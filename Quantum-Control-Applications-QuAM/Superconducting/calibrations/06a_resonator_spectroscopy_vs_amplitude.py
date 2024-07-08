@@ -38,7 +38,7 @@ from scipy import signal
 
 import matplotlib
 
-matplotlib.use("TKAgg")
+# matplotlib.use("TKAgg")
 
 
 ###################################################
@@ -50,7 +50,6 @@ u = unit(coerce_to_integer=True)
 machine = QuAM.load()
 # Generate the OPX and Octave configurations
 config = machine.generate_config()
-octave_config = machine.get_octave_config()
 # Open Communication with the QOP
 qmm = machine.connect()
 
@@ -99,9 +98,7 @@ with program() as multi_res_spec_vs_amp:
                 update_frequency(rr.name, df + rr.intermediate_frequency)
                 rr.wait(machine.depletion_time * u.ns)
 
-                with for_(
-                    *from_array(a, amps)
-                ):  # QUA for_ loop for sweeping the readout amplitude
+                with for_(*from_array(a, amps)):  # QUA for_ loop for sweeping the readout amplitude
                     # readout the resonator
                     rr.measure("readout", qua_vars=(I[i], Q[i]), amplitude_scale=a)
 
@@ -112,12 +109,9 @@ with program() as multi_res_spec_vs_amp:
                     save(I[i], I_st[i])
                     save(Q[i], Q_st[i])
 
-        align(*[rr.name for rr in resonators])
-
-        with stream_processing():
-            if not i:
-                n_st.save("n")
-            # for i in range(num_resonators):
+    with stream_processing():
+        n_st.save("n")
+        for i in range(num_resonators):
             I_st[i].buffer(len(amps)).buffer(len(dfs)).average().save(f"I{i + 1}")
             Q_st[i].buffer(len(amps)).buffer(len(dfs)).average().save(f"Q{i + 1}")
 

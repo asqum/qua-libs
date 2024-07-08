@@ -44,7 +44,6 @@ u = unit(coerce_to_integer=True)
 machine = QuAM.load()
 # Generate the OPX and Octave configurations
 config = machine.generate_config()
-octave_config = machine.get_octave_config()
 # Open Communication with the QOP
 qmm = machine.connect()
 
@@ -56,15 +55,19 @@ num_qubits = len(qubits)
 num_resonators = len(resonators)
 num_couplers = len(couplers)
 
-all_flux_elements = [qubit.z for qubit in qubits] + [coupler.z for coupler in couplers]
+all_flux_elements = [qubit.z for qubit in qubits] + couplers
 
 # Set the element you would like to sweep
-target_flux_elements = all_flux_elements
-target_qubits = qubits[1:]  # ignore qubit 1 since it doesn't work
+# target_flux_elements = all_flux_elements
+q4 = machine.qubits["q4"]
+q5 = machine.qubits["q5"]
+coupler = (q4 @ q5).coupler
+target_flux_elements = [q4.z, coupler, q5.z]
+target_qubits = [q4]
 
 flux_elements_by_port, port_by_flux_element = {}, {}
 for flux_element in target_flux_elements:
-    port: LFFEMAnalogOutputPort = machine.ports.get_analog_ouptut(*flux_element.opx_output)
+    port: LFFEMAnalogOutputPort = flux_element.opx_output
     flux_elements_by_port[port.port_id] = flux_element
     port_by_flux_element[flux_element.name] = port
 
@@ -77,15 +80,17 @@ crosstalk_matrix = np.ones((len(all_flux_elements), len(all_flux_elements)))
 ###################
 # Adjust the pulse duration and amplitude to drive the qubit into a mixed state
 operation = "saturation"
-saturation_len = 10 * u.us  # in ns
-saturation_amp = 0.5  # scaling factor
+saturation_len = 20 * u.us  # in ns
+saturation_amp = 0.05  # scaling factor
 cooldown_time = machine.thermalization_time
-dfs = np.arange(-50e6, 100e6, 0.1e6)
+dfs = np.arange(-270e6, 50e6, 0.5e6)
 
-n_avg = 20  # Number of averaging loops
+n_avg = 200  # Number of averaging loops
 # Flux bias sweep in V
-dc_low = -0.5
-dc_high = -0.5
+dc_low = -0.01
+dc_high = 0.01
+dc_bias = 0.02
+
 
 for port_id, flux_element in flux_elements_by_port.items():
     with program() as multi_qubit_spec_vs_flux:
@@ -95,12 +100,14 @@ for port_id, flux_element in flux_elements_by_port.items():
         dc = declare(fixed)  # QUA variable for the flux bias
         df = declare(int)  # QUA variable for the readout frequency
 
-        for i, q in enumerate(len(target_qubits)):
+        for i, q in enumerate(target_qubits):
             # Bring the active qubits to the minimum frequency point
             # todo: bring to the "steepspot" (not sweetspot!)
             machine.apply_all_flux_to_min()
             # todo: bring to what?
-            machine.apply_all_couplers_to_min()
+            # machine.apply_all_couplers_to_min()
+
+            q.z.set_dc_offset(dc_bias)
 
             with for_(n, 0, n < n_avg, n + 1):
                 save(n, n_st)
@@ -111,7 +118,7 @@ for port_id, flux_element in flux_elements_by_port.items():
 
                     with for_(*from_array(dc, [dc_low, dc_high])):
                         # Flux sweeping by tuning the OPX dc offset associated with the flux_line element
-                        flux_element.set_dc_offset(dc)
+                        flux_element.set_dc_offset(dc + dc_bias)
                         wait(100)  # Wait for the flux to settle
                         # Apply saturation pulse to all qubits
                         q.xy.play(
@@ -119,6 +126,11 @@ for port_id, flux_element in flux_elements_by_port.items():
                             amplitude_scale=saturation_amp,
                             duration=saturation_len * u.ns,
                         )
+                        align()
+                        # machine.apply_all_flux_to_min()
+                        wait(100)
+                        align()
+
                         # QUA macro to read the state of the active resonators
                         q.resonator.measure("readout", qua_vars=(I[i], Q[i]))
                         # save data
@@ -130,7 +142,7 @@ for port_id, flux_element in flux_elements_by_port.items():
 
         with stream_processing():
             n_st.save("n")
-            for i, q in enumerate(len(target_qubits)):
+            for i, q in enumerate(target_qubits):
                 I_st[i].buffer(2).buffer(len(dfs)).average().save(f"I{i + 1}")
                 Q_st[i].buffer(2).buffer(len(dfs)).average().save(f"Q{i + 1}")
 
@@ -151,7 +163,7 @@ for port_id, flux_element in flux_elements_by_port.items():
         job = qm.execute(multi_qubit_spec_vs_flux)
         # Get results from QUA program
         data_list = ["n"] + sum(
-            [[f"I{i + 1}", f"Q{i + 1}"] for i in range(num_resonators)], []
+            [[f"I{i + 1}", f"Q{i + 1}"] for i in range(len(target_qubits))], []
         )
         results = fetching_tool(job, data_list, mode="live")
         # Live plotting
@@ -167,7 +179,7 @@ for port_id, flux_element in flux_elements_by_port.items():
             # Progress bar
             progress_counter(n, n_avg, start_time=results.start_time)
 
-            plt.suptitle("Qubit spectroscopy vs flux element")
+            plt.suptitle(f"Qubit spectroscopy vs {flux_element.name}")
             S_data, R_data = [], []
             for i, q in enumerate(target_qubits):
                 S = u.demod2volts(I[i] + 1j * Q[i], q.resonator.operations["readout"].length)
@@ -182,8 +194,8 @@ for port_id, flux_element in flux_elements_by_port.items():
                 )
                 plt.xlabel("Flux Bias [V]")
                 plt.ylabel(f"{q.xy.name} IF [MHz]")
-                plt.plot(q.xy.intermediate_frequency / u.MHz + dfs / u.MHz, R[0])
-                plt.plot(q.xy.intermediate_frequency / u.MHz + dfs / u.MHz, R[1])
+                plt.plot(q.xy.intermediate_frequency / u.MHz + dfs / u.MHz, R[:, 0])
+                plt.plot(q.xy.intermediate_frequency / u.MHz + dfs / u.MHz, R[:,1])
                 # plt.plot(coupler.z.min_offset, rr.intermediate_frequency / u.MHz, "r*")
 
             plt.tight_layout()
@@ -211,7 +223,7 @@ for port_id, flux_element in flux_elements_by_port.items():
                     fit = Fit()
                     res = fit.reflection_resonator_spectroscopy(
                         (q.xy.intermediate_frequency + dfs) / u.MHz,
-                        -np.angle(S_data[i][j]),
+                        -np.angle(S_data[i][:, j]),
                         plot=True,
                     )
                     measured_qubit_frequencies.append(int(res["f"][0] * u.MHz))

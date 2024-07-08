@@ -58,18 +58,18 @@ num_qubits = len(qubits)
 ###################
 
 operation = "x180"  # The qubit operation to play
-n_avg = 600  # The number of averages
+n_avg = 100  # The number of averages
 
 # Pulse amplitude sweep (as a pre-factor of the qubit pulse amplitude) - must be within [-2; 2)
-amps = np.arange(0.0, 2, 0.025)
+amps = np.arange(0.0, 2, 0.015)
+dfs = np.linspace(-5e6, 5e6, 51).astype(int)
 # Number of applied Rabi pulses sweep
-N_pi = 40  # Maximum number of qubit pulses
-N_pi_vec = np.linspace(1, N_pi, N_pi).astype("int")[::2]
+N_pi = 11  # Maximum number of qubit pulses
 
 with program() as power_rabi:
     I, I_st, Q, Q_st, n, n_st = qua_declaration(num_qubits=num_qubits)
     a = declare(fixed)  # QUA variable for the qubit drive amplitude pre-factor
-    npi = declare(int)  # QUA variable for the number of qubit pulses
+    df = declare(int)
     count = declare(int)  # QUA variable for counting the qubit pulses
 
     # Bring the active qubits to the minimum frequency point
@@ -77,12 +77,15 @@ with program() as power_rabi:
 
     with for_(n, 0, n < n_avg, n + 1):
         save(n, n_st)
-        with for_(*from_array(npi, N_pi_vec)):
+        with for_(*from_array(df, dfs)):
+            for qubit in qubits:
+                qubit.xy.update_frequency(qubit.xy.intermediate_frequency + df)
+
             with for_(*from_array(a, amps)):
                 # Loop for error amplification (perform many qubit pulses)
-                with for_(count, 0, count < npi, count + 1):
+                with for_(count, 0, count < N_pi, count + 1):
                     for qubit in qubits:
-                        qubit.xy.play("x180", amplitude_scale=a)
+                        qubit.xy.play(operation, amplitude_scale=a)
                 # Align all elements to measure after playing the qubit pulse.
                 align()
                 multiplexed_readout(qubits, I, I_st, Q, Q_st)
@@ -91,10 +94,10 @@ with program() as power_rabi:
     with stream_processing():
         n_st.save("n")
         for i, qubit in enumerate(qubits):
-            I_st[i].buffer(len(amps)).buffer(np.ceil(N_pi / 2)).average().save(
+            I_st[i].buffer(len(amps)).buffer(len(dfs)).average().save(
                 f"I{i + 1}"
             )
-            Q_st[i].buffer(len(amps)).buffer(np.ceil(N_pi / 2)).average().save(
+            Q_st[i].buffer(len(amps)).buffer(len(dfs)).average().save(
                 f"Q{i + 1}"
             )
 
@@ -121,7 +124,7 @@ else:
     data_list = ["n"] + sum([[f"I{i + 1}", f"Q{i + 1}"] for i in range(num_qubits)], [])
     results = fetching_tool(job, data_list, mode="live")
     # Live plotting
-    fig = plt.figure()
+    fig = plt.figure(figsize=(8, 16))
     interrupt_on_close(fig, job)  # Interrupts the job when closing the figure
     while results.is_processing():
         fetched_data = results.fetch_all()
@@ -146,7 +149,7 @@ else:
                 plt.cla()
                 plt.pcolor(
                     amps * qubit.xy.operations[operation].amplitude,
-                    N_pi_vec,
+                    dfs,
                     I_volts[i],
                 )
                 plt.title(f"{qubit.name} - I")
@@ -154,12 +157,12 @@ else:
                 plt.cla()
                 plt.pcolor(
                     amps * qubit.xy.operations[operation].amplitude,
-                    N_pi_vec,
+                    dfs,
                     Q_volts[i],
                 )
                 plt.title(f"{qubit.name} - Q")
                 plt.xlabel("Qubit pulse amplitude [V]")
-                plt.ylabel("Number of Rabi pulses")
+                plt.ylabel("Frequency shift")
                 plt.subplot(3, num_qubits, i + 2 * num_qubits + 1)
                 plt.cla()
                 plt.plot(

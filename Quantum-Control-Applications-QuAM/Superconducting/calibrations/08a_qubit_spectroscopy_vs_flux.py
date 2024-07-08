@@ -42,12 +42,12 @@ u = unit(coerce_to_integer=True)
 machine = QuAM.load()
 # Generate the OPX and Octave configurations
 config = machine.generate_config()
-octave_config = machine.get_octave_config()
 # Open Communication with the QOP
 qmm = machine.connect()
 
 # Get the relevant QuAM components
 qubits = machine.active_qubits
+qubits = [machine.qubits["q5"]]
 num_qubits = len(qubits)
 
 ###################
@@ -55,19 +55,14 @@ num_qubits = len(qubits)
 ###################
 
 operation = "saturation"  # The qubit operation to play, can be switched to "x180" when the qubits are found.
-n_avg = 2  # Number of averaging loops
+n_avg = 200  # Number of averaging loops
 cooldown_time = max(q.thermalization_time for q in qubits)
-
-# Adjust the pulse duration and amplitude to drive the qubit into a mixed state
-saturation_len = 10 * u.us  # In ns
-saturation_amp = (
-    0.5  # pre-factor to the value defined in the config - restricted to [-2; 2)
-)
+pulse = "x180"
 
 # Qubit detuning sweep with respect to their resonance frequencies
-dfs = np.arange(-50e6, 100e6, 0.1e6)
+dfs = np.arange(-300e6, 100e6, 1e6)
 # Flux bias sweep
-dcs = np.linspace(-0.05, 0.05, 40)
+dcs = np.linspace(-0.1, 0.1, 100)
 
 # Adjust the qubits IFs locally to help find the qubits
 # q1.xy.intermediate_frequency = 340e6
@@ -93,15 +88,16 @@ with program() as multi_qubit_spec_vs_flux:
 
                 with for_(*from_array(dc, dcs)):
                     # Flux sweeping for all qubits
-                    q.z.set_dc_offset(dc)
+                    other_element.set_dc_offset(dc)
                     wait(100)  # Wait for the flux to settle
 
                     # Apply saturation pulse to all qubits
-                    q.xy.play(
-                        operation,
-                        amplitude_scale=saturation_amp,
-                        duration=saturation_len * u.ns,
-                    )
+                    q.xy.play(pulse)
+
+                    align()
+                    # q.z.set_dc_offset(0)
+                    wait(100)
+                    align()
 
                     # QUA macro to read the state of the active resonators
                     q.resonator.measure("readout", qua_vars=(I[i], Q[i]))
@@ -110,10 +106,11 @@ with program() as multi_qubit_spec_vs_flux:
                     save(I[i], I_st[i])
                     save(Q[i], Q_st[i])
 
+                    q.z.set_dc_offset(dc)
                     # Wait for the qubits to decay to the ground state
                     wait(cooldown_time * u.ns)
 
-        align(*qubits)
+        align(*[q.xy.name for q in qubits])
 
     with stream_processing():
         n_st.save("n")
@@ -168,7 +165,7 @@ else:
             plt.plot(q.z.min_offset, q.xy.intermediate_frequency / u.MHz, "r*")
             plt.xlabel("Flux [V]")
             plt.ylabel(f"{q.name} IF [MHz]")
-            plt.title(f"{q.name} (f_01: {q.f_01 / u.MHz} MHz)")
+            # plt.title(f"{q.name} (f_01: {q.f_01 / u.MHz} MHz)")
             plt.subplot(2, num_qubits, num_qubits + i + 1)
             plt.cla()
             plt.pcolor(
@@ -178,7 +175,7 @@ else:
             plt.xlabel("Flux [V]")
             plt.ylabel(f"{q.name} IF [MHz]")
             plt.tight_layout()
-            plt.pause(0.1)
+            plt.pause(1)
 
     # Close the quantum machines at the end in order to put all flux biases to 0 so that the fridge doesn't heat-up
     qm.close()

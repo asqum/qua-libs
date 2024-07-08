@@ -48,7 +48,6 @@ u = unit(coerce_to_integer=True)
 machine = QuAM.load()
 # Generate the OPX and Octave configurations
 config = machine.generate_config()
-octave_config = machine.get_octave_config()
 # Open Communication with the QOP
 qmm = machine.connect()
 
@@ -62,9 +61,9 @@ num_qubits = len(qubits)
 n_runs = 100  # The number of averages
 
 # The readout amplitude sweep (as a pre-factor of the readout amplitude) - must be within [-2; 2)
-amplitudes = np.arange(0.5, 1.5, 0.05)
+amplitudes = np.linspace(0.5, 1.5, 51)
 # The frequency sweep parameters with respect to the resonators' resonance frequencies
-dfs = np.arange(-5e6, 5e6, 0.1e6)
+dfs = np.linspace(-5e6, 5e6, 51)
 
 with program() as ro_amp_freq_opt:
     I_g, I_g_st, Q_g, Q_g_st, n, n_st = qua_declaration(num_qubits=num_qubits)
@@ -193,14 +192,14 @@ else:
     plt.tight_layout()
 
     # Update the state
-    for i, qubit in enumerate(qubits):
-        qubit.resonator.operations["readout"].amplitude *= amplitudes[
-            np.argmax(fidelity_vec[i]) // len(dfs)
-        ]
-        qubit.resonator.intermediate_frequency += dfs[
-            np.argmax(fidelity_vec[i]) % len(dfs)
-        ]
-        qubit.resonator.readout_fidelity = np.max(fidelity_vec[i])
+    # for i, qubit in enumerate(qubits):
+    #     qubit.resonator.operations["readout"].amplitude *= amplitudes[
+    #         np.argmax(fidelity_vec[i]) // len(dfs)
+    #     ]
+    #     qubit.resonator.intermediate_frequency += dfs[
+    #         np.argmax(fidelity_vec[i]) % len(dfs)
+    #     ]
+    #     qubit.resonator.readout_fidelity = np.max(fidelity_vec[i])
 
     # Close the quantum machines at the end to put all flux biases to 0 so that the fridge doesn't heat-up
     qm.close()

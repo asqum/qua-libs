@@ -45,7 +45,6 @@ u = unit(coerce_to_integer=True)
 machine = QuAM.load()
 # Generate the OPX and Octave configurations
 config = machine.generate_config()
-octave_config = machine.get_octave_config()
 # Open Communication with the QOP
 qmm = machine.connect()
 
@@ -56,11 +55,12 @@ num_qubits = len(qubits)
 ###################
 # The QUA program #
 ###################
-n_avg = 2  # Number of averaging loops
+n_avg = 20  # Number of averaging loops
 
 # Frequency detuning sweep in Hz
 dfs = np.arange(-10e6, 10e6, 0.1e6)
 # Idle time sweep (Must be a list of integers) - in clock cycles (4ns)
+
 t_delay = np.arange(4, 300, 4)
 
 
@@ -141,7 +141,7 @@ else:
         progress_counter(n, n_avg, start_time=results.start_time)
         # Plot results
         plt.suptitle("Ramsey chevron")
-        for i, (ax, qubit) in enumerate(zip(axes, qubits)):
+        for i, (ax, qubit) in enumerate(zip(axes.T, qubits)):
             ax[0].cla()
             ax[0].pcolor(4 * t_delay, dfs / u.MHz, I_volts[i])
             # ax[0].set_title(f"{qubit.name} - I, f_01={int(qubit.f_01 / u.MHz)} MHz")

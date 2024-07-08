@@ -44,7 +44,6 @@ u = unit(coerce_to_integer=True)
 machine = QuAM.load()
 # Generate the OPX and Octave configurations
 config = machine.generate_config()
-octave_config = machine.get_octave_config()
 # Open Communication with the QOP
 qmm = machine.connect()
  
@@ -61,7 +60,7 @@ q4 = machine.qubits["q4"]
 q5 = machine.qubits["q5"]
 coupler = (q4 @ q5).coupler
 target_flux_elements = [q4.z, coupler, q5.z]
-target_qubit = q4
+target_qubit = q5
  
 ###################
 # The QUA program #
@@ -70,20 +69,19 @@ target_qubit = q4
 operation = "x180"
 cooldown_time = machine.thermalization_time
 
-flux_offsets = np.linspace(-0.1, 0.1, 51)
-compensation_scales = np.linspace(-1, 0, 51)
+flux_offsets = np.linspace(-0.3, 0.3, 51)
+compensation_scales = np.linspace(-1, 1, 101)
 n_avg = 200  # Number of averaging loops
-intermediate_frequency = 
-dc_bias = 0.02
+intermediate_frequency = -418e6
+dc_bias = 0.045
  
 with program() as multi_qubit_spec_vs_flux:
     # Declare 'I' and 'Q' and the corresponding streams for the two resonators.
     # For instance, here 'I' is a python list containing two QUA fixed variables.
     I, I_st, Q, Q_st, n, n_st = qua_declaration(num_qubits=len(target_flux_elements))
     compensation_scale = declare(fixed)  # QUA variable for the flux bias
-    flux = declare(int)  # QUA variable for the readout frequency
+    flux = declare(float)  # QUA variable for the readout frequency
 
-    machine.apply_all_flux_to_min()
 
     target_qubit.xy.update_frequency(intermediate_frequency)
 
@@ -91,19 +89,23 @@ with program() as multi_qubit_spec_vs_flux:
     with for_(n, 0, n < n_avg, n + 1):
         save(n, n_st)
 
-        for flux_element in target_flux_elements:
+        for i, flux_element in enumerate(target_flux_elements):
+            # machine.apply_all_flux_to_min()
+            for elem in target_flux_elements:
+                elem.set_dc_offset(0)
             with for_(*from_array(flux, flux_offsets)):
                 with for_(*from_array(compensation_scale, compensation_scales)):
                     # Flux sweeping by tuning the OPX dc offset associated with the flux_line element
-                    flux_element.set_dc_offset(flux)
                     target_qubit.z.set_dc_offset(dc_bias + compensation_scale * flux)
+                    flux_element.set_dc_offset(flux)
                     wait(100)  # Wait for the flux to settle
                     align()
                     # Apply saturation pulse to all qubits
                     target_qubit.xy.play(operation)
 
                     align()
-                    machine.apply_all_flux_to_min()
+                    # machine.apply_all_flux_to_min()
+                    # coupler.set_dc_offset(0)
                     wait(100)
                     align()
 
@@ -159,7 +161,7 @@ else:
         plt.suptitle(f"Qubit spectroscopy vs {flux_element.name}")
         S_data, R_data = [], []
         for i, q in enumerate(target_flux_elements):
-            S = u.demod2volts(I[i] + 1j * Q[i], q.resonator.operations["readout"].length)
+            S = u.demod2volts(I[i] + 1j * Q[i], target_qubit.resonator.operations["readout"].length)
             R = np.abs(S)
             S_data.append(S)
             R_data.append(R)
@@ -167,11 +169,11 @@ else:
             plt.subplot(1, len(target_flux_elements), i + 1)
             plt.cla()
             plt.title(
-                f"{q.xy.name} (LO: {q.xy.frequency_converter_up.LO_frequency / u.MHz} MHz)"
+                q.name
             )
-            plt.xlabel("Flux Bias [V]")
-            plt.ylabel(f"{q.xy.name} RF [MHz]")
-            plt.pcolormesh(q.xy.RF_frequency + intermediate_frequency  / u.MHz, R)
+            plt.ylabel("Flux Bias [V]")
+            plt.xlabel(f"Compensation scale")
+            plt.pcolormesh(compensation_scales, flux_offsets, R)
             # plt.plot(coupler.z.min_offset, rr.intermediate_frequency / u.MHz, "r*")
 
         plt.tight_layout()
@@ -181,6 +183,7 @@ else:
     plt.show()
     qm.close()
 
+data = {"fig": plt.gcf()}
  
 node_save(machine, f"resonator_spectroscopy_crosstalk", data, additional_files=True)
  

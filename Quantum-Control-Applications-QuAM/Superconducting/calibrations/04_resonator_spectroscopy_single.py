@@ -46,12 +46,11 @@ u = unit(coerce_to_integer=True)
 machine = QuAM.load()
 # Generate the OPX and Octave configurations
 config = machine.generate_config()
-octave_config = machine.get_octave_config()
 # Open Communication with the QOP
 qmm = machine.connect()
 
 # Get the relevant QuAM components
-rr = machine.active_qubits[0].resonator  # The resonator to measure
+rr = machine.qubits["q4"].resonator  # The resonator to measure
 
 ###################
 # The QUA program #
@@ -188,8 +187,8 @@ else:
         )
 
         # Update QUAM
-        rr.intermediate_frequency = int(res_spec_fit["f"][0] * u.MHz)
-        rr.frequency_bare = rr.rf_frequency
+        # rr.intermediate_frequency = int(res_spec_fit["f"][0] * u.MHz)
+        # rr.frequency_bare = rr.rf_frequency
         # Save data from the node
         data[f"{rr.name}"] = {
             "resonator_frequency": int(res_spec_fit["f"][0] * u.MHz),

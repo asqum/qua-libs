@@ -46,7 +46,6 @@ u = unit(coerce_to_integer=True)
 machine = QuAM.load()
 # Generate the OPX and Octave configurations
 config = machine.generate_config()
-octave_config = machine.get_octave_config()
 # Open Communication with the QOP
 qmm = machine.connect()
 
@@ -62,7 +61,7 @@ num_resonators = len(resonators)
 
 n_avg = 400  # The number of averages
 # The frequency sweep around the resonator resonance frequency f_opt
-dfs = np.arange(-5e6, +5e6, 0.1e6)
+dfs = np.arange(-100e6, +100e6, 0.1e6)
 # You can adjust the IF frequency here to manually adjust the resonator frequencies instead of updating the state
 # rr1.intermediate_frequency = -50 * u.MHz
 # rr2.intermediate_frequency = 50 * u.MHz
@@ -79,6 +78,7 @@ with program() as multi_res_spec:
     machine.apply_all_flux_to_min()
 
     with for_(n, 0, n < n_avg, n + 1):
+        save(n, n_st)
         with for_(*from_array(df, dfs)):
             for i, rr in enumerate(resonators):
                 # Update the resonator frequencies for all resonators
@@ -94,7 +94,8 @@ with program() as multi_res_spec:
                 save(Q[i], Q_st[i])
 
     with stream_processing():
-        for i in range(num_qubits):
+        n_st.save("n")
+        for i in range(num_resonators):
             I_st[i].buffer(len(dfs)).average().save(f"I{i + 1}")
             Q_st[i].buffer(len(dfs)).average().save(f"Q{i + 1}")
 
@@ -116,40 +117,35 @@ else:
     qm = qmm.open_qm(config)
     # Execute the QUA program
     job = qm.execute(multi_res_spec)
-    # Tool to easily fetch results from the OPX (results_handle used in it)
-    data_list = sum([[f"I{i + 1}", f"Q{i + 1}"] for i in range(num_qubits)], [])
-    results = fetching_tool(job, data_list, mode="live")
     # Prepare the figures for live plotting
     fig, axss = plt.subplots(2, num_qubits, figsize=(4 * num_qubits, 5))
+    # Tool to easily fetch results from the OPX (results_handle used in it)
+    res_list = sum([[f"I{i + 1}", f"Q{i + 1}"] for i in range(num_resonators)], [])
+    results = fetching_tool(job, res_list, mode="live")
     interrupt_on_close(fig, job)
-    # Live plotting
     s_data = []
+    # Live plotting
     while results.is_processing():
         # Fetch results
-        data = results.fetch_all()
-        for i in range(num_qubits):
-            I, Q = data[2 * i : 2 * i + 2]
-            rr = resonators[i]
+        fetched_data = results.fetch_all()
+        n = fetched_data[0]
+        I_data = fetched_data[0::2]
+        Q_data = fetched_data[1::2]
+
+        for i, rr in enumerate(resonators):
+            s = u.demod2volts(I_data[i] + 1j * Q_data[i], rr.operations["readout"].length)
             # Data analysis
-            s_data.append(u.demod2volts(I + 1j * Q, rr.operations["readout"].length))
+            s_data.append(s)
             # Plot
             plt.sca(axss[0, i])
             plt.suptitle("Multiplexed resonator spectroscopy")
             plt.cla()
-            plt.plot(
-                (rr.LO_frequency + rr.intermediate_frequency) / u.MHz + dfs / u.MHz,
-                np.abs(s_data[-1]),
-                ".",
-            )
+            plt.plot((rr.RF_frequency + dfs) / u.MHz, np.abs(s), ".")
             plt.title(f"{rr.name}")
             plt.ylabel(r"R=$\sqrt{I^2 + Q^2}$ [V]")
             plt.sca(axss[1, i])
             plt.cla()
-            plt.plot(
-                (rr.LO_frequency + rr.intermediate_frequency) / u.MHz + dfs / u.MHz,
-                signal.detrend(np.unwrap(np.angle(s_data[-1]))),
-                ".",
-            )
+            plt.plot((rr.RF_frequency + dfs) / u.MHz, signal.detrend(np.unwrap(np.angle(s))), ".")
             plt.ylabel("Phase [rad]")
             plt.xlabel("Readout frequency [MHz]")
             plt.tight_layout()
@@ -181,7 +177,7 @@ else:
             plt.ylabel(r"R=$\sqrt{I^2 + Q^2}$ [V]")
             plt.title(f"{rr.name}")
             intermediate_frequency = int(res_1["f"][0] * u.MHz)
-            rr.RF_frequency = rr.LO_frequency + intermediate_frequency
+            # rr.RF_frequency = rr.LO_frequency + intermediate_frequency
             plt.legend((f"fr = {rr.RF_frequency:.3f} MHz",))
 
             data[f"{rr.name}"] = {

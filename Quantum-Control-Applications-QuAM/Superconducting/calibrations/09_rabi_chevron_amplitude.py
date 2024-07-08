@@ -46,7 +46,6 @@ u = unit(coerce_to_integer=True)
 machine = QuAM.load()
 # Generate the OPX and Octave configurations
 config = machine.generate_config()
-octave_config = machine.get_octave_config()
 # Open Communication with the QOP
 qmm = machine.connect()
 
@@ -59,7 +58,7 @@ num_qubits = len(qubits)
 ###################
 
 operation = "x180"  # The qubit operation to play
-n_avg = 2  # The number of averages
+n_avg = 100  # The number of averages
 
 # The frequency sweep with respect to the qubits resonance frequencies
 dfs = np.arange(-100e6, +100e6, 1e6)

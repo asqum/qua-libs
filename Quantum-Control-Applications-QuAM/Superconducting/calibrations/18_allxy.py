@@ -44,12 +44,12 @@ u = unit(coerce_to_integer=True)
 machine = QuAM.load()
 # Generate the OPX and Octave configurations
 config = machine.generate_config()
-octave_config = machine.get_octave_config()
 # Open Communication with the QOP
 qmm = machine.connect()
 
 # Get the relevant QuAM components
 qubits = machine.active_qubits
+qubits = [machine.qubits["q2"]]
 num_qubits = len(qubits)
 
 ##############################

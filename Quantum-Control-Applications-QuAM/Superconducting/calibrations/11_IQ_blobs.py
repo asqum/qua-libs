@@ -49,7 +49,6 @@ u = unit(coerce_to_integer=True)
 machine = QuAM.load()
 # Generate the OPX and Octave configurations
 config = machine.generate_config()
-octave_config = machine.get_octave_config()
 # Open Communication with the QOP
 qmm = machine.connect()
 
@@ -160,8 +159,10 @@ else:
         qubit.resonator.operations["readout"].threshold = threshold
         qubit.resonator.operations["readout"].rus_exit_threshold = rus_threshold
 
+    plt.show()
     qm.close()
 
     node_save(machine, "iq_blobs", data, additional_files=True)
+
 
 # %%

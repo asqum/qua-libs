@@ -50,7 +50,6 @@ u = unit(coerce_to_integer=True)
 machine = QuAM.load()
 # Generate the OPX and Octave configurations
 config = machine.generate_config()
-octave_config = machine.get_octave_config()
 # Open Communication with the QOP
 qmm = machine.connect()
 
@@ -202,7 +201,7 @@ else:
         plt.title(f"{q2.name} - Q")
         plt.xlabel(f"{qb.name} flux amplitude [V]")
         plt.tight_layout()
-        plt.pause(0.1)
+        pause(0.1)
 
     # Close the quantum machines at the end in order to put all flux biases to 0 so that the fridge doesn't heat-up
     qm.close()

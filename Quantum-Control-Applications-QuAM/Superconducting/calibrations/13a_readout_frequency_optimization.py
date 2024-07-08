@@ -46,7 +46,6 @@ u = unit(coerce_to_integer=True)
 machine = QuAM.load()
 # Generate the OPX and Octave configurations
 config = machine.generate_config()
-octave_config = machine.get_octave_config()
 # Open Communication with the QOP
 qmm = machine.connect()
 
@@ -57,7 +56,7 @@ num_qubits = len(qubits)
 ###################
 # The QUA program #
 ###################
-n_avg = 2  # The number of averages
+n_avg = 200  # The number of averages
 
 # The frequency sweep parameters with respect to the resonators resonance frequencies
 dfs = np.arange(-2e6, 2e6, 0.02e6)
@@ -168,7 +167,7 @@ else:
             qubit.resonator.intermediate_frequency + dfs[np.argmax(D_data[i])]
         )
         # Update the state
-        qubit.resonator.intermediate_frequency += dfs[np.argmax(D_data[i])]
+        # qubit.resonator.intermediate_frequency += dfs[np.argmax(D_data[i])]
 
     data["figure"] = fig
     node_save(machine, "readout_frequency_optimization", data, additional_files=True)
