@@ -105,7 +105,7 @@ cz_corr = 0 # float(eval(f"cz{q2_number}_{q1_number}_2pi_dev"))
 simulate = False
 flux_settle_time = 100
 
-n_avg = 100  # The number of averages
+n_avg = 1000  # The number of averages
 phis = np.arange(0, 3, 1 / points_per_cycle)
 # dcs = np.linspace(0.7, 1.3, 25)
 cz_point = -0.03832
