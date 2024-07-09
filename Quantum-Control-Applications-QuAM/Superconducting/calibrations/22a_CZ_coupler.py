@@ -62,10 +62,10 @@ qmm = machine.connect()
 q1 = machine.qubits["q4"]
 q2 = machine.qubits["q5"]
 coupler = (q1 @ q2).coupler
-compensations = {
-    q1: coupler.opx_output.crosstalk[q1.z.opx_output.port_id],
-    q2: coupler.opx_output.crosstalk[q2.z.opx_output.port_id]
-}
+# compensations = {
+#     q1: coupler.opx_output.crosstalk[q1.z.opx_output.port_id],
+#     q2: coupler.opx_output.crosstalk[q2.z.opx_output.port_id]
+# }
 
 import numpy as np
 compensation_arr = np.array([[1, 0.177], [0.408, 1]])
@@ -76,12 +76,16 @@ inv_arr = np.linalg.inv(compensation_arr)
 ###################
 qb = q1  # The qubit whose flux will be swept
 
-n_avg = 1000
+n_avg = 250
 # The flux pulse durations in clock cycles (4ns) - Must be larger than 4 clock cycles.
-ts = np.arange(10, 35, 5)
+ts = np.arange(4, 300, 5)
 # The flux bias sweep in V
-dcs = np.linspace(-0.040, -0.030, 201)
+dcs = np.linspace(-0.07, 0.07, 301)
+# dcs = np.linspace(-0.0392, -0.0396, 25)
 # dcs = np.linspace(-0.045, -0.025, 701)
+cz_point = -0.0394572
+# wait_time = 40
+scale = 0.048 #0.05
 
 with program() as cz:
     I, I_st, Q, Q_st, n, n_st = qua_declaration(num_qubits=2)
@@ -110,7 +114,7 @@ with program() as cz:
                 # q1.z.set_dc_offset(0.0175 + vals[0])
                 # q2.z.set_dc_offset(q2.z.min_offset + vals[1])
                 
-                q1.z.set_dc_offset(0.0175 + 0.05 * dc)
+                q1.z.set_dc_offset(0.00939 + scale * dc) # 0.0175
                 # q2.z.set_dc_offset(q2.z.min_offset)
                 # q2.z.set_dc_offset(q2.z.min_offset + 0.01 * dc)
 
@@ -181,53 +185,29 @@ else:
         # Progress bar
         progress_counter(n, n_avg, start_time=results.start_time)
         # Plot
-        plt.suptitle("CZ chevron")
-        plt.subplot(241)
+        plt.suptitle("CZ chevron (compensation: %s)" %scale)
+        plt.subplot(221)
         plt.cla()
         plt.pcolor(dcs, 4 * ts, I1)
+        # plt.plot(cz_point, wait_time, color="r", marker="*")
         # plt.title(f"{q1.name} - I, f_01={int(q1.f_01 / u.MHz)} MHz")
         plt.ylabel("Interaction time [ns]")
-        plt.subplot(243)
+        plt.subplot(223)
         plt.cla()
         plt.pcolor(dcs, 4 * ts, Q1)
+        # plt.plot(cz_point, wait_time, color="r", marker="*")
         plt.title(f"{q1.name} - Q")
         plt.xlabel("Flux amplitude [V]")
         plt.ylabel("Interaction time [ns]")
-        plt.subplot(242)
+        plt.subplot(222)
         plt.cla()
         plt.pcolor(dcs, 4 * ts, I2)
+        # plt.plot(cz_point, wait_time, color="r", marker="*")
         # plt.title(f"{q2.name} - I, f_01={int(q2.f_01 / u.MHz)} MHz")
-        plt.subplot(244)
+        plt.subplot(224)
         plt.cla()
         plt.pcolor(dcs, 4 * ts, Q2)
-        plt.title(f"{q2.name} - Q")
-        plt.xlabel("Flux amplitude [V]")
-
-        plt.subplot(245)
-        plt.cla()
-        for j, t in enumerate(ts):
-            plt.plot(dcs, I1[j, :])
-        # plt.title(f"{q1.name} - I, f_01={int(q1.f_01 / u.MHz)} MHz")
-        plt.ylabel("I1 [V]")
-        plt.legend([f"{4 * t}" for t in ts])
-        plt.subplot(247)
-        plt.cla()
-        for j, t in enumerate(ts):
-            plt.plot(dcs, Q1[j, :])
-        plt.title(f"{q1.name} - Q")
-        plt.xlabel("Flux amplitude [V]")
-        plt.ylabel("Q1 [V]")
-        plt.subplot(246)
-        plt.cla()
-        for j, t in enumerate(ts):
-            plt.plot(dcs, I2[j, :])
-        plt.ylabel("I2 [V]")
-        # plt.title(f"{q2.name} - I, f_01={int(q2.f_01 / u.MHz)} MHz")
-        plt.subplot(248)
-        plt.cla()
-        for j, t in enumerate(ts):
-            plt.plot(dcs, Q2[j, :])
-        plt.ylabel("Q2 [V]")
+        # plt.plot(cz_point, wait_time, color="r", marker="*")
         plt.title(f"{q2.name} - Q")
         plt.xlabel("Flux amplitude [V]")
         plt.tight_layout()

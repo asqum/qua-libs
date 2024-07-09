@@ -64,10 +64,8 @@ from quam_libs.experiments.cz_pi_calibration.cosine import Cosine
 ###################################################
 # Class containing tools to help handle units and conversions.
 u = unit(coerce_to_integer=True)
-# Define a path relative to this script, i.e., ../configuration/quam_state
-config_path = Path(__file__).parent.parent / "configuration" / "quam_state"
 # Instantiate the QuAM class from the state file
-machine = QuAM.load(config_path)
+machine = QuAM.load()
 # Generate the OPX and Octave configurations
 config = machine.generate_config()
 # Open Communication with the QOP
@@ -94,7 +92,7 @@ q2_number = machine.active_qubits.index(q2) + 1
 # Qubit to flux-tune to reach some distance of Ec with another qubit, Qubit to meet with:
 qubit_to_flux_tune = q2
 qubit_to_meet_with = q1
-cz = 1
+play_cz = True
 
 # qubit to flux-tune is target
 # qubit to meet with is control
@@ -107,14 +105,17 @@ cz_corr = 0 # float(eval(f"cz{q2_number}_{q1_number}_2pi_dev"))
 simulate = False
 flux_settle_time = 100
 
-n_avg = 3000  # The number of averages
+n_avg = 250  # The number of averages
 phis = np.arange(0, 3, 1 / points_per_cycle)
 # dcs = np.linspace(0.7, 1.3, 25)
-cz_point = -0.03832
+# cz_point = -0.03832
 # dcs = cz_point * np.linspace(0.5, 1.5, 51)
-dcs = np.linspace(-0.0385797, -0.0385, 51)
+#dcs = np.linspace(-0.0385797, -0.0385, 51)
+# dcs = np.linspace(-0.0395, -0.038, 151)
+dcs = np.linspace(-0.0392, -0.0397, 51)
+#dcs = np.linspace(-0.042, -0.036, 301)
 
-wait_time = 60 
+wait_time = 40 
 
 ###################
 # The QUA program #
@@ -154,7 +155,7 @@ with program() as cz_pi_cal:
                     wait(20 * u.ns)
 
                     # cz
-                    if cz:
+                    if play_cz:
                         # wait(flux_settle_time * u.ns, qubit_to_flux_tune.z.name)
                         # align()
                         # coupler.play("const", amplitude_scale=a)
@@ -238,9 +239,9 @@ else:
     # print(f"len of dcs {len(dcs)}")
     # print(f"len of phis {len(phis)}")
 
-    fig, axs = plt.subplots(1, 3, figsize=(18, 6))
+    fig, axs = plt.subplots(2, 3, figsize=(16, 8))
 
-    iss = [0, len(dcs) // 2, len(dcs) - 1]
+    idxs = [0, len(dcs) // 2, len(dcs) - 1]
     
     # fig2, ax2 = plt.subplots(len(dcs)//5, 5)
     # CZ_sign = np.zeros([len(dcs),len(phis)])
@@ -248,44 +249,59 @@ else:
     interrupt_on_close(fig, job)
     results = fetching_tool(job, ["n", "I1", "Q1", "I2", "Q2"], mode="live")
     # Live plotting
-    while results.is_processing():
+    while results.is_processing():  
         # Fetch results
         n, I1, Q1, I2, Q2 = results.fetch_all()
         # Progress bar
         progress_counter(n, n_avg, start_time=results.start_time)
 
         plt.suptitle(f"q{q2_number}->q{q1_number}: amp_scale, pha_diff_deg ({n}/{n_avg})")
-        dcs_fit = []
-        dcs_norm_fit = []
-        dphases = []
+        dcs_fit_I, dcs_fit_Q = [], []
+        dphases_I, dphases_Q = [], []
         for i, dc_ in enumerate(dcs):
             # Fitting for phase
             I_control_g = I1[:, i, 1]
             I_control_e = I1[:, i, 0]
+            Q_control_g = Q1[:, i, 1]
+            Q_control_e = Q1[:, i, 0]
             try:
                 fit = Cosine(phis, I_control_g, plot=False)
                 phase_g = fit.out.get('phase')[0]
-                for j, k in enumerate(iss):
+                for j, k in enumerate(idxs):
                     if i == k:
-                        axs[j].cla()
-                        axs[j].plot(fit.x_data, fit.fit_type(fit.x, fit.popt) * fit.y_normal, '-b', alpha=0.5)
+                        axs[0, j].cla()
+                        axs[0, j].plot(fit.x_data, fit.fit_type(fit.x, fit.popt) * fit.y_normal, '-b', alpha=0.5)
                 fit = Cosine(phis, I_control_e, plot=False)
                 phase_e = fit.out.get('phase')[0]
-                for j, k in enumerate(iss):
+                for j, k in enumerate(idxs):
                     if i == k:
-                        axs[j].cla()
-                        axs[j].plot(fit.x_data, fit.fit_type(fit.x, fit.popt) * fit.y_normal, '-r', alpha=0.5)
+                        axs[0, j].plot(fit.x_data, fit.fit_type(fit.x, fit.popt) * fit.y_normal, '-r', alpha=0.5)
                 dphase = (phase_g - phase_e) / np.pi * 180
-                dphases.append(dphase)
-                dcs_fit.append(dc_)
-                dcs_norm_fit.append(dc_/cz_point)
+                dphases_I.append(dphase)
+                dcs_fit_I.append(dc_)
+
+                fit = Cosine(phis, Q_control_g, plot=False)
+                phase_g = fit.out.get('phase')[0]
+                for j, k in enumerate(idxs):
+                    if i == k:
+                        axs[1, j].cla()
+                        axs[1, j].plot(fit.x_data, fit.fit_type(fit.x, fit.popt) * fit.y_normal, '-b', alpha=0.5)
+                fit = Cosine(phis, Q_control_e, plot=False)
+                phase_e = fit.out.get('phase')[0]
+                for j, k in enumerate(idxs):
+                    if i == k:
+                        axs[1, j].plot(fit.x_data, fit.fit_type(fit.x, fit.popt) * fit.y_normal, '-r', alpha=0.5)
+                dphase = (phase_g - phase_e) / np.pi * 180
+                dphases_Q.append(dphase)
+                dcs_fit_Q.append(dc_)
             except Exception as e:
                 print(e)
-            for j, k in enumerate(iss):
+            for j, k in enumerate(idxs):
                 if i == k:
-                    axs[j].plot(phis, I_control_e, '.r', phis, I_control_g, '.b')
-                    axs[j].set_title("coupler bias: %.7f, phase: %.1f" % (dcs[i]/cz_point, dphase))
-
+                    axs[0, j].plot(phis, I_control_e, '.r', phis, I_control_g, '.b')
+                    axs[0, j].set_title("coupler bias: %.7f, phase: %.1f" % (dcs[i], dphase))
+                    axs[1, j].plot(phis, Q_control_e, '.r', phis, Q_control_g, '.b')
+                    axs[1, j].set_title("coupler bias: %.7f, phase: %.1f" % (dcs[i], dphase))
             # I10 = I1[:,i,0]
             # I10 /= np.max(I10)
             # I11 = I1[:,i,1]
@@ -299,14 +315,14 @@ else:
         plt.tight_layout()
         plt.pause(3)
 
-    fig2, axs = plt.subplots(2, 1, figsize=(8, 6))
+    fig_summary, axs = plt.subplots(2, 1, figsize=(8, 6))
     axs[0].set_title("coupler bias vs conditional phase")
-    axs[0].plot(dcs_norm_fit, dphases)
-    axs[0].set_xlabel("coupler bias / cz_point")
-    axs[0].set_ylabel("conditional phase [deg]")
-    axs[1].plot(dcs_fit, dphases)
+    axs[0].plot(dcs_fit_I, dphases_I)
+    axs[0].set_xlabel("coupler bias [V]")
+    axs[0].set_ylabel("conditional phase [deg]: I")
+    axs[1].plot(dcs_fit_Q, dphases_Q)
     axs[1].set_xlabel("coupler bias [V]")
-    axs[1].set_ylabel("conditional phase [deg]")
+    axs[1].set_ylabel("conditional phase [deg]: Q")
     plt.tight_layout()
     plt.show()
 
@@ -335,10 +351,14 @@ else:
 
         data = {}
         data["I1"] = I1
+        data["Q1"] = Q1
         data["figure"] = fig
-        data["figure_summary"] = fig2
+        data["figure_summary"] = fig_summary
         data["coupler_biases"] = dcs
-        data["conditional_phases"] = dphases
+        data["conditional_phases"] = dphases_I
+        data["conditional_phases"] = dphases_Q
+        data["fitted_dc_I"] = dcs_fit_I
+        data["fitted_dc_Q"] = dcs_fit_Q
         # np.savez(save_dir / filename, I1=I1)
         # print("Data saved as %s.npz" % filename)
 

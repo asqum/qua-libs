@@ -1,5 +1,5 @@
 
-# Single QUA script generated at 2024-07-08 18:24:53.353731
+# Single QUA script generated at 2024-07-09 15:29:29.442311
 # QUA library version: 1.2.0
 
 from qm.qua import *
@@ -16,16 +16,10 @@ with program() as prog:
     v9 = declare(fixed, )
     v10 = declare(fixed, )
     v11 = declare(fixed, )
-    v12 = declare(int, )
+    v12 = declare(fixed, )
     v13 = declare(fixed, )
-    v14 = declare(fixed, )
-    v15 = declare(fixed, )
-    v16 = declare(fixed, )
-    v17 = declare(int, )
-    a1 = declare(fixed, value=[-0.036, -0.034, -0.032])
-    a2 = declare(fixed, value=[0.015700000000000002, 0.0158, 0.0159])
-    a3 = declare(fixed, value=[0.0237, 0.0237, 0.0237])
-    a4 = declare(int, value=[0, 1])
+    v14 = declare(bool, )
+    a1 = declare(bool, value=[True, False])
     align()
     set_dc_offset("q1.z", "single", 0.0)
     set_dc_offset("q2.z", "single", 0.0182)
@@ -33,26 +27,33 @@ with program() as prog:
     set_dc_offset("q4.z", "single", 0.0029)
     set_dc_offset("q5.z", "single", 0.0237)
     align()
-    with for_(v1,0,(v1<4),(v1+1)):
+    with for_(v1,0,(v1<1),(v1+1)):
         r1 = declare_stream()
         save(v1, r1)
-        with for_each_((v14,v15,v16),(a1,a2,a3)):
-            set_dc_offset("coupler_q4_q5", "single", v14)
-            set_dc_offset("q4.z", "single", v15)
-            set_dc_offset("q5.z", "single", v16)
-            wait(100, )
-            with for_(v12,4,(v12<=196),(v12+4)):
-                with for_each_((v17),(a4)):
-                    assign(v13, Cast.mul_fixed_by_int(0.001,(4*v12)))
+        set_dc_offset("coupler_q4_q5", "single", 0)
+        wait(100, )
+        with for_(v12,0.0,(v12<2.975),(v12+0.05)):
+            with for_(v13,0.9999,(v13<1.0001041666666666),(v13+8.333333333387927e-06)):
+                with for_each_((v14),(a1)):
+                    play("x180", "q4.xy", condition=v14)
                     align()
-                    with if_((v17==1)):
-                        play("x180", "q5.xy")
-                        align()
-                    play("x90", "q4.xy")
-                    frame_rotation_2pi(v13, "q4.xy")
-                    wait(v12, "q4.xy")
-                    play("x90", "q4.xy")
+                    play("x90", "q5.xy")
                     align()
+                    wait(5, )
+                    play("const", "q4.z")
+                    play("const"*amp(v13), "coupler_q4_q5")
+                    play("const"*amp(v13), "coupler_q4_q5")
+                    wait(10, "q5.z")
+                    align()
+                    set_dc_offset("coupler_q4_q5", "single", 0)
+                    set_dc_offset("q4.z", "single", 0.0029)
+                    set_dc_offset("q5.z", "single", 0.0237)
+                    wait(5, )
+                    align()
+                    frame_rotation_2pi(v12, "q5.xy")
+                    play("x90", "q5.xy")
+                    align()
+                    wait(4, )
                     measure("readout"*amp(1.0), "q1.resonator", None, dual_demod.full("iw1", "iw2", v2), dual_demod.full("iw3", "iw1", v7))
                     r2 = declare_stream()
                     save(v2, r2)
@@ -78,47 +79,13 @@ with program() as prog:
                     save(v6, r6)
                     r11 = declare_stream()
                     save(v11, r11)
-                    wait(25000, )
-                    reset_frame("q4.xy")
-                    assign(v13, Cast.mul_fixed_by_int(0.001,(4*v12)))
-                    align()
-                    with if_((v17==1)):
-                        play("x180", "q4.xy")
-                        align()
-                    play("x90", "q5.xy")
-                    frame_rotation_2pi(v13, "q5.xy")
-                    wait(v12, "q5.xy")
-                    play("x90", "q5.xy")
-                    align()
-                    measure("readout"*amp(1.0), "q1.resonator", None, dual_demod.full("iw1", "iw2", v2), dual_demod.full("iw3", "iw1", v7))
-                    save(v2, r2)
-                    save(v7, r7)
-                    measure("readout"*amp(1.0), "q2.resonator", None, dual_demod.full("iw1", "iw2", v3), dual_demod.full("iw3", "iw1", v8))
-                    save(v3, r3)
-                    save(v8, r8)
-                    measure("readout"*amp(1.0), "q3.resonator", None, dual_demod.full("iw1", "iw2", v4), dual_demod.full("iw3", "iw1", v9))
-                    save(v4, r4)
-                    save(v9, r9)
-                    measure("readout"*amp(1.0), "q4.resonator", None, dual_demod.full("iw1", "iw2", v5), dual_demod.full("iw3", "iw1", v10))
-                    save(v5, r5)
-                    save(v10, r10)
-                    measure("readout"*amp(1.0), "q5.resonator", None, dual_demod.full("iw1", "iw2", v6), dual_demod.full("iw3", "iw1", v11))
-                    save(v6, r6)
-                    save(v11, r11)
-                    wait(25000, )
-                    reset_frame("q5.xy")
+                    wait(7, )
     with stream_processing():
         r1.save("n")
-        r2.buffer(2).buffer(2).buffer(49).buffer(3).average().save("I1")
-        r7.buffer(2).buffer(2).buffer(49).buffer(3).average().save("Q1")
-        r3.buffer(2).buffer(2).buffer(49).buffer(3).average().save("I2")
-        r8.buffer(2).buffer(2).buffer(49).buffer(3).average().save("Q2")
-        r4.buffer(2).buffer(2).buffer(49).buffer(3).average().save("I3")
-        r9.buffer(2).buffer(2).buffer(49).buffer(3).average().save("Q3")
-        r5.buffer(2).buffer(2).buffer(49).buffer(3).average().save("I4")
-        r10.buffer(2).buffer(2).buffer(49).buffer(3).average().save("Q4")
-        r6.buffer(2).buffer(2).buffer(49).buffer(3).average().save("I5")
-        r11.buffer(2).buffer(2).buffer(49).buffer(3).average().save("Q5")
+        r6.buffer(60, 25, 2).average().save("I1")
+        r11.buffer(60, 25, 2).average().save("Q1")
+        r5.buffer(60, 25, 2).average().save("I2")
+        r5.buffer(60, 25, 2).average().save("Q2")
 
 
 config = {
@@ -1297,7 +1264,7 @@ config = {
         },
         "q4.z.const.pulse": {
             "operation": "control",
-            "length": 100,
+            "length": 40,
             "waveforms": {
                 "single": "q4.z.const.wf",
             },
@@ -1472,28 +1439,28 @@ config = {
         },
         "coupler_q1_q2.const.pulse": {
             "operation": "control",
-            "length": 100,
+            "length": 40,
             "waveforms": {
                 "single": "coupler_q1_q2.const.wf",
             },
         },
         "coupler_q2_q3.const.pulse": {
             "operation": "control",
-            "length": 100,
+            "length": 40,
             "waveforms": {
                 "single": "coupler_q2_q3.const.wf",
             },
         },
         "coupler_q3_q4.const.pulse": {
             "operation": "control",
-            "length": 100,
+            "length": 40,
             "waveforms": {
                 "single": "coupler_q3_q4.const.wf",
             },
         },
         "coupler_q4_q5.const.pulse": {
             "operation": "control",
-            "length": 100,
+            "length": 40,
             "waveforms": {
                 "single": "coupler_q4_q5.const.wf",
             },
@@ -1986,7 +1953,7 @@ config = {
         },
         "q4.z.const.wf": {
             "type": "constant",
-            "sample": 0.1,
+            "sample": 0.25,
         },
         "q4.resonator.readout.wf.I": {
             "type": "constant",
@@ -2130,19 +2097,19 @@ config = {
         },
         "coupler_q1_q2.const.wf": {
             "type": "constant",
-            "sample": 0.1,
+            "sample": -0.0394572,
         },
         "coupler_q2_q3.const.wf": {
             "type": "constant",
-            "sample": 0.1,
+            "sample": -0.0394572,
         },
         "coupler_q3_q4.const.wf": {
             "type": "constant",
-            "sample": 0.1,
+            "sample": -0.0394572,
         },
         "coupler_q4_q5.const.wf": {
             "type": "constant",
-            "sample": 0.1,
+            "sample": -0.0394572,
         },
     },
     "digital_waveforms": {
@@ -2716,7 +2683,7 @@ loaded_config = {
             "mixInputs": {
                 "I": ('con1', 1, 3),
                 "Q": ('con1', 1, 4),
-                "mixer": "q1.xy_mixer_35c",
+                "mixer": "q1.xy_mixer_1a7",
                 "lo_frequency": 4700000000.0,
             },
             "intermediate_frequency": 385991173.03796864,
@@ -2770,7 +2737,7 @@ loaded_config = {
             "mixInputs": {
                 "I": ('con1', 1, 1),
                 "Q": ('con1', 1, 2),
-                "mixer": "q1.resonator_mixer_922",
+                "mixer": "q1.resonator_mixer_e75",
                 "lo_frequency": 6200000000.0,
             },
             "smearing": 0,
@@ -2820,7 +2787,7 @@ loaded_config = {
             "mixInputs": {
                 "I": ('con1', 1, 5),
                 "Q": ('con1', 1, 6),
-                "mixer": "q2.xy_mixer_4c8",
+                "mixer": "q2.xy_mixer_e8f",
                 "lo_frequency": 4700000000.0,
             },
             "intermediate_frequency": -264564380.79657173,
@@ -2874,7 +2841,7 @@ loaded_config = {
             "mixInputs": {
                 "I": ('con1', 1, 1),
                 "Q": ('con1', 1, 2),
-                "mixer": "q2.resonator_mixer_b1a",
+                "mixer": "q2.resonator_mixer_76d",
                 "lo_frequency": 6200000000.0,
             },
             "smearing": 0,
@@ -2924,7 +2891,7 @@ loaded_config = {
             "mixInputs": {
                 "I": ('con1', 1, 7),
                 "Q": ('con1', 1, 8),
-                "mixer": "q3.xy_mixer_07e",
+                "mixer": "q3.xy_mixer_244",
                 "lo_frequency": 4700000000.0,
             },
             "intermediate_frequency": -236154100.04951477,
@@ -2978,7 +2945,7 @@ loaded_config = {
             "mixInputs": {
                 "I": ('con1', 1, 1),
                 "Q": ('con1', 1, 2),
-                "mixer": "q3.resonator_mixer_10b",
+                "mixer": "q3.resonator_mixer_397",
                 "lo_frequency": 6200000000.0,
             },
             "smearing": 0,
@@ -3028,7 +2995,7 @@ loaded_config = {
             "mixInputs": {
                 "I": ('con1', 2, 1),
                 "Q": ('con1', 2, 2),
-                "mixer": "q4.xy_mixer_43e",
+                "mixer": "q4.xy_mixer_96e",
                 "lo_frequency": 4700000000.0,
             },
             "intermediate_frequency": -284600668.894413,
@@ -3082,7 +3049,7 @@ loaded_config = {
             "mixInputs": {
                 "I": ('con1', 1, 1),
                 "Q": ('con1', 1, 2),
-                "mixer": "q4.resonator_mixer_755",
+                "mixer": "q4.resonator_mixer_9ec",
                 "lo_frequency": 6200000000.0,
             },
             "smearing": 0,
@@ -3132,7 +3099,7 @@ loaded_config = {
             "mixInputs": {
                 "I": ('con1', 2, 3),
                 "Q": ('con1', 2, 4),
-                "mixer": "q5.xy_mixer_17b",
+                "mixer": "q5.xy_mixer_a3f",
                 "lo_frequency": 4700000000.0,
             },
             "intermediate_frequency": -345901097.018157,
@@ -3186,7 +3153,7 @@ loaded_config = {
             "mixInputs": {
                 "I": ('con1', 1, 1),
                 "Q": ('con1', 1, 2),
-                "mixer": "q5.resonator_mixer_ff1",
+                "mixer": "q5.resonator_mixer_685",
                 "lo_frequency": 6200000000.0,
             },
             "smearing": 0,
@@ -3898,7 +3865,7 @@ loaded_config = {
             "digital_marker": "ON",
         },
         "q4.z.const.pulse": {
-            "length": 100,
+            "length": 40,
             "waveforms": {
                 "single": "q4.z.const.wf",
             },
@@ -4090,7 +4057,7 @@ loaded_config = {
             "operation": "control",
         },
         "coupler_q1_q2.const.pulse": {
-            "length": 100,
+            "length": 40,
             "waveforms": {
                 "single": "coupler_q1_q2.const.wf",
             },
@@ -4098,7 +4065,7 @@ loaded_config = {
             "operation": "control",
         },
         "coupler_q2_q3.const.pulse": {
-            "length": 100,
+            "length": 40,
             "waveforms": {
                 "single": "coupler_q2_q3.const.wf",
             },
@@ -4106,7 +4073,7 @@ loaded_config = {
             "operation": "control",
         },
         "coupler_q3_q4.const.pulse": {
-            "length": 100,
+            "length": 40,
             "waveforms": {
                 "single": "coupler_q3_q4.const.wf",
             },
@@ -4114,7 +4081,7 @@ loaded_config = {
             "operation": "control",
         },
         "coupler_q4_q5.const.pulse": {
-            "length": 100,
+            "length": 40,
             "waveforms": {
                 "single": "coupler_q4_q5.const.wf",
             },
@@ -4705,7 +4672,7 @@ loaded_config = {
         },
         "q4.z.const.wf": {
             "type": "constant",
-            "sample": 0.1,
+            "sample": 0.25,
         },
         "q4.resonator.readout.wf.I": {
             "type": "constant",
@@ -4873,19 +4840,19 @@ loaded_config = {
         },
         "coupler_q1_q2.const.wf": {
             "type": "constant",
-            "sample": 0.1,
+            "sample": -0.0394572,
         },
         "coupler_q2_q3.const.wf": {
             "type": "constant",
-            "sample": 0.1,
+            "sample": -0.0394572,
         },
         "coupler_q3_q4.const.wf": {
             "type": "constant",
-            "sample": 0.1,
+            "sample": -0.0394572,
         },
         "coupler_q4_q5.const.wf": {
             "type": "constant",
-            "sample": 0.1,
+            "sample": -0.0394572,
         },
     },
     "digital_waveforms": {
@@ -4956,16 +4923,16 @@ loaded_config = {
         },
     },
     "mixers": {
-        "q1.xy_mixer_35c": [{'intermediate_frequency': 385991173.03796864, 'lo_frequency': 4700000000.0, 'correction': (1, 0, 0, 1)}],
-        "q1.resonator_mixer_922": [{'intermediate_frequency': -287531678.0, 'lo_frequency': 6200000000.0, 'correction': (1, 0, 0, 1)}],
-        "q2.xy_mixer_4c8": [{'intermediate_frequency': -264564380.79657173, 'lo_frequency': 4700000000.0, 'correction': (1, 0, 0, 1)}],
-        "q2.resonator_mixer_b1a": [{'intermediate_frequency': -185741282.0, 'lo_frequency': 6200000000.0, 'correction': (1, 0, 0, 1)}],
-        "q3.xy_mixer_07e": [{'intermediate_frequency': -236154100.04951477, 'lo_frequency': 4700000000.0, 'correction': (1, 0, 0, 1)}],
-        "q3.resonator_mixer_10b": [{'intermediate_frequency': -343278899.0, 'lo_frequency': 6200000000.0, 'correction': (1, 0, 0, 1)}],
-        "q4.xy_mixer_43e": [{'intermediate_frequency': -284600668.894413, 'lo_frequency': 4700000000.0, 'correction': (1, 0, 0, 1)}],
-        "q4.resonator_mixer_755": [{'intermediate_frequency': -162578680.0, 'lo_frequency': 6200000000.0, 'correction': (1, 0, 0, 1)}],
-        "q5.xy_mixer_17b": [{'intermediate_frequency': -345901097.018157, 'lo_frequency': 4700000000.0, 'correction': (1, 0, 0, 1)}],
-        "q5.resonator_mixer_ff1": [{'intermediate_frequency': -257761381.0, 'lo_frequency': 6200000000.0, 'correction': (1, 0, 0, 1)}],
+        "q1.xy_mixer_1a7": [{'intermediate_frequency': 385991173.03796864, 'lo_frequency': 4700000000.0, 'correction': (1, 0, 0, 1)}],
+        "q1.resonator_mixer_e75": [{'intermediate_frequency': -287531678.0, 'lo_frequency': 6200000000.0, 'correction': (1, 0, 0, 1)}],
+        "q2.xy_mixer_e8f": [{'intermediate_frequency': -264564380.79657173, 'lo_frequency': 4700000000.0, 'correction': (1, 0, 0, 1)}],
+        "q2.resonator_mixer_76d": [{'intermediate_frequency': -185741282.0, 'lo_frequency': 6200000000.0, 'correction': (1, 0, 0, 1)}],
+        "q3.xy_mixer_244": [{'intermediate_frequency': -236154100.04951477, 'lo_frequency': 4700000000.0, 'correction': (1, 0, 0, 1)}],
+        "q3.resonator_mixer_397": [{'intermediate_frequency': -343278899.0, 'lo_frequency': 6200000000.0, 'correction': (1, 0, 0, 1)}],
+        "q4.xy_mixer_96e": [{'intermediate_frequency': -284600668.894413, 'lo_frequency': 4700000000.0, 'correction': (1, 0, 0, 1)}],
+        "q4.resonator_mixer_9ec": [{'intermediate_frequency': -162578680.0, 'lo_frequency': 6200000000.0, 'correction': (1, 0, 0, 1)}],
+        "q5.xy_mixer_a3f": [{'intermediate_frequency': -345901097.018157, 'lo_frequency': 4700000000.0, 'correction': (1, 0, 0, 1)}],
+        "q5.resonator_mixer_685": [{'intermediate_frequency': -257761381.0, 'lo_frequency': 6200000000.0, 'correction': (1, 0, 0, 1)}],
     },
 }
 

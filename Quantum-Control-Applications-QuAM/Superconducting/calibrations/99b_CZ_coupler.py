@@ -35,7 +35,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 
-from quam_components import QuAM
+from quam_libs.components import QuAM
 from quam_libs.macros import qua_declaration, multiplexed_readout, node_save
 
 
@@ -57,10 +57,10 @@ qmm = machine.connect()
 q1 = machine.qubits["q4"]
 q2 = machine.qubits["q5"]
 coupler = (q1 @ q2).coupler
-compensations = {
-    q1: coupler.opx_output.crosstalk[q1.z.opx_output.port_id],
-    q2: coupler.opx_output.crosstalk[q2.z.opx_output.port_id]
-}
+# compensations = {
+#     q1: coupler.opx_output.crosstalk[q1.z.opx_output.port_id],
+#     q2: coupler.opx_output.crosstalk[q2.z.opx_output.port_id]
+# }
 
 import numpy as np
 compensation_arr = np.array([[1, 0.177], [0.408, 1]])
@@ -74,8 +74,8 @@ n_avg = 100
 
 # The flux pulse durations in clock cycles (4ns) - Must be larger than 4 clock cycles.
 # The flux bias sweep in V
-dcs = np.linspace(-0.07, -0.025, 301)
-scales = np.linspace(0.035, 0.06, 101)
+dcs = np.linspace(-0.1, 0.1, 301)
+scales = np.linspace(-0.2, 0.2, 101)
 ts = scales
 
 
@@ -83,7 +83,7 @@ with program() as cz:
     I, I_st, Q, Q_st, n, n_st = qua_declaration(num_qubits=2)
     t = declare(int)  # QUA variable for the flux pulse duration
     dc = declare(fixed)  # QUA variable for the flux pulse amplitude
-    assign(t, 10)
+    assign(t, 30)
     scale = declare(fixed)
 
     # Bring the active qubits to the minimum frequency point
@@ -106,7 +106,7 @@ with program() as cz:
                 # varying its amplitude and duration in order to observe the SWAP chevron.
                 
                 # vals = inv_arr @ [compensations[q1] * dc, compensations[q2] * dc]
-                q1.z.set_dc_offset(-0.01368 + scale * dc) # 0.0175
+                q1.z.set_dc_offset(0.00939 + scale * dc) # 0.0175
                 q2.z.set_dc_offset(q2.z.min_offset)
                 
                 coupler.set_dc_offset(dc)

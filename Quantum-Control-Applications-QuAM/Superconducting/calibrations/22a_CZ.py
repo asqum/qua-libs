@@ -1,3 +1,4 @@
+# %%
 """
         CZ CHEVRON - 4ns granularity
 The goal of this protocol is to find the parameters of the CZ gate between two flux-tunable qubits.
@@ -38,6 +39,10 @@ import os
 from quam_libs.components import QuAM
 from quam_libs.macros import qua_declaration, multiplexed_readout, node_save
 
+import matplotlib
+
+matplotlib.use("TKAgg")
+
 
 ###################################################
 #  Load QuAM and open Communication with the QOP  #
@@ -60,13 +65,13 @@ coupler = (q1 @ q2).coupler
 # The QUA program #
 ###################
 qb = q1  # The qubit whose flux will be swept
-n_avg = 100
+n_avg = 50
 
 # The flux pulse durations in clock cycles (4ns) - Must be larger than 4 clock cycles.
 ts = np.arange(4, 200, 1)
 # The flux bias sweep in V
-dcs = np.linspace(-0.02, 0.0, 201)
-coupler_bias = -0.02
+dcs = np.linspace(0.007, 0.012, 201)
+coupler_bias = 0 # -0.02
 
 
 with program() as cz:
@@ -91,11 +96,11 @@ with program() as cz:
                 wait(20 * u.ns)
                 # Play a flux pulse on the qubit with the highest frequency to bring it close to the excited qubit while
                 # varying its amplitude and duration in order to observe the SWAP chevron.
-                qb.z.set_dc_offset(dc + coupler_bias*0.05 )
+                q1.z.set_dc_offset(dc + coupler_bias*0.05)
                 wait(t, q2.z.name)
                 align()
                 # Put back the qubit to the max frequency point
-                qb.z.to_min()
+                q1.z.to_min()
 
                 # Wait some time to ensure that the flux pulse will end before the readout pulse
                 wait(20 * u.ns)
@@ -194,4 +199,4 @@ else:
         f"qubit_flux": qb.name,
         "figure": fig,
     }
-    node_save("CZ_chevron_fine", data, machine)
+    node_save(machine, "cz_chevron_dc_offset", data, additional_files=True)

@@ -801,8 +801,8 @@
             "z": {
                 "operations": {
                     "const": {
-                        "length": 100,
-                        "amplitude": 0.1,
+                        "length": 40,
+                        "amplitude": 0.25,
                         "__class__": "quam.components.pulses.SquarePulse"
                     }
                 },
@@ -1043,7 +1043,7 @@
                 "operations": {
                     "const": {
                         "length": 40,
-                        "amplitude": -0.03832,
+                        "amplitude": -0.0394572,
                         "__class__": "quam.components.pulses.SquarePulse"
                     }
                 },
@@ -1059,7 +1059,7 @@
                 "operations": {
                     "const": {
                         "length": 40,
-                        "amplitude": -0.03832,
+                        "amplitude": -0.0394572,
                         "__class__": "quam.components.pulses.SquarePulse"
                     }
                 },
@@ -1075,7 +1075,7 @@
                 "operations": {
                     "const": {
                         "length": 40,
-                        "amplitude": -0.03832,
+                        "amplitude": -0.0394572,
                         "__class__": "quam.components.pulses.SquarePulse"
                     }
                 },
@@ -1091,7 +1091,7 @@
                 "operations": {
                     "const": {
                         "length": 40,
-                        "amplitude": -0.03832,
+                        "amplitude": -0.07,
                         "__class__": "quam.components.pulses.SquarePulse"
                     }
                 },
@@ -1205,9 +1205,6 @@
                         "controller_id": "con1",
                         "fem_id": 3,
                         "port_id": 1,
-                        "crosstalk": {
-                            "8": 0.408
-                        },
                         "upsampling_mode": "pulse",
                         "output_mode": "amplified",
                         "__class__": "quam.components.ports.analog_outputs.LFFEMAnalogOutputPort"
@@ -1240,10 +1237,6 @@
                         "controller_id": "con1",
                         "fem_id": 3,
                         "port_id": 5,
-                        "crosstalk": {
-                            "8": 0.427,
-                            "1": 0.374
-                        },
                         "upsampling_mode": "pulse",
                         "output_mode": "amplified",
                         "__class__": "quam.components.ports.analog_outputs.LFFEMAnalogOutputPort"
@@ -1268,9 +1261,6 @@
                         "controller_id": "con1",
                         "fem_id": 3,
                         "port_id": 8,
-                        "crosstalk": {
-                            "1": 0.177
-                        },
                         "upsampling_mode": "pulse",
                         "output_mode": "amplified",
                         "__class__": "quam.components.ports.analog_outputs.LFFEMAnalogOutputPort"
