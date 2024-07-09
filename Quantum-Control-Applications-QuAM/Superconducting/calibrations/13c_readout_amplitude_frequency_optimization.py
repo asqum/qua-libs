@@ -219,8 +219,6 @@ else:
         ].amplitude
         data[f"{qubit.resonator.name}_if_opt"] = qubit.resonator.intermediate_frequency
 
-    node_save(
-        machine, "readout_amplitude_frequency_optimization", data, additional_files=True
-    )
+    node_save(machine, "readout_amplitude_frequency_optimization", data, additional_files=True)
 
 # %%

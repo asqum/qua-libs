@@ -38,7 +38,7 @@ from scipy import signal
 
 import matplotlib
 
-# matplotlib.use("TKAgg")
+matplotlib.use("TKAgg")
 
 
 ###################################################
@@ -85,29 +85,28 @@ with program() as multi_res_spec_vs_amp:
     # Bring the active qubits to the minimum frequency point
     machine.apply_all_flux_to_min()
 
-    for i, q in enumerate(qubits):
+    with for_(n, 0, n < n_avg, n + 1):  # QUA for_ loop for averaging
+        save(n, n_st)
 
-        # resonator of this qubit
-        rr = resonators[i]
+        with for_(*from_array(df, dfs)):  # QUA for_ loop for sweeping the frequency
 
-        with for_(n, 0, n < n_avg, n + 1):  # QUA for_ loop for averaging
-            save(n, n_st)
+            with for_(*from_array(a, amps)):  # QUA for_ loop for sweeping the readout amplitude
+                for i, rr in enumerate(resonators):
+                    # Update the resonator frequencies for all resonators
+                    update_frequency(rr.name, df + rr.intermediate_frequency)
+                
+                align()
 
-            with for_(*from_array(df, dfs)):  # QUA for_ loop for sweeping the frequency
-                # Update the resonator frequencies for all resonators
-                update_frequency(rr.name, df + rr.intermediate_frequency)
-                rr.wait(machine.depletion_time * u.ns)
-
-                with for_(*from_array(a, amps)):  # QUA for_ loop for sweeping the readout amplitude
+                for i, rr in enumerate(resonators):
                     # readout the resonator
                     rr.measure("readout", qua_vars=(I[i], Q[i]), amplitude_scale=a)
-
-                    # wait for the resonator to relax
-                    rr.wait(machine.depletion_time * u.ns)
 
                     # save data
                     save(I[i], I_st[i])
                     save(Q[i], Q_st[i])
+
+                # Wait for the qubits to decay to the ground state
+                wait(machine.thermalization_time * u.ns)
 
     with stream_processing():
         n_st.save("n")
@@ -193,8 +192,6 @@ else:
         data[f"{rr.name}_R"] = A_data[i]
         data[f"{rr.name}_readout_amplitude"] = prev_amps[i]
     data["figure"] = fig
-    node_save(
-        machine, "resonator_spectroscopy_vs_amplitude", data, additional_files=True
-    )
+    node_save(machine, "resonator_spectroscopy_vs_amplitude", data, additional_files=True)
 
 # %%

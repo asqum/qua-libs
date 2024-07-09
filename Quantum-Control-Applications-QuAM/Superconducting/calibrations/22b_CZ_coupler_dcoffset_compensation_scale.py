@@ -1,4 +1,3 @@
-# %%
 """
         CZ CHEVRON - 4ns granularity
 The goal of this protocol is to find the parameters of the CZ gate between two flux-tunable qubits.
@@ -40,10 +39,6 @@ from quam_libs.components import QuAM
 from quam_libs.macros import qua_declaration, multiplexed_readout, node_save
 
 
-import matplotlib
-
-matplotlib.use("TKAgg")
-
 ###################################################
 #  Load QuAM and open Communication with the QOP  #
 ###################################################
@@ -75,29 +70,30 @@ inv_arr = np.linalg.inv(compensation_arr)
 # The QUA program #
 ###################
 qb = q1  # The qubit whose flux will be swept
+n_avg = 100
 
-n_avg = 250
 # The flux pulse durations in clock cycles (4ns) - Must be larger than 4 clock cycles.
-amps = np.linspace(-0.05, 0.05, 101)
 # The flux bias sweep in V
-scales = np.linspace(-1, 1, 101)
-# wait_time = 40
+dcs = np.linspace(-0.1, 0.1, 301)
+scales = np.linspace(-0.2, 0.2, 101)
+ts = scales
 
 
 with program() as cz:
     I, I_st, Q, Q_st, n, n_st = qua_declaration(num_qubits=2)
-    t = declare(int, value=60)
-    scale = declare(fixed)  # QUA variable for the flux pulse duration
-    a = declare(fixed)
+    t = declare(int)  # QUA variable for the flux pulse duration
+    dc = declare(fixed)  # QUA variable for the flux pulse amplitude
+    assign(t, 30)
+    scale = declare(fixed)
 
     # Bring the active qubits to the minimum frequency point
     machine.apply_all_flux_to_min()
-    coupler.set_dc_offset(0)
 
     with for_(n, 0, n < n_avg, n + 1):
         save(n, n_st)
+
         with for_(*from_array(scale, scales)):
-            with for_(*from_array(a, amps)):
+            with for_(*from_array(dc, dcs)):
                 # assign(v1, Cast.mul_fixed_by_int(-0.15, dc))
                 # Put the two qubits in their excited states
                 q1.xy.play("x180")
@@ -110,30 +106,17 @@ with program() as cz:
                 # varying its amplitude and duration in order to observe the SWAP chevron.
                 
                 # vals = inv_arr @ [compensations[q1] * dc, compensations[q2] * dc]
-                # q1.z.set_dc_offset(0.0175 + vals[0])
-                # q2.z.set_dc_offset(q2.z.min_offset + vals[1])
-
-                # q1.z.set_dc_offset(0.0175 + 0.05 * dc)
-                # q1.z.play("const", amplitude_scale=4*(1.127 * 0.0175 - 0.0394572 * 0.05 * amp - q1.z.min_offset), duration=t) # 1.127 = (0.01189 - 0.0024)/0.00842
-                # q1.z.play("const", amplitude_scale=0.0531 + scale * a * coupler.operations["const"].amplitude, duration=t) # 1.127 = (0.01189 - 0.0024)/0.00842
-                # q1.z.play("const", amplitude_scale=0.02393 - scale * a, duration=t)
-                q1.z.play("const", amplitude_scale=0.02393, duration=t)
-                #q1.z.set_dc_offset(q1.z.min_offset + scale * a * coupler.operations["const"].amplitude)
-
-                # coupler.set_dc_offset(dc)
-                coupler.play("const", amplitude_scale=a, duration=t)
-
+                q1.z.set_dc_offset(0.00939 + scale * dc) # 0.0175
+                q2.z.set_dc_offset(q2.z.min_offset)
+                
+                coupler.set_dc_offset(dc)
+                wait(t, q2.z.name)
                 align()
-
+                
                 # Put back the qubit to the max frequency point
                 coupler.set_dc_offset(0)
                 q1.z.to_min()
                 q2.z.to_min()
-                
-                # Put back the qubit to the max frequency point
-                # coupler.set_dc_offset(-0.033)
-                # q1.z.set_dc_offset(q1.z.min_offset + 0.051 * -0.033)
-                # q2.z.set_dc_offset(q2.z.min_offset + 0.01 * -0.033)
 
                 # Wait some time to ensure that the flux pulse will end before the readout pulse
                 wait(20 * u.ns)
@@ -148,11 +131,11 @@ with program() as cz:
         # for the progress counter
         n_st.save("n")
         # resonator 1
-        I_st[0].buffer(len(amps)).buffer(len(scales)).average().save("I1")
-        Q_st[0].buffer(len(amps)).buffer(len(scales)).average().save("Q1")
+        I_st[0].buffer(len(dcs)).buffer(len(scales)).average().save("I1")
+        Q_st[0].buffer(len(dcs)).buffer(len(scales)).average().save("Q1")
         # resonator 2
-        I_st[1].buffer(len(amps)).buffer(len(scales)).average().save("I2")
-        Q_st[1].buffer(len(amps)).buffer(len(scales)).average().save("Q2")
+        I_st[1].buffer(len(dcs)).buffer(len(scales)).average().save("I2")
+        Q_st[1].buffer(len(dcs)).buffer(len(scales)).average().save("Q2")
 
 
 ###########################
@@ -192,51 +175,44 @@ else:
         plt.suptitle("CZ chevron")
         plt.subplot(221)
         plt.cla()
-        plt.pcolor(amps * coupler.operations["const"].amplitude, scales, I1)
-        # plt.plot(cz_point, wait_time, color="r", marker="*")
+        plt.pcolor(dcs,  ts, I1)
         # plt.title(f"{q1.name} - I, f_01={int(q1.f_01 / u.MHz)} MHz")
-        plt.ylabel("Compensation Scales")
+        plt.ylabel("Compensation scale")
         plt.subplot(223)
         plt.cla()
-        plt.pcolor(amps * coupler.operations["const"].amplitude, scales, Q1)
-        # plt.plot(cz_point, wait_time, color="r", marker="*")
+        plt.pcolor(dcs,  ts, Q1)
         plt.title(f"{q1.name} - Q")
         plt.xlabel("Flux amplitude [V]")
-        plt.ylabel("Compensation Scales")
+        plt.ylabel("Compensation scale")
         plt.subplot(222)
         plt.cla()
-        plt.pcolor(amps * coupler.operations["const"].amplitude, scales, I2)
-        # plt.plot(cz_point, wait_time, color="r", marker="*")
+        plt.pcolor(dcs,  ts, I2)
         # plt.title(f"{q2.name} - I, f_01={int(q2.f_01 / u.MHz)} MHz")
         plt.subplot(224)
         plt.cla()
-        plt.pcolor(amps * coupler.operations["const"].amplitude, scales, Q2)
-        # plt.plot(cz_point, wait_time, color="r", marker="*")
+        plt.pcolor(dcs, ts, Q2)
         plt.title(f"{q2.name} - Q")
         plt.xlabel("Flux amplitude [V]")
         plt.tight_layout()
-        plt.pause(0.3)
+        plt.pause(0.1)
 
     # Close the quantum machines at the end in order to put all flux biases to 0 so that the fridge doesn't heat-up
     qm.close()
-
-    plt.show()
 
     # q1.z.cz.length =
     # q1.z.cz.level =
 
     # Save data from the node
     data = {
-        f"{q1.name}_flux_pulse_amplitude": amps,
+        f"{q1.name}_flux_pulse_amplitude": dcs,
+        f"{q1.name}_flux_pulse_duration": 4 * ts,
         f"{q1.name}_I": I1.T,
         f"{q1.name}_Q": Q1.T,
-        f"{q2.name}_flux_pulse_amplitude": amps,
+        f"{q2.name}_flux_pulse_amplitude": dcs,
+        f"{q2.name}_flux_pulse_duration": 4 * ts,
         f"{q2.name}_I": I2.T,
         f"{q2.name}_Q": Q2.T,
-        f"compensation_scales": scales,
-        f"qubit_flux": q1.name,
+        f"qubit_flux": qb.name,
         "figure": fig,
     }
-    node_save(machine, "cz_chevron_coupler_pulsed_compensation_scale", data, additional_files=True)
-
-# %%
+    node_save(machine, "CZ_chevron_coupler", data)

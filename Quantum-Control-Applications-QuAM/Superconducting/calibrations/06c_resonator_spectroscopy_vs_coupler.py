@@ -55,6 +55,7 @@ qmm = machine.connect()
 qubits = machine.active_qubits
 resonators = [qubit.resonator for qubit in machine.active_qubits]
 couplers = [qubit_pair.coupler for qubit_pair in machine.active_qubit_pairs]
+
 num_qubits = len(qubits)
 num_resonators = len(resonators)
 num_couplers = len(couplers)

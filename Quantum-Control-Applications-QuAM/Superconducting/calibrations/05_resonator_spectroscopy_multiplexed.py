@@ -59,7 +59,7 @@ num_resonators = len(resonators)
 # The QUA program #
 ###################
 
-n_avg = 400  # The number of averages
+n_avg = 100  # The number of averages
 # The frequency sweep around the resonator resonance frequency f_opt
 dfs = np.arange(-100e6, +100e6, 0.1e6)
 # You can adjust the IF frequency here to manually adjust the resonator frequencies instead of updating the state
@@ -84,14 +84,12 @@ with program() as multi_res_spec:
                 # Update the resonator frequencies for all resonators
                 update_frequency(rr.name, df + rr.intermediate_frequency)
 
-                rr.measure("readout", qua_vars=(I[i], Q[i]))
-
-                # wait for the resonator to relax
-                rr.wait(machine.depletion_time * u.ns)
-
-                # save data
-                save(I[i], I_st[i])
-                save(Q[i], Q_st[i])
+            # Align the elements to measure after having waited a time "tau" after the qubit pulses.
+            align()
+            # Measure the state of the resonators
+            multiplexed_readout(qubits, I, I_st, Q, Q_st)
+            # Wait for the qubits to decay to the ground state
+            wait(machine.thermalization_time * u.ns)
 
     with stream_processing():
         n_st.save("n")
@@ -120,7 +118,7 @@ else:
     # Prepare the figures for live plotting
     fig, axss = plt.subplots(2, num_qubits, figsize=(4 * num_qubits, 5))
     # Tool to easily fetch results from the OPX (results_handle used in it)
-    res_list = sum([[f"I{i + 1}", f"Q{i + 1}"] for i in range(num_resonators)], [])
+    res_list = ["n"] + sum([[f"I{i + 1}", f"Q{i + 1}"] for i in range(num_resonators)], [])
     results = fetching_tool(job, res_list, mode="live")
     interrupt_on_close(fig, job)
     s_data = []
@@ -129,8 +127,11 @@ else:
         # Fetch results
         fetched_data = results.fetch_all()
         n = fetched_data[0]
-        I_data = fetched_data[0::2]
-        Q_data = fetched_data[1::2]
+        I_data = fetched_data[1::2]
+        Q_data = fetched_data[2::2]
+
+        # Progress bar
+        progress_counter(n, n_avg, start_time=results.start_time)
 
         for i, rr in enumerate(resonators):
             s = u.demod2volts(I_data[i] + 1j * Q_data[i], rr.operations["readout"].length)
@@ -191,8 +192,6 @@ else:
 
     plt.show()
     # Save data from the node
-    node_save(
-        machine, "resonator_spectroscopy_multiplexed", data, additional_files=True
-    )
+    node_save(machine, "resonator_spectroscopy_multiplexed", data, additional_files=True)
 
 # %%
