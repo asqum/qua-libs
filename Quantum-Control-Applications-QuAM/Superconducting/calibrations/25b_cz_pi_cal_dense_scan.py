@@ -64,8 +64,10 @@ from quam_libs.experiments.cz_pi_calibration.cosine import Cosine
 ###################################################
 # Class containing tools to help handle units and conversions.
 u = unit(coerce_to_integer=True)
+# Define a path relative to this script, i.e., ../configuration/quam_state
+config_path = Path(__file__).parent.parent / "configuration" / "quam_state"
 # Instantiate the QuAM class from the state file
-machine = QuAM.load()
+machine = QuAM.load(config_path)
 # Generate the OPX and Octave configurations
 config = machine.generate_config()
 # Open Communication with the QOP
@@ -105,13 +107,14 @@ cz_corr = 0 # float(eval(f"cz{q2_number}_{q1_number}_2pi_dev"))
 simulate = False
 flux_settle_time = 100
 
-n_avg = 1000  # The number of averages
+n_avg = 3000  # The number of averages
 phis = np.arange(0, 3, 1 / points_per_cycle)
 # dcs = np.linspace(0.7, 1.3, 25)
 cz_point = -0.03832
-dcs = cz_point * np.linspace(0.5, 1.5, 51)
+# dcs = cz_point * np.linspace(0.5, 1.5, 51)
+dcs = np.linspace(-0.0385797, -0.0385, 51)
 
-wait_time = 40 
+wait_time = 60 
 
 ###################
 # The QUA program #
@@ -130,10 +133,10 @@ with program() as cz_pi_cal:
         # Save the averaging iteration to get the progress bar
         save(n, n_st)
 
-        coupler.set_dc_offset(-0.034)
-        q1.z.set_dc_offset(0.0175 + 0.05 * -0.034)
-        q2.z.set_dc_offset(q2.z.min_offset)
-        wait(100)
+        coupler.set_dc_offset(0)
+        # q1.z.set_dc_offset(0.0175 + 0.05 * -0.034)
+        # q2.z.set_dc_offset(q2.z.min_offset)
+        wait(20)
 
         with for_(*from_array(phi, phis)):
             with for_(*from_array(dc, dcs)):
