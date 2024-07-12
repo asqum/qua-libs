@@ -80,12 +80,12 @@ n_avg = 250
 # The flux pulse durations in clock cycles (4ns) - Must be larger than 4 clock cycles.
 ts = np.arange(4, 300, 5)
 # The flux bias sweep in V
-dcs = np.linspace(-0.07, 0.07, 301)
+dcs = np.linspace(-0.046, -0.02, 301)
 # dcs = np.linspace(-0.0392, -0.0396, 25)
 # dcs = np.linspace(-0.045, -0.025, 701)
-cz_point = -0.0394572
+cz_point = -0.00939
 # wait_time = 40
-scale = 0.048 #0.05
+scale = 0.044 #0.05
 
 with program() as cz:
     I, I_st, Q, Q_st, n, n_st = qua_declaration(num_qubits=2)

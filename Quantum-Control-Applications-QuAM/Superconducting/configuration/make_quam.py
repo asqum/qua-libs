@@ -48,11 +48,11 @@ def create_quam_superconducting(
     else:
         raise ValueError("Wiring must be provided.")
 
-    host_ip = "192.168.1.52"
+    host_ip = "qum.phys.sinica.edu.tw"
     octave_ips = [
-        "192.168.1.52",
-        "192.168.1.52",
-        "192.168.1.52",
+        "qum.phys.sinica.edu.tw",
+        "qum.phys.sinica.edu.tw",
+        "qum.phys.sinica.edu.tw",
     ]        # or "192.168.88.X" if configured internally
     octave_ports = [
         11243,
@@ -65,7 +65,7 @@ def create_quam_superconducting(
         "cluster_name": "QPX_20q",
         "octave_ips": octave_ips,
         "octave_ports": octave_ports,
-        "data_folder": r"C:\Users\ASQUM_2\Documents\GitHub\PYQUM\TEST\BETAsite\QM\OPX1000\data",
+        "data_folder": r"/Users/adamachuck/Documents/GitHub/ASQUM/qua-libs/Quantum-Control-Applications-QuAM/Superconducting/data",
     }
     print("Please update the default network settings in: quam.network")
 

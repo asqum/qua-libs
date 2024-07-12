@@ -65,7 +65,7 @@ coupler = (q1 @ q2).coupler
 # The QUA program #
 ###################
 qb = q1  # The qubit whose flux will be swept
-n_avg = 50
+n_avg = 1000
 
 # The flux pulse durations in clock cycles (4ns) - Must be larger than 4 clock cycles.
 ts = np.arange(4, 200, 1)

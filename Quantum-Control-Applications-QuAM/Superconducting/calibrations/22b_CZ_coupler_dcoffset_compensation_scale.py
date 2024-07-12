@@ -70,12 +70,14 @@ inv_arr = np.linalg.inv(compensation_arr)
 # The QUA program #
 ###################
 qb = q1  # The qubit whose flux will be swept
-n_avg = 100
+n_avg = 1000
 
 # The flux pulse durations in clock cycles (4ns) - Must be larger than 4 clock cycles.
 # The flux bias sweep in V
-dcs = np.linspace(-0.1, 0.1, 301)
-scales = np.linspace(-0.2, 0.2, 101)
+# dcs = np.linspace(-0.1, 0.1, 301)
+dcs = np.linspace(-0.046, -0.026, 301)
+# scales = np.linspace(-0.2, 0.2, 101)
+scales = np.linspace(0.025, 0.06, 101)
 ts = scales
 
 
