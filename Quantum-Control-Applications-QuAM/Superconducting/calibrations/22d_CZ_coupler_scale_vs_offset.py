@@ -75,9 +75,12 @@ n_avg = 1000
 # The flux pulse durations in clock cycles (4ns) - Must be larger than 4 clock cycles.
 # The flux bias sweep in V
 # dcs = np.linspace(-0.1, 0.1, 301)
-dcs = np.linspace(-0.046, -0.026, 301)
+# dcs = np.linspace(-0.046, -0.026, 301)
+dc = 0 #-0.03
+cz_flux_points = np.linspace(0, 0.02, 301)
+dcs = cz_flux_points
 # scales = np.linspace(-0.2, 0.2, 101)
-scales = np.linspace(0.025, 0.1, 101)
+scales = np.linspace(0.0, 0.1, 101)
 ts = scales
 
 
@@ -95,7 +98,9 @@ with program() as cz:
         save(n, n_st)
 
         with for_(*from_array(scale, scales)):
-            with for_(*from_array(dc, dcs)):
+            # with for_(*from_array(dc, dcs)):
+            cz_flux_point = declare(fixed)
+            with for_(*from_array(cz_flux_point, cz_flux_points)):
                 # assign(v1, Cast.mul_fixed_by_int(-0.15, dc))
                 # Put the two qubits in their excited states
                 q1.xy.play("x180")
@@ -108,7 +113,7 @@ with program() as cz:
                 # varying its amplitude and duration in order to observe the SWAP chevron.
                 
                 # vals = inv_arr @ [compensations[q1] * dc, compensations[q2] * dc]
-                q1.z.set_dc_offset(0.00903 + scale * dc) # 0.0175
+                q1.z.set_dc_offset(cz_flux_point + scale * dc) # 0.0175
                 q2.z.set_dc_offset(q2.z.min_offset)
                 
                 coupler.set_dc_offset(dc)

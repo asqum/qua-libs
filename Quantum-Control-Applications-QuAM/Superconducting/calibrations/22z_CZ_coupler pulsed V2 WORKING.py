@@ -34,10 +34,10 @@ from qualang_tools.units import unit
 
 import matplotlib.pyplot as plt
 import numpy as np
-import os
 
 from quam_libs.components import QuAM
 from quam_libs.macros import qua_declaration, multiplexed_readout, node_save
+from quam.components import pulses
 
 
 import matplotlib
@@ -54,7 +54,6 @@ config_path = Path(__file__).parent.parent / "configuration" / "quam_state"
 # Instantiate the QuAM class from the state file
 machine = QuAM.load(config_path)
 # Generate the OPX and Octave configurations
-config = machine.generate_config()
 # Open Communication with the QOP
 qmm = machine.connect()
 
@@ -71,21 +70,27 @@ import numpy as np
 compensation_arr = np.array([[1, 0.177], [0.408, 1]])
 inv_arr = np.linalg.inv(compensation_arr)
 
+# Ad qubit pulses
+q1.z.operations["flux_pulse"] = pulses.SquarePulse(length=100, amplitude=0.1)
+coupler.operations["flux_pulse"] = pulses.SquarePulse(length=100, amplitude=0.1)
+
+config = machine.generate_config()
 ###################
 # The QUA program #
 ###################
 qb = q1  # The qubit whose flux will be swept
 
-n_avg = 250
+n_avg = 5
 # The flux pulse durations in clock cycles (4ns) - Must be larger than 4 clock cycles.
 ts = np.arange(4, 300, 5)
 # The flux bias sweep in V
-dcs = np.linspace(-0.06, 0.06, 301)
-# dcs = np.linspace(-0.0392, -0.0396, 25)
-# dcs = np.linspace(-0.045, -0.025, 701)
-cz_point = -0.00939
-# wait_time = 40
+# dcs = np.linspace(-0.06, 0.06, 301)
+dcs = np.linspace(-0.1, 0.1, 201)
+cz_point = 0.00903
 scale = 0.05 #0.05
+
+simulate = True
+
 
 with program() as cz:
     I, I_st, Q, Q_st, n, n_st = qua_declaration(num_qubits=2)
@@ -98,35 +103,34 @@ with program() as cz:
     with for_(n, 0, n < n_avg, n + 1):
         save(n, n_st)
         with for_(*from_array(t, ts)):
+            # assign(dc, -0.035)
+            # scale = declare(fixed)
+            # scales = np.linspace(0.02, 0.12, 301)
+            # dcs = scales
+            # with for_(*from_array(scale, scales)):
             with for_(*from_array(dc, dcs)):
                 # assign(v1, Cast.mul_fixed_by_int(-0.15, dc))
                 # Put the two qubits in their excited states
                 q1.xy.play("x180")
                 q2.xy.play("x180")
-
                 align()
-                # Wait some time to ensure that the flux pulse will arrive after the x90 pulse
-                wait(20 * u.ns)
-                # Play a flux pulse on the qubit with the highest frequency to bring it close to the excited qubit while
-                # varying its amplitude and duration in order to observe the SWAP chevron.
-                
-                # vals = inv_arr @ [compensations[q1] * dc, compensations[q2] * dc]
-                # q1.z.set_dc_offset(0.0175 + vals[0])
-                # q2.z.set_dc_offset(q2.z.min_offset + vals[1])
-                
-                q1.z.set_dc_offset(0.00903 + scale * dc) # 0.0175
-                # q2.z.set_dc_offset(q2.z.min_offset)
-                # q2.z.set_dc_offset(q2.z.min_offset + 0.01 * dc)
 
+                q1.z.set_dc_offset(cz_point)
+                wait(200 * u.ns)
+
+                # q1.z.play("flux_pulse", duration=t, amplitude_scale=10*scale * dc)
+                # coupler.play("flux_pulse", duration=t, amplitude_scale=10*dc)
+                # wait(t)
+
+                # wait(36 * u.ns)
+                q1.z.set_dc_offset(cz_point + scale * dc) # 0.0175
                 coupler.set_dc_offset(dc)
-                wait(t, q2.z.name)
-                align()
-                
-                # Put back the qubit to the max frequency point
-                # coupler.set_dc_offset(-0.033)
-                # q1.z.set_dc_offset(q1.z.min_offset + 0.051 * -0.033)
-                # q2.z.set_dc_offset(q2.z.min_offset + 0.01 * -0.033)
+                wait(t)
+                # wait(t - 36 * u.ns)
 
+                align()
+
+                # wait(36 * u.ns)
                 coupler.set_dc_offset(0)
                 q1.z.to_min()
                 q2.z.to_min()
@@ -138,7 +142,7 @@ with program() as cz:
                 # Measure the state of the resonators
                 multiplexed_readout([q1, q2], I, I_st, Q, Q_st)
                 # Wait for the qubits to decay to the ground state
-                wait(machine.thermalization_time * u.ns)
+                if not simulate: wait(machine.thermalization_time * u.ns)
 
     with stream_processing():
         # for the progress counter
@@ -154,13 +158,13 @@ with program() as cz:
 ###########################
 # Run or Simulate Program #
 ###########################
-simulate = False
 
 if simulate:
     # Simulates the QUA program for the specified duration
     simulation_config = SimulationConfig(duration=10_000)  # In clock cycles = 4ns
     job = qmm.simulate(config, cz, simulation_config)
     job.get_simulated_samples().con1.plot()
+    plt.show()
 else:
     # Open the quantum machine
     qm = qmm.open_qm(config)
