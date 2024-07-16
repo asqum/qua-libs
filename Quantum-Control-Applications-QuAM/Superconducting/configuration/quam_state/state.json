@@ -49,7 +49,7 @@
             "name": "octave2",
             "ip": "qum.phys.sinica.edu.tw",
             "port": 11240,
-            "calibration_db_path": "/Users/adamachuck/Documents/GitHub/ASQUBIT/qua-libs/Quantum-Control-Applications-QuAM/Superconducting/configuration",
+            "calibration_db_path": "#../octave1/calibration_db_path",
             "RF_outputs": {
                 "1": {
                     "id": 1,
@@ -86,7 +86,7 @@
             "name": "octave3",
             "ip": "qum.phys.sinica.edu.tw",
             "port": 11241,
-            "calibration_db_path": "/Users/adamachuck/Documents/GitHub/ASQUBIT/qua-libs/Quantum-Control-Applications-QuAM/Superconducting/configuration",
+            "calibration_db_path": "#../octave1/calibration_db_path",
             "RF_outputs": {
                 "1": {
                     "id": 1
@@ -1216,6 +1216,7 @@
                         "fem_id": 3,
                         "port_id": 1,
                         "output_mode": "amplified",
+                        "upsampling_mode": "pulse",
                         "__class__": "quam.components.ports.analog_outputs.LFFEMAnalogOutputPort"
                     },
                     "2": {
@@ -1244,6 +1245,7 @@
                         "fem_id": 3,
                         "port_id": 5,
                         "output_mode": "amplified",
+                        "upsampling_mode": "pulse",
                         "__class__": "quam.components.ports.analog_outputs.LFFEMAnalogOutputPort"
                     },
                     "6": {
@@ -1264,6 +1266,7 @@
                         "fem_id": 3,
                         "port_id": 8,
                         "output_mode": "amplified",
+                        "upsampling_mode": "pulse",
                         "__class__": "quam.components.ports.analog_outputs.LFFEMAnalogOutputPort"
                     }
                 }

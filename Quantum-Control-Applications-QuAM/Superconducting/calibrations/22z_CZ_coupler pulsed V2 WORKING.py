@@ -80,7 +80,7 @@ config = machine.generate_config()
 ###################
 qb = q1  # The qubit whose flux will be swept
 
-n_avg = 5
+n_avg = 100
 # The flux pulse durations in clock cycles (4ns) - Must be larger than 4 clock cycles.
 ts = np.arange(4, 300, 5)
 # The flux bias sweep in V
@@ -116,24 +116,39 @@ with program() as cz:
                 align()
 
                 q1.z.set_dc_offset(cz_point)
-                wait(200 * u.ns)
+                wait(130 * u.ns)
 
-                # q1.z.play("flux_pulse", duration=t, amplitude_scale=10*scale * dc)
-                # coupler.play("flux_pulse", duration=t, amplitude_scale=10*dc)
-                # wait(t)
+                z_amp = declare(fixed)
+                coupler_amp = declare(fixed)
 
+                assign(z_amp, Cast.mul_fixed_by_int(scale * dc, 10))
+                assign(coupler_amp, Cast.mul_fixed_by_int(dc, 10))
+
+                ########### Pulsed Version
+                # q1.z.play("flux_pulse", duration=t, amplitude_scale=z_amp)
+                # coupler.play("flux_pulse", duration=t, amplitude_scale=coupler_amp)
+                # wait(64 * u.ns, q1.z.name)
+                # q1.z.to_min()
+                # # wait(t)
+                #############################
+
+                ########## Set DC Offset Version
                 # wait(36 * u.ns)
                 q1.z.set_dc_offset(cz_point + scale * dc) # 0.0175
                 coupler.set_dc_offset(dc)
                 wait(t)
-                # wait(t - 36 * u.ns)
-
-                align()
-
-                # wait(36 * u.ns)
                 coupler.set_dc_offset(0)
                 q1.z.to_min()
                 q2.z.to_min()
+                # wait(t - 36 * u.ns)
+                #############################
+
+                align()
+
+                q1.z.to_min()
+                q2.z.to_min()
+
+                # wait(36 * u.ns)
 
                 # Wait some time to ensure that the flux pulse will end before the readout pulse
                 wait(20 * u.ns)
@@ -161,7 +176,7 @@ with program() as cz:
 
 if simulate:
     # Simulates the QUA program for the specified duration
-    simulation_config = SimulationConfig(duration=10_000)  # In clock cycles = 4ns
+    simulation_config = SimulationConfig(duration=750)  # In clock cycles = 4ns
     job = qmm.simulate(config, cz, simulation_config)
     job.get_simulated_samples().con1.plot()
     plt.show()
