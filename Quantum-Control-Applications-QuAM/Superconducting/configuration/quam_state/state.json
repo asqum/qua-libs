@@ -1215,8 +1215,8 @@
                         "controller_id": "con1",
                         "fem_id": 3,
                         "port_id": 1,
-                        "output_mode": "amplified",
                         "upsampling_mode": "pulse",
+                        "output_mode": "amplified",
                         "__class__": "quam.components.ports.analog_outputs.LFFEMAnalogOutputPort"
                     },
                     "2": {
@@ -1244,8 +1244,8 @@
                         "controller_id": "con1",
                         "fem_id": 3,
                         "port_id": 5,
-                        "output_mode": "amplified",
                         "upsampling_mode": "pulse",
+                        "output_mode": "amplified",
                         "__class__": "quam.components.ports.analog_outputs.LFFEMAnalogOutputPort"
                     },
                     "6": {
@@ -1265,8 +1265,8 @@
                         "controller_id": "con1",
                         "fem_id": 3,
                         "port_id": 8,
-                        "output_mode": "amplified",
                         "upsampling_mode": "pulse",
+                        "output_mode": "amplified",
                         "__class__": "quam.components.ports.analog_outputs.LFFEMAnalogOutputPort"
                     }
                 }

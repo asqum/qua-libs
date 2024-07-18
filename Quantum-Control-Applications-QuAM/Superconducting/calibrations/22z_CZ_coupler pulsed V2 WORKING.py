@@ -80,16 +80,18 @@ config = machine.generate_config()
 ###################
 qb = q1  # The qubit whose flux will be swept
 
-n_avg = 100
+n_avg = 300
 # The flux pulse durations in clock cycles (4ns) - Must be larger than 4 clock cycles.
 ts = np.arange(4, 300, 5)
 # The flux bias sweep in V
 # dcs = np.linspace(-0.06, 0.06, 301)
-dcs = np.linspace(-0.1, 0.1, 201)
-cz_point = 0.00903
+dcs = np.linspace(-0.05, 0.05, 201)
+cz_point = 0.00907 # 0.00914
 scale = 0.05 #0.05
 
-simulate = True
+simulate = False
+mode = "dc" # dc or pulse
+pulse_dc_factor = (0.00859 - q1.z.min_offset)/(0.00908 - q1.z.min_offset)
 
 
 with program() as cz:
@@ -115,36 +117,38 @@ with program() as cz:
                 q2.xy.play("x180")
                 align()
 
-                q1.z.set_dc_offset(cz_point)
-                wait(130 * u.ns)
+                # q1.z.set_dc_offset(cz_point)
+                # wait(130 * u.ns)
 
                 z_amp = declare(fixed)
                 coupler_amp = declare(fixed)
 
-                assign(z_amp, Cast.mul_fixed_by_int(scale * dc, 10))
-                assign(coupler_amp, Cast.mul_fixed_by_int(dc, 10))
+                # assign(z_amp, Cast.mul_fixed_by_int(1 * scale * dc, 10))
+                assign(z_amp, Cast.mul_fixed_by_int(pulse_dc_factor*((cz_point - q1.z.min_offset + scale * dc)), 10))
+                assign(coupler_amp, Cast.mul_fixed_by_int(pulse_dc_factor*(dc), 10))
 
-                ########### Pulsed Version
-                # q1.z.play("flux_pulse", duration=t, amplitude_scale=z_amp)
-                # coupler.play("flux_pulse", duration=t, amplitude_scale=coupler_amp)
-                # wait(64 * u.ns, q1.z.name)
-                # q1.z.to_min()
-                # # wait(t)
-                #############################
+                if mode == "pulse":
+                    ########### Pulsed Version
+                    # wait(16 * u.ns)
+                    q1.z.play("flux_pulse", duration=t, amplitude_scale=z_amp)
+                    coupler.play("flux_pulse", duration=t, amplitude_scale=coupler_amp)
+                    wait(64 * u.ns, q1.z.name)
+                    # q1.z.to_min()
+                    # # wait(t)
+                    #############################
 
-                ########## Set DC Offset Version
-                # wait(36 * u.ns)
-                q1.z.set_dc_offset(cz_point + scale * dc) # 0.0175
-                coupler.set_dc_offset(dc)
-                wait(t)
-                coupler.set_dc_offset(0)
-                q1.z.to_min()
-                q2.z.to_min()
-                # wait(t - 36 * u.ns)
-                #############################
+                if mode == "dc":
+                    ########## Set DC Offset Version
+                    # wait(100 * u.ns)
+                    q1.z.set_dc_offset(cz_point + scale * dc) # 0.0175
+                    coupler.set_dc_offset(dc)
+                    wait(t)
+                    # wait(t - 36 * u.ns)
+                    #############################
 
                 align()
 
+                coupler.set_dc_offset(0)
                 q1.z.to_min()
                 q2.z.to_min()
 

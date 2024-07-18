@@ -61,19 +61,23 @@ coupler = (q1 @ q2).coupler
 # The QUA program #
 ###################
 qb = q1  # The qubit whose flux will be swept
-n_avg = 101
+n_avg = 301
 
 # The flux pulse durations in clock cycles (4ns) - Must be larger than 4 clock cycles.
 ts = np.arange(4, 200, 1)
 # The flux bias sweep in V
-amps = np.linspace(0, 0.05, 201)
-coupler_bias = -0
+dcs = np.linspace(0.007, 0.012, 201)
+coupler_bias = 0
+
+pulse_dc_factor = (0.00859 - q1.z.min_offset)/(0.00908 - q1.z.min_offset)
+print("correction needed: %s" %pulse_dc_factor)
 
 
 with program() as cz:
     I, I_st, Q, Q_st, n, n_st = qua_declaration(num_qubits=2)
     t = declare(int)  # QUA variable for the flux pulse duration
-    a = declare(fixed)  # QUA variable for the flux pulse amplitude
+    dc = declare(fixed)  # QUA variable for the flux pulse amplitude
+    z_amp = declare(fixed)
 
     # Bring the active qubits to the minimum frequency point
     machine.apply_all_flux_to_min()
@@ -83,25 +87,27 @@ with program() as cz:
     with for_(n, 0, n < n_avg, n + 1):
         save(n, n_st)
         with for_(*from_array(t, ts)):
-            with for_(*from_array(a, amps)):
+            with for_(*from_array(dc, dcs)):
                 # Put the two qubits in their excited states
                 q1.xy.play("x180")
                 q2.xy.play("x180")
 
                 align()
                 # Wait some time to ensure that the flux pulse will arrive after the x90 pulse
-                wait(20 * u.ns)
+                # wait(20 * u.ns)
                 # Play a flux pulse on the qubit with the highest frequency to bring it close to the excited qubit while
-                # varying its amplitude and duration in order to observe the SWAP chevron.
-                q1.z.play("const", amplitude_scale=a, duration=t)
+                assign(z_amp, Cast.mul_fixed_by_int(pulse_dc_factor * (dc - q1.z.min_offset), 10))
+                # q1.z.play("const", amplitude_scale=a, duration=t)
+                q1.z.play("flux_pulse", duration=t, amplitude_scale=z_amp)
+                wait(64 * u.ns, q1.z.name)
                 align()
                 # Put back the qubit to the max frequency point
                 # qb.z.to_min()
 
                 # Wait some time to ensure that the flux pulse will end before the readout pulse
-                wait(20 * u.ns)
+                # wait(20 * u.ns)
                 # Align the elements to measure after having waited a time "tau" after the qubit pulses.
-                align()
+                # align()
                 # Measure the state of the resonators
                 multiplexed_readout([q1, q2], I, I_st, Q, Q_st)
                 # Wait for the qubits to decay to the ground state
@@ -111,11 +117,11 @@ with program() as cz:
         # for the progress counter
         n_st.save("n")
         # resonator 1
-        I_st[0].buffer(len(amps)).buffer(len(ts)).average().save("I1")
-        Q_st[0].buffer(len(amps)).buffer(len(ts)).average().save("Q1")
+        I_st[0].buffer(len(dcs)).buffer(len(ts)).average().save("I1")
+        Q_st[0].buffer(len(dcs)).buffer(len(ts)).average().save("Q1")
         # resonator 2
-        I_st[1].buffer(len(amps)).buffer(len(ts)).average().save("I2")
-        Q_st[1].buffer(len(amps)).buffer(len(ts)).average().save("Q2")
+        I_st[1].buffer(len(dcs)).buffer(len(ts)).average().save("I2")
+        Q_st[1].buffer(len(dcs)).buffer(len(ts)).average().save("Q2")
 
 
 ###########################
@@ -155,26 +161,26 @@ else:
         plt.suptitle("CZ chevron")
         plt.subplot(221)
         plt.cla()
-        plt.pcolor(amps, 4 * ts, I1)
-        # plt.pcolor(amps * q1.z.operations["const"].amplitude, 4 * ts, I1)
+        plt.pcolor(dcs, 4 * ts, I1)
+        # plt.pcolor(dcs * q1.z.operations["const"].amplitude, 4 * ts, I1)
         # plt.title(f"{q1.name} - I, f_01={int(q1.f_01 / u.MHz)} MHz")
         plt.ylabel("Interaction time [ns]")
         plt.subplot(223)
         plt.cla()
-        plt.pcolor(amps, 4 * ts, Q1)
-        # plt.pcolor(amps * q1.z.operations["const"].amplitude, 4 * ts, Q1)
+        plt.pcolor(dcs, 4 * ts, Q1)
+        # plt.pcolor(dcs * q1.z.operations["const"].amplitude, 4 * ts, Q1)
         plt.title(f"{q1.name} - Q")
         plt.xlabel("Flux amplitude [V]")
         plt.ylabel("Interaction time [ns]")
         plt.subplot(222)
         plt.cla()
-        plt.pcolor(amps, 4 * ts, I2)
-        # plt.pcolor(amps * q1.z.operations["const"].amplitude, 4 * ts, I2)
+        plt.pcolor(dcs, 4 * ts, I2)
+        # plt.pcolor(dcs * q1.z.operations["const"].amplitude, 4 * ts, I2)
         # plt.title(f"{q2.name} - I, f_01={int(q2.f_01 / u.MHz)} MHz")
         plt.subplot(224)
         plt.cla()
-        plt.pcolor(amps, 4 * ts, Q2)
-        # plt.pcolor(amps * q1.z.operations["const"].amplitude, 4 * ts, Q2)
+        plt.pcolor(dcs, 4 * ts, Q2)
+        # plt.pcolor(dcs * q1.z.operations["const"].amplitude, 4 * ts, Q2)
         plt.title(f"{q2.name} - Q")
         plt.xlabel("Flux amplitude [V]")
         plt.tight_layout()
@@ -188,11 +194,11 @@ else:
 
     # Save data from the node
     data = {
-        f"{q1.name}_flux_pulse_amplitude": amps,
+        f"{q1.name}_flux_pulse_amplitude": dcs,
         f"{q1.name}_flux_pulse_duration": 4 * ts,
         f"{q1.name}_I": I1.T,
         f"{q1.name}_Q": Q1.T,
-        f"{q2.name}_flux_pulse_amplitude": amps,
+        f"{q2.name}_flux_pulse_amplitude": dcs,
         f"{q2.name}_flux_pulse_duration": 4 * ts,
         f"{q2.name}_I": I2.T,
         f"{q2.name}_Q": Q2.T,

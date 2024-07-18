@@ -78,17 +78,20 @@ qb = q1  # The qubit whose flux will be swept
 
 n_avg = 250
 # The flux pulse durations in clock cycles (4ns) - Must be larger than 4 clock cycles.
-amps = np.linspace(-0.05, 0.05, 101)
+dcs = np.linspace(-0.07, 0.07, 201)
 # The flux bias sweep in V
-scales = np.linspace(-1, 1, 101)
+scales = np.linspace(-0.1, 0.1, 101)
 # wait_time = 40
+cz_point = 0.0088 # 0.00914
+
+mode = "pulse" # dc or pulse
 
 
 with program() as cz:
     I, I_st, Q, Q_st, n, n_st = qua_declaration(num_qubits=2)
     t = declare(int, value=60)
     scale = declare(fixed)  # QUA variable for the flux pulse duration
-    a = declare(fixed)
+    dc = declare(fixed)
 
     # Bring the active qubits to the minimum frequency point
     machine.apply_all_flux_to_min()
@@ -97,15 +100,15 @@ with program() as cz:
     with for_(n, 0, n < n_avg, n + 1):
         save(n, n_st)
         with for_(*from_array(scale, scales)):
-            with for_(*from_array(a, amps)):
+            with for_(*from_array(dc, dcs)):
                 # assign(v1, Cast.mul_fixed_by_int(-0.15, dc))
                 # Put the two qubits in their excited states
                 q1.xy.play("x180")
                 q2.xy.play("x180")
-
                 align()
+
                 # Wait some time to ensure that the flux pulse will arrive after the x90 pulse
-                wait(20 * u.ns)
+                # wait(20 * u.ns)
                 # Play a flux pulse on the qubit with the highest frequency to bring it close to the excited qubit while
                 # varying its amplitude and duration in order to observe the SWAP chevron.
                 
@@ -117,11 +120,37 @@ with program() as cz:
                 # q1.z.play("const", amplitude_scale=4*(1.127 * 0.0175 - 0.0394572 * 0.05 * amp - q1.z.min_offset), duration=t) # 1.127 = (0.01189 - 0.0024)/0.00842
                 # q1.z.play("const", amplitude_scale=0.0531 + scale * a * coupler.operations["const"].amplitude, duration=t) # 1.127 = (0.01189 - 0.0024)/0.00842
                 # q1.z.play("const", amplitude_scale=0.02393 - scale * a, duration=t)
-                q1.z.play("const", amplitude_scale=0.02393, duration=t)
+                # q1.z.play("const", amplitude_scale=0.02393, duration=t)
                 #q1.z.set_dc_offset(q1.z.min_offset + scale * a * coupler.operations["const"].amplitude)
 
                 # coupler.set_dc_offset(dc)
-                coupler.play("const", amplitude_scale=a, duration=t)
+                # coupler.play("const", amplitude_scale=a, duration=t)
+
+                z_amp = declare(fixed)
+                coupler_amp = declare(fixed)
+
+                # assign(z_amp, Cast.mul_fixed_by_int(1 * scale * dc, 10))
+                assign(z_amp, Cast.mul_fixed_by_int((cz_point + scale * dc) - q1.z.min_offset, 10))
+                assign(coupler_amp, Cast.mul_fixed_by_int(dc, 10))
+
+                if mode == "pulse":
+                    ########### Pulsed Version
+                    # wait(16 * u.ns)
+                    q1.z.play("flux_pulse", duration=t, amplitude_scale=z_amp)
+                    coupler.play("flux_pulse", duration=t, amplitude_scale=coupler_amp)
+                    # wait(64 * u.ns, q1.z.name)
+                    # q1.z.to_min()
+                    # # wait(t)
+                    #############################
+
+                if mode == "dc":
+                    ########## Set DC Offset Version
+                    wait(68 * u.ns)
+                    q1.z.set_dc_offset(cz_point + scale * dc) # 0.0175
+                    coupler.set_dc_offset(dc)
+                    wait(t)
+                    # wait(t - 36 * u.ns)
+                    #############################
 
                 align()
 
@@ -148,11 +177,11 @@ with program() as cz:
         # for the progress counter
         n_st.save("n")
         # resonator 1
-        I_st[0].buffer(len(amps)).buffer(len(scales)).average().save("I1")
-        Q_st[0].buffer(len(amps)).buffer(len(scales)).average().save("Q1")
+        I_st[0].buffer(len(dcs)).buffer(len(scales)).average().save("I1")
+        Q_st[0].buffer(len(dcs)).buffer(len(scales)).average().save("Q1")
         # resonator 2
-        I_st[1].buffer(len(amps)).buffer(len(scales)).average().save("I2")
-        Q_st[1].buffer(len(amps)).buffer(len(scales)).average().save("Q2")
+        I_st[1].buffer(len(dcs)).buffer(len(scales)).average().save("I2")
+        Q_st[1].buffer(len(dcs)).buffer(len(scales)).average().save("Q2")
 
 
 ###########################
@@ -192,25 +221,25 @@ else:
         plt.suptitle("CZ chevron")
         plt.subplot(221)
         plt.cla()
-        plt.pcolor(amps * coupler.operations["const"].amplitude, scales, I1)
+        plt.pcolor(dcs * coupler.operations["const"].amplitude, scales, I1)
         # plt.plot(cz_point, wait_time, color="r", marker="*")
         # plt.title(f"{q1.name} - I, f_01={int(q1.f_01 / u.MHz)} MHz")
         plt.ylabel("Compensation Scales")
         plt.subplot(223)
         plt.cla()
-        plt.pcolor(amps * coupler.operations["const"].amplitude, scales, Q1)
+        plt.pcolor(dcs * coupler.operations["const"].amplitude, scales, Q1)
         # plt.plot(cz_point, wait_time, color="r", marker="*")
         plt.title(f"{q1.name} - Q")
         plt.xlabel("Flux amplitude [V]")
         plt.ylabel("Compensation Scales")
         plt.subplot(222)
         plt.cla()
-        plt.pcolor(amps * coupler.operations["const"].amplitude, scales, I2)
+        plt.pcolor(dcs * coupler.operations["const"].amplitude, scales, I2)
         # plt.plot(cz_point, wait_time, color="r", marker="*")
         # plt.title(f"{q2.name} - I, f_01={int(q2.f_01 / u.MHz)} MHz")
         plt.subplot(224)
         plt.cla()
-        plt.pcolor(amps * coupler.operations["const"].amplitude, scales, Q2)
+        plt.pcolor(dcs * coupler.operations["const"].amplitude, scales, Q2)
         # plt.plot(cz_point, wait_time, color="r", marker="*")
         plt.title(f"{q2.name} - Q")
         plt.xlabel("Flux amplitude [V]")
@@ -227,10 +256,10 @@ else:
 
     # Save data from the node
     data = {
-        f"{q1.name}_flux_pulse_amplitude": amps,
+        f"{q1.name}_flux_pulse_amplitude": dcs,
         f"{q1.name}_I": I1.T,
         f"{q1.name}_Q": Q1.T,
-        f"{q2.name}_flux_pulse_amplitude": amps,
+        f"{q2.name}_flux_pulse_amplitude": dcs,
         f"{q2.name}_I": I2.T,
         f"{q2.name}_Q": Q2.T,
         f"compensation_scales": scales,
