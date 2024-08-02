@@ -75,17 +75,18 @@ n_avg = 1000
 # The flux pulse durations in clock cycles (4ns) - Must be larger than 4 clock cycles.
 # The flux bias sweep in V
 # dcs = np.linspace(-0.1, 0.1, 301)
-dcs = np.linspace(-0.046, -0.026, 301)
+dcs = np.linspace(-0.046, -0.0382, 501)
 # scales = np.linspace(-0.2, 0.2, 101)
-scales = np.linspace(0.025, 0.1, 101)
+scales = np.linspace(0.02, 0.09, 101)
 ts = scales
+CZ_dur = 360
 
 
 with program() as cz:
     I, I_st, Q, Q_st, n, n_st = qua_declaration(num_qubits=2)
     t = declare(int)  # QUA variable for the flux pulse duration
     dc = declare(fixed)  # QUA variable for the flux pulse amplitude
-    assign(t, 30)
+    assign(t, CZ_dur//4)
     scale = declare(fixed)
 
     # Bring the active qubits to the minimum frequency point
@@ -103,12 +104,12 @@ with program() as cz:
 
                 align()
                 # Wait some time to ensure that the flux pulse will arrive after the x90 pulse
-                wait(200 * u.ns)
+                wait(40 * u.ns)
                 # Play a flux pulse on the qubit with the highest frequency to bring it close to the excited qubit while
                 # varying its amplitude and duration in order to observe the SWAP chevron.
                 
                 # vals = inv_arr @ [compensations[q1] * dc, compensations[q2] * dc]
-                q1.z.set_dc_offset(0.00903 + scale * dc) # 0.0175
+                q1.z.set_dc_offset(0.009082 + scale * dc) # 0.0175
                 q2.z.set_dc_offset(q2.z.min_offset)
                 
                 coupler.set_dc_offset(dc)
@@ -183,7 +184,7 @@ else:
         plt.subplot(223)
         plt.cla()
         plt.pcolor(dcs,  ts, Q1)
-        plt.title(f"{q1.name} - Q")
+        plt.title(f"{q1.name} - Q ({CZ_dur}ns)")
         plt.xlabel("Flux amplitude [V]")
         plt.ylabel("Compensation scale")
         plt.subplot(222)
@@ -193,7 +194,7 @@ else:
         plt.subplot(224)
         plt.cla()
         plt.pcolor(dcs, ts, Q2)
-        plt.title(f"{q2.name} - Q")
+        plt.title(f"{q2.name} - Q ({CZ_dur}ns)")
         plt.xlabel("Flux amplitude [V]")
         plt.tight_layout()
         plt.pause(0.1)
