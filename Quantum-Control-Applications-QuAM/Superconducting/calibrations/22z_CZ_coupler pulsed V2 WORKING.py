@@ -80,17 +80,18 @@ config = machine.generate_config()
 ###################
 qb = q1  # The qubit whose flux will be swept
 
-n_avg = 300
+n_avg = 137000000
 # The flux pulse durations in clock cycles (4ns) - Must be larger than 4 clock cycles.
-ts = np.arange(4, 300, 5)
+# ts = np.arange(4, 300, 2)
+ts = [16]
 # The flux bias sweep in V
-# dcs = np.linspace(-0.06, 0.06, 301)
-dcs = np.linspace(-0.05, 0.05, 201)
-cz_point = 0.00907 # 0.00914
-scale = 0.05 #0.05
+# dcs = np.linspace(-0.046, 0.0535, 501)
+dcs = [-0.045]
+cz_point = 0.009082 # 0.00914
+scale = 0.05051 #0.05
 
 simulate = False
-mode = "dc" # dc or pulse
+mode = "pulse" # dc or pulse
 pulse_dc_factor = (0.00859 - q1.z.min_offset)/(0.00908 - q1.z.min_offset)
 
 
@@ -118,7 +119,7 @@ with program() as cz:
                 align()
 
                 # q1.z.set_dc_offset(cz_point)
-                # wait(130 * u.ns)
+                # wait(20 * u.ns)
 
                 z_amp = declare(fixed)
                 coupler_amp = declare(fixed)
@@ -139,7 +140,7 @@ with program() as cz:
 
                 if mode == "dc":
                     ########## Set DC Offset Version
-                    # wait(100 * u.ns)
+                    wait(64 * u.ns)
                     q1.z.set_dc_offset(cz_point + scale * dc) # 0.0175
                     coupler.set_dc_offset(dc)
                     wait(t)
@@ -208,33 +209,33 @@ else:
         # Progress bar
         progress_counter(n, n_avg, start_time=results.start_time)
         # Plot
-        plt.suptitle("CZ chevron (compensation: %s)" %scale)
-        plt.subplot(221)
-        plt.cla()
-        plt.pcolor(dcs, 4 * ts, I1)
-        # plt.plot(cz_point, wait_time, color="r", marker="*")
-        # plt.title(f"{q1.name} - I, f_01={int(q1.f_01 / u.MHz)} MHz")
-        plt.ylabel("Interaction time [ns]")
-        plt.subplot(223)
-        plt.cla()
-        plt.pcolor(dcs, 4 * ts, Q1)
-        # plt.plot(cz_point, wait_time, color="r", marker="*")
-        plt.title(f"{q1.name} - Q")
-        plt.xlabel("Flux amplitude [V]")
-        plt.ylabel("Interaction time [ns]")
-        plt.subplot(222)
-        plt.cla()
-        plt.pcolor(dcs, 4 * ts, I2)
-        # plt.plot(cz_point, wait_time, color="r", marker="*")
-        # plt.title(f"{q2.name} - I, f_01={int(q2.f_01 / u.MHz)} MHz")
-        plt.subplot(224)
-        plt.cla()
-        plt.pcolor(dcs, 4 * ts, Q2)
-        # plt.plot(cz_point, wait_time, color="r", marker="*")
-        plt.title(f"{q2.name} - Q")
-        plt.xlabel("Flux amplitude [V]")
-        plt.tight_layout()
-        plt.pause(0.3)
+        # plt.suptitle("CZ chevron (compensation: %s)" %scale)
+        # plt.subplot(221)
+        # plt.cla()
+        # plt.pcolor(dcs, 4 * ts, I1)
+        # # plt.plot(cz_point, wait_time, color="r", marker="*")
+        # # plt.title(f"{q1.name} - I, f_01={int(q1.f_01 / u.MHz)} MHz")
+        # plt.ylabel("Interaction time [ns]")
+        # plt.subplot(223)
+        # plt.cla()
+        # plt.pcolor(dcs, 4 * ts, Q1)
+        # # plt.plot(cz_point, wait_time, color="r", marker="*")
+        # plt.title(f"{q1.name} - Q")
+        # plt.xlabel("Flux amplitude [V]")
+        # plt.ylabel("Interaction time [ns]")
+        # plt.subplot(222)
+        # plt.cla()
+        # plt.pcolor(dcs, 4 * ts, I2)
+        # # plt.plot(cz_point, wait_time, color="r", marker="*")
+        # # plt.title(f"{q2.name} - I, f_01={int(q2.f_01 / u.MHz)} MHz")
+        # plt.subplot(224)
+        # plt.cla()
+        # plt.pcolor(dcs, 4 * ts, Q2)
+        # # plt.plot(cz_point, wait_time, color="r", marker="*")
+        # plt.title(f"{q2.name} - Q")
+        # plt.xlabel("Flux amplitude [V]")
+        # plt.tight_layout()
+        # plt.pause(0.3)
 
     # Close the quantum machines at the end in order to put all flux biases to 0 so that the fridge doesn't heat-up
     qm.close()
@@ -257,6 +258,6 @@ else:
         f"qubit_flux": qb.name,
         "figure": fig,
     }
-    node_save(machine, "CZ_chevron_coupler", data)
+    node_save(machine, "CZ_chevron_coupler_working", data)
 
 # %%
