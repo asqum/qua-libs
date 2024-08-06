@@ -110,16 +110,15 @@ with program() as cz:
                 
                 # vals = inv_arr @ [compensations[q1] * dc, compensations[q2] * dc]
                 q1.z.set_dc_offset(0.009082 + scale * dc) # 0.0175
-                q2.z.set_dc_offset(q2.z.min_offset)
+                # q2.z.set_dc_offset(q2.z.min_offset)
                 
                 coupler.set_dc_offset(dc)
-                wait(t, q2.z.name)
-                align()
+                wait(t)#, q2.z.name)
                 
                 # Put back the qubit to the max frequency point
                 coupler.set_dc_offset(0)
                 q1.z.to_min()
-                q2.z.to_min()
+                # q2.z.to_min()
 
                 # Wait some time to ensure that the flux pulse will end before the readout pulse
                 wait(20 * u.ns)

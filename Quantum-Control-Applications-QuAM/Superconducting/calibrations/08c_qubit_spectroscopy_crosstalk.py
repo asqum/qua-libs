@@ -81,15 +81,15 @@ crosstalk_matrix = np.ones((len(all_flux_elements), len(all_flux_elements)))
 # Adjust the pulse duration and amplitude to drive the qubit into a mixed state
 operation = "saturation"
 saturation_len = 20 * u.us  # in ns
-saturation_amp = 0.05  # scaling factor
+saturation_amp = 0.04  # scaling factor
 cooldown_time = machine.thermalization_time
-dfs = np.arange(-270e6, 50e6, 0.5e6)
+dfs = np.arange(-50e6, 50e6, 0.25e6)
 
-n_avg = 200  # Number of averaging loops
+n_avg = 300  # Number of averaging loops
 # Flux bias sweep in V
-dc_low = -0.01
-dc_high = 0.01
-dc_bias = 0.02
+dc_low = -0.002
+dc_high = 0.002
+dc_bias = q4.z.min_offset + 0.01
 
 
 for port_id, flux_element in flux_elements_by_port.items():
@@ -101,16 +101,18 @@ for port_id, flux_element in flux_elements_by_port.items():
         df = declare(int)  # QUA variable for the readout frequency
 
         for i, q in enumerate(target_qubits):
-            # Bring the active qubits to the minimum frequency point
-            # todo: bring to the "steepspot" (not sweetspot!)
-            machine.apply_all_flux_to_min()
-            # todo: bring to what?
-            # machine.apply_all_couplers_to_min()
-
-            q.z.set_dc_offset(dc_bias)
+            
 
             with for_(n, 0, n < n_avg, n + 1):
                 save(n, n_st)
+
+                # Bring the active qubits to the minimum frequency point
+                # todo: bring to the "steepspot" (not sweetspot!)
+                machine.apply_all_flux_to_min()
+                # todo: bring to what?
+                # machine.apply_all_couplers_to_min()
+                q.z.set_dc_offset(dc_bias)
+                wait(100)
 
                 with for_(*from_array(df, dfs)):
                     # Update the qubit frequency
@@ -118,7 +120,13 @@ for port_id, flux_element in flux_elements_by_port.items():
 
                     with for_(*from_array(dc, [dc_low, dc_high])):
                         # Flux sweeping by tuning the OPX dc offset associated with the flux_line element
-                        flux_element.set_dc_offset(dc + dc_bias)
+                        if q==flux_element:
+                            flux_element.set_dc_offset(dc + dc_bias)
+                        else: 
+                            if hasattr(flux_element, "min_offset"):
+                                flux_element.set_dc_offset(dc + flux_element.min_offset)
+                            else:
+                                flux_element.set_dc_offset(dc)
                         wait(100)  # Wait for the flux to settle
                         # Apply saturation pulse to all qubits
                         q.xy.play(
@@ -127,7 +135,9 @@ for port_id, flux_element in flux_elements_by_port.items():
                             duration=saturation_len * u.ns,
                         )
                         align()
-                        # machine.apply_all_flux_to_min()
+
+                        wait(100)
+                        machine.apply_all_flux_to_min()
                         wait(100)
                         align()
 
@@ -192,8 +202,8 @@ for port_id, flux_element in flux_elements_by_port.items():
                 plt.title(
                     f"{q.xy.name} (LO: {q.xy.frequency_converter_up.LO_frequency / u.MHz} MHz)"
                 )
-                plt.xlabel("Flux Bias [V]")
-                plt.ylabel(f"{q.xy.name} IF [MHz]")
+                plt.xlabel("IF-Frequency (MHz)")
+                plt.ylabel("readout amplitude")
                 plt.plot(q.xy.intermediate_frequency / u.MHz + dfs / u.MHz, R[:, 0])
                 plt.plot(q.xy.intermediate_frequency / u.MHz + dfs / u.MHz, R[:,1])
                 # plt.plot(coupler.z.min_offset, rr.intermediate_frequency / u.MHz, "r*")
@@ -209,7 +219,8 @@ for port_id, flux_element in flux_elements_by_port.items():
         # q2.z.min_offset =
         # Save data from the node
         data = {}
-        for i, (q, rr) in enumerate(zip(qubits, resonators)):
+        for i, q in enumerate(target_qubits):
+            rr = q.resonator
             data[f"{q.name}_flux_element_bias_{flux_element.name}"] = [dc_low, dc_high]
             data[f"{q.name}_frequency"] = q.xy.intermediate_frequency + dfs
             data[f"{q.name}_S_{flux_element.name}"] = S_data[i]
@@ -218,6 +229,7 @@ for port_id, flux_element in flux_elements_by_port.items():
 
             try:
                 measured_qubit_frequencies = []
+                plt.figure()
                 for j, dc in enumerate([dc_low, dc_high]):
                     # Extract the resonator frequency shift for each combination
                     fit = Fit()
@@ -229,7 +241,7 @@ for port_id, flux_element in flux_elements_by_port.items():
                     measured_qubit_frequencies.append(int(res["f"][0] * u.MHz))
 
                     plt.subplot(1, len(target_qubits), i + 1)
-                    plt.axvline(measured_qubit_frequencies[j], color="r")
+                    plt.axvline(measured_qubit_frequencies[j]/u.MHz, color="r")
                     data[f"{q.xy.name}_frequency_at_{flux_element.name}_{dc:.3f}"] = qubit_frequency_shift
 
                 # resonator frequency shift per unit volt
