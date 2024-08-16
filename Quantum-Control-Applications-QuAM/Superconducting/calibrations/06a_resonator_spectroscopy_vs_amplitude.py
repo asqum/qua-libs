@@ -64,7 +64,7 @@ num_resonators = len(resonators)
 # The QUA program #
 ###################
 
-n_avg = 100  # The number of averages
+n_avg = 3000  # The number of averages
 
 # Uncomment this to override the initial readout amplitude for all resonators
 # for rr in resonators:
@@ -178,11 +178,13 @@ else:
     # Close the quantum machines at the end in order to put all flux biases to 0 so that the fridge doesn't heat-up
     qm.close()
 
-    # resonators[0].operations["readout"].amplitude = 0.008
-    # resonators[1].operations["readout"].amplitude = 0.008
-    # resonators[2].operations["readout"].amplitude = 0.008
-    # resonators[3].operations["readout"].amplitude = 0.008
-    # resonators[4].operations["readout"].amplitude = 0.008
+    # update QUAM:
+    if int(input("Update QUAM STATES: (1/0) ")):
+        resonators[0].operations["readout"].amplitude = 0.008
+        resonators[1].operations["readout"].amplitude = 0.008
+        resonators[2].operations["readout"].amplitude = 0.008
+        resonators[3].operations["readout"].amplitude = 0.008
+        resonators[4].operations["readout"].amplitude = 0.008
 
     # Save data from the node
     data = {}

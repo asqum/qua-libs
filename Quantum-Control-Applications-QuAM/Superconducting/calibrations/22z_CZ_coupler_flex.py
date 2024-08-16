@@ -41,6 +41,7 @@ from quam.components import pulses
 
 
 import matplotlib
+import json
 
 matplotlib.use("TKAgg")
 
@@ -60,7 +61,10 @@ qmm = machine.connect()
 # Get the relevant QuAM components
 q1 = machine.qubits["q4"]
 q2 = machine.qubits["q5"]
-coupler = (q1 @ q2).coupler
+q3 = machine.qubits["q3"]
+coupler = (q1 @ q2).coupler # q3.z 
+# coupler = q2.z
+
 # compensations = {
 #     q1: coupler.opx_output.crosstalk[q1.z.opx_output.port_id],
 #     q2: coupler.opx_output.crosstalk[q2.z.opx_output.port_id]
@@ -75,25 +79,35 @@ q1.z.operations["flux_pulse"] = pulses.SquarePulse(length=100, amplitude=0.1)
 coupler.operations["flux_pulse"] = pulses.SquarePulse(length=100, amplitude=0.1)
 
 config = machine.generate_config()
+
+# debugging qua: 
+# with open("qua_config.json", "w+") as f:
+#     json.dump(config, f, indent=4)
+# raise Exception
+
 ###################
 # The QUA program #
 ###################
 qb = q1  # The qubit whose flux will be swept
 
-n_avg = 13700
+n_avg = 13700000
 # The flux pulse durations in clock cycles (4ns) - Must be larger than 4 clock cycles.
 ts = np.arange(4, 300, 2)
 # ts = [30]
 # The flux bias sweep in V
-dcs = np.linspace(-0.046, 0.0535, 501)
+# dcs = np.linspace(-0.057, 0.0535, 501) # for qc
+dcs = np.linspace(0.001, 0.031, 401) # for q4
 # dcs = [-0.045]
-cz_point = 0.009082 # 0.00914
-scale = 0.05051 #0.05
+cz_point = 0.009 #0.009082 #0.00914
+coupler_point = -0.000 # slow:-0.031, fast:-0.043 
+scale = 0.0448 #0.05051 #0.226 #-0.57
 
 simulate = False
 mode = "dc" # dc or pulse
+sweep_flux = "q4" # q4 or qc
 pulse_dc_factor = 1.0 #(0.00859 - q1.z.min_offset)/(0.00908 - q1.z.min_offset) * 1.08
 print("pulse_dc_factor: %s" % pulse_dc_factor)
+print("q4's offset: %s" % q1.z.min_offset)
 
 
 with program() as cz:
@@ -115,10 +129,10 @@ with program() as cz:
             with for_(*from_array(dc, dcs)):
                 # assign(v1, Cast.mul_fixed_by_int(-0.15, dc))
                 # Put the two qubits in their excited states
+                # wait(300 * u.ns, q1.xy.name, q2.xy.name)
                 q1.xy.play("x180")
                 q2.xy.play("x180")
-                wait(16 * u.ns)
-                align()
+                align() # this makes the following flux pulse to have an extra delay of q1.xy length.. weird.. 
 
                 # q1.z.set_dc_offset(cz_point)
                 # wait(20 * u.ns)
@@ -126,10 +140,18 @@ with program() as cz:
                 z_amp = declare(fixed)
                 coupler_amp = declare(fixed)
                 q1_dc_point = declare(fixed)
-                # assign(z_amp, Cast.mul_fixed_by_int(1 * scale * dc, 10))
-                assign(z_amp, Cast.mul_fixed_by_int(pulse_dc_factor*((cz_point - q1.z.min_offset + scale * dc)), 10))
-                assign(coupler_amp, Cast.mul_fixed_by_int(pulse_dc_factor*(dc), 10))
-                assign(q1_dc_point, cz_point + scale * dc)
+                coupler_dc_point = declare(fixed)
+
+                if sweep_flux == "q4":
+                    assign(z_amp, Cast.mul_fixed_by_int(pulse_dc_factor*((dc - q1.z.min_offset + scale * coupler_point)), 10))
+                    assign(coupler_amp, Cast.mul_fixed_by_int(pulse_dc_factor*(coupler_point), 10))
+                    assign(q1_dc_point, dc + scale * coupler_point)
+                    assign(coupler_dc_point, coupler_point)
+                else:
+                    assign(z_amp, Cast.mul_fixed_by_int(pulse_dc_factor*((cz_point - q1.z.min_offset + scale * dc)), 10))
+                    assign(coupler_amp, Cast.mul_fixed_by_int(pulse_dc_factor*(dc), 10))
+                    assign(q1_dc_point, cz_point + scale * dc)
+                    assign(coupler_dc_point, dc)
 
                 if mode == "pulse":
                     ########### Pulsed Version
@@ -137,15 +159,13 @@ with program() as cz:
                     q1.z.play("flux_pulse", duration=t, amplitude_scale=z_amp)
                     coupler.play("flux_pulse", duration=t, amplitude_scale=coupler_amp)
                     # wait(64 * u.ns, q1.z.name)
-                    # q1.z.to_min()
-                    # # wait(t)
                     #############################
 
                 if mode == "dc":
                     ########## Set DC Offset Version
-                    # wait(32 * u.ns)
+                    wait(64 * u.ns)
                     q1.z.set_dc_offset(q1_dc_point) # 0.0175
-                    coupler.set_dc_offset(dc)
+                    coupler.set_dc_offset(coupler_dc_point)
                     wait(t)
                     coupler.set_dc_offset(0)
                     q1.z.to_min()
@@ -153,12 +173,8 @@ with program() as cz:
                     # wait(t - 36 * u.ns)
                     #############################
 
-                align()
-                # q1.xy.play("x180")
-                # q2.xy.play("x180")
-
                 # Wait some time to ensure that the flux pulse will end before the readout pulse
-                wait(1000 * u.ns)
+                # wait(100 * u.ns)
                 # Align the elements to measure after having waited a time "tau" after the qubit pulses.
                 align()
                 # Measure the state of the resonators

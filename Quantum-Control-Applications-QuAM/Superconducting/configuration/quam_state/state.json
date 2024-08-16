@@ -246,7 +246,7 @@
                 "opx_output_Q": "#/ports/analog_outputs/con1/1/4",
                 "frequency_converter_up": "#/octaves/octave1/RF_outputs/2",
                 "intermediate_frequency": "#./inferred_intermediate_frequency",
-                "RF_frequency": 5085991173.037969
+                "RF_frequency": 5089403633.0
             },
             "z": {
                 "operations": {
@@ -291,7 +291,7 @@
                 "opx_output_Q": "#/ports/analog_outputs/con1/1/2",
                 "frequency_converter_up": "#/octaves/octave1/RF_outputs/1",
                 "intermediate_frequency": "#./inferred_intermediate_frequency",
-                "RF_frequency": 5912468322
+                "RF_frequency": 5914243468
             },
             "T2ramsey": 10256,
             "T2echo": 6550,
@@ -428,7 +428,7 @@
                 "opx_output_Q": "#/ports/analog_outputs/con1/1/6",
                 "frequency_converter_up": "#/octaves/octave1/RF_outputs/3",
                 "intermediate_frequency": "#./inferred_intermediate_frequency",
-                "RF_frequency": 4435435619.203428
+                "RF_frequency": 4435701979.0
             },
             "z": {
                 "operations": {
@@ -440,7 +440,7 @@
                 },
                 "opx_output": "#/ports/analog_outputs/con1/3/6",
                 "independent_offset": -0.057,
-                "min_offset": 0.0182
+                "min_offset": 0.02
             },
             "resonator": {
                 "operations": {
@@ -475,7 +475,7 @@
                 "opx_output_Q": "#/ports/analog_outputs/con1/1/2",
                 "frequency_converter_up": "#/octaves/octave1/RF_outputs/1",
                 "intermediate_frequency": "#./inferred_intermediate_frequency",
-                "RF_frequency": 6014258718
+                "RF_frequency": 6014269234
             },
             "T2ramsey": 5536,
             "T2echo": 40469,
@@ -612,7 +612,7 @@
                 "opx_output_Q": "#/ports/analog_outputs/con1/1/8",
                 "frequency_converter_up": "#/octaves/octave1/RF_outputs/4",
                 "intermediate_frequency": "#./inferred_intermediate_frequency",
-                "RF_frequency": 4463845899.950485
+                "RF_frequency": 4535023788.0
             },
             "z": {
                 "operations": {
@@ -620,11 +620,16 @@
                         "length": 100,
                         "amplitude": 0.25,
                         "__class__": "quam.components.pulses.SquarePulse"
+                    },
+                    "flux_pulse": {
+                        "length": 100,
+                        "amplitude": 0.1,
+                        "__class__": "quam.components.pulses.SquarePulse"
                     }
                 },
                 "opx_output": "#/ports/analog_outputs/con1/3/7",
                 "independent_offset": -0.039,
-                "min_offset": 0.0024
+                "min_offset": -0.022
             },
             "resonator": {
                 "operations": {
@@ -659,7 +664,7 @@
                 "opx_output_Q": "#/ports/analog_outputs/con1/1/2",
                 "frequency_converter_up": "#/octaves/octave1/RF_outputs/1",
                 "intermediate_frequency": "#./inferred_intermediate_frequency",
-                "RF_frequency": 5856721101
+                "RF_frequency": 5857408866
             },
             "T2ramsey": 3589,
             "T2echo": 1678888165,
@@ -788,7 +793,7 @@
                 "digital_outputs": {
                     "octave_switch": {
                         "opx_output": "#/ports/digital_outputs/con1/2/1",
-                        "delay": 87,
+                        "delay": 127,
                         "buffer": 15
                     }
                 },
@@ -796,7 +801,7 @@
                 "opx_output_Q": "#/ports/analog_outputs/con1/2/2",
                 "frequency_converter_up": "#/octaves/octave2/RF_outputs/1",
                 "intermediate_frequency": "#./inferred_intermediate_frequency",
-                "RF_frequency": 4415399331.105587
+                "RF_frequency": 4415281807.0
             },
             "z": {
                 "operations": {
@@ -813,7 +818,7 @@
                 },
                 "opx_output": "#/ports/analog_outputs/con1/3/8",
                 "independent_offset": -0.061,
-                "min_offset": 0.0029
+                "min_offset": -0.002
             },
             "resonator": {
                 "operations": {
@@ -848,7 +853,7 @@
                 "opx_output_Q": "#/ports/analog_outputs/con1/1/2",
                 "frequency_converter_up": "#/octaves/octave1/RF_outputs/1",
                 "intermediate_frequency": "#./inferred_intermediate_frequency",
-                "RF_frequency": 6037421320
+                "RF_frequency": 6037730991
             },
             "T2ramsey": 2317,
             "T2echo": 11131,
@@ -977,7 +982,7 @@
                 "digital_outputs": {
                     "octave_switch": {
                         "opx_output": "#/ports/digital_outputs/con1/2/3",
-                        "delay": 87,
+                        "delay": 127,
                         "buffer": 15
                     }
                 },
@@ -985,7 +990,7 @@
                 "opx_output_Q": "#/ports/analog_outputs/con1/2/4",
                 "frequency_converter_up": "#/octaves/octave2/RF_outputs/2",
                 "intermediate_frequency": "#./inferred_intermediate_frequency",
-                "RF_frequency": 4354098902.981843
+                "RF_frequency": 4354569181.0
             },
             "z": {
                 "operations": {
@@ -993,11 +998,16 @@
                         "length": 100,
                         "amplitude": 0.25,
                         "__class__": "quam.components.pulses.SquarePulse"
+                    },
+                    "flux_pulse": {
+                        "length": 100,
+                        "amplitude": 0.1,
+                        "__class__": "quam.components.pulses.SquarePulse"
                     }
                 },
                 "opx_output": "#/ports/analog_outputs/con1/3/1",
                 "independent_offset": -0.068,
-                "min_offset": 0.0237
+                "min_offset": 0.021
             },
             "resonator": {
                 "operations": {
@@ -1032,7 +1042,7 @@
                 "opx_output_Q": "#/ports/analog_outputs/con1/1/2",
                 "frequency_converter_up": "#/octaves/octave1/RF_outputs/1",
                 "intermediate_frequency": "#./inferred_intermediate_frequency",
-                "RF_frequency": 5942238619
+                "RF_frequency": 5943264487
             },
             "T2ramsey": 4374,
             "T2echo": 25776,
@@ -1189,24 +1199,28 @@
                         "controller_id": "con1",
                         "fem_id": 2,
                         "port_id": 1,
+                        "delay": 40,
                         "__class__": "quam.components.ports.analog_outputs.LFFEMAnalogOutputPort"
                     },
                     "2": {
                         "controller_id": "con1",
                         "fem_id": 2,
                         "port_id": 2,
+                        "delay": 40,
                         "__class__": "quam.components.ports.analog_outputs.LFFEMAnalogOutputPort"
                     },
                     "3": {
                         "controller_id": "con1",
                         "fem_id": 2,
                         "port_id": 3,
+                        "delay": 40,
                         "__class__": "quam.components.ports.analog_outputs.LFFEMAnalogOutputPort"
                     },
                     "4": {
                         "controller_id": "con1",
                         "fem_id": 2,
                         "port_id": 4,
+                        "delay": 40,
                         "__class__": "quam.components.ports.analog_outputs.LFFEMAnalogOutputPort"
                     }
                 },
@@ -1223,6 +1237,7 @@
                         "controller_id": "con1",
                         "fem_id": 3,
                         "port_id": 2,
+                        "upsampling_mode": "pulse",
                         "output_mode": "amplified",
                         "__class__": "quam.components.ports.analog_outputs.LFFEMAnalogOutputPort"
                     },

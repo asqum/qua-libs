@@ -63,7 +63,7 @@ num_resonators = len(resonators)
 # The QUA program #
 ###################
 
-n_avg = 20  # Number of averaging loops
+n_avg = 3000  # Number of averaging loops
 # Flux bias sweep in V
 dcs = np.linspace(-0.25, 0.25, 51)
 # The frequency sweep around the resonator resonance frequency f_opt
@@ -177,17 +177,19 @@ else:
     # Close the quantum machines at the end in order to put all flux biases to 0 so that the fridge doesn't heat up
     qm.close()
 
-    # Update machine with min frequency point for both resonator and qubit
-    # resonators[0].intermediate_frequency = 0
-    # resonators[1].intermediate_frequency = 0
-    # resonators[2].intermediate_frequency = 0
-    # resonators[3].intermediate_frequency = 0
-    # resonators[4].intermediate_frequency = 0
-    # qubits[0].z.min_offset = 0.0
-    # qubits[1].z.min_offset = 0.0
-    # qubits[2].z.min_offset = 0.0
-    # qubits[3].z.min_offset = 0.0
-    # qubits[4].z.min_offset = 0.0
+    # update QUAM:
+    if int(input("Update QUAM STATES: (1/0) ")):
+        # Update machine with min frequency point for both resonator and qubit
+        # resonators[0].intermediate_frequency = 0
+        # resonators[1].intermediate_frequency = 0
+        # resonators[2].intermediate_frequency = 0
+        # resonators[3].intermediate_frequency = 0
+        # resonators[4].intermediate_frequency = 0
+        qubits[0].z.min_offset = 0.0
+        qubits[1].z.min_offset = 0.020
+        qubits[2].z.min_offset = -0.042
+        qubits[3].z.min_offset = -0.002
+        qubits[4].z.min_offset = 0.021
 
     # Save data from the node
     data = {}

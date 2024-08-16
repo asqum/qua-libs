@@ -76,17 +76,21 @@ inv_arr = np.linalg.inv(compensation_arr)
 ###################
 qb = q1  # The qubit whose flux will be swept
 
-n_avg = 250
+n_avg = 3000
 # The flux pulse durations in clock cycles (4ns) - Must be larger than 4 clock cycles.
 # dcs = np.linspace(-0.07, 0.07, 201)
-dcs = np.linspace(-0.046, -0.0382, 501)
+dcs = np.linspace(-0.046, -0.0382, 501) # 501
+# dcs = [-0.046, -0.045]
 # The flux bias sweep in V
-# scales = np.linspace(-0.1, 0.1, 101)
-scales = np.linspace(0.02, 0.09, 101)
-cz_dur = 360
-cz_point = 0.009082 #0.0088 # 0.00914
+# scales = np.linspace(-0.6, 0.6, 101)
+scales = np.linspace(0.01, 0.1, 101) # 101
+# scales = [0.4, 0.41]
+cz_dur = 120 #360
+cz_point = 0.00857 #0.0088 #0.00914 #0.009082
 
-mode = "dc" # dc or pulse
+mode = "pulse" # dc or pulse
+simulate = False
+scope_debug = False
 
 
 with program() as cz:
@@ -159,7 +163,10 @@ with program() as cz:
                 # Measure the state of the resonators
                 multiplexed_readout([q1, q2], I, I_st, Q, Q_st)
                 # Wait for the qubits to decay to the ground state
-                wait(machine.thermalization_time * u.ns)
+                if not simulate and not scope_debug:
+                    wait(machine.thermalization_time * u.ns)
+                else:
+                    wait(30000 * u.ns)
 
     with stream_processing():
         # for the progress counter
@@ -175,7 +182,6 @@ with program() as cz:
 ###########################
 # Run or Simulate Program #
 ###########################
-simulate = False
 
 if simulate:
     # Simulates the QUA program for the specified duration

@@ -46,7 +46,7 @@ config = machine.generate_config()
 qmm = machine.connect()
 
 # Get the relevant QuAM components
-qubits = machine.active_qubits
+# qubits = machine.active_qubits
 qubits = [machine.qubits["q5"]]
 num_qubits = len(qubits)
 
@@ -55,14 +55,19 @@ num_qubits = len(qubits)
 ###################
 
 operation = "saturation"  # The qubit operation to play, can be switched to "x180" when the qubits are found.
-n_avg = 200  # Number of averaging loops
+n_avg = 20000  # Number of averaging loops
 cooldown_time = max(q.thermalization_time for q in qubits)
-pulse = "x180"
+pulse = "saturation" # x180, saturation
+saturation_len = 20 * u.us  # In ns
+saturation_amp = (
+    0.03  # pre-factor to the value defined in the config - restricted to [-2; 2)
+)
 
 # Qubit detuning sweep with respect to their resonance frequencies
 dfs = np.arange(-300e6, 100e6, 1e6)
 # Flux bias sweep
-dcs = np.linspace(-0.1, 0.1, 100)
+dc_center = qubits[0].z.min_offset
+dcs = np.linspace(dc_center-0.05, dc_center+0.05, 100)
 
 # Adjust the qubits IFs locally to help find the qubits
 # q1.xy.intermediate_frequency = 340e6
@@ -88,14 +93,17 @@ with program() as multi_qubit_spec_vs_flux:
 
                 with for_(*from_array(dc, dcs)):
                     # Flux sweeping for all qubits
-                    other_element.set_dc_offset(dc)
+                    q.z.set_dc_offset(dc)
                     wait(100)  # Wait for the flux to settle
 
                     # Apply saturation pulse to all qubits
-                    q.xy.play(pulse)
+                    # q.xy.play(pulse)
+                    q.xy.play(pulse, amplitude_scale=saturation_amp, duration=saturation_len * u.ns)
 
                     align()
-                    # q.z.set_dc_offset(0)
+                    # back to readout sweet-spot to get a uniform background.
+                    # q.z.set_dc_offset(q.z.min_offset)
+                    # machine.apply_all_flux_to_min() 
                     wait(100)
                     align()
 
@@ -174,8 +182,10 @@ else:
             plt.plot(q.z.min_offset, q.xy.intermediate_frequency / u.MHz, "r*")
             plt.xlabel("Flux [V]")
             plt.ylabel(f"{q.name} IF [MHz]")
+
             plt.tight_layout()
-            plt.pause(1)
+            plt.pause(0.1)
+        
 
     # Close the quantum machines at the end in order to put all flux biases to 0 so that the fridge doesn't heat-up
     qm.close()

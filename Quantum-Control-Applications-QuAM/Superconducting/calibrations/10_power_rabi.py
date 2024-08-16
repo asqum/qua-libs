@@ -197,20 +197,23 @@ else:
         data[f"{qubit.name}_Q"] = np.angle(Q_volts[i])
 
         # Get the optimal pi pulse amplitude when doing error amplification
-        try:
-            qubit.xy.operations[operation].amplitude = (
-                amps[np.argmax(np.sum(I_volts[i], axis=0))]
-                * qubit.xy.operations[operation].amplitude
-            )
+        # update QUAM:
+        for qubit in qubits:
+            if int(input("Update QUAM STATES for %s: (1/0) " %qubit.name)):
+                try:
+                    qubit.xy.operations[operation].amplitude = (
+                        amps[np.argmax(np.sum(I_volts[i], axis=0))]
+                        * qubit.xy.operations[operation].amplitude
+                    )
 
-            data[f"{qubit.name}"] = {
-                "x180_amplitude": qubit.xy.operations[operation].amplitude,
-                "successful_fit": True,
-            }
+                    data[f"{qubit.name}"] = {
+                        "x180_amplitude": qubit.xy.operations[operation].amplitude,
+                        "successful_fit": True,
+                    }
 
-        except (Exception,):
-            data[f"{qubit.name}"] = {"successful_fit": True}
-            pass
+                except (Exception,):
+                    data[f"{qubit.name}"] = {"successful_fit": True}
+                    pass
 
     data["figure"] = fig
     # Save data from the node

@@ -1,4 +1,20 @@
 {
+    "network": {
+        "host": "qum.phys.sinica.edu.tw",
+        "port": 9501,
+        "cluster_name": "QPX_20q",
+        "octave_ips": [
+            "qum.phys.sinica.edu.tw",
+            "qum.phys.sinica.edu.tw",
+            "qum.phys.sinica.edu.tw"
+        ],
+        "octave_ports": [
+            11243,
+            11240,
+            11241
+        ],
+        "data_folder": "/Users/adamachuck/Documents/GitHub/ASQUM/qua-libs/Quantum-Control-Applications-QuAM/Superconducting/data"
+    },
     "wiring": {
         "qubits": {
             "q0": {
@@ -132,21 +148,5 @@
                 }
             }
         ]
-    },
-    "network": {
-        "host": "qum.phys.sinica.edu.tw",
-        "port": 9501,
-        "cluster_name": "QPX_20q",
-        "octave_ips": [
-            "qum.phys.sinica.edu.tw",
-            "qum.phys.sinica.edu.tw",
-            "qum.phys.sinica.edu.tw"
-        ],
-        "octave_ports": [
-            11243,
-            11240,
-            11241
-        ],
-        "data_folder": "/Users/adamachuck/Documents/GitHub/ASQUM/qua-libs/Quantum-Control-Applications-QuAM/Superconducting/data"
     }
 }

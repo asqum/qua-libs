@@ -61,7 +61,7 @@ num_resonators = len(resonators)
 
 n_avg = 100  # The number of averages
 # The frequency sweep around the resonator resonance frequency f_opt
-dfs = np.arange(-100e6, +100e6, 0.1e6)
+dfs = np.arange(-10e6, +10e6, 0.1e6)
 # You can adjust the IF frequency here to manually adjust the resonator frequencies instead of updating the state
 # rr1.intermediate_frequency = -50 * u.MHz
 # rr2.intermediate_frequency = 50 * u.MHz
@@ -178,7 +178,11 @@ else:
             plt.ylabel(r"R=$\sqrt{I^2 + Q^2}$ [V]")
             plt.title(f"{rr.name}")
             intermediate_frequency = int(res_1["f"][0] * u.MHz)
-            # rr.RF_frequency = rr.LO_frequency + intermediate_frequency
+
+            # update QUAM:
+            if int(input("Update QUAM STATES: (1/0) ")):
+                rr.RF_frequency = rr.LO_frequency + intermediate_frequency
+
             plt.legend((f"fr = {rr.RF_frequency:.3f} MHz",))
 
             data[f"{rr.name}"] = {
