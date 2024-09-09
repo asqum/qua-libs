@@ -152,10 +152,10 @@ else:
     )
     results = fetching_tool(job, data_list)
     fetched_data = results.fetch_all()
-    I_g_data = fetched_data[1::2]
-    Q_g_data = fetched_data[2::2]
-    I_e_data = fetched_data[3::2]
-    Q_e_data = fetched_data[4::2]
+    I_g_data = fetched_data[0::4]
+    Q_g_data = fetched_data[1::4]
+    I_e_data = fetched_data[2::4]
+    Q_e_data = fetched_data[3::4]
     # Prepare for save data
     data = {}
     # Plot the results

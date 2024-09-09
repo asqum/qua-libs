@@ -46,20 +46,21 @@ matplotlib.use("TKAgg")
 # Class containing tools to help handling units and conversions.
 u = unit(coerce_to_integer=True)
 # Instantiate the QuAM class from the state file
-machine = QuAM.load()
-# Generate the OPX and Octave configurations
-config = machine.generate_config()
-# Open Communication with the QOP
-qmm = machine.connect()
+machine = QuAM.load('/home/dean/src/qm/asqum/Quantum-Control-Applications-QuAM/Superconducting/configuration/quam_state')
 
 # Get the relevant QuAM components
 qubits = machine.active_qubits
 num_qubits = len(qubits)
 
-# resetting angles: 
+# # Resetting angles:
 # for qubit in qubits:
 #     qubit.resonator.operations["readout"].integration_weights_angle = 0
 # node_save(machine, "iq_blobs", dict(status="reset angles"))
+
+# Generate the OPX and Octave configurations
+config = machine.generate_config()
+# Open Communication with the QOP
+qmm = machine.connect()
 
 ###################
 # The QUA program #
@@ -124,10 +125,10 @@ else:
     )
     results = fetching_tool(job, data_list)
     fetched_data = results.fetch_all()
-    I_g_data = fetched_data[1::2]
-    Q_g_data = fetched_data[2::2]
-    I_e_data = fetched_data[3::2]
-    Q_e_data = fetched_data[4::2]
+    I_g_data = fetched_data[0::4]
+    Q_g_data = fetched_data[1::4]
+    I_e_data = fetched_data[2::4]
+    Q_e_data = fetched_data[3::4]
     # Prepare for save data
     data = {}
     # Plot the results
@@ -163,13 +164,7 @@ else:
         
         print("updating angle: %s" %angle)
 
-        theta = qubit.resonator.operations["readout"].integration_weights_angle
-        theta = 2*np.pi - theta
-        theta -= angle
-        theta = 2*np.pi - theta
-        qubit.resonator.operations["readout"].integration_weights_angle = theta
-
-        # qubit.resonator.operations["readout"].integration_weights_angle += angle
+        qubit.resonator.operations["readout"].integration_weights_angle -= angle
         qubit.resonator.operations["readout"].threshold = threshold
         qubit.resonator.operations["readout"].rus_exit_threshold = rus_threshold
 
