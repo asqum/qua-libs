@@ -57,7 +57,7 @@ num_qubits = len(qubits)
 ###################
 # The QUA program #
 ###################
-n_avg = 2
+n_avg = 2000
 
 # Dephasing time sweep (in clock cycles = 4ns) - minimum is 4 clock cycles
 idle_times = np.arange(4, 2000, 5)  # Linear sweep
@@ -144,7 +144,7 @@ else:
         progress_counter(n, n_avg, start_time=results.start_time)
         # Plot results
         plt.suptitle("Echo")
-        for i, (ax, qubit) in enumerate(zip(axes, qubits)):
+        for i, (ax, qubit) in enumerate(zip(axes.T, qubits)):
             ax[0].cla()
             ax[0].plot(8 * idle_times, I_volts[i])
             ax[0].set_ylabel("I [V]")

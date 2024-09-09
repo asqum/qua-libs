@@ -46,11 +46,29 @@ qubit2_frame_update = 0.12  # example values, should be taken from QPU parameter
 
 # defines the CZ gate that realizes the mapping |00> -> |00>, |01> -> |01>, |10> -> |10>, |11> -> -|11>
 def bake_cz(baker: Baking, q1, q2):
+    print("q1,q2: %s,%s" %(q1,q2))
     qc_xy_element = qc.xy.name
     qt_xy_element = qt.xy.name
-    qc_z_element = qc.z.name
+    # qc_z_element = qc.z.name
+    coupler = (qc @ qt).coupler
 
-    baker.play("cz", qc_z_element)
+    z_amp = declare(fixed)
+    coupler_amp = declare(fixed)
+
+    cz_point = 0.01269*.9975 *1.0833333*1.017 #0.009082 #0.00914
+    cz_dur = 64
+    cz_coupler = -0.045366*1.0175*.9999167 # 60ns
+    scale = 0.0448 #0.05051 #0.226 #-0.57
+
+    # baker.play("cz", qc_z_element)
+    assign(z_amp, Cast.mul_fixed_by_int((cz_point - q1.z.min_offset + scale * cz_coupler), 10))
+    assign(coupler_amp, Cast.mul_fixed_by_int(cz_coupler, 10))
+    ########### Pulsed Version
+    wait(24 * u.ns)
+    qc.z.play("flux_pulse", duration=cz_dur//4, amplitude_scale=z_amp)
+    coupler.play("flux_pulse", duration=cz_dur//4, amplitude_scale=coupler_amp)
+    #############################
+
     baker.align()
     baker.frame_rotation_2pi(qubit1_frame_update, qc_xy_element)
     baker.frame_rotation_2pi(qubit2_frame_update, qt_xy_element)

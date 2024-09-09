@@ -52,21 +52,22 @@ qmm = machine.connect()
 # Get the relevant QuAM components
 qubits = machine.active_qubits
 num_qubits = len(qubits)
+selected_qubits = ["q1", "q5", "q3" ,"q2","q4"] 
 q3 = machine.qubits["q3"]
 q4 = machine.qubits["q4"]
 q5 = machine.qubits["q5"]
 coupler = (q4 @ q5).coupler
-apply_pi = True
+apply_pi = False
 # qubits_wo_q5 = [q for q in machine.active_qubits if q.name != "q5"]
 # qubits_wo_q3 = [q for q in machine.active_qubits if q.name != "q3"]
 
 ###################
 # The QUA program #
 ###################
-n_avg = 400
+n_avg = 1200
 
 # Dephasing time sweep (in clock cycles = 4ns) - minimum is 4 clock cycles
-idle_times = np.arange(4, 300, 4)
+idle_times = np.arange(4, 600, 4)
 
 # Detuning converted into virtual Z-rotations to observe Ramsey oscillation and get the qubit frequency
 detuning = 2e6
@@ -104,10 +105,11 @@ with program() as ramsey:
 
                 # for qubit in [machine.qubits["q4"]]:
                 for qubit in qubits:
-                    qubit.xy.play("x90")
-                    qubit.xy.frame_rotation_2pi(phi)
-                    qubit.xy.wait(t)
-                    qubit.xy.play("x90")
+                    if qubit.name in selected_qubits:
+                        qubit.xy.play("x90")
+                        qubit.xy.frame_rotation_2pi(phi)
+                        qubit.xy.wait(t)
+                        qubit.xy.play("x90")
 
             # Align the elements to measure after playing the qubit pulse.
             align()
@@ -178,6 +180,10 @@ else:
             ax[1].set_xlabel("Idle time [ns]")
             ax[1].set_ylabel("Q [V]")
             ax[1].set_title(f"{qubit.name}")
+            n_period = 3
+            for i in range(n_period):
+                ax[0].axvline( (i+1)/abs(detuning)/1e-9, color="r", linestyle="--", linewidth=1.0)
+                ax[1].axvline( (i+1)/abs(detuning)/1e-9, color="r", linestyle="--", linewidth=1.0)
         plt.tight_layout()
         plt.pause(0.1)
 
@@ -211,17 +217,22 @@ else:
                 )
             )
 
-            # Update the state
-            qubit_detuning = fit_I["f"][0] * u.GHz - detuning if detuning >= 0 else detuning + fit_I["f"][0] * u.GHz
-            # qubit.T2ramsey = int(fit_I["T2"][0])
-            # qubit.xy.RF_frequency -= qubit_detuning
             data[f"{qubit.name}"] = {
                 "T2*": qubit.T2ramsey,
                 "if_01": qubit.xy.intermediate_frequency,
                 "successful_fit": True,
             }
-            print(f"Detuning to add to {qubit.name}: {-qubit_detuning / u.kHz:.3f} kHz")
+            
             plt.tight_layout()
+
+            # update QUAM state:
+            qubit_detuning = fit_I["f"][0] * u.GHz - detuning if detuning >= 0 else detuning + fit_I["f"][0] * u.GHz
+            print(f"Detuning to add to {qubit.name}: {-qubit_detuning / u.kHz:.3f} kHz")
+            if int(input("Update QUAM STATES for %s: (1/0) " %qubit.name)):
+                # qubit.T2ramsey = int(fit_I["T2"][0])
+                qubit.xy.RF_frequency -= qubit_detuning
+
+            
             data["figure_analysis"] = fig_analysis
         except (Exception,):
             data[f"{qubit.name}"] = {"successful_fit": False}

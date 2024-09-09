@@ -56,6 +56,11 @@ qmm = machine.connect()
 qubits = machine.active_qubits
 num_qubits = len(qubits)
 
+# resetting angles: 
+# for qubit in qubits:
+#     qubit.resonator.operations["readout"].integration_weights_angle = 0
+# node_save(machine, "iq_blobs", dict(status="reset angles"))
+
 ###################
 # The QUA program #
 ###################
@@ -79,6 +84,7 @@ with program() as iq_blobs:
         for qubit in qubits:
             # excited iq blobs for all qubits
             qubit.xy.play("x180")
+            wait(1000*u.ns)
         align()
         multiplexed_readout(qubits, I_e, I_e_st, Q_e, Q_e_st)
 
@@ -154,8 +160,16 @@ else:
             "confusion_matrix": [[gg, ge], [eg, ee]],
         }
         data[f"{qubit.name}_figure"] = figs[i]
+        
+        print("updating angle: %s" %angle)
 
-        qubit.resonator.operations["readout"].integration_weights_angle += angle
+        theta = qubit.resonator.operations["readout"].integration_weights_angle
+        theta = 2*np.pi - theta
+        theta -= angle
+        theta = 2*np.pi - theta
+        qubit.resonator.operations["readout"].integration_weights_angle = theta
+
+        # qubit.resonator.operations["readout"].integration_weights_angle += angle
         qubit.resonator.operations["readout"].threshold = threshold
         qubit.resonator.operations["readout"].rus_exit_threshold = rus_threshold
 

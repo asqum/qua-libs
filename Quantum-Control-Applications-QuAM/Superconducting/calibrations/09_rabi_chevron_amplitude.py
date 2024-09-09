@@ -53,15 +53,36 @@ qmm = machine.connect()
 qubits = machine.active_qubits
 num_qubits = len(qubits)
 
+#####################
+# UPDATE QUAM STATE #
+#####################
+# (sub)-component(s) to update:
+operation = "x180"  # The qubit operation to play
+amp_list = [0.1281, 0.0426, 0.0473, 0.0618, 0.0715]
+df_list = [14.8, 0, 9.1, 0, 0]
+from sys import exit
+from os.path import basename
+if int(input("UPDATE STATE (1/0): ")):
+    for i,q in enumerate(qubits):
+        if int(input("update %s (1/0): " %(q.name))): 
+            print("\n%s's x180-amplitude (previous): %s" %(q.name, q.xy.operations[operation].amplitude))
+            q.xy.operations[operation].amplitude = amp_list[i]
+            q.xy.RF_frequency = q.xy.RF_frequency + df_list[i]*u.MHz
+            print("%s's x180-amplitude (current): %s" %(q.name, q.xy.operations[operation].amplitude))
+
+        filename = basename(__file__).split('.')[0]
+        node_save(machine, filename, dict(amp_list=amp_list, df_list=df_list))
+    exit()
+
 ###################
 # The QUA program #
 ###################
 
-operation = "x180"  # The qubit operation to play
-n_avg = 100  # The number of averages
+n_avg = 3700  # The number of averages
 
 # The frequency sweep with respect to the qubits resonance frequencies
-dfs = np.arange(-100e6, +100e6, 1e6)
+dfs = np.arange(-40e6, +40e6, 0.2e6)
+# dfs = np.arange(-49e6, +49e6, 0.1e6)
 # Pulse amplitude sweep (as a pre-factor of the qubit pulse amplitude) - must be within [-2; 2)
 amps = np.arange(0.0, 1.9, 0.02)
 
@@ -161,6 +182,13 @@ else:
 
     # Close the quantum machines at the end to put all flux biases to 0 and prevent the fridge from heating up
     qm.close()
+
+    # Update QUAM:
+    # for i,q in enumerate(qubits):
+    #     print("\n%s's x180-amplitude (previous): %s" %(q.name, q.xy.operations[operation].amplitude))
+    #     q.xy.operations[operation].amplitude = amp_list[i]
+    #     q.xy.RF_frequency = q.xy.RF_frequency + df_list[i]*u.MHz
+    #     print("%s's x180-amplitude (current): %s" %(q.name, q.xy.operations[operation].amplitude))
 
     # Save data from the node
     data = {}

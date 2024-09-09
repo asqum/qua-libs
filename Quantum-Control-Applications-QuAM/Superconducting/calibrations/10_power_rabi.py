@@ -58,10 +58,10 @@ num_qubits = len(qubits)
 ###################
 
 operation = "x180"  # The qubit operation to play
-n_avg = 600  # The number of averages
+n_avg = 6000  # The number of averages
 
 # Pulse amplitude sweep (as a pre-factor of the qubit pulse amplitude) - must be within [-2; 2)
-amps = np.arange(0.0, 2, 0.025)
+amps = np.arange(0.05, 1.95, 0.025)
 # Number of applied Rabi pulses sweep
 N_pi = 40  # Maximum number of qubit pulses
 N_pi_vec = np.linspace(1, N_pi, N_pi).astype("int")[::2]
@@ -164,9 +164,11 @@ else:
                 plt.cla()
                 plt.plot(
                     amps * qubit.xy.operations[operation].amplitude,
-                    np.sum(I_volts[i], axis=0),
+                    abs(np.sum(I_volts[i], axis=0)),
                 )
                 plt.axvline(qubit.xy.operations[operation].amplitude, color="k")
+                plt.axvline(amps[ np.argmax(abs(np.sum(I_volts[i], axis=0))) ]
+                    * qubit.xy.operations[operation].amplitude, color='r', linestyle='dotted')
                 plt.xlabel("Rabi pulse amplitude [V]")
                 plt.ylabel(r"$\Sigma$ of Rabi pulses")
 
@@ -198,22 +200,21 @@ else:
 
         # Get the optimal pi pulse amplitude when doing error amplification
         # update QUAM:
-        for qubit in qubits:
-            if int(input("Update QUAM STATES for %s: (1/0) " %qubit.name)):
-                try:
-                    qubit.xy.operations[operation].amplitude = (
-                        amps[np.argmax(np.sum(I_volts[i], axis=0))]
-                        * qubit.xy.operations[operation].amplitude
-                    )
+        if int(input("Update QUAM STATES for %s: (1/0) " %qubit.name)):
+            try:
+                qubit.xy.operations[operation].amplitude = (
+                    amps[ np.argmax(abs(np.sum(I_volts[i], axis=0))) ]
+                    * qubit.xy.operations[operation].amplitude
+                )
 
-                    data[f"{qubit.name}"] = {
-                        "x180_amplitude": qubit.xy.operations[operation].amplitude,
-                        "successful_fit": True,
-                    }
+                data[f"{qubit.name}"] = {
+                    "x180_amplitude": qubit.xy.operations[operation].amplitude,
+                    "successful_fit": True,
+                }
 
-                except (Exception,):
-                    data[f"{qubit.name}"] = {"successful_fit": True}
-                    pass
+            except (Exception,):
+                data[f"{qubit.name}"] = {"successful_fit": True}
+                pass
 
     data["figure"] = fig
     # Save data from the node

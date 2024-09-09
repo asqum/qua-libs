@@ -54,12 +54,13 @@ qmm = machine.connect()
 
 # Get the relevant QuAM components
 qubits = machine.active_qubits
+qubits = [machine.qubits["q5"]]
 
 ##############################
 # Program-specific variables #
 ##############################
-num_of_sequences = 50  # Number of random sequences
-n_avg = 10  # Number of averaging loops for each random sequence
+num_of_sequences = 40  # Number of random sequences
+n_avg = 90  # Number of averaging loops for each random sequence
 max_circuit_depth = 1000  # Maximum circuit depth
 delta_clifford = (
     10  #  Play each sequence with a depth step equals to 'delta_clifford - Must be > 1
@@ -70,7 +71,7 @@ assert (
 num_depths = max_circuit_depth // delta_clifford + 1
 seed = 345324  # Pseudo-random number generator seed
 # Flag to enable state discrimination if the readout has been calibrated (rotated blobs and threshold)
-state_discrimination = False
+state_discrimination = True
 # List of recovery gates from the lookup table
 inv_gates = [int(np.where(c1_table[i, :] == 0)[0][0]) for i in range(24)]
 
@@ -153,7 +154,7 @@ def play_sequence(sequence_list, depth, qubit: Transmon):
                 qubit.xy.play("x90")
             with case_(17):
                 qubit.xy.play("-x90")
-                qubit.xy.play("-x90")
+                qubit.xy.play("-y90")
                 qubit.xy.play("x90")
             with case_(18):
                 qubit.xy.play("x180")

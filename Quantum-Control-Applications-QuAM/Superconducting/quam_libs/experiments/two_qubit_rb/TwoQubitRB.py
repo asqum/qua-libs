@@ -17,6 +17,7 @@ from .verification.command_registry import (
 )
 from .verification.sequence_tracker import SequenceTracker
 
+import cirq
 
 class TwoQubitRb:
     _buffer_length = 4096

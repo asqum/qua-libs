@@ -53,10 +53,25 @@ qmm = machine.connect()
 qubits = machine.active_qubits
 num_qubits = len(qubits)
 
+#####################
+# UPDATE QUAM STATE #
+#####################
+# (sub)-component(s) to update:
+amp_list = [0.025, 0.0725, 0.0962, 0.0338, 0.0509]
+from sys import exit
+from os.path import basename
+if int(input("update state.json (1/0): ")): 
+    for i,qubit in enumerate(qubits): 
+        qubit.resonator.operations["readout"].amplitude = amp_list[i]
+
+    filename = basename(__file__).split('.')[0]
+    node_save(machine, filename, dict(amp_list=amp_list))
+    exit()
+
 ###################
 # The QUA program #
 ###################
-n_runs = 4000
+n_runs = 2000
 
 # The readout amplitude sweep (as a pre-factor of the readout amplitude) - must be within [-2; 2)
 amplitudes = np.arange(0.5, 1.99, 0.02)
@@ -201,6 +216,7 @@ else:
     # # Update the state
     # rr1.operations["readout"].amplitude *= amplitudes[np.argmax(fidelity_vec[0])]
     # rr2.operations["readout"].amplitude *= amplitudes[np.argmax(fidelity_vec[1])]
+
 
     node_save(machine, "readout_amplitude_optimization", data, additional_files=True)
 

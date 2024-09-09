@@ -52,6 +52,23 @@ qmm = machine.connect()
 qubits = machine.active_qubits
 num_qubits = len(qubits)
 
+#####################
+# UPDATE QUAM STATE #
+#####################
+# (sub)-component(s) to update:
+df_list = [0, 0, -4.44, 0, 0]
+from sys import exit
+from os.path import basename
+if int(input("update state.json (1/0): ")): 
+    for i,q in enumerate(qubits):
+        q.xy.RF_frequency = q.xy.RF_frequency + df_list[i]*u.MHz
+
+    filename = basename(__file__).split('.')[0]
+    node_save(machine, filename, dict(df_list=df_list))
+    exit()
+
+
+
 ###################
 # The QUA program #
 ###################

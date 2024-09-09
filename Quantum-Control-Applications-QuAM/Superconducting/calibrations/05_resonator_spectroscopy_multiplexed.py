@@ -59,7 +59,7 @@ num_resonators = len(resonators)
 # The QUA program #
 ###################
 
-n_avg = 100  # The number of averages
+n_avg = 1000  # The number of averages
 # The frequency sweep around the resonator resonance frequency f_opt
 dfs = np.arange(-10e6, +10e6, 0.1e6)
 # You can adjust the IF frequency here to manually adjust the resonator frequencies instead of updating the state

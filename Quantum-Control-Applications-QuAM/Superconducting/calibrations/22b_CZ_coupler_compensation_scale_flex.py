@@ -59,9 +59,14 @@ config = machine.generate_config()
 qmm = machine.connect()
 
 # Get the relevant QuAM components
-q1 = machine.qubits["q4"]
-q2 = machine.qubits["q5"]
-coupler = (q1 @ q2).coupler
+q1 = machine.qubits["q3"]
+q2 = machine.qubits["q4"]
+
+try: 
+    coupler = (q1 @ q2).coupler
+except:
+    coupler = (q2 @ q1).coupler 
+
 # compensations = {
 #     q1: coupler.opx_output.crosstalk[q1.z.opx_output.port_id],
 #     q2: coupler.opx_output.crosstalk[q2.z.opx_output.port_id]
@@ -79,14 +84,15 @@ qb = q1  # The qubit whose flux will be swept
 n_avg = 3000
 # The flux pulse durations in clock cycles (4ns) - Must be larger than 4 clock cycles.
 # dcs = np.linspace(-0.07, 0.07, 201)
-dcs = np.linspace(-0.046, -0.0382, 501) # 501
+dcs = np.linspace(-0.0325, -0.0225, 201) # q3_4
+# dcs = np.linspace(-0.04848, -0.0382, 501) # q4_5
 # dcs = [-0.046, -0.045]
 # The flux bias sweep in V
-# scales = np.linspace(-0.6, 0.6, 101)
-scales = np.linspace(0.01, 0.1, 101) # 101
+scales = np.linspace(-0.25, 0.35, 101) # q3_4
+# scales = np.linspace(0.0, 0.1, 101) # q4_5
 # scales = [0.4, 0.41]
-cz_dur = 120 #360
-cz_point = 0.00857 #0.0088 #0.00914 #0.009082
+cz_dur = 60 #360
+cz_point = -0.105 #-0.09529 #0.01269 #0.0088 #0.00914 #0.009082
 
 mode = "pulse" # dc or pulse
 simulate = False
@@ -228,6 +234,10 @@ else:
         plt.title(f"{q1.name} - Q")
         plt.xlabel("Flux amplitude [V]")
         plt.ylabel("Compensation Scales")
+
+        cz_coupler = -0.045366*1.0175*.9999167
+        # plt.axvline( cz_coupler, color="r", linestyle="--", linewidth=1.5)
+        
         plt.subplot(222)
         plt.cla()
         # plt.pcolor(dcs * coupler.operations["const"].amplitude, scales, I2)
@@ -241,6 +251,10 @@ else:
         # plt.plot(cz_point, wait_time, color="r", marker="*")
         plt.title(f"{q2.name} - Q")
         plt.xlabel("Flux amplitude [V]")
+
+        cz_coupler = -0.045366*1.0175*.9999167
+        # plt.axvline( cz_coupler, color="r", linestyle="--", linewidth=1.5)
+
         plt.tight_layout()
         plt.pause(0.3)
 

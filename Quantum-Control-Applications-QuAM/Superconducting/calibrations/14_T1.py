@@ -53,7 +53,7 @@ num_qubits = len(qubits)
 ###################
 # The QUA program #
 ###################
-n_avg = 2
+n_avg = 2000
 
 # The wait time sweep (in clock cycles = 4ns) - must be larger than 4 clock cycles
 # Linear sweep
@@ -135,15 +135,16 @@ else:
         progress_counter(n, n_avg, start_time=results.start_time)
         # Plot results
         plt.suptitle("T1")
-        for i, (ax, qubit) in enumerate(zip(axes, qubits)):
-            ax[0].cla()
-            ax[0].plot(t_delay * 4, I_volts[i], ".")
-            ax[0].set_title(f"{qubit.name}")
-            ax[0].set_ylabel("I quadrature [V]")
-            ax[1].cla()
-            ax[1].plot(t_delay * 4, Q_volts[i], ".")
-            ax[1].set_xlabel("Wait time [ns]")
-            ax[1].set_ylabel("Q quadrature [V]")
+        # for i, (ax, qubit) in enumerate(zip(axes, qubits)):
+        for i, qubit in enumerate(qubits):
+            axes[0,i].cla()
+            axes[0,i].plot(t_delay * 4, I_volts[i], ".")
+            axes[0,i].set_title(f"{qubit.name}")
+            axes[0,i].set_ylabel("I quadrature [V]")
+            axes[1,i].cla()
+            axes[1,i].plot(t_delay * 4, Q_volts[i], ".")
+            axes[1,i].set_xlabel("Wait time [ns]")
+            axes[1,i].set_ylabel("Q quadrature [V]")
         plt.tight_layout()
         plt.pause(0.1)
 
@@ -174,7 +175,7 @@ else:
             plt.legend((f"T1 = {np.round(np.abs(fit_res['T1'][0]) / 4) * 4:.0f} ns",))
             qubit.T1 = int(np.round(np.abs(fit_res["T1"][0]) / 4) * 4)
             data[f"{qubit.name}"] = {"T1": qubit.T1, "successful_fit": True}
-            plt.tight_layout()
+            # plt.tight_layout()
             data["figure_analysis"] = fig_analysis
         except (Exception,):
             data[f"{qubit.name}"] = {"successful_fit": False}

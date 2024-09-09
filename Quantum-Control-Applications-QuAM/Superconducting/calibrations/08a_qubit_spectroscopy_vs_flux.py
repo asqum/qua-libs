@@ -60,14 +60,14 @@ cooldown_time = max(q.thermalization_time for q in qubits)
 pulse = "saturation" # x180, saturation
 saturation_len = 20 * u.us  # In ns
 saturation_amp = (
-    0.03  # pre-factor to the value defined in the config - restricted to [-2; 2)
+    0.053  # pre-factor to the value defined in the config - restricted to [-2; 2)
 )
 
 # Qubit detuning sweep with respect to their resonance frequencies
-dfs = np.arange(-300e6, 100e6, 1e6)
+dfs = np.arange(-450e6, 450e6, 1e6)
 # Flux bias sweep
 dc_center = qubits[0].z.min_offset
-dcs = np.linspace(dc_center-0.05, dc_center+0.05, 100)
+dcs = np.linspace(dc_center-0.04, dc_center+0.04, 100)
 
 # Adjust the qubits IFs locally to help find the qubits
 # q1.xy.intermediate_frequency = 340e6

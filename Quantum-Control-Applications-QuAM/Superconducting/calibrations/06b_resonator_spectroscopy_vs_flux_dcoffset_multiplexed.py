@@ -186,10 +186,10 @@ else:
         # resonators[3].intermediate_frequency = 0
         # resonators[4].intermediate_frequency = 0
         qubits[0].z.min_offset = 0.0
-        qubits[1].z.min_offset = 0.020
-        qubits[2].z.min_offset = -0.042
-        qubits[3].z.min_offset = -0.002
-        qubits[4].z.min_offset = 0.021
+        qubits[1].z.min_offset = 0.013
+        qubits[2].z.min_offset = 0.023
+        qubits[3].z.min_offset = 0.008
+        qubits[4].z.min_offset = 0.018
 
     # Save data from the node
     data = {}
