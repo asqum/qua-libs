@@ -82,7 +82,8 @@ with program() as power_rabi:
                 # Loop for error amplification (perform many qubit pulses)
                 with for_(count, 0, count < npi, count + 1):
                     for qubit in qubits:
-                        qubit.xy.play("x180", amplitude_scale=a)
+                        if qubit.name in ["q2","q3","q4","q5"]:
+                            qubit.xy.play("x180", amplitude_scale=a)
                 # Align all elements to measure after playing the qubit pulse.
                 align()
                 multiplexed_readout(qubits, I, I_st, Q, Q_st)

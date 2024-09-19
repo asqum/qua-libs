@@ -60,7 +60,7 @@ n_avg = 100  # The number of averages
 ## rr1
 # frequencies = np.arange(10e6, 251e6, 1e6)
 # rr2
-frequencies = np.arange(-300e6, 151e6, 1e5)
+frequencies = np.arange(-499e6, 499e6, 1e5)
 
 with program() as resonator_spec:
     n = declare(int)  # QUA variable for the averaging loop

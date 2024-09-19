@@ -297,7 +297,9 @@ class XEB:
         xeb_prog = self._xeb_prog(simulate)
         qmm = self.quam.connect()
         if simulate:
-            job = qmm.simulate(config, xeb_prog, simulate=SimulationConfig(1000))
+            job = qmm.simulate(config, xeb_prog, simulate=SimulationConfig(duration=750))
+            job.get_simulated_samples().con1.plot()
+            plt.show()
         elif self.xeb_config.generate_new_data:
             qm = qmm.open_qm(config)
             job = qm.execute(xeb_prog)
@@ -910,7 +912,7 @@ class XEBResult:
 
         def create_plot(data, title):
             plt.figure()
-            plt.pcolor(self.xeb_config.depths, range(self.xeb_config.seqs), np.abs(data))
+            plt.pcolor(self.xeb_config.depths, range(self.xeb_config.seqs), np.abs(data), vmin=0, vmax=1)
             ax = plt.gca()
             ax.set_title(title)
             ax.set_xlabel("Circuit depth")

@@ -59,7 +59,7 @@ num_qubits = len(qubits)
 n_avg = 200  # The number of averages
 
 # The frequency sweep parameters with respect to the resonators resonance frequencies
-dfs = np.arange(-2e6, 2e6, 0.02e6)
+dfs = np.arange(-3e6, 3e6, 0.02e6)
 
 with program() as ro_freq_opt:
     n = declare(int)

@@ -57,7 +57,7 @@ num_qubits = len(qubits)
 # UPDATE QUAM STATE #
 #####################
 # (sub)-component(s) to update:
-amp_list = [0.025, 0.0725, 0.0962, 0.0338, 0.0509]
+amp_list = [0.03, 0.012, 0.01238, 0.0787, 0.0581]
 from sys import exit
 from os.path import basename
 if int(input("update state.json (1/0): ")): 

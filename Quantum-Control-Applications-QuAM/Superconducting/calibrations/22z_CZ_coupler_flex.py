@@ -120,7 +120,7 @@ cz_point = 0.02275 #q3_2:-0.09529 #q3_4:-0.105 #q4_5:0.02275, 0.02075
 coupler_point = -0.04128*1.0113857 #*1.0178961 #q3_4_off: -0.02257, q4_5_off: -0.03479, -0.03663 
 scale = 0.0448 # q4_5: 0.0448, q3_4: 0.051, q3_2: -0.117 
 
-simulate = False
+simulate = True
 mode = "pulse" # dc or pulse
 sweep_flux = "qc" # q4 or qc
 pulse_dc_factor = 1.0 #(0.00859 - q1.z.min_offset)/(0.00908 - q1.z.min_offset) * 1.08

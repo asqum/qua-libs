@@ -46,7 +46,7 @@ matplotlib.use("TKAgg")
 # Class containing tools to help handling units and conversions.
 u = unit(coerce_to_integer=True)
 # Instantiate the QuAM class from the state file
-machine = QuAM.load('/home/dean/src/qm/asqum/Quantum-Control-Applications-QuAM/Superconducting/configuration/quam_state')
+machine = QuAM.load()
 
 # Get the relevant QuAM components
 qubits = machine.active_qubits

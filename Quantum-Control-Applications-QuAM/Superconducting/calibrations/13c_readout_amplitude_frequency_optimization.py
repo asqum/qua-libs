@@ -190,6 +190,7 @@ else:
         ax.set_ylabel("Readout amplitude [V]")
         ax.set_xlabel("Readout IF [MHz]")
     plt.tight_layout()
+    plt.show()
 
     # Update the state
     # for i, qubit in enumerate(qubits):

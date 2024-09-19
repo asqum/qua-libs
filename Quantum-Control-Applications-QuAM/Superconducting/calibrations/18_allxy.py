@@ -49,7 +49,7 @@ qmm = machine.connect()
 
 # Get the relevant QuAM components
 qubits = machine.active_qubits
-qubits = [machine.qubits["q5"]]
+qubits = [machine.qubits["q4"]]
 num_qubits = len(qubits)
 
 ##############################

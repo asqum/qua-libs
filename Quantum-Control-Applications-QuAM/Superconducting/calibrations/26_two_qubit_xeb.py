@@ -10,7 +10,7 @@ from quam_libs.experiments.two_qubit_xeb import (
 machine = QuAM.load()
 qubits = machine.active_qubits
 # Get the relevant QuAM components
-target_qubit_indices = [3, 4]  # Indices of the target qubits
+target_qubit_indices = [3]  # Indices of the target qubits
 target_qubits = [qubits[i] for i in target_qubit_indices]
 target_qubit_pairs = [
     qubit_pair
@@ -32,9 +32,9 @@ def cz_gate(qubit_pair: TransmonPair):
 cz_qua = QUAGate("cz", cz_gate)
 
 xeb_config = XEBConfig(
-    seqs=10, #81,
+    seqs=8, #81,
     # depths=np.arange(1, 2000, 150),
-    depths=np.arange(1, 8),
+    depths=np.arange(1, 5, 1),
     n_shots=300, #1000,
     qubits=target_qubits,
     qubit_pairs=target_qubit_pairs,
@@ -44,7 +44,7 @@ xeb_config = XEBConfig(
     save_dir="",
     should_save_data=False, #True,
     generate_new_data=True,
-    disjoint_processing=True, #False,
+    disjoint_processing=False, #False,
     # reset_method="active",
     # reset_kwargs={"max_tries": 3, "pi_pulse": "x180"},
     reset_method="cooldown", #"active",

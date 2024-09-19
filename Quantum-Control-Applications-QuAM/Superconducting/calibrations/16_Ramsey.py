@@ -223,7 +223,7 @@ else:
                 "successful_fit": True,
             }
             
-            plt.tight_layout()
+            # plt.tight_layout()
 
             # update QUAM state:
             qubit_detuning = fit_I["f"][0] * u.GHz - detuning if detuning >= 0 else detuning + fit_I["f"][0] * u.GHz

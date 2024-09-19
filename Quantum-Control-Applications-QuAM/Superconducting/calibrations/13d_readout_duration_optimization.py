@@ -55,7 +55,7 @@ qubits = machine.active_qubits
 num_qubits = len(qubits)
 
 # Select the resonator and qubit to measure (no multiplexing here)
-qb = qubits[0]
+qb = qubits[4]
 rr = qb.resonator
 
 ####################
@@ -80,7 +80,7 @@ rr = qb.resonator
 # The QUA program #
 ###################
 
-n_avg = 1e4  # number of averages
+n_avg = 3e4  # number of averages
 # Set maximum readout duration for this scan and update the configuration accordingly
 readout_len = 7 * u.us
 ringdown_len = 0 * u.us
@@ -291,20 +291,24 @@ else:
         plt.xlabel("Readout duration [ns]")
         plt.ylabel("SNR")
         plt.title("SNR")
+        plt.axvline(rr.operations["readout"].length, color="k")
+
+        # Get the optimal readout length in ns
+        opt_readout_length = int(np.round(np.argmax(SNR) * division_length / 4) * 4 * 4)
+        plt.axvline(opt_readout_length, color="r")
+
         plt.pause(0.1)
         plt.tight_layout()
-
     plt.show()
-
-    # Get the optimal readout length in ns
-    opt_readout_length = int(np.round(np.argmax(SNR) * division_length / 4) * 4 * 4)
-    print(f"The optimal readout length is {opt_readout_length} ns (SNR={max(SNR)})")
 
     # Close the quantum machines at the end in order to put all flux biases to 0 so that the fridge doesn't heat-up
     qm.close()
 
     # Update the state
-    rr.operations["readout"].length = opt_readout_length
+    print(f">>> The OPTIMAL readout length is {opt_readout_length} ns (SNR={max(SNR)})")
+    if input(f"Update {qb.name} readout duration (y/n)") == 'y':
+        rr.operations["readout"].length = opt_readout_length
+        print(f"UPDATED {qb.name} readout duration")
 
     # Save data from the node
     data = {

@@ -28,8 +28,8 @@ with program() as hello_qua:
     a = declare(fixed)
     with infinite_loop_():
         with for_(a, 0, a < 1.1, a + 0.05):
-            play("x180" * amp(a), machine.qubits["q0"].xy.name)
-        wait(25, machine.qubits["q0"].xy.name)
+            play("x180" * amp(a), machine.qubits["q1"].xy.name)
+        wait(25, machine.qubits["q1"].xy.name)
         align()
         measure("readout", machine.qubits["q1"].resonator.name, None)
 
@@ -38,7 +38,7 @@ with program() as hello_qua:
 # Run or Simulate Program #
 ###########################
 
-simulate = False
+simulate = True
 
 if simulate:
     # Simulates the QUA program for the specified duration

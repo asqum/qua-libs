@@ -60,6 +60,21 @@ prev_amps = [rr.operations["readout"].amplitude for rr in resonators]
 num_qubits = len(qubits)
 num_resonators = len(resonators)
 
+#####################
+# UPDATE QUAM STATE #
+#####################
+# (sub)-component(s) to update:
+amp_list = [0.0180, 0.0657, 0.0662, 0.0587, 0.0425]
+from sys import exit
+from os.path import basename
+if int(input("update state.json (1/0): ")): 
+    for i,qubit in enumerate(qubits): 
+        qubit.resonator.operations["readout"].amplitude = amp_list[i]
+
+    filename = basename(__file__).split('.')[0]
+    node_save(machine, filename, dict(amp_list=amp_list))
+    exit()
+        
 ###################
 # The QUA program #
 ###################
@@ -178,13 +193,13 @@ else:
     # Close the quantum machines at the end in order to put all flux biases to 0 so that the fridge doesn't heat-up
     qm.close()
 
-    # update QUAM:
-    if int(input("Update QUAM STATES: (1/0) ")):
-        resonators[0].operations["readout"].amplitude = 0.008
-        resonators[1].operations["readout"].amplitude = 0.008
-        resonators[2].operations["readout"].amplitude = 0.008
-        resonators[3].operations["readout"].amplitude = 0.008
-        resonators[4].operations["readout"].amplitude = 0.008
+    # # update QUAM:
+    # if int(input("Update QUAM STATES: (1/0) ")):
+    #     resonators[0].operations["readout"].amplitude = 0.0150
+    #     resonators[1].operations["readout"].amplitude = 0.0059
+    #     resonators[2].operations["readout"].amplitude = 0.0089
+    #     resonators[3].operations["readout"].amplitude = 0.0587
+    #     resonators[4].operations["readout"].amplitude = 0.0425
 
     # Save data from the node
     data = {}
