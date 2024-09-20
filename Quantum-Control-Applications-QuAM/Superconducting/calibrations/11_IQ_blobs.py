@@ -52,7 +52,7 @@ machine = QuAM.load()
 qubits = machine.active_qubits
 num_qubits = len(qubits)
 
-# # Resetting angles:
+# # Resetting angles: (has to be before generate_config())
 # for qubit in qubits:
 #     qubit.resonator.operations["readout"].integration_weights_angle = 0
 # node_save(machine, "iq_blobs", dict(status="reset angles"))

@@ -23,6 +23,7 @@ from qiskit.quantum_info import Statevector
 from qualang_tools.results import DataHandler
 
 from quam_libs.components import QuAM, Transmon, TransmonPair
+from quam_libs.macros import multiplexed_readout, node_save
 from qm import SimulationConfig
 from qm.jobs.running_qm_job import RunningQmJob
 from qm.jobs.simulated_job import SimulatedJob
@@ -43,6 +44,7 @@ class XEB:
         """
         self.xeb_config = xeb_config
         self.quam = quam
+        self.readout_qubits: List[Transmon] = xeb_config.readout_qubits
         self.qubits: List[Transmon] = xeb_config.qubits
         self.qubit_dict: Dict = {i: qubit for i, qubit in enumerate(self.qubits)}
         self.qubit_dict2: Dict = {qubit: i for i, qubit in enumerate(self.qubits)}
@@ -186,7 +188,9 @@ class XEB:
                 with for_each_(depth, self.xeb_config.depths):  # Truncate depth to each value in depths
                     with for_(n, 0, n < self.xeb_config.n_shots, n + 1):
                         if simulate:
-                            wait(25, *[qubit.name for qubit in self.qubit_drive_channels])
+                            gap = 4
+                            wait(gap, *[qubit.name for qubit in self.qubit_drive_channels])
+                            print("Simulating output for %s with spacings of %sns" %(qubit.name,gap*4)) 
 
                         # Play all cycles generated for sequence s of depth d
                         with for_(depth_, 0, depth_ < depth, depth_ + 1):
@@ -227,6 +231,14 @@ class XEB:
 
                         # Measure the state
                         for q_idx, readout_element in enumerate(self.readout_channels):
+                            # qubit.xy.align(qubit.z.name, qubit.resonator.name)
+                            
+                            align()
+                            # Play the readout on the other resonator to measure in the same condition as when optimizing readout
+                            for other_qubit in self.readout_qubits:
+                                if other_qubit.resonator != readout_element:
+                                    other_qubit.resonator.play("readout")
+
                             readout_element.measure(
                                 self.xeb_config.readout_pulse_name,
                                 qua_vars=(I[q_idx], Q[q_idx]),
@@ -297,7 +309,8 @@ class XEB:
         xeb_prog = self._xeb_prog(simulate)
         qmm = self.quam.connect()
         if simulate:
-            job = qmm.simulate(config, xeb_prog, simulate=SimulationConfig(duration=750))
+            qm = qmm.open_qm(config)
+            job = qm.simulate(xeb_prog, simulate=SimulationConfig(duration=3000))
             job.get_simulated_samples().con1.plot()
             plt.show()
         elif self.xeb_config.generate_new_data:

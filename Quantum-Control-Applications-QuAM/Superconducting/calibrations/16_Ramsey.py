@@ -61,6 +61,9 @@ apply_pi = False
 # qubits_wo_q5 = [q for q in machine.active_qubits if q.name != "q5"]
 # qubits_wo_q3 = [q for q in machine.active_qubits if q.name != "q3"]
 
+for q in qubits:
+    print("%s: %s" %(q.name,q.xy.RF_frequency))
+
 ###################
 # The QUA program #
 ###################
@@ -230,7 +233,11 @@ else:
             print(f"Detuning to add to {qubit.name}: {-qubit_detuning / u.kHz:.3f} kHz")
             if int(input("Update QUAM STATES for %s: (1/0) " %qubit.name)):
                 # qubit.T2ramsey = int(fit_I["T2"][0])
-                qubit.xy.RF_frequency -= qubit_detuning
+                # qubit.xy.RF_frequency -= qubit_detuning
+                if detuning < 0:
+                    qubit.xy.RF_frequency += qubit_detuning
+                else: 
+                    qubit.xy.RF_frequency -= qubit_detuning
 
             
             data["figure_analysis"] = fig_analysis

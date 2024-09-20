@@ -35,6 +35,7 @@ class XEBConfig:
     seqs: int
     depths: Union[np.ndarray, List[int]]
     n_shots: int
+    readout_qubits: List[Transmon]
     qubits: List[Transmon]
     baseline_gate_name: str = "sx"
     gate_set_choice: Union[Literal["sw", "t"], Dict[int, QUAGate]] = "sw"

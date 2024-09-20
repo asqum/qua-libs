@@ -18,6 +18,8 @@ target_qubit_pairs = [
     if qubit_pair.qubit_control in target_qubits and qubit_pair.qubit_target in target_qubits
 ]
 
+print("target_qubits: %s" %[q.name for q in target_qubits]) 
+
 
 def cz_gate(qubit_pair: TransmonPair):
     """
@@ -32,10 +34,11 @@ def cz_gate(qubit_pair: TransmonPair):
 cz_qua = QUAGate("cz", cz_gate)
 
 xeb_config = XEBConfig(
-    seqs=8, #81,
+    seqs=11, #81,
     # depths=np.arange(1, 2000, 150),
     depths=np.arange(1, 5, 1),
-    n_shots=300, #1000,
+    n_shots=100, #1000,
+    readout_qubits=qubits, 
     qubits=target_qubits,
     qubit_pairs=target_qubit_pairs,
     baseline_gate_name="x90",
@@ -49,6 +52,7 @@ xeb_config = XEBConfig(
     # reset_kwargs={"max_tries": 3, "pi_pulse": "x180"},
     reset_method="cooldown", #"active",
     reset_kwargs={"cooldown_time": 50000, "max_tries": 3, "pi_pulse": "x180"},
+    # reset_kwargs={"cooldown_time": 10, "max_tries": 3, "pi_pulse": "x180"},
 )
 
 simulate = False  # Set to True to simulate the experiment with Qiskit Aer instead of running it on the QPU
@@ -58,10 +62,12 @@ if simulate:
 else:
     job = xeb.run(simulate=False)  # If simulate is False, job is run on the QPU, else pulse output is simulated
 
-# job.circuits[3][5].draw("mpl")
+# job.circuits[0][0].draw("mpl")
 
 result = job.result()
 
 result.plot_fidelities()
+
 # result.plot_records() # bug?
+
 result.plot_state_heatmap()

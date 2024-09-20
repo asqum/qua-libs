@@ -44,14 +44,11 @@ matplotlib.use("TKAgg")
 u = unit(coerce_to_integer=True)
 # Instantiate the QuAM class from the state file
 machine = QuAM.load()
-# Generate the OPX and Octave configurations
-config = machine.generate_config()
-# Open Communication with the QOP
-qmm = machine.connect()
 
 # Get the relevant QuAM components
 qubits = machine.active_qubits
 num_qubits = len(qubits)
+
 
 #####################
 # UPDATE QUAM STATE #
@@ -73,6 +70,12 @@ if int(input("UPDATE STATE (1/0): ")):
         filename = basename(__file__).split('.')[0]
         node_save(machine, filename, dict(amp_list=amp_list, df_list=df_list))
     exit()
+
+
+# Generate the OPX and Octave configurations
+config = machine.generate_config()
+# Open Communication with the QOP
+qmm = machine.connect()
 
 ###################
 # The QUA program #

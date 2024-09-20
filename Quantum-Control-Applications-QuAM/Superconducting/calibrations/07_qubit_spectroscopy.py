@@ -71,10 +71,10 @@ n_avg = 66000  # The number of averages
 # Adjust the pulse duration and amplitude to drive the qubit into a mixed state
 saturation_len = 20 * u.us  # In ns
 saturation_amp = (
-    0.00137  # pre-factor to the value defined in the config - restricted to [-2; 2)
+    0.0137  # pre-factor to the value defined in the config - restricted to [-2; 2)
 )
 # Qubit detuning sweep with respect to their resonance frequencies
-dfs = np.arange(-2e6, +2e6, 0.01e6)
+dfs = np.arange(-20e6, +20e6, 0.01e6)
 
 with program() as multi_qubit_spec:
     # Macro to declare I, Q, n and their respective streams for a given number of qubit (defined in macros.py)

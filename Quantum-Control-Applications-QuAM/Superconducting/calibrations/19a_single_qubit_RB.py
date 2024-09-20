@@ -54,16 +54,16 @@ qmm = machine.connect()
 
 # Get the relevant QuAM components
 qubits = machine.active_qubits
-qubits = [machine.qubits["q5"]]
+qubits = [machine.qubits["q4"]]
 
 ##############################
 # Program-specific variables #
 ##############################
 num_of_sequences = 40  # Number of random sequences
-n_avg = 90  # Number of averaging loops for each random sequence
-max_circuit_depth = 1000  # Maximum circuit depth
+n_avg = 300  # Number of averaging loops for each random sequence
+max_circuit_depth = 600  # Maximum circuit depth
 delta_clifford = (
-    10  #  Play each sequence with a depth step equals to 'delta_clifford - Must be > 1
+    6  #  Play each sequence with a depth step equals to 'delta_clifford - Must be > 1
 )
 assert (
     max_circuit_depth / delta_clifford
@@ -71,7 +71,7 @@ assert (
 num_depths = max_circuit_depth // delta_clifford + 1
 seed = 345324  # Pseudo-random number generator seed
 # Flag to enable state discrimination if the readout has been calibrated (rotated blobs and threshold)
-state_discrimination = True
+state_discrimination = False
 # List of recovery gates from the lookup table
 inv_gates = [int(np.where(c1_table[i, :] == 0)[0][0]) for i in range(24)]
 
@@ -226,9 +226,9 @@ def get_rb_program(qubit: Transmon):
                         # Align the two elements to play the sequence after qubit initialization
                         qubit.resonator.align(qubit.xy.name)
                         # The strict_timing ensures that the sequence will be played without gaps
-                        with strict_timing_():
+                        # with strict_timing_():
                             # Play the random sequence of desired depth
-                            play_sequence(sequence_list, depth, qubit)
+                        play_sequence(sequence_list, depth, qubit)
                         # Align the two elements to measure after playing the circuit.
                         qubit.resonator.align(qubit.xy.name)
                         # # Play through the 2nd resonator to be in the same condition as when the readout was optimized

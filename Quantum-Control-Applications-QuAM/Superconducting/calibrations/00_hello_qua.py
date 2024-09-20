@@ -6,6 +6,7 @@ from pathlib import Path
 from qm.qua import *
 from qm import SimulationConfig
 from quam_libs.components import QuAM
+from matplotlib import pyplot as plt
 
 ###################################################
 #  Load QuAM and open Communication with the QOP  #
@@ -44,9 +45,11 @@ if simulate:
     # Simulates the QUA program for the specified duration
     simulation_config = SimulationConfig(duration=1_000)  # In clock cycles = 4ns
     # Simulate blocks python until the simulation is done
-    job = qmm.simulate(config, hello_qua, simulation_config)
+    qm = qmm.open_qm(config)
+    job = qm.simulate(hello_qua, simulation_config)
     # Plot the simulated samples
     job.get_simulated_samples().con1.plot()
+    plt.show()
 else:
     # Open a quantum machine to execute the QUA program
     qm = qmm.open_qm(config)

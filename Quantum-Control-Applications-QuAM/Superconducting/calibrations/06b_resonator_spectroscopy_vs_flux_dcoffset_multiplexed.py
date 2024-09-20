@@ -40,17 +40,13 @@ import matplotlib
 matplotlib.use("TKAgg")
 
 
-###################################################
-#  Load QuAM and open Communication with the QOP  #
-###################################################
+################
+#  Load QuAM   #
+################
 # Class containing tools to help handling units and conversions.
 u = unit(coerce_to_integer=True)
 # Instantiate the QuAM class from the state file
 machine = QuAM.load()
-# Generate the OPX and Octave configurations
-config = machine.generate_config()
-# Open Communication with the QOP
-qmm = machine.connect()
 
 # Get the relevant QuAM components
 qubits = machine.active_qubits
@@ -58,6 +54,34 @@ resonators = [qubit.resonator for qubit in machine.active_qubits]
 num_qubits = len(qubits)
 num_resonators = len(resonators)
 
+
+#####################
+# UPDATE QUAM STATE #
+#####################
+# (sub)-component(s) to update:
+min_offset_list = [0.0, 0.013, 0.023, 0.008, 0.018]
+from sys import exit
+from os.path import basename
+if int(input("UPDATE STATE (1/0): ")):
+    for i,q in enumerate(qubits):
+        if int(input("update %s (1/0): " %(q.name))): 
+            print("\n%s's min_offset (previous): %s" %(q.name, q.z.min_offset))
+            # q.z.min_offset = min_offset_list[i]
+            q.z.min_offset *= 5
+            print("%s's min_offset (current): %s" %(q.name, q.z.min_offset))
+
+        filename = basename(__file__).split('.')[0]
+        node_save(machine, filename, dict(min_offset_list=min_offset_list))
+    exit()
+
+
+###################################
+# Open Communication with the QOP #
+###################################
+# Generate the OPX and Octave configurations
+config = machine.generate_config()
+# Open Communication with the QOP
+qmm = machine.connect()
 
 ###################
 # The QUA program #
@@ -177,19 +201,12 @@ else:
     # Close the quantum machines at the end in order to put all flux biases to 0 so that the fridge doesn't heat up
     qm.close()
 
-    # update QUAM:
-    if int(input("Update QUAM STATES: (1/0) ")):
-        # Update machine with min frequency point for both resonator and qubit
-        # resonators[0].intermediate_frequency = 0
-        # resonators[1].intermediate_frequency = 0
-        # resonators[2].intermediate_frequency = 0
-        # resonators[3].intermediate_frequency = 0
-        # resonators[4].intermediate_frequency = 0
-        qubits[0].z.min_offset = 0.0
-        qubits[1].z.min_offset = 0.013
-        qubits[2].z.min_offset = 0.023
-        qubits[3].z.min_offset = 0.008
-        qubits[4].z.min_offset = 0.018
+    # Update machine with min frequency point for both resonator and qubit
+    # resonators[0].intermediate_frequency = 0
+    # resonators[1].intermediate_frequency = 0
+    # resonators[2].intermediate_frequency = 0
+    # resonators[3].intermediate_frequency = 0
+    # resonators[4].intermediate_frequency = 0
 
     # Save data from the node
     data = {}

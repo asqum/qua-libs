@@ -61,7 +61,7 @@ operation = "x180"  # The qubit operation to play
 n_avg = 6000  # The number of averages
 
 # Pulse amplitude sweep (as a pre-factor of the qubit pulse amplitude) - must be within [-2; 2)
-amps = np.arange(0.05, 1.95, 0.025)
+amps = np.arange(0.1, 1.9, 0.025)
 # Number of applied Rabi pulses sweep
 N_pi = 40  # Maximum number of qubit pulses
 N_pi_vec = np.linspace(1, N_pi, N_pi).astype("int")[::2]
@@ -82,7 +82,7 @@ with program() as power_rabi:
                 # Loop for error amplification (perform many qubit pulses)
                 with for_(count, 0, count < npi, count + 1):
                     for qubit in qubits:
-                        if qubit.name in ["q2","q3","q4","q5"]:
+                        if qubit.name in ["q2","q3","q4","q5","q1"]:
                             qubit.xy.play("x180", amplitude_scale=a)
                 # Align all elements to measure after playing the qubit pulse.
                 align()

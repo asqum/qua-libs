@@ -49,13 +49,13 @@ qmm = machine.connect()
 
 # Get the relevant QuAM components
 qubits = machine.active_qubits
-qubits = [machine.qubits["q4"]]
+qubits = [machine.qubits["q1"]]
 num_qubits = len(qubits)
 
 ##############################
 # Program-specific variables #
 ##############################
-n_points = 8_000
+n_points = 3_000
 
 
 # All XY sequences. The sequence names must match corresponding operation in the config
