@@ -49,7 +49,8 @@ qmm = machine.connect()
 
 # Get the relevant QuAM components
 qubits = machine.active_qubits
-qubits = [machine.qubits["q1"]]
+readout_qubits = machine.active_qubits
+qubits = [machine.qubits["q5"]]
 num_qubits = len(qubits)
 
 ##############################
@@ -107,7 +108,7 @@ def allXY(pulses, qubit: Transmon, resonator: ReadoutResonator):
 
     align()
     # Play the readout on the other resonator to measure in the same condition as when optimizing readout
-    for other_qubit in qubits:
+    for other_qubit in readout_qubits:
         if other_qubit.resonator != resonator:
             other_qubit.resonator.play("readout")
     resonator.measure("readout", qua_vars=(I_xy, Q_xy))

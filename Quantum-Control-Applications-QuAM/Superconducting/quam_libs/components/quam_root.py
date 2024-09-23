@@ -151,7 +151,16 @@ class QuAM(QuamRoot):
                 print(
                     f"No calibration elements found for {name}. Skipping calibration."
                 )
+    
+    # def generate_config(self) -> Dict[str, Any]:
+    #     cfg = super().generate_config()
 
+    #     cfg["octaves"]["octave2"]["IF_outputs"] = {
+    #         "IF_out1": { "port": [ "con1", 2, 1 ], "name": "out1" },
+    #         "IF_out2": { "port": [ "con1", 2, 2 ], "name": "out2" }
+    #     }
+
+    #     return cfg
 
 @quam_dataclass
 class FEMQuAM(QuAM):

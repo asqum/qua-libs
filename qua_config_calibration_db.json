@@ -1,0 +1,5101 @@
+{
+    "version": 1,
+    "controllers": {
+        "con1": {
+            "fems": {
+                "1": {
+                    "type": "LF",
+                    "analog_outputs": {
+                        "3": {
+                            "delay": 0,
+                            "shareable": false,
+                            "sampling_rate": 1000000000.0,
+                            "upsampling_mode": "mw",
+                            "output_mode": "direct",
+                            "offset": 0.0
+                        },
+                        "4": {
+                            "delay": 0,
+                            "shareable": false,
+                            "sampling_rate": 1000000000.0,
+                            "upsampling_mode": "mw",
+                            "output_mode": "direct",
+                            "offset": 0.0
+                        },
+                        "1": {
+                            "delay": 0,
+                            "shareable": false,
+                            "sampling_rate": 1000000000.0,
+                            "upsampling_mode": "mw",
+                            "output_mode": "direct",
+                            "offset": 0.0
+                        },
+                        "2": {
+                            "delay": 0,
+                            "shareable": false,
+                            "sampling_rate": 1000000000.0,
+                            "upsampling_mode": "mw",
+                            "output_mode": "direct",
+                            "offset": 0.0
+                        },
+                        "5": {
+                            "delay": 0,
+                            "shareable": false,
+                            "sampling_rate": 1000000000.0,
+                            "upsampling_mode": "mw",
+                            "output_mode": "direct",
+                            "offset": 0.0
+                        },
+                        "6": {
+                            "delay": 0,
+                            "shareable": false,
+                            "sampling_rate": 1000000000.0,
+                            "upsampling_mode": "mw",
+                            "output_mode": "direct",
+                            "offset": 0.0
+                        },
+                        "7": {
+                            "delay": 0,
+                            "shareable": false,
+                            "sampling_rate": 1000000000.0,
+                            "upsampling_mode": "mw",
+                            "output_mode": "direct",
+                            "offset": 0.0
+                        },
+                        "8": {
+                            "delay": 0,
+                            "shareable": false,
+                            "sampling_rate": 1000000000.0,
+                            "upsampling_mode": "mw",
+                            "output_mode": "direct",
+                            "offset": 0.0
+                        }
+                    },
+                    "analog_inputs": {
+                        "1": {
+                            "gain_db": 0,
+                            "shareable": false,
+                            "sampling_rate": 1000000000.0,
+                            "offset": 0.0
+                        },
+                        "2": {
+                            "gain_db": 0,
+                            "shareable": false,
+                            "sampling_rate": 1000000000.0,
+                            "offset": 0.0
+                        }
+                    },
+                    "digital_outputs": {
+                        "3": {
+                            "inverted": false,
+                            "shareable": false,
+                            "level": "LVTTL"
+                        },
+                        "1": {
+                            "inverted": false,
+                            "shareable": false,
+                            "level": "LVTTL"
+                        },
+                        "5": {
+                            "inverted": false,
+                            "shareable": false,
+                            "level": "LVTTL"
+                        },
+                        "7": {
+                            "inverted": false,
+                            "shareable": false,
+                            "level": "LVTTL"
+                        }
+                    }
+                },
+                "2": {
+                    "type": "LF",
+                    "analog_outputs": {
+                        "5": {
+                            "delay": 0,
+                            "shareable": false,
+                            "sampling_rate": 1000000000.0,
+                            "upsampling_mode": "pulse",
+                            "output_mode": "amplified",
+                            "offset": 0.0
+                        },
+                        "1": {
+                            "delay": 40,
+                            "shareable": false,
+                            "sampling_rate": 1000000000.0,
+                            "upsampling_mode": "mw",
+                            "output_mode": "direct",
+                            "offset": 0.0
+                        },
+                        "2": {
+                            "delay": 40,
+                            "shareable": false,
+                            "sampling_rate": 1000000000.0,
+                            "upsampling_mode": "mw",
+                            "output_mode": "direct",
+                            "offset": 0.0
+                        },
+                        "3": {
+                            "delay": 40,
+                            "shareable": false,
+                            "sampling_rate": 1000000000.0,
+                            "upsampling_mode": "mw",
+                            "output_mode": "direct",
+                            "offset": 0.0
+                        },
+                        "4": {
+                            "delay": 40,
+                            "shareable": false,
+                            "sampling_rate": 1000000000.0,
+                            "upsampling_mode": "mw",
+                            "output_mode": "direct",
+                            "offset": 0.0
+                        }
+                    },
+                    "analog_inputs": {
+                        "1": {
+                            "gain_db": 0,
+                            "shareable": false,
+                            "sampling_rate": 1000000000.0,
+                            "offset": 0.0
+                        },
+                        "2": {
+                            "gain_db": 0,
+                            "shareable": false,
+                            "sampling_rate": 1000000000.0,
+                            "offset": 0.0
+                        }
+                    },
+                    "digital_outputs": {
+                        "1": {
+                            "inverted": false,
+                            "shareable": false,
+                            "level": "LVTTL"
+                        },
+                        "3": {
+                            "inverted": false,
+                            "shareable": false,
+                            "level": "LVTTL"
+                        }
+                    }
+                },
+                "3": {
+                    "type": "LF",
+                    "analog_outputs": {
+                        "1": {
+                            "delay": 0,
+                            "shareable": false,
+                            "sampling_rate": 1000000000.0,
+                            "upsampling_mode": "pulse",
+                            "output_mode": "amplified",
+                            "offset": 0.0
+                        },
+                        "2": {
+                            "delay": 0,
+                            "shareable": false,
+                            "sampling_rate": 1000000000.0,
+                            "upsampling_mode": "pulse",
+                            "output_mode": "amplified",
+                            "offset": 0.0
+                        },
+                        "3": {
+                            "delay": 0,
+                            "shareable": false,
+                            "sampling_rate": 1000000000.0,
+                            "upsampling_mode": "mw",
+                            "output_mode": "amplified",
+                            "offset": 0.0
+                        },
+                        "4": {
+                            "delay": 0,
+                            "shareable": false,
+                            "sampling_rate": 1000000000.0,
+                            "upsampling_mode": "mw",
+                            "output_mode": "amplified",
+                            "offset": 0.0
+                        },
+                        "5": {
+                            "delay": 0,
+                            "shareable": false,
+                            "sampling_rate": 1000000000.0,
+                            "upsampling_mode": "pulse",
+                            "output_mode": "amplified",
+                            "offset": 0.0
+                        },
+                        "6": {
+                            "delay": 0,
+                            "shareable": false,
+                            "sampling_rate": 1000000000.0,
+                            "upsampling_mode": "mw",
+                            "output_mode": "amplified",
+                            "offset": 0.0
+                        },
+                        "7": {
+                            "delay": 0,
+                            "shareable": false,
+                            "sampling_rate": 1000000000.0,
+                            "upsampling_mode": "mw",
+                            "output_mode": "direct",
+                            "offset": 0.0
+                        },
+                        "8": {
+                            "delay": 0,
+                            "shareable": false,
+                            "sampling_rate": 1000000000.0,
+                            "upsampling_mode": "pulse",
+                            "output_mode": "amplified",
+                            "offset": 0.0
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "elements": {
+        "q1.xy": {
+            "operations": {
+                "x180_DragGaussian": "q1.xy.x180_DragGaussian.pulse",
+                "x90_DragGaussian": "q1.xy.x90_DragGaussian.pulse",
+                "-x90_DragGaussian": "q1.xy.-x90_DragGaussian.pulse",
+                "y180_DragGaussian": "q1.xy.y180_DragGaussian.pulse",
+                "y90_DragGaussian": "q1.xy.y90_DragGaussian.pulse",
+                "-y90_DragGaussian": "q1.xy.-y90_DragGaussian.pulse",
+                "x180_Square": "q1.xy.x180_Square.pulse",
+                "x90_Square": "q1.xy.x90_Square.pulse",
+                "-x90_Square": "q1.xy.-x90_Square.pulse",
+                "y180_Square": "q1.xy.y180_Square.pulse",
+                "y90_Square": "q1.xy.y90_Square.pulse",
+                "-y90_Square": "q1.xy.-y90_Square.pulse",
+                "x180": "q1.xy.x180_DragGaussian.pulse",
+                "x90": "q1.xy.x90_DragGaussian.pulse",
+                "-x90": "q1.xy.-x90_DragGaussian.pulse",
+                "y180": "q1.xy.y180_DragGaussian.pulse",
+                "y90": "q1.xy.y90_DragGaussian.pulse",
+                "-y90": "q1.xy.-y90_DragGaussian.pulse",
+                "saturation": "q1.xy.saturation.pulse"
+            },
+            "digitalInputs": {
+                "octave_switch": {
+                    "port": [
+                        "con1",
+                        1,
+                        3
+                    ],
+                    "delay": 87,
+                    "buffer": 15
+                }
+            },
+            "intermediate_frequency": 379074851.12737465,
+            "RF_inputs": {
+                "port": [
+                    "octave1",
+                    2
+                ]
+            }
+        },
+        "q1.z": {
+            "operations": {
+                "const": "q1.z.const.pulse",
+                "flux_pulse": "q1.z.flux_pulse.pulse"
+            },
+            "singleInput": {
+                "port": [
+                    "con1",
+                    2,
+                    5
+                ]
+            }
+        },
+        "q1.resonator": {
+            "operations": {
+                "readout": "q1.resonator.readout.pulse",
+                "const": "q1.resonator.const.pulse"
+            },
+            "digitalInputs": {
+                "octave_switch": {
+                    "port": [
+                        "con1",
+                        1,
+                        1
+                    ],
+                    "delay": 87,
+                    "buffer": 15
+                }
+            },
+            "smearing": 0,
+            "time_of_flight": 264,
+            "RF_outputs": {
+                "port": [
+                    "octave1",
+                    1
+                ]
+            },
+            "intermediate_frequency": -285756532,
+            "RF_inputs": {
+                "port": [
+                    "octave1",
+                    1
+                ]
+            }
+        },
+        "q2.xy": {
+            "operations": {
+                "x180_DragGaussian": "q2.xy.x180_DragGaussian.pulse",
+                "x90_DragGaussian": "q2.xy.x90_DragGaussian.pulse",
+                "-x90_DragGaussian": "q2.xy.-x90_DragGaussian.pulse",
+                "y180_DragGaussian": "q2.xy.y180_DragGaussian.pulse",
+                "y90_DragGaussian": "q2.xy.y90_DragGaussian.pulse",
+                "-y90_DragGaussian": "q2.xy.-y90_DragGaussian.pulse",
+                "x180_Square": "q2.xy.x180_Square.pulse",
+                "x90_Square": "q2.xy.x90_Square.pulse",
+                "-x90_Square": "q2.xy.-x90_Square.pulse",
+                "y180_Square": "q2.xy.y180_Square.pulse",
+                "y90_Square": "q2.xy.y90_Square.pulse",
+                "-y90_Square": "q2.xy.-y90_Square.pulse",
+                "x180": "q2.xy.x180_DragGaussian.pulse",
+                "x90": "q2.xy.x90_DragGaussian.pulse",
+                "-x90": "q2.xy.-x90_DragGaussian.pulse",
+                "y180": "q2.xy.y180_DragGaussian.pulse",
+                "y90": "q2.xy.y90_DragGaussian.pulse",
+                "-y90": "q2.xy.-y90_DragGaussian.pulse",
+                "saturation": "q2.xy.saturation.pulse"
+            },
+            "digitalInputs": {
+                "octave_switch": {
+                    "port": [
+                        "con1",
+                        1,
+                        5
+                    ],
+                    "delay": 87,
+                    "buffer": 15
+                }
+            },
+            "intermediate_frequency": -267917832.34100437,
+            "RF_inputs": {
+                "port": [
+                    "octave1",
+                    3
+                ]
+            }
+        },
+        "q2.z": {
+            "operations": {
+                "const": "q2.z.const.pulse",
+                "flux_pulse": "q2.z.flux_pulse.pulse"
+            },
+            "singleInput": {
+                "port": [
+                    "con1",
+                    3,
+                    6
+                ]
+            }
+        },
+        "q2.resonator": {
+            "operations": {
+                "readout": "q2.resonator.readout.pulse",
+                "const": "q2.resonator.const.pulse"
+            },
+            "digitalInputs": {
+                "octave_switch": {
+                    "port": [
+                        "con1",
+                        1,
+                        1
+                    ],
+                    "delay": 87,
+                    "buffer": 15
+                }
+            },
+            "smearing": 0,
+            "time_of_flight": 264,
+            "RF_outputs": {
+                "port": [
+                    "octave1",
+                    1
+                ]
+            },
+            "intermediate_frequency": -185730766,
+            "RF_inputs": {
+                "port": [
+                    "octave1",
+                    1
+                ]
+            }
+        },
+        "q3.xy": {
+            "operations": {
+                "x180_DragGaussian": "q3.xy.x180_DragGaussian.pulse",
+                "x90_DragGaussian": "q3.xy.x90_DragGaussian.pulse",
+                "-x90_DragGaussian": "q3.xy.-x90_DragGaussian.pulse",
+                "y180_DragGaussian": "q3.xy.y180_DragGaussian.pulse",
+                "y90_DragGaussian": "q3.xy.y90_DragGaussian.pulse",
+                "-y90_DragGaussian": "q3.xy.-y90_DragGaussian.pulse",
+                "x180_Square": "q3.xy.x180_Square.pulse",
+                "x90_Square": "q3.xy.x90_Square.pulse",
+                "-x90_Square": "q3.xy.-x90_Square.pulse",
+                "y180_Square": "q3.xy.y180_Square.pulse",
+                "y90_Square": "q3.xy.y90_Square.pulse",
+                "-y90_Square": "q3.xy.-y90_Square.pulse",
+                "x180": "q3.xy.x180_DragGaussian.pulse",
+                "x90": "q3.xy.x90_DragGaussian.pulse",
+                "-x90": "q3.xy.-x90_DragGaussian.pulse",
+                "y180": "q3.xy.y180_DragGaussian.pulse",
+                "y90": "q3.xy.y90_DragGaussian.pulse",
+                "-y90": "q3.xy.-y90_DragGaussian.pulse",
+                "saturation": "q3.xy.saturation.pulse"
+            },
+            "digitalInputs": {
+                "octave_switch": {
+                    "port": [
+                        "con1",
+                        1,
+                        7
+                    ],
+                    "delay": 87,
+                    "buffer": 15
+                }
+            },
+            "intermediate_frequency": -236290056.36654186,
+            "RF_inputs": {
+                "port": [
+                    "octave1",
+                    4
+                ]
+            }
+        },
+        "q3.z": {
+            "operations": {
+                "const": "q3.z.const.pulse",
+                "flux_pulse": "q3.z.flux_pulse.pulse"
+            },
+            "singleInput": {
+                "port": [
+                    "con1",
+                    3,
+                    7
+                ]
+            }
+        },
+        "q3.resonator": {
+            "operations": {
+                "readout": "q3.resonator.readout.pulse",
+                "const": "q3.resonator.const.pulse"
+            },
+            "digitalInputs": {
+                "octave_switch": {
+                    "port": [
+                        "con1",
+                        1,
+                        1
+                    ],
+                    "delay": 87,
+                    "buffer": 15
+                }
+            },
+            "smearing": 0,
+            "time_of_flight": 264,
+            "RF_outputs": {
+                "port": [
+                    "octave1",
+                    1
+                ]
+            },
+            "intermediate_frequency": -342591134,
+            "RF_inputs": {
+                "port": [
+                    "octave1",
+                    1
+                ]
+            }
+        },
+        "q4.xy": {
+            "operations": {
+                "x180_DragGaussian": "q4.xy.x180_DragGaussian.pulse",
+                "x90_DragGaussian": "q4.xy.x90_DragGaussian.pulse",
+                "-x90_DragGaussian": "q4.xy.-x90_DragGaussian.pulse",
+                "y180_DragGaussian": "q4.xy.y180_DragGaussian.pulse",
+                "y90_DragGaussian": "q4.xy.y90_DragGaussian.pulse",
+                "-y90_DragGaussian": "q4.xy.-y90_DragGaussian.pulse",
+                "x180_Square": "q4.xy.x180_Square.pulse",
+                "x90_Square": "q4.xy.x90_Square.pulse",
+                "-x90_Square": "q4.xy.-x90_Square.pulse",
+                "y180_Square": "q4.xy.y180_Square.pulse",
+                "y90_Square": "q4.xy.y90_Square.pulse",
+                "-y90_Square": "q4.xy.-y90_Square.pulse",
+                "x180": "q4.xy.x180_DragGaussian.pulse",
+                "x90": "q4.xy.x90_DragGaussian.pulse",
+                "-x90": "q4.xy.-x90_DragGaussian.pulse",
+                "y180": "q4.xy.y180_DragGaussian.pulse",
+                "y90": "q4.xy.y90_DragGaussian.pulse",
+                "-y90": "q4.xy.-y90_DragGaussian.pulse",
+                "saturation": "q4.xy.saturation.pulse"
+            },
+            "digitalInputs": {
+                "octave_switch": {
+                    "port": [
+                        "con1",
+                        2,
+                        1
+                    ],
+                    "delay": 127,
+                    "buffer": 15
+                }
+            },
+            "intermediate_frequency": -286087272.6872959,
+            "RF_inputs": {
+                "port": [
+                    "octave2",
+                    1
+                ]
+            }
+        },
+        "q4.z": {
+            "operations": {
+                "const": "q4.z.const.pulse",
+                "flux_pulse": "q4.z.flux_pulse.pulse"
+            },
+            "singleInput": {
+                "port": [
+                    "con1",
+                    3,
+                    8
+                ]
+            }
+        },
+        "q4.resonator": {
+            "operations": {
+                "readout": "q4.resonator.readout.pulse",
+                "const": "q4.resonator.const.pulse"
+            },
+            "digitalInputs": {
+                "octave_switch": {
+                    "port": [
+                        "con1",
+                        1,
+                        1
+                    ],
+                    "delay": 87,
+                    "buffer": 15
+                }
+            },
+            "smearing": 0,
+            "time_of_flight": 264,
+            "RF_outputs": {
+                "port": [
+                    "octave1",
+                    1
+                ]
+            },
+            "intermediate_frequency": -162269009,
+            "RF_inputs": {
+                "port": [
+                    "octave1",
+                    1
+                ]
+            }
+        },
+        "q5.xy": {
+            "operations": {
+                "x180_DragGaussian": "q5.xy.x180_DragGaussian.pulse",
+                "x90_DragGaussian": "q5.xy.x90_DragGaussian.pulse",
+                "-x90_DragGaussian": "q5.xy.-x90_DragGaussian.pulse",
+                "y180_DragGaussian": "q5.xy.y180_DragGaussian.pulse",
+                "y90_DragGaussian": "q5.xy.y90_DragGaussian.pulse",
+                "-y90_DragGaussian": "q5.xy.-y90_DragGaussian.pulse",
+                "x180_Square": "q5.xy.x180_Square.pulse",
+                "x90_Square": "q5.xy.x90_Square.pulse",
+                "-x90_Square": "q5.xy.-x90_Square.pulse",
+                "y180_Square": "q5.xy.y180_Square.pulse",
+                "y90_Square": "q5.xy.y90_Square.pulse",
+                "-y90_Square": "q5.xy.-y90_Square.pulse",
+                "x180": "q5.xy.x180_DragGaussian.pulse",
+                "x90": "q5.xy.x90_DragGaussian.pulse",
+                "-x90": "q5.xy.-x90_DragGaussian.pulse",
+                "y180": "q5.xy.y180_DragGaussian.pulse",
+                "y90": "q5.xy.y90_DragGaussian.pulse",
+                "-y90": "q5.xy.-y90_DragGaussian.pulse",
+                "saturation": "q5.xy.saturation.pulse"
+            },
+            "digitalInputs": {
+                "octave_switch": {
+                    "port": [
+                        "con1",
+                        2,
+                        3
+                    ],
+                    "delay": 127,
+                    "buffer": 15
+                }
+            },
+            "intermediate_frequency": -338212498.4287844,
+            "RF_inputs": {
+                "port": [
+                    "octave2",
+                    2
+                ]
+            }
+        },
+        "q5.z": {
+            "operations": {
+                "const": "q5.z.const.pulse",
+                "flux_pulse": "q5.z.flux_pulse.pulse"
+            },
+            "singleInput": {
+                "port": [
+                    "con1",
+                    3,
+                    1
+                ]
+            }
+        },
+        "q5.resonator": {
+            "operations": {
+                "readout": "q5.resonator.readout.pulse",
+                "const": "q5.resonator.const.pulse"
+            },
+            "digitalInputs": {
+                "octave_switch": {
+                    "port": [
+                        "con1",
+                        1,
+                        1
+                    ],
+                    "delay": 87,
+                    "buffer": 15
+                }
+            },
+            "smearing": 0,
+            "time_of_flight": 264,
+            "RF_outputs": {
+                "port": [
+                    "octave1",
+                    1
+                ]
+            },
+            "intermediate_frequency": -256735513,
+            "RF_inputs": {
+                "port": [
+                    "octave1",
+                    1
+                ]
+            }
+        },
+        "coupler_q1_q2": {
+            "operations": {
+                "const": "coupler_q1_q2.const.pulse",
+                "flux_pulse": "coupler_q1_q2.flux_pulse.pulse"
+            },
+            "singleInput": {
+                "port": [
+                    "con1",
+                    3,
+                    2
+                ]
+            }
+        },
+        "coupler_q2_q3": {
+            "operations": {
+                "const": "coupler_q2_q3.const.pulse",
+                "flux_pulse": "coupler_q2_q3.flux_pulse.pulse"
+            },
+            "singleInput": {
+                "port": [
+                    "con1",
+                    3,
+                    3
+                ]
+            }
+        },
+        "coupler_q3_q4": {
+            "operations": {
+                "const": "coupler_q3_q4.const.pulse",
+                "flux_pulse": "coupler_q3_q4.flux_pulse.pulse"
+            },
+            "singleInput": {
+                "port": [
+                    "con1",
+                    3,
+                    4
+                ]
+            }
+        },
+        "coupler_q4_q5": {
+            "operations": {
+                "const": "coupler_q4_q5.const.pulse",
+                "flux_pulse": "coupler_q4_q5.flux_pulse.pulse"
+            },
+            "singleInput": {
+                "port": [
+                    "con1",
+                    3,
+                    5
+                ]
+            }
+        }
+    },
+    "pulses": {
+        "const_pulse": {
+            "operation": "control",
+            "length": 1000,
+            "waveforms": {
+                "I": "const_wf",
+                "Q": "zero_wf"
+            }
+        },
+        "q1.xy.x180_DragGaussian.pulse": {
+            "operation": "control",
+            "length": 40,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q1.xy.x180_DragGaussian.wf.I",
+                "Q": "q1.xy.x180_DragGaussian.wf.Q"
+            }
+        },
+        "q1.xy.x90_DragGaussian.pulse": {
+            "operation": "control",
+            "length": 40,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q1.xy.x90_DragGaussian.wf.I",
+                "Q": "q1.xy.x90_DragGaussian.wf.Q"
+            }
+        },
+        "q1.xy.-x90_DragGaussian.pulse": {
+            "operation": "control",
+            "length": 40,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q1.xy.-x90_DragGaussian.wf.I",
+                "Q": "q1.xy.-x90_DragGaussian.wf.Q"
+            }
+        },
+        "q1.xy.y180_DragGaussian.pulse": {
+            "operation": "control",
+            "length": 40,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q1.xy.y180_DragGaussian.wf.I",
+                "Q": "q1.xy.y180_DragGaussian.wf.Q"
+            }
+        },
+        "q1.xy.y90_DragGaussian.pulse": {
+            "operation": "control",
+            "length": 40,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q1.xy.y90_DragGaussian.wf.I",
+                "Q": "q1.xy.y90_DragGaussian.wf.Q"
+            }
+        },
+        "q1.xy.-y90_DragGaussian.pulse": {
+            "operation": "control",
+            "length": 40,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q1.xy.-y90_DragGaussian.wf.I",
+                "Q": "q1.xy.-y90_DragGaussian.wf.Q"
+            }
+        },
+        "q1.xy.x180_Square.pulse": {
+            "operation": "control",
+            "length": 100,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q1.xy.x180_Square.wf.I",
+                "Q": "q1.xy.x180_Square.wf.Q"
+            }
+        },
+        "q1.xy.x90_Square.pulse": {
+            "operation": "control",
+            "length": 100,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q1.xy.x90_Square.wf.I",
+                "Q": "q1.xy.x90_Square.wf.Q"
+            }
+        },
+        "q1.xy.-x90_Square.pulse": {
+            "operation": "control",
+            "length": 100,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q1.xy.-x90_Square.wf.I",
+                "Q": "q1.xy.-x90_Square.wf.Q"
+            }
+        },
+        "q1.xy.y180_Square.pulse": {
+            "operation": "control",
+            "length": 100,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q1.xy.y180_Square.wf.I",
+                "Q": "q1.xy.y180_Square.wf.Q"
+            }
+        },
+        "q1.xy.y90_Square.pulse": {
+            "operation": "control",
+            "length": 100,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q1.xy.y90_Square.wf.I",
+                "Q": "q1.xy.y90_Square.wf.Q"
+            }
+        },
+        "q1.xy.-y90_Square.pulse": {
+            "operation": "control",
+            "length": 100,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q1.xy.-y90_Square.wf.I",
+                "Q": "q1.xy.-y90_Square.wf.Q"
+            }
+        },
+        "q1.xy.saturation.pulse": {
+            "operation": "control",
+            "length": 10000,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q1.xy.saturation.wf.I",
+                "Q": "q1.xy.saturation.wf.Q"
+            }
+        },
+        "q1.z.const.pulse": {
+            "operation": "control",
+            "length": 100,
+            "waveforms": {
+                "single": "q1.z.const.wf"
+            }
+        },
+        "q1.z.flux_pulse.pulse": {
+            "operation": "control",
+            "length": 100,
+            "waveforms": {
+                "single": "q1.z.flux_pulse.wf"
+            }
+        },
+        "q1.resonator.readout.pulse": {
+            "operation": "measurement",
+            "length": 1632,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q1.resonator.readout.wf.I",
+                "Q": "q1.resonator.readout.wf.Q"
+            },
+            "integration_weights": {
+                "iw1": "q1.resonator.readout.iw1",
+                "iw2": "q1.resonator.readout.iw2",
+                "iw3": "q1.resonator.readout.iw3"
+            }
+        },
+        "q1.resonator.const.pulse": {
+            "operation": "control",
+            "length": 100,
+            "waveforms": {
+                "I": "q1.resonator.const.wf.I",
+                "Q": "q1.resonator.const.wf.Q"
+            }
+        },
+        "q2.xy.x180_DragGaussian.pulse": {
+            "operation": "control",
+            "length": 40,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q2.xy.x180_DragGaussian.wf.I",
+                "Q": "q2.xy.x180_DragGaussian.wf.Q"
+            }
+        },
+        "q2.xy.x90_DragGaussian.pulse": {
+            "operation": "control",
+            "length": 40,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q2.xy.x90_DragGaussian.wf.I",
+                "Q": "q2.xy.x90_DragGaussian.wf.Q"
+            }
+        },
+        "q2.xy.-x90_DragGaussian.pulse": {
+            "operation": "control",
+            "length": 40,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q2.xy.-x90_DragGaussian.wf.I",
+                "Q": "q2.xy.-x90_DragGaussian.wf.Q"
+            }
+        },
+        "q2.xy.y180_DragGaussian.pulse": {
+            "operation": "control",
+            "length": 40,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q2.xy.y180_DragGaussian.wf.I",
+                "Q": "q2.xy.y180_DragGaussian.wf.Q"
+            }
+        },
+        "q2.xy.y90_DragGaussian.pulse": {
+            "operation": "control",
+            "length": 40,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q2.xy.y90_DragGaussian.wf.I",
+                "Q": "q2.xy.y90_DragGaussian.wf.Q"
+            }
+        },
+        "q2.xy.-y90_DragGaussian.pulse": {
+            "operation": "control",
+            "length": 40,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q2.xy.-y90_DragGaussian.wf.I",
+                "Q": "q2.xy.-y90_DragGaussian.wf.Q"
+            }
+        },
+        "q2.xy.x180_Square.pulse": {
+            "operation": "control",
+            "length": 100,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q2.xy.x180_Square.wf.I",
+                "Q": "q2.xy.x180_Square.wf.Q"
+            }
+        },
+        "q2.xy.x90_Square.pulse": {
+            "operation": "control",
+            "length": 100,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q2.xy.x90_Square.wf.I",
+                "Q": "q2.xy.x90_Square.wf.Q"
+            }
+        },
+        "q2.xy.-x90_Square.pulse": {
+            "operation": "control",
+            "length": 100,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q2.xy.-x90_Square.wf.I",
+                "Q": "q2.xy.-x90_Square.wf.Q"
+            }
+        },
+        "q2.xy.y180_Square.pulse": {
+            "operation": "control",
+            "length": 100,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q2.xy.y180_Square.wf.I",
+                "Q": "q2.xy.y180_Square.wf.Q"
+            }
+        },
+        "q2.xy.y90_Square.pulse": {
+            "operation": "control",
+            "length": 100,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q2.xy.y90_Square.wf.I",
+                "Q": "q2.xy.y90_Square.wf.Q"
+            }
+        },
+        "q2.xy.-y90_Square.pulse": {
+            "operation": "control",
+            "length": 100,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q2.xy.-y90_Square.wf.I",
+                "Q": "q2.xy.-y90_Square.wf.Q"
+            }
+        },
+        "q2.xy.saturation.pulse": {
+            "operation": "control",
+            "length": 10000,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q2.xy.saturation.wf.I",
+                "Q": "q2.xy.saturation.wf.Q"
+            }
+        },
+        "q2.z.const.pulse": {
+            "operation": "control",
+            "length": 100,
+            "waveforms": {
+                "single": "q2.z.const.wf"
+            }
+        },
+        "q2.z.flux_pulse.pulse": {
+            "operation": "control",
+            "length": 100,
+            "waveforms": {
+                "single": "q2.z.flux_pulse.wf"
+            }
+        },
+        "q2.resonator.readout.pulse": {
+            "operation": "measurement",
+            "length": 608,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q2.resonator.readout.wf.I",
+                "Q": "q2.resonator.readout.wf.Q"
+            },
+            "integration_weights": {
+                "iw1": "q2.resonator.readout.iw1",
+                "iw2": "q2.resonator.readout.iw2",
+                "iw3": "q2.resonator.readout.iw3"
+            }
+        },
+        "q2.resonator.const.pulse": {
+            "operation": "control",
+            "length": 100,
+            "waveforms": {
+                "I": "q2.resonator.const.wf.I",
+                "Q": "q2.resonator.const.wf.Q"
+            }
+        },
+        "q3.xy.x180_DragGaussian.pulse": {
+            "operation": "control",
+            "length": 40,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q3.xy.x180_DragGaussian.wf.I",
+                "Q": "q3.xy.x180_DragGaussian.wf.Q"
+            }
+        },
+        "q3.xy.x90_DragGaussian.pulse": {
+            "operation": "control",
+            "length": 40,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q3.xy.x90_DragGaussian.wf.I",
+                "Q": "q3.xy.x90_DragGaussian.wf.Q"
+            }
+        },
+        "q3.xy.-x90_DragGaussian.pulse": {
+            "operation": "control",
+            "length": 40,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q3.xy.-x90_DragGaussian.wf.I",
+                "Q": "q3.xy.-x90_DragGaussian.wf.Q"
+            }
+        },
+        "q3.xy.y180_DragGaussian.pulse": {
+            "operation": "control",
+            "length": 40,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q3.xy.y180_DragGaussian.wf.I",
+                "Q": "q3.xy.y180_DragGaussian.wf.Q"
+            }
+        },
+        "q3.xy.y90_DragGaussian.pulse": {
+            "operation": "control",
+            "length": 40,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q3.xy.y90_DragGaussian.wf.I",
+                "Q": "q3.xy.y90_DragGaussian.wf.Q"
+            }
+        },
+        "q3.xy.-y90_DragGaussian.pulse": {
+            "operation": "control",
+            "length": 40,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q3.xy.-y90_DragGaussian.wf.I",
+                "Q": "q3.xy.-y90_DragGaussian.wf.Q"
+            }
+        },
+        "q3.xy.x180_Square.pulse": {
+            "operation": "control",
+            "length": 100,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q3.xy.x180_Square.wf.I",
+                "Q": "q3.xy.x180_Square.wf.Q"
+            }
+        },
+        "q3.xy.x90_Square.pulse": {
+            "operation": "control",
+            "length": 100,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q3.xy.x90_Square.wf.I",
+                "Q": "q3.xy.x90_Square.wf.Q"
+            }
+        },
+        "q3.xy.-x90_Square.pulse": {
+            "operation": "control",
+            "length": 100,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q3.xy.-x90_Square.wf.I",
+                "Q": "q3.xy.-x90_Square.wf.Q"
+            }
+        },
+        "q3.xy.y180_Square.pulse": {
+            "operation": "control",
+            "length": 100,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q3.xy.y180_Square.wf.I",
+                "Q": "q3.xy.y180_Square.wf.Q"
+            }
+        },
+        "q3.xy.y90_Square.pulse": {
+            "operation": "control",
+            "length": 100,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q3.xy.y90_Square.wf.I",
+                "Q": "q3.xy.y90_Square.wf.Q"
+            }
+        },
+        "q3.xy.-y90_Square.pulse": {
+            "operation": "control",
+            "length": 100,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q3.xy.-y90_Square.wf.I",
+                "Q": "q3.xy.-y90_Square.wf.Q"
+            }
+        },
+        "q3.xy.saturation.pulse": {
+            "operation": "control",
+            "length": 10000,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q3.xy.saturation.wf.I",
+                "Q": "q3.xy.saturation.wf.Q"
+            }
+        },
+        "q3.z.const.pulse": {
+            "operation": "control",
+            "length": 100,
+            "waveforms": {
+                "single": "q3.z.const.wf"
+            }
+        },
+        "q3.z.flux_pulse.pulse": {
+            "operation": "control",
+            "length": 100,
+            "waveforms": {
+                "single": "q3.z.flux_pulse.wf"
+            }
+        },
+        "q3.resonator.readout.pulse": {
+            "operation": "measurement",
+            "length": 768,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q3.resonator.readout.wf.I",
+                "Q": "q3.resonator.readout.wf.Q"
+            },
+            "integration_weights": {
+                "iw1": "q3.resonator.readout.iw1",
+                "iw2": "q3.resonator.readout.iw2",
+                "iw3": "q3.resonator.readout.iw3"
+            }
+        },
+        "q3.resonator.const.pulse": {
+            "operation": "control",
+            "length": 100,
+            "waveforms": {
+                "I": "q3.resonator.const.wf.I",
+                "Q": "q3.resonator.const.wf.Q"
+            }
+        },
+        "q4.xy.x180_DragGaussian.pulse": {
+            "operation": "control",
+            "length": 40,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q4.xy.x180_DragGaussian.wf.I",
+                "Q": "q4.xy.x180_DragGaussian.wf.Q"
+            }
+        },
+        "q4.xy.x90_DragGaussian.pulse": {
+            "operation": "control",
+            "length": 40,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q4.xy.x90_DragGaussian.wf.I",
+                "Q": "q4.xy.x90_DragGaussian.wf.Q"
+            }
+        },
+        "q4.xy.-x90_DragGaussian.pulse": {
+            "operation": "control",
+            "length": 40,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q4.xy.-x90_DragGaussian.wf.I",
+                "Q": "q4.xy.-x90_DragGaussian.wf.Q"
+            }
+        },
+        "q4.xy.y180_DragGaussian.pulse": {
+            "operation": "control",
+            "length": 40,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q4.xy.y180_DragGaussian.wf.I",
+                "Q": "q4.xy.y180_DragGaussian.wf.Q"
+            }
+        },
+        "q4.xy.y90_DragGaussian.pulse": {
+            "operation": "control",
+            "length": 40,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q4.xy.y90_DragGaussian.wf.I",
+                "Q": "q4.xy.y90_DragGaussian.wf.Q"
+            }
+        },
+        "q4.xy.-y90_DragGaussian.pulse": {
+            "operation": "control",
+            "length": 40,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q4.xy.-y90_DragGaussian.wf.I",
+                "Q": "q4.xy.-y90_DragGaussian.wf.Q"
+            }
+        },
+        "q4.xy.x180_Square.pulse": {
+            "operation": "control",
+            "length": 100,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q4.xy.x180_Square.wf.I",
+                "Q": "q4.xy.x180_Square.wf.Q"
+            }
+        },
+        "q4.xy.x90_Square.pulse": {
+            "operation": "control",
+            "length": 100,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q4.xy.x90_Square.wf.I",
+                "Q": "q4.xy.x90_Square.wf.Q"
+            }
+        },
+        "q4.xy.-x90_Square.pulse": {
+            "operation": "control",
+            "length": 100,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q4.xy.-x90_Square.wf.I",
+                "Q": "q4.xy.-x90_Square.wf.Q"
+            }
+        },
+        "q4.xy.y180_Square.pulse": {
+            "operation": "control",
+            "length": 100,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q4.xy.y180_Square.wf.I",
+                "Q": "q4.xy.y180_Square.wf.Q"
+            }
+        },
+        "q4.xy.y90_Square.pulse": {
+            "operation": "control",
+            "length": 100,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q4.xy.y90_Square.wf.I",
+                "Q": "q4.xy.y90_Square.wf.Q"
+            }
+        },
+        "q4.xy.-y90_Square.pulse": {
+            "operation": "control",
+            "length": 100,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q4.xy.-y90_Square.wf.I",
+                "Q": "q4.xy.-y90_Square.wf.Q"
+            }
+        },
+        "q4.xy.saturation.pulse": {
+            "operation": "control",
+            "length": 10000,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q4.xy.saturation.wf.I",
+                "Q": "q4.xy.saturation.wf.Q"
+            }
+        },
+        "q4.z.const.pulse": {
+            "operation": "control",
+            "length": 100,
+            "waveforms": {
+                "single": "q4.z.const.wf"
+            }
+        },
+        "q4.z.flux_pulse.pulse": {
+            "operation": "control",
+            "length": 100,
+            "waveforms": {
+                "single": "q4.z.flux_pulse.wf"
+            }
+        },
+        "q4.resonator.readout.pulse": {
+            "operation": "measurement",
+            "length": 352,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q4.resonator.readout.wf.I",
+                "Q": "q4.resonator.readout.wf.Q"
+            },
+            "integration_weights": {
+                "iw1": "q4.resonator.readout.iw1",
+                "iw2": "q4.resonator.readout.iw2",
+                "iw3": "q4.resonator.readout.iw3"
+            }
+        },
+        "q4.resonator.const.pulse": {
+            "operation": "control",
+            "length": 100,
+            "waveforms": {
+                "I": "q4.resonator.const.wf.I",
+                "Q": "q4.resonator.const.wf.Q"
+            }
+        },
+        "q5.xy.x180_DragGaussian.pulse": {
+            "operation": "control",
+            "length": 40,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q5.xy.x180_DragGaussian.wf.I",
+                "Q": "q5.xy.x180_DragGaussian.wf.Q"
+            }
+        },
+        "q5.xy.x90_DragGaussian.pulse": {
+            "operation": "control",
+            "length": 40,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q5.xy.x90_DragGaussian.wf.I",
+                "Q": "q5.xy.x90_DragGaussian.wf.Q"
+            }
+        },
+        "q5.xy.-x90_DragGaussian.pulse": {
+            "operation": "control",
+            "length": 40,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q5.xy.-x90_DragGaussian.wf.I",
+                "Q": "q5.xy.-x90_DragGaussian.wf.Q"
+            }
+        },
+        "q5.xy.y180_DragGaussian.pulse": {
+            "operation": "control",
+            "length": 40,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q5.xy.y180_DragGaussian.wf.I",
+                "Q": "q5.xy.y180_DragGaussian.wf.Q"
+            }
+        },
+        "q5.xy.y90_DragGaussian.pulse": {
+            "operation": "control",
+            "length": 40,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q5.xy.y90_DragGaussian.wf.I",
+                "Q": "q5.xy.y90_DragGaussian.wf.Q"
+            }
+        },
+        "q5.xy.-y90_DragGaussian.pulse": {
+            "operation": "control",
+            "length": 40,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q5.xy.-y90_DragGaussian.wf.I",
+                "Q": "q5.xy.-y90_DragGaussian.wf.Q"
+            }
+        },
+        "q5.xy.x180_Square.pulse": {
+            "operation": "control",
+            "length": 100,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q5.xy.x180_Square.wf.I",
+                "Q": "q5.xy.x180_Square.wf.Q"
+            }
+        },
+        "q5.xy.x90_Square.pulse": {
+            "operation": "control",
+            "length": 100,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q5.xy.x90_Square.wf.I",
+                "Q": "q5.xy.x90_Square.wf.Q"
+            }
+        },
+        "q5.xy.-x90_Square.pulse": {
+            "operation": "control",
+            "length": 100,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q5.xy.-x90_Square.wf.I",
+                "Q": "q5.xy.-x90_Square.wf.Q"
+            }
+        },
+        "q5.xy.y180_Square.pulse": {
+            "operation": "control",
+            "length": 100,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q5.xy.y180_Square.wf.I",
+                "Q": "q5.xy.y180_Square.wf.Q"
+            }
+        },
+        "q5.xy.y90_Square.pulse": {
+            "operation": "control",
+            "length": 100,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q5.xy.y90_Square.wf.I",
+                "Q": "q5.xy.y90_Square.wf.Q"
+            }
+        },
+        "q5.xy.-y90_Square.pulse": {
+            "operation": "control",
+            "length": 100,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q5.xy.-y90_Square.wf.I",
+                "Q": "q5.xy.-y90_Square.wf.Q"
+            }
+        },
+        "q5.xy.saturation.pulse": {
+            "operation": "control",
+            "length": 10000,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q5.xy.saturation.wf.I",
+                "Q": "q5.xy.saturation.wf.Q"
+            }
+        },
+        "q5.z.const.pulse": {
+            "operation": "control",
+            "length": 100,
+            "waveforms": {
+                "single": "q5.z.const.wf"
+            }
+        },
+        "q5.z.flux_pulse.pulse": {
+            "operation": "control",
+            "length": 100,
+            "waveforms": {
+                "single": "q5.z.flux_pulse.wf"
+            }
+        },
+        "q5.resonator.readout.pulse": {
+            "operation": "measurement",
+            "length": 992,
+            "digital_marker": "ON",
+            "waveforms": {
+                "I": "q5.resonator.readout.wf.I",
+                "Q": "q5.resonator.readout.wf.Q"
+            },
+            "integration_weights": {
+                "iw1": "q5.resonator.readout.iw1",
+                "iw2": "q5.resonator.readout.iw2",
+                "iw3": "q5.resonator.readout.iw3"
+            }
+        },
+        "q5.resonator.const.pulse": {
+            "operation": "control",
+            "length": 100,
+            "waveforms": {
+                "I": "q5.resonator.const.wf.I",
+                "Q": "q5.resonator.const.wf.Q"
+            }
+        },
+        "coupler_q1_q2.const.pulse": {
+            "operation": "control",
+            "length": 40,
+            "waveforms": {
+                "single": "coupler_q1_q2.const.wf"
+            }
+        },
+        "coupler_q1_q2.flux_pulse.pulse": {
+            "operation": "control",
+            "length": 100,
+            "waveforms": {
+                "single": "coupler_q1_q2.flux_pulse.wf"
+            }
+        },
+        "coupler_q2_q3.const.pulse": {
+            "operation": "control",
+            "length": 40,
+            "waveforms": {
+                "single": "coupler_q2_q3.const.wf"
+            }
+        },
+        "coupler_q2_q3.flux_pulse.pulse": {
+            "operation": "control",
+            "length": 100,
+            "waveforms": {
+                "single": "coupler_q2_q3.flux_pulse.wf"
+            }
+        },
+        "coupler_q3_q4.const.pulse": {
+            "operation": "control",
+            "length": 40,
+            "waveforms": {
+                "single": "coupler_q3_q4.const.wf"
+            }
+        },
+        "coupler_q3_q4.flux_pulse.pulse": {
+            "operation": "control",
+            "length": 100,
+            "waveforms": {
+                "single": "coupler_q3_q4.flux_pulse.wf"
+            }
+        },
+        "coupler_q4_q5.const.pulse": {
+            "operation": "control",
+            "length": 40,
+            "waveforms": {
+                "single": "coupler_q4_q5.const.wf"
+            }
+        },
+        "coupler_q4_q5.flux_pulse.pulse": {
+            "operation": "control",
+            "length": 100,
+            "waveforms": {
+                "single": "coupler_q4_q5.flux_pulse.wf"
+            }
+        }
+    },
+    "waveforms": {
+        "zero_wf": {
+            "type": "constant",
+            "sample": 0.0
+        },
+        "const_wf": {
+            "type": "constant",
+            "sample": 0.1
+        },
+        "q1.xy.x180_DragGaussian.wf.I": {
+            "type": "arbitrary",
+            "samples": [
+                0.0,
+                0.001173436852452634,
+                0.0027940104360579185,
+                0.004980196487036035,
+                0.007859927728104189,
+                0.011562204247194586,
+                0.016205251438885848,
+                0.021881582832769593,
+                0.028640962356535654,
+                0.03647293825069825,
+                0.04529121269444906,
+                0.05492246951414616,
+                0.06510226796782165,
+                0.07548012949936996,
+                0.08563498215957298,
+                0.09510077147941577,
+                0.10340048663326548,
+                0.1100853530495829,
+                0.11477480050569643,
+                0.11719228555973606,
+                0.11719228555973606,
+                0.11477480050569643,
+                0.1100853530495829,
+                0.10340048663326548,
+                0.09510077147941577,
+                0.08563498215957298,
+                0.07548012949936996,
+                0.06510226796782165,
+                0.05492246951414616,
+                0.04529121269444906,
+                0.03647293825069825,
+                0.028640962356535654,
+                0.021881582832769593,
+                0.016205251438885848,
+                0.011562204247194586,
+                0.007859927728104189,
+                0.004980196487036035,
+                0.0027940104360579185,
+                0.001173436852452634,
+                0.0
+            ]
+        },
+        "q1.xy.x180_DragGaussian.wf.Q": {
+            "type": "arbitrary",
+            "samples": [
+                -0.0012441407995655686,
+                -0.0017394283754544402,
+                -0.0023757985843695295,
+                -0.0031690501396725644,
+                -0.004126551861018883,
+                -0.005242891883430487,
+                -0.006495622925442198,
+                -0.007841841055449604,
+                -0.009216450503713898,
+                -0.010532945411799886,
+                -0.011687339680555317,
+                -0.012565488042005902,
+                -0.01305349840422965,
+                -0.013050317644033341,
+                -0.012480998514808312,
+                -0.01130875822651547,
+                -0.009543838037682238,
+                -0.007247437569911292,
+                -0.0045296228072666395,
+                -0.0015410046057220143,
+                0.0015410046057220143,
+                0.0045296228072666395,
+                0.007247437569911292,
+                0.009543838037682238,
+                0.01130875822651547,
+                0.012480998514808312,
+                0.013050317644033341,
+                0.01305349840422965,
+                0.012565488042005902,
+                0.011687339680555317,
+                0.010532945411799886,
+                0.009216450503713898,
+                0.007841841055449604,
+                0.006495622925442198,
+                0.005242891883430487,
+                0.004126551861018883,
+                0.0031690501396725644,
+                0.0023757985843695295,
+                0.0017394283754544402,
+                0.0012441407995655686
+            ]
+        },
+        "q1.xy.x90_DragGaussian.wf.I": {
+            "type": "arbitrary",
+            "samples": [
+                0.0,
+                0.0009308033584822786,
+                0.0022162882408895738,
+                0.0039504329579779455,
+                0.00623471737013874,
+                0.009171468002093624,
+                0.012854464586515613,
+                0.0173570914762729,
+                0.022718822828775964,
+                0.028931368012269813,
+                0.035926273150203525,
+                0.04356605894305792,
+                0.0516409635018751,
+                0.05987297730580422,
+                0.0679280941544471,
+                0.07543662643820798,
+                0.08202019565499412,
+                0.08732282109948077,
+                0.09104262368830635,
+                0.09296024132804348,
+                0.09296024132804348,
+                0.09104262368830635,
+                0.08732282109948077,
+                0.08202019565499412,
+                0.07543662643820798,
+                0.0679280941544471,
+                0.05987297730580422,
+                0.0516409635018751,
+                0.04356605894305792,
+                0.035926273150203525,
+                0.028931368012269813,
+                0.022718822828775964,
+                0.0173570914762729,
+                0.012854464586515613,
+                0.009171468002093624,
+                0.00623471737013874,
+                0.0039504329579779455,
+                0.0022162882408895738,
+                0.0009308033584822786,
+                0.0
+            ]
+        },
+        "q1.xy.x90_DragGaussian.wf.Q": {
+            "type": "arbitrary",
+            "samples": [
+                -0.000986887732595056,
+                -0.0013797638708280822,
+                -0.001884550750887437,
+                -0.002513780359838345,
+                -0.003273297854213009,
+                -0.004158810389375907,
+                -0.0051525121456675385,
+                -0.006220370508937416,
+                -0.007310749670263035,
+                -0.00835503073175349,
+                -0.009270728973311507,
+                -0.009967301134289303,
+                -0.010354404780457047,
+                -0.010351881711348506,
+                -0.009900281647465004,
+                -0.008970427437576657,
+                -0.007570442738114132,
+                -0.0057488728229083625,
+                -0.00359302514903068,
+                -0.0012223685147135855,
+                0.0012223685147135855,
+                0.00359302514903068,
+                0.0057488728229083625,
+                0.007570442738114132,
+                0.008970427437576657,
+                0.009900281647465004,
+                0.010351881711348506,
+                0.010354404780457047,
+                0.009967301134289303,
+                0.009270728973311507,
+                0.00835503073175349,
+                0.007310749670263035,
+                0.006220370508937416,
+                0.0051525121456675385,
+                0.004158810389375907,
+                0.003273297854213009,
+                0.002513780359838345,
+                0.001884550750887437,
+                0.0013797638708280822,
+                0.000986887732595056
+            ]
+        },
+        "q1.xy.-x90_DragGaussian.wf.I": {
+            "type": "arbitrary",
+            "samples": [
+                0.0,
+                -0.0004890327182525387,
+                -0.0011644107780623145,
+                -0.002075509236305739,
+                -0.003275644372434133,
+                -0.004818577292999117,
+                -0.00675357872437716,
+                -0.009119203909448838,
+                -0.011936192088487896,
+                -0.01520018746480943,
+                -0.018875225207582575,
+                -0.022889075371637223,
+                -0.027131531621974618,
+                -0.03145653115118992,
+                -0.03568859118023487,
+                -0.03963348235338423,
+                -0.04309240922612172,
+                -0.04587834388284734,
+                -0.04783268273949085,
+                -0.048840175630855964,
+                -0.048840175630855964,
+                -0.04783268273949085,
+                -0.04587834388284734,
+                -0.04309240922612172,
+                -0.03963348235338423,
+                -0.03568859118023487,
+                -0.03145653115118992,
+                -0.027131531621974618,
+                -0.022889075371637223,
+                -0.018875225207582575,
+                -0.01520018746480943,
+                -0.011936192088487896,
+                -0.009119203909448838,
+                -0.00675357872437716,
+                -0.004818577292999117,
+                -0.003275644372434133,
+                -0.002075509236305739,
+                -0.0011644107780623145,
+                -0.0004890327182525387,
+                0.0
+            ]
+        },
+        "q1.xy.-x90_DragGaussian.wf.Q": {
+            "type": "arbitrary",
+            "samples": [
+                0.0005184987635497805,
+                0.0007249110890595781,
+                0.000990119951752293,
+                0.001320709504600477,
+                0.0017197507214693466,
+                0.002184988194208497,
+                0.0027070669626005537,
+                0.003268106706752398,
+                0.0038409786031951124,
+                0.004389631120900922,
+                0.00487072779517416,
+                0.005236698302518974,
+                0.005440077831187151,
+                0.005438752241487408,
+                0.005201487082534747,
+                0.004712953035363147,
+                0.003977418169861095,
+                0.003020387580099762,
+                0.0018877315378892233,
+                0.0006422174909547061,
+                -0.0006422174909547061,
+                -0.0018877315378892233,
+                -0.003020387580099762,
+                -0.003977418169861095,
+                -0.004712953035363147,
+                -0.005201487082534747,
+                -0.005438752241487408,
+                -0.005440077831187151,
+                -0.005236698302518974,
+                -0.00487072779517416,
+                -0.004389631120900922,
+                -0.0038409786031951124,
+                -0.003268106706752398,
+                -0.0027070669626005537,
+                -0.002184988194208497,
+                -0.0017197507214693466,
+                -0.001320709504600477,
+                -0.000990119951752293,
+                -0.0007249110890595781,
+                -0.0005184987635497805
+            ]
+        },
+        "q1.xy.y180_DragGaussian.wf.I": {
+            "type": "arbitrary",
+            "samples": [
+                0.0012441168589138857,
+                0.0017321153320569958,
+                0.0023584198510472236,
+                0.0031380938452002277,
+                0.004077712344661929,
+                0.005171063319337525,
+                0.006394966492700466,
+                0.0077059448387112855,
+                0.00903859512308619,
+                0.010306477990882275,
+                0.011406144703967218,
+                0.01222452738083789,
+                0.012649376614588493,
+                0.012581815467043922,
+                0.011949510309797849,
+                0.010718570291688418,
+                0.008902195674469756,
+                0.006564368935024418,
+                0.0038175148575970578,
+                0.0008139569741352298,
+                -0.002267992931071884,
+                -0.00524155643241938,
+                -0.007930227283990303,
+                -0.010185113102109473,
+                -0.011898510938831113,
+                -0.013012006383126657,
+                -0.013518317573834699,
+                -0.013457117824269798,
+                -0.01290596511486535,
+                -0.011968084864759001,
+                -0.010759007467701918,
+                -0.009393951185208936,
+                -0.007977435475501683,
+                -0.006596029371291811,
+                -0.005314518672533937,
+                -0.0041752325652208285,
+                -0.003199884471862841,
+                -0.0023930858840431725,
+                -0.0017466744761893199,
+                -0.0012441168589138857
+            ]
+        },
+        "q1.xy.y180_DragGaussian.wf.Q": {
+            "type": "arbitrary",
+            "samples": [
+                7.718193434917465e-06,
+                0.0011842050483269783,
+                0.0028086952551815243,
+                0.004999760279849545,
+                0.007885376096730656,
+                0.011594506738218222,
+                0.0162452360692075,
+                0.021929809678814607,
+                0.02869758670684389,
+                0.03653757894429601,
+                0.04536284513932814,
+                0.054999364337974414,
+                0.06518199434203885,
+                0.07555963644304464,
+                0.08571076184909959,
+                0.09516909687239852,
+                0.10345770339930746,
+                0.11012819515394756,
+                0.11480069204586943,
+                0.11719959028918929,
+                0.11718047063386537,
+                0.11474449180707666,
+                0.11003827426220991,
+                0.10333929045422588,
+                0.09502878609160678,
+                0.08555590677026631,
+                0.0753977176698657,
+                0.06502003610431943,
+                0.05484346097503317,
+                0.045217837197420584,
+                0.036406893880103784,
+                0.028583235746251896,
+                0.021832513864429335,
+                0.016164643142367787,
+                0.011529456779678473,
+                0.007834176866717968,
+                0.004960441029180352,
+                0.0027792180882194413,
+                0.0011626234963472836,
+                -7.718193434917465e-06
+            ]
+        },
+        "q1.xy.y90_DragGaussian.wf.I": {
+            "type": "arbitrary",
+            "samples": [
+                0.0005184887862238215,
+                0.0007218633600881588,
+                0.000982877321542896,
+                0.001307808392110963,
+                0.001699396731911017,
+                0.002155053461995904,
+                0.002665118144638677,
+                0.003211471621419199,
+                0.00376685693225695,
+                0.004295250261619488,
+                0.0047535390913487985,
+                0.005094602101432681,
+                0.0052716590731771,
+                0.005243502797393769,
+                0.004979988055064991,
+                0.004466990749923527,
+                0.003710012123790585,
+                0.002735717032576403,
+                0.001590958783915899,
+                0.0003392185874936378,
+                -0.0009451916783944673,
+                -0.002184431641687849,
+                -0.003304941886684752,
+                -0.004244671143251993,
+                -0.004958733940741835,
+                -0.00542278592849688,
+                -0.005633792372819906,
+                -0.005608287225420161,
+                -0.005378592966978427,
+                -0.004987729046907883,
+                -0.004483843043306853,
+                -0.003914952452390121,
+                -0.003324616017568186,
+                -0.0027489115979052,
+                -0.0022148388361938314,
+                -0.0017400385256682402,
+                -0.00133355978900649,
+                -0.0009973244767618647,
+                -0.0007279309195103634,
+                -0.0005184887862238215
+            ]
+        },
+        "q1.xy.y90_DragGaussian.wf.Q": {
+            "type": "arbitrary",
+            "samples": [
+                3.21657625426328e-06,
+                0.0004935203905871,
+                0.0011705307128487958,
+                0.0020836624954768002,
+                0.003286250043168337,
+                0.004832039436239804,
+                0.006770242418221146,
+                0.009139302567135315,
+                0.011959790426900945,
+                0.015227126634168026,
+                0.018905078206626433,
+                0.02292112148015826,
+                0.027164757786142177,
+                0.03148966586713472,
+                0.03572017255377029,
+                0.039661957130349174,
+                0.04311625445526093,
+                0.045896198436084966,
+                0.047843473103066095,
+                0.04884321989497052,
+                0.04883525173119965,
+                0.04782005151417887,
+                0.04585872368145948,
+                0.04306690556674725,
+                0.03960348226449907,
+                0.03565563631564314,
+                0.031422185816871846,
+                0.027097261288934194,
+                0.022856148367029493,
+                0.018844645787232887,
+                0.01517266330958149,
+                0.011912134380496564,
+                0.009098754295207451,
+                0.006736655116099197,
+                0.0048049297047017,
+                0.0032649126370921534,
+                0.0020672761002530444,
+                0.0011582460304172513,
+                0.0004845262252797133,
+                -3.21657625426328e-06
+            ]
+        },
+        "q1.xy.-y90_DragGaussian.wf.I": {
+            "type": "arbitrary",
+            "samples": [
+                -0.0005184887862238215,
+                -0.0007218633600881588,
+                -0.000982877321542896,
+                -0.001307808392110963,
+                -0.001699396731911017,
+                -0.002155053461995904,
+                -0.002665118144638677,
+                -0.003211471621419199,
+                -0.00376685693225695,
+                -0.004295250261619488,
+                -0.0047535390913487985,
+                -0.005094602101432681,
+                -0.0052716590731771,
+                -0.005243502797393769,
+                -0.004979988055064991,
+                -0.004466990749923527,
+                -0.003710012123790585,
+                -0.002735717032576403,
+                -0.001590958783915899,
+                -0.0003392185874936378,
+                0.0009451916783944673,
+                0.002184431641687849,
+                0.003304941886684752,
+                0.004244671143251993,
+                0.004958733940741835,
+                0.00542278592849688,
+                0.005633792372819906,
+                0.005608287225420161,
+                0.005378592966978427,
+                0.004987729046907883,
+                0.004483843043306853,
+                0.003914952452390121,
+                0.003324616017568186,
+                0.0027489115979052,
+                0.0022148388361938314,
+                0.0017400385256682402,
+                0.00133355978900649,
+                0.0009973244767618647,
+                0.0007279309195103634,
+                0.0005184887862238215
+            ]
+        },
+        "q1.xy.-y90_DragGaussian.wf.Q": {
+            "type": "arbitrary",
+            "samples": [
+                -3.21657625426328e-06,
+                -0.0004935203905871,
+                -0.0011705307128487958,
+                -0.0020836624954768002,
+                -0.003286250043168337,
+                -0.004832039436239804,
+                -0.006770242418221146,
+                -0.009139302567135315,
+                -0.011959790426900945,
+                -0.015227126634168026,
+                -0.018905078206626433,
+                -0.02292112148015826,
+                -0.027164757786142177,
+                -0.03148966586713472,
+                -0.03572017255377029,
+                -0.039661957130349174,
+                -0.04311625445526093,
+                -0.045896198436084966,
+                -0.047843473103066095,
+                -0.04884321989497052,
+                -0.04883525173119965,
+                -0.04782005151417887,
+                -0.04585872368145948,
+                -0.04306690556674725,
+                -0.03960348226449907,
+                -0.03565563631564314,
+                -0.031422185816871846,
+                -0.027097261288934194,
+                -0.022856148367029493,
+                -0.018844645787232887,
+                -0.01517266330958149,
+                -0.011912134380496564,
+                -0.009098754295207451,
+                -0.006736655116099197,
+                -0.0048049297047017,
+                -0.0032649126370921534,
+                -0.0020672761002530444,
+                -0.0011582460304172513,
+                -0.0004845262252797133,
+                3.21657625426328e-06
+            ]
+        },
+        "q1.xy.x180_Square.wf.I": {
+            "type": "constant",
+            "sample": 0.25
+        },
+        "q1.xy.x180_Square.wf.Q": {
+            "type": "constant",
+            "sample": 0.0
+        },
+        "q1.xy.x90_Square.wf.I": {
+            "type": "constant",
+            "sample": 0.125
+        },
+        "q1.xy.x90_Square.wf.Q": {
+            "type": "constant",
+            "sample": 0.0
+        },
+        "q1.xy.-x90_Square.wf.I": {
+            "type": "constant",
+            "sample": -0.125
+        },
+        "q1.xy.-x90_Square.wf.Q": {
+            "type": "constant",
+            "sample": 0.0
+        },
+        "q1.xy.y180_Square.wf.I": {
+            "type": "constant",
+            "sample": -0.0015509083533014347
+        },
+        "q1.xy.y180_Square.wf.Q": {
+            "type": "constant",
+            "sample": 0.24999518932027404
+        },
+        "q1.xy.y90_Square.wf.I": {
+            "type": "constant",
+            "sample": -0.0007754541766507173
+        },
+        "q1.xy.y90_Square.wf.Q": {
+            "type": "constant",
+            "sample": 0.12499759466013702
+        },
+        "q1.xy.-y90_Square.wf.I": {
+            "type": "constant",
+            "sample": 0.0007754541766507173
+        },
+        "q1.xy.-y90_Square.wf.Q": {
+            "type": "constant",
+            "sample": -0.12499759466013702
+        },
+        "q1.xy.saturation.wf.I": {
+            "type": "constant",
+            "sample": 0.25
+        },
+        "q1.xy.saturation.wf.Q": {
+            "type": "constant",
+            "sample": 0.0
+        },
+        "q1.z.const.wf": {
+            "type": "constant",
+            "sample": 0.25
+        },
+        "q1.z.flux_pulse.wf": {
+            "type": "constant",
+            "sample": 0.1
+        },
+        "q1.resonator.readout.wf.I": {
+            "type": "constant",
+            "sample": 0.018
+        },
+        "q1.resonator.readout.wf.Q": {
+            "type": "constant",
+            "sample": 0.0
+        },
+        "q1.resonator.const.wf.I": {
+            "type": "constant",
+            "sample": 0.125
+        },
+        "q1.resonator.const.wf.Q": {
+            "type": "constant",
+            "sample": 0.0
+        },
+        "q2.xy.x180_DragGaussian.wf.I": {
+            "type": "arbitrary",
+            "samples": [
+                0.0,
+                0.0005678483600883946,
+                0.0013520746692667826,
+                0.0024100115844926124,
+                0.0038035681779454125,
+                0.005595170040086616,
+                0.007842028682802827,
+                0.01058891315860402,
+                0.01385990517642167,
+                0.017649946931507583,
+                0.021917277270781566,
+                0.026578025208963376,
+                0.031504222852976216,
+                0.03652626697882492,
+                0.041440392880004014,
+                0.046021067955088146,
+                0.05003745761377632,
+                0.05327239132493575,
+                0.05554170393609924,
+                0.056711570828046044,
+                0.056711570828046044,
+                0.05554170393609924,
+                0.05327239132493575,
+                0.05003745761377632,
+                0.046021067955088146,
+                0.041440392880004014,
+                0.03652626697882492,
+                0.031504222852976216,
+                0.026578025208963376,
+                0.021917277270781566,
+                0.017649946931507583,
+                0.01385990517642167,
+                0.01058891315860402,
+                0.007842028682802827,
+                0.005595170040086616,
+                0.0038035681779454125,
+                0.0024100115844926124,
+                0.0013520746692667826,
+                0.0005678483600883946,
+                0.0
+            ]
+        },
+        "q2.xy.x180_DragGaussian.wf.Q": {
+            "type": "arbitrary",
+            "samples": [
+                -0.0002298063953032062,
+                -0.0003212914205457098,
+                -0.0004388359491394108,
+                -0.0005853581760099596,
+                -0.0007622192026365651,
+                -0.0009684193984445405,
+                -0.001199812505357894,
+                -0.0014484736985740081,
+                -0.0017023790783876524,
+                -0.0019455500678511501,
+                -0.0021587792986214934,
+                -0.002320982892906676,
+                -0.0024111237372969664,
+                -0.002410536216145588,
+                -0.0023053767543627667,
+                -0.0020888511688536065,
+                -0.0017628511319323483,
+                -0.0013386808821862503,
+                -0.0008366708091114864,
+                -0.0002846403829134703,
+                0.0002846403829134703,
+                0.0008366708091114864,
+                0.0013386808821862503,
+                0.0017628511319323483,
+                0.0020888511688536065,
+                0.0023053767543627667,
+                0.002410536216145588,
+                0.0024111237372969664,
+                0.002320982892906676,
+                0.0021587792986214934,
+                0.0019455500678511501,
+                0.0017023790783876524,
+                0.0014484736985740081,
+                0.001199812505357894,
+                0.0009684193984445405,
+                0.0007622192026365651,
+                0.0005853581760099596,
+                0.0004388359491394108,
+                0.0003212914205457098,
+                0.0002298063953032062
+            ]
+        },
+        "q2.xy.x90_DragGaussian.wf.I": {
+            "type": "arbitrary",
+            "samples": [
+                0.0,
+                0.00026603379872938097,
+                0.000633439463265899,
+                0.0011290770245503219,
+                0.0017819505386041678,
+                0.002621306047391519,
+                0.0036739468260611747,
+                0.004960846926740169,
+                0.006493288496137415,
+                0.008268901980856329,
+                0.010268122512924919,
+                0.012451657002170647,
+                0.01475955320235419,
+                0.017112352946247314,
+                0.019414593602047767,
+                0.021560614400241016,
+                0.023442270619010212,
+                0.024957819072268947,
+                0.026020979410283022,
+                0.026569055543185643,
+                0.026569055543185643,
+                0.026020979410283022,
+                0.024957819072268947,
+                0.023442270619010212,
+                0.021560614400241016,
+                0.019414593602047767,
+                0.017112352946247314,
+                0.01475955320235419,
+                0.012451657002170647,
+                0.010268122512924919,
+                0.008268901980856329,
+                0.006493288496137415,
+                0.004960846926740169,
+                0.0036739468260611747,
+                0.002621306047391519,
+                0.0017819505386041678,
+                0.0011290770245503219,
+                0.000633439463265899,
+                0.00026603379872938097,
+                0.0
+            ]
+        },
+        "q2.xy.x90_DragGaussian.wf.Q": {
+            "type": "arbitrary",
+            "samples": [
+                -0.00010766301817848148,
+                -0.00015052324372941546,
+                -0.00020559220167580945,
+                -0.0002742370501113891,
+                -0.00035709545750967737,
+                -0.0004536991025056735,
+                -0.0005621054862493382,
+                -0.0006786018723929309,
+                -0.0007975551307929997,
+                -0.0009114793870111321,
+                -0.0010113760957964632,
+                -0.0010873675776570946,
+                -0.0011295980619541522,
+                -0.0011293228115621097,
+                -0.0010800561885396073,
+                -0.0009786151558911404,
+                -0.0008258859515757834,
+                -0.0006271645485054657,
+                -0.0003919756210958591,
+                -0.00013335243642592976,
+                0.00013335243642592976,
+                0.0003919756210958591,
+                0.0006271645485054657,
+                0.0008258859515757834,
+                0.0009786151558911404,
+                0.0010800561885396073,
+                0.0011293228115621097,
+                0.0011295980619541522,
+                0.0010873675776570946,
+                0.0010113760957964632,
+                0.0009114793870111321,
+                0.0007975551307929997,
+                0.0006786018723929309,
+                0.0005621054862493382,
+                0.0004536991025056735,
+                0.00035709545750967737,
+                0.0002742370501113891,
+                0.00020559220167580945,
+                0.00015052324372941546,
+                0.00010766301817848148
+            ]
+        },
+        "q2.xy.-x90_DragGaussian.wf.I": {
+            "type": "arbitrary",
+            "samples": [
+                2.8569348615996787e-10,
+                -0.0002660333993015011,
+                -0.0006334389177063009,
+                -0.0011290762968337096,
+                -0.0017819495910130327,
+                -0.0026213048434509828,
+                -0.0036739453344508586,
+                -0.0049608451259917,
+                -0.006493286379730399,
+                -0.00826889956213482,
+                -0.010268119829111482,
+                -0.012451654116699302,
+                -0.014759550204812337,
+                -0.01711234994942758,
+                -0.019414590735953332,
+                -0.02156061180332192,
+                -0.023442268427365145,
+                -0.02495781740794363,
+                -0.0260209783700489,
+                -0.026569055189229435,
+                -0.026569055896954765,
+                -0.026020980450333915,
+                -0.024957820736418522,
+                -0.02344227281049021,
+                -0.021560616997008297,
+                -0.01941459646800549,
+                -0.017112355942946553,
+                -0.014759556199792113,
+                -0.012451659887554315,
+                -0.010268125196666053,
+                -0.008268904399519614,
+                -0.0064932906124987085,
+                -0.004960848727453705,
+                -0.003673948317645621,
+                -0.0026213072513135978,
+                -0.0017819514861827552,
+                -0.0011290777522589839,
+                -0.0006334400088210368,
+                -0.00026603419815538756,
+                -2.8569348615996787e-10
+            ]
+        },
+        "q2.xy.-x90_DragGaussian.wf.Q": {
+            "type": "arbitrary",
+            "samples": [
+                0.00010766301817810243,
+                0.0001505239496734585,
+                0.00020559388256358003,
+                0.0002742400462176918,
+                0.0003571001860741816,
+                0.0004537060583750488,
+                0.0005621152353951582,
+                0.0006786150364433129,
+                0.0007975723613142704,
+                0.0009115013292818216,
+                0.0010114033431779996,
+                0.0010874006192431976,
+                0.0011296372277499074,
+                0.0011293682207232521,
+                0.0010801077069032294,
+                0.000978672368914006,
+                0.0008259481577429233,
+                0.0006272307763172121,
+                0.00039204467009985525,
+                0.0001334229398000687,
+                -0.00013328193305085185,
+                -0.00039190657208910295,
+                -0.0006270983206893031,
+                -0.0008258237454028281,
+                -0.0009785579428613841,
+                -0.0010800046701683803,
+                -0.0011292774023930153,
+                -0.0011295588961504428,
+                -0.001087334536063335,
+                -0.0010113488484078054,
+                -0.0009114574447340243,
+                -0.0007975379002661131,
+                -0.0006785887083377706,
+                -0.0005620957370995603,
+                -0.0004536921466331035,
+                -0.00035709072894265863,
+                -0.0002742340540031553,
+                -0.0002055905207865912,
+                -0.0001505225377843125,
+                -0.00010766301817810243
+            ]
+        },
+        "q2.xy.y180_DragGaussian.wf.I": {
+            "type": "arbitrary",
+            "samples": [
+                0.00022980197320333906,
+                0.00031776251496493964,
+                0.0004304397291471841,
+                0.0005703960837353492,
+                0.0007386085928285974,
+                0.0009336903796090261,
+                0.0011511403465391625,
+                0.0013827560905215368,
+                0.0016163645491292667,
+                0.0018360188296524726,
+                0.0020227710042347597,
+                0.0021560579056419376,
+                0.002215636691172844,
+                0.0021838942605852613,
+                0.002048251386719149,
+                0.0018033131388001354,
+                0.0014524031659188584,
+                0.0010081727355015896,
+                0.0004920943389259257,
+                -6.718289004565707e-05,
+                -0.0006364527013628435,
+                -0.0011812150796546577,
+                -0.0016691375091510753,
+                -0.002073231253848236,
+                -0.002374308808555329,
+                -0.0025624133985726813,
+                -0.002637085401164285,
+                -0.00260651799026845,
+                -0.002485818556128637,
+                -0.00229470451144179,
+                -0.0020550064307036896,
+                -0.0017883280908418918,
+                -0.0015141355614820366,
+                -0.0012484384888670694,
+                -0.0010031111472355242,
+                -0.0007858004781048139,
+                -0.0006002977405188918,
+                -0.0004472152803380091,
+                -0.0003248079610854965,
+                -0.00022980197320333906
+            ]
+        },
+        "q2.xy.y180_DragGaussian.wf.Q": {
+            "type": "arbitrary",
+            "samples": [
+                1.4256346324713364e-06,
+                0.0005698306073338951,
+                0.001354771029030982,
+                0.0024135965568565254,
+                0.003808223515465796,
+                0.005601070092740503,
+                0.007849320977797069,
+                0.010597695198959235,
+                0.013870199409894955,
+                0.017661676777948096,
+                0.021930247798164573,
+                0.026591912302521174,
+                0.03151857435385164,
+                0.03654051819715106,
+                0.04145389716643595,
+                0.046033140851520146,
+                0.05004743083922936,
+                0.0532796709047345,
+                0.05554582556169021,
+                0.05671224534782019,
+                0.05670871373863982,
+                0.0555354447637157,
+                0.0532630615338338,
+                0.050025558674860235,
+                0.04600722391770752,
+                0.04142529374190916,
+                0.03651061003112261,
+                0.031488658898291506,
+                0.026563115248469344,
+                0.021903463247387244,
+                0.017637537819132125,
+                0.013849077538429698,
+                0.010579723599289988,
+                0.007834434583901428,
+                0.005589054654864129,
+                0.0037987664584384693,
+                0.0024063338617777486,
+                0.0013493262743169878,
+                0.0005658442589501476,
+                -1.4256346324713364e-06
+            ]
+        },
+        "q2.xy.y90_DragGaussian.wf.I": {
+            "type": "arbitrary",
+            "samples": [
+                0.00010766094644928633,
+                0.00014886997109010824,
+                0.00020165861930330432,
+                0.0002672273930893375,
+                0.00034603401812020185,
+                0.0004374287503195407,
+                0.0005393028505229778,
+                0.0006478135384953285,
+                0.000757257802187585,
+                0.0008601646110505378,
+                0.0009476569662584746,
+                0.0010101011383200095,
+                0.0010380134680060594,
+                0.0010231423158047856,
+                0.000959594383748497,
+                0.0008448421767722006,
+                0.0006804428059910676,
+                0.00047232331983688123,
+                0.0002305434611051949,
+                -3.147481036254514e-05,
+                -0.00029817455108750604,
+                -0.0005533926957331356,
+                -0.0007819816404718234,
+                -0.0009712973125780735,
+                -0.0011123504725773605,
+                -0.0012004764268954448,
+                -0.0012354598448366045,
+                -0.0012211391828262838,
+                -0.0011645921691768957,
+                -0.0010750563020826167,
+                -0.0009627590842884647,
+                -0.0008378217651400301,
+                -0.0007093640900003772,
+                -0.0005848864890999662,
+                -0.00046995199388321333,
+                -0.00036814315392413145,
+                -0.00028123615300050406,
+                -0.00020951787174242322,
+                -0.0001521707234157875,
+                -0.00010766094644928633
+            ]
+        },
+        "q2.xy.y90_DragGaussian.wf.Q": {
+            "type": "arbitrary",
+            "samples": [
+                6.679018969386046e-07,
+                0.00026696247054003704,
+                0.0006347026928201754,
+                0.0011307565641657275,
+                0.001784131538342764,
+                0.0026240701892479338,
+                0.003677363225711376,
+                0.004964961263807073,
+                0.006498111287270383,
+                0.008274397348680579,
+                0.010274199132870934,
+                0.012458163028272257,
+                0.014766276800701401,
+                0.017119029562777888,
+                0.019420920285139816,
+                0.021566270485078476,
+                0.023446943019670916,
+                0.024961229514920774,
+                0.026022910368950818,
+                0.02656937155194863,
+                0.026567717012687942,
+                0.026018047022830434,
+                0.0249534481170234,
+                0.02343669603230153,
+                0.021554128545718962,
+                0.019407519739821084,
+                0.017105017753321683,
+                0.01475226157614014,
+                0.012444671768597877,
+                0.010261650719788531,
+                0.008263088380719158,
+                0.006488215807953861,
+                0.004956541669307392,
+                0.0036703890329588904,
+                0.002618441023424242,
+                0.0017797009597189418,
+                0.0011273540319113077,
+                0.0006321518555165542,
+                0.00026509488849150916,
+                -6.679018969386046e-07
+            ]
+        },
+        "q2.xy.-y90_DragGaussian.wf.I": {
+            "type": "arbitrary",
+            "samples": [
+                -0.00010766094644928633,
+                -0.0001521707234157875,
+                -0.00020951787174242322,
+                -0.00028123615300050406,
+                -0.00036814315392413145,
+                -0.00046995199388321333,
+                -0.0005848864890999662,
+                -0.0007093640900003772,
+                -0.0008378217651400301,
+                -0.0009627590842884647,
+                -0.0010750563020826167,
+                -0.0011645921691768957,
+                -0.0012211391828262838,
+                -0.0012354598448366045,
+                -0.0012004764268954448,
+                -0.0011123504725773605,
+                -0.0009712973125780735,
+                -0.0007819816404718234,
+                -0.0005533926957331356,
+                -0.00029817455108750604,
+                -3.147481036254514e-05,
+                0.0002305434611051949,
+                0.00047232331983688123,
+                0.0006804428059910676,
+                0.0008448421767722006,
+                0.000959594383748497,
+                0.0010231423158047856,
+                0.0010380134680060594,
+                0.0010101011383200095,
+                0.0009476569662584746,
+                0.0008601646110505378,
+                0.000757257802187585,
+                0.0006478135384953285,
+                0.0005393028505229778,
+                0.0004374287503195407,
+                0.00034603401812020185,
+                0.0002672273930893375,
+                0.00020165861930330432,
+                0.00014886997109010824,
+                0.00010766094644928633
+            ]
+        },
+        "q2.xy.-y90_DragGaussian.wf.Q": {
+            "type": "arbitrary",
+            "samples": [
+                6.679018969386046e-07,
+                -0.00026509488849150916,
+                -0.0006321518555165542,
+                -0.0011273540319113077,
+                -0.0017797009597189418,
+                -0.002618441023424242,
+                -0.0036703890329588904,
+                -0.004956541669307392,
+                -0.006488215807953861,
+                -0.008263088380719158,
+                -0.010261650719788531,
+                -0.012444671768597877,
+                -0.01475226157614014,
+                -0.017105017753321683,
+                -0.019407519739821084,
+                -0.021554128545718962,
+                -0.02343669603230153,
+                -0.0249534481170234,
+                -0.026018047022830434,
+                -0.026567717012687942,
+                -0.02656937155194863,
+                -0.026022910368950818,
+                -0.024961229514920774,
+                -0.023446943019670916,
+                -0.021566270485078476,
+                -0.019420920285139816,
+                -0.017119029562777888,
+                -0.014766276800701401,
+                -0.012458163028272257,
+                -0.010274199132870934,
+                -0.008274397348680579,
+                -0.006498111287270383,
+                -0.004964961263807073,
+                -0.003677363225711376,
+                -0.0026240701892479338,
+                -0.001784131538342764,
+                -0.0011307565641657275,
+                -0.0006347026928201754,
+                -0.00026696247054003704,
+                -6.679018969386046e-07
+            ]
+        },
+        "q2.xy.x180_Square.wf.I": {
+            "type": "constant",
+            "sample": 0.25
+        },
+        "q2.xy.x180_Square.wf.Q": {
+            "type": "constant",
+            "sample": 0.0
+        },
+        "q2.xy.x90_Square.wf.I": {
+            "type": "constant",
+            "sample": 0.125
+        },
+        "q2.xy.x90_Square.wf.Q": {
+            "type": "constant",
+            "sample": 0.0
+        },
+        "q2.xy.-x90_Square.wf.I": {
+            "type": "constant",
+            "sample": -0.125
+        },
+        "q2.xy.-x90_Square.wf.Q": {
+            "type": "constant",
+            "sample": 0.0
+        },
+        "q2.xy.y180_Square.wf.I": {
+            "type": "constant",
+            "sample": -0.0015509083533014347
+        },
+        "q2.xy.y180_Square.wf.Q": {
+            "type": "constant",
+            "sample": 0.24999518932027404
+        },
+        "q2.xy.y90_Square.wf.I": {
+            "type": "constant",
+            "sample": -0.0007754541766507173
+        },
+        "q2.xy.y90_Square.wf.Q": {
+            "type": "constant",
+            "sample": 0.12499759466013702
+        },
+        "q2.xy.-y90_Square.wf.I": {
+            "type": "constant",
+            "sample": 0.0007754541766507173
+        },
+        "q2.xy.-y90_Square.wf.Q": {
+            "type": "constant",
+            "sample": -0.12499759466013702
+        },
+        "q2.xy.saturation.wf.I": {
+            "type": "constant",
+            "sample": 0.5
+        },
+        "q2.xy.saturation.wf.Q": {
+            "type": "constant",
+            "sample": 0.0
+        },
+        "q2.z.const.wf": {
+            "type": "constant",
+            "sample": 0.25
+        },
+        "q2.z.flux_pulse.wf": {
+            "type": "constant",
+            "sample": 0.1
+        },
+        "q2.resonator.readout.wf.I": {
+            "type": "constant",
+            "sample": 0.0657
+        },
+        "q2.resonator.readout.wf.Q": {
+            "type": "constant",
+            "sample": 0.0
+        },
+        "q2.resonator.const.wf.I": {
+            "type": "constant",
+            "sample": 0.125
+        },
+        "q2.resonator.const.wf.Q": {
+            "type": "constant",
+            "sample": 0.0
+        },
+        "q3.xy.x180_DragGaussian.wf.I": {
+            "type": "arbitrary",
+            "samples": [
+                0.0,
+                0.0004724241663205588,
+                0.001124865005037741,
+                0.0020050206950489,
+                0.0031643967858418264,
+                0.004654928546765929,
+                0.0065242133694959166,
+                0.008809497081959675,
+                0.011530814577387775,
+                0.014683957990865009,
+                0.01823418393081862,
+                0.02211171552883724,
+                0.02621008928259923,
+                0.03038820297656114,
+                0.034476533585981954,
+                0.03828744818155307,
+                0.04162890281889482,
+                0.044320221433179215,
+                0.046208186942638035,
+                0.04718146331354797,
+                0.04718146331354797,
+                0.046208186942638035,
+                0.044320221433179215,
+                0.04162890281889482,
+                0.03828744818155307,
+                0.034476533585981954,
+                0.03038820297656114,
+                0.02621008928259923,
+                0.02211171552883724,
+                0.01823418393081862,
+                0.014683957990865009,
+                0.011530814577387775,
+                0.008809497081959675,
+                0.0065242133694959166,
+                0.004654928546765929,
+                0.0031643967858418264,
+                0.0020050206950489,
+                0.001124865005037741,
+                0.0004724241663205588,
+                0.0
+            ]
+        },
+        "q3.xy.x180_DragGaussian.wf.Q": {
+            "type": "arbitrary",
+            "samples": [
+                -0.00016407093013121827,
+                -0.0002293869243393487,
+                -0.0003133081751503135,
+                -0.00041791813613869215,
+                -0.0005441885695803,
+                -0.0006914057863806275,
+                -0.0008566095537829035,
+                -0.0010341419205591959,
+                -0.0012154183892857547,
+                -0.001389031009463554,
+                -0.001541266625785265,
+                -0.0016570723436804685,
+                -0.0017214286561425959,
+                -0.0017210091937440355,
+                -0.0016459302966400564,
+                -0.0014913412384686237,
+                -0.0012585925840636343,
+                -0.0009557550267449566,
+                -0.0005973435059691976,
+                -0.00020321981168496938,
+                0.00020321981168496938,
+                0.0005973435059691976,
+                0.0009557550267449566,
+                0.0012585925840636343,
+                0.0014913412384686237,
+                0.0016459302966400564,
+                0.0017210091937440355,
+                0.0017214286561425959,
+                0.0016570723436804685,
+                0.001541266625785265,
+                0.001389031009463554,
+                0.0012154183892857547,
+                0.0010341419205591959,
+                0.0008566095537829035,
+                0.0006914057863806275,
+                0.0005441885695803,
+                0.00041791813613869215,
+                0.0003133081751503135,
+                0.0002293869243393487,
+                0.00016407093013121827
+            ]
+        },
+        "q3.xy.x90_DragGaussian.wf.I": {
+            "type": "arbitrary",
+            "samples": [
+                0.0,
+                0.00023277957388820845,
+                0.0005542595303576617,
+                0.0009879423964815318,
+                0.001559206721278647,
+                0.0022936427914675797,
+                0.0032147034728035287,
+                0.004340741060897647,
+                0.005681627434120238,
+                0.007235289233249289,
+                0.008984607198809306,
+                0.010895199876899318,
+                0.012914609052059918,
+                0.014973308827966401,
+                0.016987769401791798,
+                0.018865537600210893,
+                0.02051198679163394,
+                0.021838091688235334,
+                0.022768356983997647,
+                0.02324792360028744,
+                0.02324792360028744,
+                0.022768356983997647,
+                0.021838091688235334,
+                0.02051198679163394,
+                0.018865537600210893,
+                0.016987769401791798,
+                0.014973308827966401,
+                0.012914609052059918,
+                0.010895199876899318,
+                0.008984607198809306,
+                0.007235289233249289,
+                0.005681627434120238,
+                0.004340741060897647,
+                0.0032147034728035287,
+                0.0022936427914675797,
+                0.001559206721278647,
+                0.0009879423964815318,
+                0.0005542595303576617,
+                0.00023277957388820845,
+                0.0
+            ]
+        },
+        "q3.xy.x90_DragGaussian.wf.Q": {
+            "type": "arbitrary",
+            "samples": [
+                -8.084336900215209e-05,
+                -0.00011302679733578356,
+                -0.00015437767308816087,
+                -0.00020592258522293452,
+                -0.00026814035430986226,
+                -0.0003406793212782354,
+                -0.0004220808780193749,
+                -0.0005095571580992326,
+                -0.0005988782854978993,
+                -0.0006844231721224784,
+                -0.0007594348764854832,
+                -0.0008164963216596742,
+                -0.0008482068819145138,
+                -0.0008480001984182831,
+                -0.0008110062533117532,
+                -0.0007348349275110571,
+                -0.0006201516905856102,
+                -0.0004709332496683552,
+                -0.0002943316127694614,
+                -0.00010013336434099883,
+                0.00010013336434099883,
+                0.0002943316127694614,
+                0.0004709332496683552,
+                0.0006201516905856102,
+                0.0007348349275110571,
+                0.0008110062533117532,
+                0.0008480001984182831,
+                0.0008482068819145138,
+                0.0008164963216596742,
+                0.0007594348764854832,
+                0.0006844231721224784,
+                0.0005988782854978993,
+                0.0005095571580992326,
+                0.0004220808780193749,
+                0.0003406793212782354,
+                0.00026814035430986226,
+                0.00020592258522293452,
+                0.00015437767308816087,
+                0.00011302679733578356,
+                8.084336900215209e-05
+            ]
+        },
+        "q3.xy.-x90_DragGaussian.wf.I": {
+            "type": "arbitrary",
+            "samples": [
+                2.1452513884435925e-10,
+                -0.0002327792739606331,
+                -0.0005542591207006927,
+                -0.0009879418500439831,
+                -0.0015592060097386503,
+                -0.002293641887436335,
+                -0.003214702352762701,
+                -0.00434073970872669,
+                -0.0056816258449229285,
+                -0.007235287417045471,
+                -0.008984605183549037,
+                -0.010895197710214653,
+                -0.012914606801221324,
+                -0.014973306577669014,
+                -0.016987767249654073,
+                -0.01886553565019401,
+                -0.020511985145933526,
+                -0.021838090438494783,
+                -0.02276835620288212,
+                -0.023247923334492715,
+                -0.023247923865918466,
+                -0.02276835776495285,
+                -0.02183809293782211,
+                -0.020511988437189918,
+                -0.01886553955009494,
+                -0.016987771553809903,
+                -0.014973311078158356,
+                -0.012914611302807574,
+                -0.010895202043507263,
+                -0.00898460921400631,
+                -0.007235291049402159,
+                -0.005681629023277541,
+                -0.004340742413038038,
+                -0.00321470459282172,
+                -0.002293643695482674,
+                -0.0015592074328076649,
+                -0.0009879429429121237,
+                -0.0005542599400107279,
+                -0.0002327798738141447,
+                -2.1452513884435925e-10
+            ]
+        },
+        "q3.xy.-x90_DragGaussian.wf.Q": {
+            "type": "arbitrary",
+            "samples": [
+                8.084336900186746e-05,
+                0.00011302741503688699,
+                0.00015437914386504998,
+                0.00020592520681606924,
+                0.0002681444918039595,
+                0.00034068540766413695,
+                0.0004220894085222129,
+                0.0005095686766436134,
+                0.0005988933622043596,
+                0.00068444237160973,
+                0.0007594587179447695,
+                0.0008165252330479893,
+                0.0008482411519862931,
+                0.0008480399314347762,
+                0.0008110513318803942,
+                0.000734884988906492,
+                0.0006202061209822185,
+                0.0004709911990039074,
+                0.0002943920306481293,
+                0.00010019505479342865,
+                -0.00010007167388786393,
+                -0.00029427119488872097,
+                -0.00047087530032948697,
+                -0.0006200972601846351,
+                -0.000734784866110448,
+                -0.0008109611747374014,
+                -0.0008479604653958189,
+                -0.0008481726118367617,
+                -0.0008164674102656097,
+                -0.0007594110350208494,
+                -0.0006844039726304074,
+                -0.000598863208787222,
+                -0.0005095456395512638,
+                -0.00042207234751356475,
+                -0.0003406732348899349,
+                -0.0002681362168138769,
+                -0.0002059199636283498,
+                -0.00015437620231018473,
+                -0.00011302617963388425,
+                -8.084336900186746e-05
+            ]
+        },
+        "q3.xy.y180_DragGaussian.wf.I": {
+            "type": "arbitrary",
+            "samples": [
+                0.00016407092937002337,
+                0.0002294324303808281,
+                0.0003134165283372026,
+                0.0004181112714167488,
+                0.0005444933832552676,
+                0.0006918541775195911,
+                0.0008572380063708604,
+                0.0010349905063786152,
+                0.0012165291100559809,
+                0.0013904454616267172,
+                0.0015430230591275682,
+                0.0016592022866758697,
+                0.0017239533820467984,
+                0.0017239363839504148,
+                0.0016492513029782328,
+                0.0014950293387120531,
+                0.0012626025570018936,
+                0.0009600242471839672,
+                0.0006017945897371521,
+                0.0002077646498746449,
+                -0.00019867497160964745,
+                -0.0005928924166585815,
+                -0.0009514857974376372,
+                -0.0012545825994470811,
+                -0.0014876531243872605,
+                -0.001642609275029537,
+                -0.0017180819875686675,
+                -0.0017189039142655124,
+                -0.0016549423853093393,
+                -0.001539510178141778,
+                -0.0013876165444117784,
+                -0.0012143076572378418,
+                -0.0010332933251441271,
+                -0.0008559810932465936,
+                -0.0006909573888262123,
+                -0.0005438837508558877,
+                -0.00041772499698283517,
+                -0.0003131998190562844,
+                -0.0002293414161694221,
+                -0.00016407092937002337
+            ]
+        },
+        "q3.xy.y180_DragGaussian.wf.Q": {
+            "type": "arbitrary",
+            "samples": [
+                -1.58044268108087e-08,
+                0.00047240206802160335,
+                0.001124834819846733,
+                0.002004980429032234,
+                0.0031643443512201965,
+                0.004654861924266462,
+                0.0065241308247746465,
+                0.008809397425512145,
+                0.0115306974465337,
+                0.014683824121834931,
+                0.018234035380948563,
+                0.022111555805784045,
+                0.026209923341294638,
+                0.030388037056277965,
+                0.03447637487884078,
+                0.03828730434779993,
+                0.0416287813895711,
+                0.04432012916274055,
+                0.046208129188073294,
+                0.04718144351913999,
+                0.04718148267016616,
+                0.046208244268443874,
+                0.04432031329237713,
+                0.04162902386195014,
+                0.038287591660042676,
+                0.034476691973220494,
+                0.030388368614876694,
+                0.0262102549807043,
+                0.022111875046719107,
+                0.018234332311496394,
+                0.014684091723644823,
+                0.011530931601249133,
+                0.008809596656665189,
+                0.006524295853679979,
+                0.0046549951260730065,
+                0.0031644491911014885,
+                0.002005060942461277,
+                0.0011248951797912937,
+                0.00047244626023596067,
+                1.58044268108087e-08
+            ]
+        },
+        "q3.xy.y90_DragGaussian.wf.I": {
+            "type": "arbitrary",
+            "samples": [
+                8.084181335592715e-05,
+                0.00011158054325040913,
+                0.00015093627949987808,
+                0.00019978979025137572,
+                0.0002584624476461783,
+                0.00032644384662271295,
+                0.00040212991415825196,
+                0.0004826189865506151,
+                0.0005636200276596991,
+                0.0006395249199181729,
+                0.0007036830534705669,
+                0.0007488907840505827,
+                0.0007680730598740646,
+                0.0007550949616374138,
+                0.0007056047534696017,
+                0.0006177859078743488,
+                0.0004928909105491354,
+                0.00033544867235442216,
+                0.00015307940887924833,
+                -4.40901581315815e-05,
+                -0.00024435303313721335,
+                -0.0004355724891786964,
+                -0.0006063997029099966,
+                -0.0007473886038127655,
+                -0.0008518556667038638,
+                -0.0009163765412231811,
+                -0.0009408727995402553,
+                -0.0009283080603417609,
+                -0.0008840704360503581,
+                -0.0008151574723166915,
+                -0.0007292950840013589,
+                -0.0006341134952430885,
+                -0.0005364757191175327,
+                -0.000442015597913117,
+                -0.0003549016847409264,
+                -0.00027780794147461667,
+                -0.0002120474551736465,
+                -0.00015781312538410712,
+                -0.00011446870153537851,
+                -8.084181335592715e-05
+            ]
+        },
+        "q3.xy.y90_DragGaussian.wf.Q": {
+            "type": "arbitrary",
+            "samples": [
+                5.015226251778717e-07,
+                0.00023347627139284148,
+                0.000555206567388342,
+                0.0009892008540139257,
+                0.001560840162363422,
+                0.0022957121051647477,
+                0.0032172600482061986,
+                0.0043438186390495,
+                0.0056852333255029645,
+                0.007239395917071736,
+                0.008989145566113438,
+                0.010900055467493492,
+                0.012919622504422131,
+                0.014978281383158877,
+                0.01699247369641176,
+                0.01886973322248338,
+                0.02051543927898692,
+                0.02184059296121861,
+                0.02276974478433184,
+                0.023248097437713305,
+                0.023246855056343697,
+                0.02276609293347676,
+                0.02183474996673255,
+                0.020507744891488974,
+                0.018860615929464385,
+                0.01698241132542903,
+                0.01496776001842825,
+                0.01290909857531422,
+                0.010889924979767878,
+                0.008979723054963598,
+                0.007230904096153034,
+                0.005677802882818248,
+                0.004337496427425655,
+                0.0032120231781302857,
+                0.002291485205923408,
+                0.0015575132734405711,
+                0.0009866459175534804,
+                0.0005532911624062966,
+                0.00023207391775976167,
+                -5.015226251778717e-07
+            ]
+        },
+        "q3.xy.-y90_DragGaussian.wf.I": {
+            "type": "arbitrary",
+            "samples": [
+                -8.084336862708528e-05,
+                -0.00011300437390116875,
+                -0.00015432428232791943,
+                -0.00020582741894312358,
+                -0.0002679901596800352,
+                -0.0003404583804392808,
+                -0.0004217712139795626,
+                -0.0005091390260619541,
+                -0.0005983309897597687,
+                -0.0006837262167262367,
+                -0.0007585694145486134,
+                -0.0008154468181893232,
+                -0.0008469628550839167,
+                -0.0008465578636378842,
+                -0.0008093698721727627,
+                -0.0007330176673336251,
+                -0.0006181758337669178,
+                -0.000468829654107762,
+                -0.0002921384085539926,
+                -9.78939659114832e-05,
+                0.00010237276184139185,
+                0.0002965248142538709,
+                0.00047303684085922874,
+                0.0006221275416500071,
+                0.000736652180870065,
+                0.000812642626925537,
+                0.0008494425253302142,
+                0.000849450900874725,
+                0.0008175458175538771,
+                0.0007603003313756696,
+                0.0006851201211680591,
+                0.0005994255756791272,
+                0.0005099752854084059,
+                0.0004223905381427614,
+                0.0003409002589560771,
+                0.0002682905464516548,
+                0.00020601774959202036,
+                0.00015443106241595482,
+                0.0001130492197216395,
+                8.084336862708528e-05
+            ]
+        },
+        "q3.xy.-y90_DragGaussian.wf.Q": {
+            "type": "arbitrary",
+            "samples": [
+                -7.787382612580221e-09,
+                -0.00023279046031735286,
+                -0.000554274398492645,
+                -0.0009879622277606471,
+                -0.0015592325431456964,
+                -0.00229367559737345,
+                -0.003214744115587255,
+                -0.0043407901247668815,
+                -0.005681685095786436,
+                -0.007235355127972123,
+                -0.00898468031105336,
+                -0.010895278476825436,
+                -0.012914690697193767,
+                -0.014973390443639906,
+                -0.016987847444611206,
+                -0.018865608296978868,
+                -0.02051204643369471,
+                -0.02183813695040961,
+                -0.0227683852303864,
+                -0.02324793313795646,
+                -0.023247913846904392,
+                -0.022768328526344694,
+                -0.021838046223428647,
+                -0.02051192695924549,
+                -0.018865466728392396,
+                -0.0169876912013454,
+                -0.014973227073357787,
+                -0.01291452728709333,
+                -0.010895121175878259,
+                -0.008984534003198418,
+                -0.00723522327139128,
+                -0.005681569719735063,
+                -0.004340691956751321,
+                -0.0032146628001910467,
+                -0.0022936099642793385,
+                -0.0015591808849439502,
+                -0.0009879225560354458,
+                -0.0005542446570797867,
+                -0.00023276868529913697,
+                7.787382612580221e-09
+            ]
+        },
+        "q3.xy.x180_Square.wf.I": {
+            "type": "constant",
+            "sample": 0.25
+        },
+        "q3.xy.x180_Square.wf.Q": {
+            "type": "constant",
+            "sample": 0.0
+        },
+        "q3.xy.x90_Square.wf.I": {
+            "type": "constant",
+            "sample": 0.125
+        },
+        "q3.xy.x90_Square.wf.Q": {
+            "type": "constant",
+            "sample": 0.0
+        },
+        "q3.xy.-x90_Square.wf.I": {
+            "type": "constant",
+            "sample": -0.125
+        },
+        "q3.xy.-x90_Square.wf.Q": {
+            "type": "constant",
+            "sample": 0.0
+        },
+        "q3.xy.y180_Square.wf.I": {
+            "type": "constant",
+            "sample": -0.0015509083533014347
+        },
+        "q3.xy.y180_Square.wf.Q": {
+            "type": "constant",
+            "sample": 0.24999518932027404
+        },
+        "q3.xy.y90_Square.wf.I": {
+            "type": "constant",
+            "sample": -0.0007754541766507173
+        },
+        "q3.xy.y90_Square.wf.Q": {
+            "type": "constant",
+            "sample": 0.12499759466013702
+        },
+        "q3.xy.-y90_Square.wf.I": {
+            "type": "constant",
+            "sample": 0.0007754541766507173
+        },
+        "q3.xy.-y90_Square.wf.Q": {
+            "type": "constant",
+            "sample": -0.12499759466013702
+        },
+        "q3.xy.saturation.wf.I": {
+            "type": "constant",
+            "sample": 0.25
+        },
+        "q3.xy.saturation.wf.Q": {
+            "type": "constant",
+            "sample": 0.0
+        },
+        "q3.z.const.wf": {
+            "type": "constant",
+            "sample": 0.25
+        },
+        "q3.z.flux_pulse.wf": {
+            "type": "constant",
+            "sample": 0.1
+        },
+        "q3.resonator.readout.wf.I": {
+            "type": "constant",
+            "sample": 0.0662
+        },
+        "q3.resonator.readout.wf.Q": {
+            "type": "constant",
+            "sample": 0.0
+        },
+        "q3.resonator.const.wf.I": {
+            "type": "constant",
+            "sample": 0.125
+        },
+        "q3.resonator.const.wf.Q": {
+            "type": "constant",
+            "sample": 0.0
+        },
+        "q4.xy.x180_DragGaussian.wf.I": {
+            "type": "arbitrary",
+            "samples": [
+                0.0,
+                0.0006828866414717301,
+                0.0016259864337212575,
+                0.0028982468428471525,
+                0.004574118869061386,
+                0.0067286746703701245,
+                0.009430716025473022,
+                0.012734081582254256,
+                0.016667731673240902,
+                0.021225583851884774,
+                0.026357416728858486,
+                0.03196236820878495,
+                0.03788654586040696,
+                0.04392598717514423,
+                0.04983564751457542,
+                0.05534430446871462,
+                0.06017435952854855,
+                0.06406464639501668,
+                0.06679369058428869,
+                0.0682005564466576,
+                0.0682005564466576,
+                0.06679369058428869,
+                0.06406464639501668,
+                0.06017435952854855,
+                0.05534430446871462,
+                0.04983564751457542,
+                0.04392598717514423,
+                0.03788654586040696,
+                0.03196236820878495,
+                0.026357416728858486,
+                0.021225583851884774,
+                0.016667731673240902,
+                0.012734081582254256,
+                0.009430716025473022,
+                0.0067286746703701245,
+                0.004574118869061386,
+                0.0028982468428471525,
+                0.0016259864337212575,
+                0.0006828866414717301,
+                0.0
+            ]
+        },
+        "q4.xy.x180_DragGaussian.wf.Q": {
+            "type": "arbitrary",
+            "samples": [
+                -0.00017152262350278894,
+                -0.0002398051076351797,
+                -0.00032753785282788446,
+                -0.0004368989379323631,
+                -0.0005689042602488597,
+                -0.0007228077167001401,
+                -0.0008955146281238798,
+                -0.0010811100732266504,
+                -0.001270619668073425,
+                -0.0014521173414411177,
+                -0.0016112671206322305,
+                -0.0017323324460626597,
+                -0.0017996116620922211,
+                -0.0017991731487553109,
+                -0.0017206843549716023,
+                -0.0015590742464582712,
+                -0.0013157547273432166,
+                -0.0009991630417537384,
+                -0.0006244733615775101,
+                -0.00021244954983842303,
+                0.00021244954983842303,
+                0.0006244733615775101,
+                0.0009991630417537384,
+                0.0013157547273432166,
+                0.0015590742464582712,
+                0.0017206843549716023,
+                0.0017991731487553109,
+                0.0017996116620922211,
+                0.0017323324460626597,
+                0.0016112671206322305,
+                0.0014521173414411177,
+                0.001270619668073425,
+                0.0010811100732266504,
+                0.0008955146281238798,
+                0.0007228077167001401,
+                0.0005689042602488597,
+                0.0004368989379323631,
+                0.00032753785282788446,
+                0.0002398051076351797,
+                0.00017152262350278894
+            ]
+        },
+        "q4.xy.x90_DragGaussian.wf.I": {
+            "type": "arbitrary",
+            "samples": [
+                0.0,
+                0.00032178352861017047,
+                0.0007661822919650029,
+                0.0013656850774891763,
+                0.0021553739970616593,
+                0.0031706238587934183,
+                0.004443854800640172,
+                0.006000436172417335,
+                0.007854014394225036,
+                0.010001723351844606,
+                0.012419898186589335,
+                0.015061011594537292,
+                0.017852547807259294,
+                0.020698397497482965,
+                0.02348309299659454,
+                0.02607883138852682,
+                0.028354805270788087,
+                0.030187950274913545,
+                0.031473905242584976,
+                0.032136835565103224,
+                0.032136835565103224,
+                0.031473905242584976,
+                0.030187950274913545,
+                0.028354805270788087,
+                0.02607883138852682,
+                0.02348309299659454,
+                0.020698397497482965,
+                0.017852547807259294,
+                0.015061011594537292,
+                0.012419898186589335,
+                0.010001723351844606,
+                0.007854014394225036,
+                0.006000436172417335,
+                0.004443854800640172,
+                0.0031706238587934183,
+                0.0021553739970616593,
+                0.0013656850774891763,
+                0.0007661822919650029,
+                0.00032178352861017047,
+                0.0
+            ]
+        },
+        "q4.xy.x90_DragGaussian.wf.Q": {
+            "type": "arbitrary",
+            "samples": [
+                -8.082330459452405e-05,
+                -0.00011299874536612141,
+                -0.0001543393582999508,
+                -0.00020587147757192083,
+                -0.00026807380491395257,
+                -0.00034059476853313156,
+                -0.00042197612233077465,
+                -0.0005094306917896752,
+                -0.000598729650697196,
+                -0.0006842533060507765,
+                -0.0007592463933592003,
+                -0.000816293676529631,
+                -0.0008479963665829324,
+                -0.0008477897343832021,
+                -0.0008108049707544304,
+                -0.0007346525498132089,
+                -0.0006199977759669505,
+                -0.00047081636937497347,
+                -0.0002942585630001443,
+                -0.0001001085123752272,
+                0.0001001085123752272,
+                0.0002942585630001443,
+                0.00047081636937497347,
+                0.0006199977759669505,
+                0.0007346525498132089,
+                0.0008108049707544304,
+                0.0008477897343832021,
+                0.0008479963665829324,
+                0.000816293676529631,
+                0.0007592463933592003,
+                0.0006842533060507765,
+                0.000598729650697196,
+                0.0005094306917896752,
+                0.00042197612233077465,
+                0.00034059476853313156,
+                0.00026807380491395257,
+                0.00020587147757192083,
+                0.0001543393582999508,
+                0.00011299874536612141,
+                8.082330459452405e-05
+            ]
+        },
+        "q4.xy.-x90_DragGaussian.wf.I": {
+            "type": "arbitrary",
+            "samples": [
+                0.0,
+                0.00032178352861017047,
+                0.0007661822919650029,
+                0.0013656850774891763,
+                0.0021553739970616593,
+                0.0031706238587934183,
+                0.004443854800640172,
+                0.006000436172417335,
+                0.007854014394225036,
+                0.010001723351844606,
+                0.012419898186589335,
+                0.015061011594537292,
+                0.017852547807259294,
+                0.020698397497482965,
+                0.02348309299659454,
+                0.02607883138852682,
+                0.028354805270788087,
+                0.030187950274913545,
+                0.031473905242584976,
+                0.032136835565103224,
+                0.032136835565103224,
+                0.031473905242584976,
+                0.030187950274913545,
+                0.028354805270788087,
+                0.02607883138852682,
+                0.02348309299659454,
+                0.020698397497482965,
+                0.017852547807259294,
+                0.015061011594537292,
+                0.012419898186589335,
+                0.010001723351844606,
+                0.007854014394225036,
+                0.006000436172417335,
+                0.004443854800640172,
+                0.0031706238587934183,
+                0.0021553739970616593,
+                0.0013656850774891763,
+                0.0007661822919650029,
+                0.00032178352861017047,
+                0.0
+            ]
+        },
+        "q4.xy.-x90_DragGaussian.wf.Q": {
+            "type": "arbitrary",
+            "samples": [
+                -8.082330459452405e-05,
+                -0.00011299874536612141,
+                -0.0001543393582999508,
+                -0.00020587147757192083,
+                -0.00026807380491395257,
+                -0.00034059476853313156,
+                -0.00042197612233077465,
+                -0.0005094306917896752,
+                -0.000598729650697196,
+                -0.0006842533060507765,
+                -0.0007592463933592003,
+                -0.000816293676529631,
+                -0.0008479963665829324,
+                -0.0008477897343832021,
+                -0.0008108049707544304,
+                -0.0007346525498132089,
+                -0.0006199977759669505,
+                -0.00047081636937497347,
+                -0.0002942585630001443,
+                -0.0001001085123752272,
+                0.0001001085123752272,
+                0.0002942585630001443,
+                0.00047081636937497347,
+                0.0006199977759669505,
+                0.0007346525498132089,
+                0.0008108049707544304,
+                0.0008477897343832021,
+                0.0008479963665829324,
+                0.000816293676529631,
+                0.0007592463933592003,
+                0.0006842533060507765,
+                0.000598729650697196,
+                0.0005094306917896752,
+                0.00042197612233077465,
+                0.00034059476853313156,
+                0.00026807380491395257,
+                0.00020587147757192083,
+                0.0001543393582999508,
+                0.00011299874536612141,
+                8.082330459452405e-05
+            ]
+        },
+        "q4.xy.y180_DragGaussian.wf.I": {
+            "type": "arbitrary",
+            "samples": [
+                0.00017151932294115922,
+                0.00023556411474643591,
+                0.0003174445263393997,
+                0.0004189108698549064,
+                0.0005405171563320125,
+                0.0006810515769027269,
+                0.0008369926909415372,
+                0.001002091695739247,
+                0.0011671947207658538,
+                0.0013204136575569484,
+                0.0014477243643670147,
+                0.0015340162958911488,
+                0.001564542790860299,
+                0.0015266378060243785,
+                0.0014114891562360737,
+                0.0012157084691980468,
+                0.0009424297412552931,
+                0.0006017102341588508,
+                0.00021009777431213147,
+                -0.00021064578904025487,
+                -0.0006355367125031634,
+                -0.0010388249157121691,
+                -0.0013965773961215227,
+                -0.0016890290760344108,
+                -0.001902380022063546,
+                -0.002029813332416401,
+                -0.0020716392495199213,
+                -0.0020346112744814436,
+                -0.0019305819266615554,
+                -0.0017747478665768835,
+                -0.0015837651399536537,
+                -0.0013739957150267835,
+                -0.0011600868437195674,
+                -0.0009540021010336958,
+                -0.0007645360389261254,
+                -0.0005972694696361806,
+                -0.0004548701917629157,
+                -0.0003376185738787045,
+                -0.00024403687151936765,
+                -0.00017151932294115922
+            ]
+        },
+        "q4.xy.y180_DragGaussian.wf.Q": {
+            "type": "arbitrary",
+            "samples": [
+                1.0640634782826093e-06,
+                0.000684361163854428,
+                0.0016279870700892647,
+                0.002900901433547393,
+                0.00457756012405555,
+                0.006733029226477491,
+                0.009436089997324525,
+                0.012740543354475492,
+                0.016675293399393887,
+                0.0212341838176004,
+                0.026366905251044494,
+                0.03197249992136319,
+                0.037896980951292486,
+                0.04393630333038221,
+                0.04984536303617699,
+                0.05535291141890979,
+                0.06018136407025305,
+                0.06406961205826549,
+                0.06679627929588776,
+                0.0682005620416468,
+                0.0681979261233948,
+                0.06678853128826469,
+                0.06405721517580336,
+                0.06016503915027279,
+                0.055333567568731805,
+                0.04982401404626082,
+                0.04391398050905868,
+                0.037874652689216984,
+                0.03195100641047283,
+                0.026346913829950185,
+                0.02121616701028188,
+                0.016659528482137212,
+                0.012727129733328247,
+                0.009424979108386437,
+                0.0067240611582722026,
+                0.004570501577099961,
+                0.0028954807118482906,
+                0.0016239232205534793,
+                0.000681385837897662,
+                -1.0640634782826093e-06
+            ]
+        },
+        "q4.xy.y90_DragGaussian.wf.I": {
+            "type": "arbitrary",
+            "samples": [
+                8.082174933439285e-05,
+                0.00011100034391312254,
+                0.0001495832743240226,
+                0.00019739530646631926,
+                0.0002546974962989526,
+                0.0003209188264526224,
+                0.0003943999562381824,
+                0.0004721963826250556,
+                0.0005499947033870149,
+                0.0006221931139816059,
+                0.0006821832880153352,
+                0.00072284497405532,
+                0.0007372293867392522,
+                0.0007193681502884544,
+                0.0006651088683032008,
+                0.0005728549033214772,
+                0.00044408302812122335,
+                0.0002835323325862752,
+                9.900033045836e-05,
+                -9.92585608911092e-05,
+                -0.00029947173292163657,
+                -0.0004895054708723028,
+                -0.0006580822865895693,
+                -0.0007958886629268298,
+                -0.0008964219228799244,
+                -0.0009564698690213839,
+                -0.0009761786909188532,
+                -0.0009587307109151853,
+                -0.000909710963584421,
+                -0.0008362802787732131,
+                -0.0007462871643318925,
+                -0.0006474415556346415,
+                -0.0005466453952910886,
+                -0.00044953604848755463,
+                -0.0003602576026748587,
+                -0.0002814397965912056,
+                -0.00021433972562357592,
+                -0.00015908950245810389,
+                -0.00011499279801293313,
+                -8.082174933439285e-05
+            ]
+        },
+        "q4.xy.y90_DragGaussian.wf.Q": {
+            "type": "arbitrary",
+            "samples": [
+                5.013981529482943e-07,
+                0.0003224783394125851,
+                0.0007671250133346518,
+                0.0013669359491722103,
+                0.0021569955534190706,
+                0.003172675772456189,
+                0.00444638707396346,
+                0.006003481028972068,
+                0.007857577560900324,
+                0.010005775748166105,
+                0.012424369280274414,
+                0.015065785766451479,
+                0.017857464934294135,
+                0.020703258580761753,
+                0.02348767105484518,
+                0.026082887076010187,
+                0.02835810588615979,
+                0.030190290148832663,
+                0.03147512507132714,
+                0.03213683820152231,
+                0.032135596128497666,
+                0.03147147412682003,
+                0.030184448604511582,
+                0.028350413408321586,
+                0.026073772045799953,
+                0.023477611181228847,
+                0.020692739827314566,
+                0.01784694361710611,
+                0.015055657792998061,
+                0.012414949107685017,
+                0.00999728603482108,
+                0.00785014896236724,
+                0.00599716038644947,
+                0.004441151503619328,
+                0.0031684499222833186,
+                0.002153669490192332,
+                0.0013643816468180278,
+                0.0007652100837344071,
+                0.0003210763338277779,
+                -5.013981529482943e-07
+            ]
+        },
+        "q4.xy.-y90_DragGaussian.wf.I": {
+            "type": "arbitrary",
+            "samples": [
+                8.082174933439285e-05,
+                0.00011100034391312254,
+                0.0001495832743240226,
+                0.00019739530646631926,
+                0.0002546974962989526,
+                0.0003209188264526224,
+                0.0003943999562381824,
+                0.0004721963826250556,
+                0.0005499947033870149,
+                0.0006221931139816059,
+                0.0006821832880153352,
+                0.00072284497405532,
+                0.0007372293867392522,
+                0.0007193681502884544,
+                0.0006651088683032008,
+                0.0005728549033214772,
+                0.00044408302812122335,
+                0.0002835323325862752,
+                9.900033045836e-05,
+                -9.92585608911092e-05,
+                -0.00029947173292163657,
+                -0.0004895054708723028,
+                -0.0006580822865895693,
+                -0.0007958886629268298,
+                -0.0008964219228799244,
+                -0.0009564698690213839,
+                -0.0009761786909188532,
+                -0.0009587307109151853,
+                -0.000909710963584421,
+                -0.0008362802787732131,
+                -0.0007462871643318925,
+                -0.0006474415556346415,
+                -0.0005466453952910886,
+                -0.00044953604848755463,
+                -0.0003602576026748587,
+                -0.0002814397965912056,
+                -0.00021433972562357592,
+                -0.00015908950245810389,
+                -0.00011499279801293313,
+                -8.082174933439285e-05
+            ]
+        },
+        "q4.xy.-y90_DragGaussian.wf.Q": {
+            "type": "arbitrary",
+            "samples": [
+                5.013981529482943e-07,
+                0.0003224783394125851,
+                0.0007671250133346518,
+                0.0013669359491722103,
+                0.0021569955534190706,
+                0.003172675772456189,
+                0.00444638707396346,
+                0.006003481028972068,
+                0.007857577560900324,
+                0.010005775748166105,
+                0.012424369280274414,
+                0.015065785766451479,
+                0.017857464934294135,
+                0.020703258580761753,
+                0.02348767105484518,
+                0.026082887076010187,
+                0.02835810588615979,
+                0.030190290148832663,
+                0.03147512507132714,
+                0.03213683820152231,
+                0.032135596128497666,
+                0.03147147412682003,
+                0.030184448604511582,
+                0.028350413408321586,
+                0.026073772045799953,
+                0.023477611181228847,
+                0.020692739827314566,
+                0.01784694361710611,
+                0.015055657792998061,
+                0.012414949107685017,
+                0.00999728603482108,
+                0.00785014896236724,
+                0.00599716038644947,
+                0.004441151503619328,
+                0.0031684499222833186,
+                0.002153669490192332,
+                0.0013643816468180278,
+                0.0007652100837344071,
+                0.0003210763338277779,
+                -5.013981529482943e-07
+            ]
+        },
+        "q4.xy.x180_Square.wf.I": {
+            "type": "constant",
+            "sample": 0.25
+        },
+        "q4.xy.x180_Square.wf.Q": {
+            "type": "constant",
+            "sample": 0.0
+        },
+        "q4.xy.x90_Square.wf.I": {
+            "type": "constant",
+            "sample": 0.125
+        },
+        "q4.xy.x90_Square.wf.Q": {
+            "type": "constant",
+            "sample": 0.0
+        },
+        "q4.xy.-x90_Square.wf.I": {
+            "type": "constant",
+            "sample": -0.125
+        },
+        "q4.xy.-x90_Square.wf.Q": {
+            "type": "constant",
+            "sample": 0.0
+        },
+        "q4.xy.y180_Square.wf.I": {
+            "type": "constant",
+            "sample": -0.0015509083533014347
+        },
+        "q4.xy.y180_Square.wf.Q": {
+            "type": "constant",
+            "sample": 0.24999518932027404
+        },
+        "q4.xy.y90_Square.wf.I": {
+            "type": "constant",
+            "sample": -0.0007754541766507173
+        },
+        "q4.xy.y90_Square.wf.Q": {
+            "type": "constant",
+            "sample": 0.12499759466013702
+        },
+        "q4.xy.-y90_Square.wf.I": {
+            "type": "constant",
+            "sample": 0.0007754541766507173
+        },
+        "q4.xy.-y90_Square.wf.Q": {
+            "type": "constant",
+            "sample": -0.12499759466013702
+        },
+        "q4.xy.saturation.wf.I": {
+            "type": "constant",
+            "sample": 0.25
+        },
+        "q4.xy.saturation.wf.Q": {
+            "type": "constant",
+            "sample": 0.0
+        },
+        "q4.z.const.wf": {
+            "type": "constant",
+            "sample": 0.25
+        },
+        "q4.z.flux_pulse.wf": {
+            "type": "constant",
+            "sample": 0.1
+        },
+        "q4.resonator.readout.wf.I": {
+            "type": "constant",
+            "sample": 0.0587
+        },
+        "q4.resonator.readout.wf.Q": {
+            "type": "constant",
+            "sample": 0.0
+        },
+        "q4.resonator.const.wf.I": {
+            "type": "constant",
+            "sample": 0.125
+        },
+        "q4.resonator.const.wf.Q": {
+            "type": "constant",
+            "sample": 0.0
+        },
+        "q5.xy.x180_DragGaussian.wf.I": {
+            "type": "arbitrary",
+            "samples": [
+                0.0,
+                0.0007940006419209964,
+                0.0018905542936776803,
+                0.0033698270165406436,
+                0.0053183838981393115,
+                0.00782351225386007,
+                0.010965208752454696,
+                0.01480607224764812,
+                0.01937977527192273,
+                0.024679245690358294,
+                0.030646090479951506,
+                0.037163036050019284,
+                0.04405114979039712,
+                0.05107328200023343,
+                0.057944516284346555,
+                0.06434949903270237,
+                0.06996546306702105,
+                0.07448874714031241,
+                0.07766184016413084,
+                0.07929762029216236,
+                0.07929762029216236,
+                0.07766184016413084,
+                0.07448874714031241,
+                0.06996546306702105,
+                0.06434949903270237,
+                0.057944516284346555,
+                0.05107328200023343,
+                0.04405114979039712,
+                0.037163036050019284,
+                0.030646090479951506,
+                0.024679245690358294,
+                0.01937977527192273,
+                0.01480607224764812,
+                0.010965208752454696,
+                0.00782351225386007,
+                0.0053183838981393115,
+                0.0033698270165406436,
+                0.0018905542936776803,
+                0.0007940006419209964,
+                0.0
+            ]
+        },
+        "q5.xy.x180_DragGaussian.wf.Q": {
+            "type": "arbitrary",
+            "samples": [
+                -0.0002724090697188308,
+                -0.00038085405266472737,
+                -0.000520189581784799,
+                -0.0006938748417719079,
+                -0.0009035232619966987,
+                -0.001147949895301571,
+                -0.0014222398292716425,
+                -0.0017169990949126327,
+                -0.002017974741044602,
+                -0.002306226001132292,
+                -0.002558984747529985,
+                -0.002751258466309563,
+                -0.002858110077343411,
+                -0.002857413638542933,
+                -0.002732759182697197,
+                -0.0024760929866104752,
+                -0.0020896574103992267,
+                -0.0015868523296995137,
+                -0.0009917770846640211,
+                -0.00033740845989758413,
+                0.00033740845989758413,
+                0.0009917770846640211,
+                0.0015868523296995137,
+                0.0020896574103992267,
+                0.0024760929866104752,
+                0.002732759182697197,
+                0.002857413638542933,
+                0.002858110077343411,
+                0.002751258466309563,
+                0.002558984747529985,
+                0.002306226001132292,
+                0.002017974741044602,
+                0.0017169990949126327,
+                0.0014222398292716425,
+                0.001147949895301571,
+                0.0009035232619966987,
+                0.0006938748417719079,
+                0.000520189581784799,
+                0.00038085405266472737,
+                0.0002724090697188308
+            ]
+        },
+        "q5.xy.x90_DragGaussian.wf.I": {
+            "type": "arbitrary",
+            "samples": [
+                0.0,
+                0.00034721322995930233,
+                0.0008267316524242431,
+                0.0014736115577770744,
+                0.002325707504428234,
+                0.003421189878029372,
+                0.004795040894307784,
+                0.006474634775708675,
+                0.008474696382826405,
+                0.010792133100014693,
+                0.013401409897383625,
+                0.016251243513862423,
+                0.019263387451601974,
+                0.02233413711734484,
+                0.025338899737966752,
+                0.0281397724709028,
+                0.030595610550546413,
+                0.03257362415682161,
+                0.033961204745038505,
+                0.03467652469790774,
+                0.03467652469790774,
+                0.033961204745038505,
+                0.03257362415682161,
+                0.030595610550546413,
+                0.0281397724709028,
+                0.025338899737966752,
+                0.02233413711734484,
+                0.019263387451601974,
+                0.016251243513862423,
+                0.013401409897383625,
+                0.010792133100014693,
+                0.008474696382826405,
+                0.006474634775708675,
+                0.004795040894307784,
+                0.003421189878029372,
+                0.002325707504428234,
+                0.0014736115577770744,
+                0.0008267316524242431,
+                0.00034721322995930233,
+                0.0
+            ]
+        },
+        "q5.xy.x90_DragGaussian.wf.Q": {
+            "type": "arbitrary",
+            "samples": [
+                -0.00011912337090616009,
+                -0.00016654591795905378,
+                -0.00022747677438357826,
+                -0.0003034286274835229,
+                -0.00039510702331705896,
+                -0.0005019937893435115,
+                -0.0006219396544862107,
+                -0.0007508366745642165,
+                -0.0008824520923801723,
+                -0.0010085031882744303,
+                -0.001119033553243505,
+                -0.0012031140632695744,
+                -0.0012498398353088225,
+                -0.0012495352854726943,
+                -0.0011950244022846128,
+                -0.0010827853255641865,
+                -0.0009137986302097985,
+                -0.0006939240269760823,
+                -0.0004337000586456444,
+                -0.00014754733811448323,
+                0.00014754733811448323,
+                0.0004337000586456444,
+                0.0006939240269760823,
+                0.0009137986302097985,
+                0.0010827853255641865,
+                0.0011950244022846128,
+                0.0012495352854726943,
+                0.0012498398353088225,
+                0.0012031140632695744,
+                0.001119033553243505,
+                0.0010085031882744303,
+                0.0008824520923801723,
+                0.0007508366745642165,
+                0.0006219396544862107,
+                0.0005019937893435115,
+                0.00039510702331705896,
+                0.0003034286274835229,
+                0.00022747677438357826,
+                0.00016654591795905378,
+                0.00011912337090616009
+            ]
+        },
+        "q5.xy.-x90_DragGaussian.wf.I": {
+            "type": "arbitrary",
+            "samples": [
+                0.0,
+                -0.0004890327182525387,
+                -0.0011644107780623145,
+                -0.002075509236305739,
+                -0.003275644372434133,
+                -0.004818577292999117,
+                -0.00675357872437716,
+                -0.009119203909448838,
+                -0.011936192088487896,
+                -0.01520018746480943,
+                -0.018875225207582575,
+                -0.022889075371637223,
+                -0.027131531621974618,
+                -0.03145653115118992,
+                -0.03568859118023487,
+                -0.03963348235338423,
+                -0.04309240922612172,
+                -0.04587834388284734,
+                -0.04783268273949085,
+                -0.048840175630855964,
+                -0.048840175630855964,
+                -0.04783268273949085,
+                -0.04587834388284734,
+                -0.04309240922612172,
+                -0.03963348235338423,
+                -0.03568859118023487,
+                -0.03145653115118992,
+                -0.027131531621974618,
+                -0.022889075371637223,
+                -0.018875225207582575,
+                -0.01520018746480943,
+                -0.011936192088487896,
+                -0.009119203909448838,
+                -0.00675357872437716,
+                -0.004818577292999117,
+                -0.003275644372434133,
+                -0.002075509236305739,
+                -0.0011644107780623145,
+                -0.0004890327182525387,
+                0.0
+            ]
+        },
+        "q5.xy.-x90_DragGaussian.wf.Q": {
+            "type": "arbitrary",
+            "samples": [
+                0.00016777939564247902,
+                0.00023457171543528706,
+                0.0003203898230754624,
+                0.0004273642640612999,
+                0.0005564887652352943,
+                0.000707033506117622,
+                0.0008759713443467757,
+                0.0010575164430481924,
+                0.0012428902709579893,
+                0.0014204270257386347,
+                0.0015761035961176129,
+                0.001694526849675457,
+                0.0017603377962096098,
+                0.001759908852778443,
+                0.0016831329609642435,
+                0.0015250497543157556,
+                0.001287040324239153,
+                0.0009773577844733555,
+                0.0006108451530220345,
+                0.0002078131522739201,
+                -0.0002078131522739201,
+                -0.0006108451530220345,
+                -0.0009773577844733555,
+                -0.001287040324239153,
+                -0.0015250497543157556,
+                -0.0016831329609642435,
+                -0.001759908852778443,
+                -0.0017603377962096098,
+                -0.001694526849675457,
+                -0.0015761035961176129,
+                -0.0014204270257386347,
+                -0.0012428902709579893,
+                -0.0010575164430481924,
+                -0.0008759713443467757,
+                -0.000707033506117622,
+                -0.0005564887652352943,
+                -0.0004273642640612999,
+                -0.0003203898230754624,
+                -0.00023457171543528706,
+                -0.00016777939564247902
+            ]
+        },
+        "q5.xy.y180_DragGaussian.wf.I": {
+            "type": "arbitrary",
+            "samples": [
+                0.00027240382782767533,
+                0.0003759210350849206,
+                0.0005084512661371616,
+                0.0006729563182568383,
+                0.0008705125716977926,
+                0.0010993936035977492,
+                0.00135418832611089,
+                0.001625114610667843,
+                0.0018977108883065866,
+                0.0021530806298962033,
+                0.0023688183948202554,
+                0.0025206596724401944,
+                0.002584777894804758,
+                0.002540518735396767,
+                0.0023732400596467966,
+                0.0020768446375268312,
+                0.001655577115256089,
+                0.001124720913678716,
+                0.00050997241360312,
+                -0.00015453139959072532,
+                -0.0008293353340735944,
+                -0.001473543586749611,
+                -0.002048922675013667,
+                -0.0025236572841620566,
+                -0.002875246042171477,
+                -0.003092173134314029,
+                -0.0031741985728742216,
+                -0.0031313322642644347,
+                -0.002981751376792333,
+                -0.0027490526165913623,
+                -0.002459282616251044,
+                -0.002138160931141223,
+                -0.0018088174996955392,
+                -0.0014902365969098978,
+                -0.0011964620076510908,
+                -0.0009364991798072974,
+                -0.000714766661209908,
+                -0.0005319078777086385,
+                -0.0003857724129095765,
+                -0.00027240382782767533
+            ]
+        },
+        "q5.xy.y180_DragGaussian.wf.Q": {
+            "type": "arbitrary",
+            "samples": [
+                1.6899260069680303e-06,
+                0.0007963480421165002,
+                0.0018937449797435963,
+                0.003374066717059609,
+                0.0053238866850706685,
+                0.007830483168540108,
+                0.010973820806551413,
+                0.014816438971517432,
+                0.019391921127885303,
+                0.024693077775249744,
+                0.03066137576913056,
+                0.03717938873111292,
+                0.04406803279367874,
+                0.05109002555814782,
+                0.0579603543104837,
+                0.06436362154656682,
+                0.06997708020981556,
+                0.07449715802442404,
+                0.07766649836063189,
+                0.07929818754874106,
+                0.07929400123194962,
+                0.07765419311771013,
+                0.07447746952415533,
+                0.06995115327274896,
+                0.06433290000019494,
+                0.057926448238131645,
+                0.051054572864700984,
+                0.044032571459329886,
+                0.03714525313321299,
+                0.03062962576256324,
+                0.024664463813891684,
+                0.019366883576824204,
+                0.014795135705606146,
+                0.01095617469749849,
+                0.007816240247885749,
+                0.005312676430875206,
+                0.0033654576267536105,
+                0.0018872908488020727,
+                0.0007916226842631687,
+                -1.6899260069680303e-06
+            ]
+        },
+        "q5.xy.y90_DragGaussian.wf.I": {
+            "type": "arbitrary",
+            "samples": [
+                0.0001677761671107308,
+                0.00023153342192660189,
+                0.00031316008029467303,
+                0.0004144803419631336,
+                0.0005361571599998001,
+                0.0006771272137716444,
+                0.0008340577616431671,
+                0.0010009238954820495,
+                0.0011688185943032915,
+                0.0013261033020169723,
+                0.001458978289819607,
+                0.0015524988095987403,
+                0.0015919898464026917,
+                0.0015647301996340236,
+                0.0014617016361938532,
+                0.0012791488128028644,
+                0.0010196860483532718,
+                0.0006927265503980655,
+                0.0003140969698144863,
+                -9.517739206656839e-05,
+                -0.0005107956988342612,
+                -0.000907569827586436,
+                -0.0012619514045064152,
+                -0.0015543450678146798,
+                -0.0017708920036211733,
+                -0.0019044995096257425,
+                -0.0019550197750601616,
+                -0.0019286179986457513,
+                -0.001836489675144487,
+                -0.001693168245378692,
+                -0.0015146960837043378,
+                -0.0013169141144364625,
+                -0.001114068291631036,
+                -0.0009178512149096901,
+                -0.000736912587969572,
+                -0.0005767989537570236,
+                -0.0004402317388586604,
+                -0.00032760723551364157,
+                -0.00023760098134880642,
+                -0.0001677761671107308
+            ]
+        },
+        "q5.xy.y90_DragGaussian.wf.Q": {
+            "type": "arbitrary",
+            "samples": [
+                1.0408418648551482e-06,
+                0.0004904785048650739,
+                0.0011663759526447056,
+                0.002078120509093063,
+                0.0032790335924283323,
+                0.0048228707471535594,
+                0.006758882972260972,
+                0.009125588875512491,
+                0.011943672839312618,
+                0.015208706780432651,
+                0.01888463956586121,
+                0.022899147146978098,
+                0.02714193002790928,
+                0.031466843671366575,
+                0.03569834597458222,
+                0.0396421805470368,
+                0.043099564337363686,
+                0.04588352422818064,
+                0.047835551768024065,
+                0.048840525009700236,
+                0.04883794661646994,
+                0.0478279728492209,
+                0.045871397889363806,
+                0.043083595684644496,
+                0.03962325884781145,
+                0.03567746289483121,
+                0.03144500801263999,
+                0.02712008904716709,
+                0.022878122700209655,
+                0.01886508442799811,
+                0.015191083163316865,
+                0.01192825196808489,
+                0.009112467986830275,
+                0.006748014562059371,
+                0.004814098393787944,
+                0.003272129087832158,
+                0.0020728180866367817,
+                0.0011624007906213415,
+                0.0004875681110017393,
+                -1.0408418648551482e-06
+            ]
+        },
+        "q5.xy.-y90_DragGaussian.wf.I": {
+            "type": "arbitrary",
+            "samples": [
+                -0.0001677761671107308,
+                -0.00023153342192660189,
+                -0.00031316008029467303,
+                -0.0004144803419631336,
+                -0.0005361571599998001,
+                -0.0006771272137716444,
+                -0.0008340577616431671,
+                -0.0010009238954820495,
+                -0.0011688185943032915,
+                -0.0013261033020169723,
+                -0.001458978289819607,
+                -0.0015524988095987403,
+                -0.0015919898464026917,
+                -0.0015647301996340236,
+                -0.0014617016361938532,
+                -0.0012791488128028644,
+                -0.0010196860483532718,
+                -0.0006927265503980655,
+                -0.0003140969698144863,
+                9.517739206656839e-05,
+                0.0005107956988342612,
+                0.000907569827586436,
+                0.0012619514045064152,
+                0.0015543450678146798,
+                0.0017708920036211733,
+                0.0019044995096257425,
+                0.0019550197750601616,
+                0.0019286179986457513,
+                0.001836489675144487,
+                0.001693168245378692,
+                0.0015146960837043378,
+                0.0013169141144364625,
+                0.001114068291631036,
+                0.0009178512149096901,
+                0.000736912587969572,
+                0.0005767989537570236,
+                0.0004402317388586604,
+                0.00032760723551364157,
+                0.00023760098134880642,
+                0.0001677761671107308
+            ]
+        },
+        "q5.xy.-y90_DragGaussian.wf.Q": {
+            "type": "arbitrary",
+            "samples": [
+                -1.0408418648551482e-06,
+                -0.0004904785048650739,
+                -0.0011663759526447056,
+                -0.002078120509093063,
+                -0.0032790335924283323,
+                -0.0048228707471535594,
+                -0.006758882972260972,
+                -0.009125588875512491,
+                -0.011943672839312618,
+                -0.015208706780432651,
+                -0.01888463956586121,
+                -0.022899147146978098,
+                -0.02714193002790928,
+                -0.031466843671366575,
+                -0.03569834597458222,
+                -0.0396421805470368,
+                -0.043099564337363686,
+                -0.04588352422818064,
+                -0.047835551768024065,
+                -0.048840525009700236,
+                -0.04883794661646994,
+                -0.0478279728492209,
+                -0.045871397889363806,
+                -0.043083595684644496,
+                -0.03962325884781145,
+                -0.03567746289483121,
+                -0.03144500801263999,
+                -0.02712008904716709,
+                -0.022878122700209655,
+                -0.01886508442799811,
+                -0.015191083163316865,
+                -0.01192825196808489,
+                -0.009112467986830275,
+                -0.006748014562059371,
+                -0.004814098393787944,
+                -0.003272129087832158,
+                -0.0020728180866367817,
+                -0.0011624007906213415,
+                -0.0004875681110017393,
+                1.0408418648551482e-06
+            ]
+        },
+        "q5.xy.x180_Square.wf.I": {
+            "type": "constant",
+            "sample": 0.25
+        },
+        "q5.xy.x180_Square.wf.Q": {
+            "type": "constant",
+            "sample": 0.0
+        },
+        "q5.xy.x90_Square.wf.I": {
+            "type": "constant",
+            "sample": 0.125
+        },
+        "q5.xy.x90_Square.wf.Q": {
+            "type": "constant",
+            "sample": 0.0
+        },
+        "q5.xy.-x90_Square.wf.I": {
+            "type": "constant",
+            "sample": -0.125
+        },
+        "q5.xy.-x90_Square.wf.Q": {
+            "type": "constant",
+            "sample": 0.0
+        },
+        "q5.xy.y180_Square.wf.I": {
+            "type": "constant",
+            "sample": -0.0015509083533014347
+        },
+        "q5.xy.y180_Square.wf.Q": {
+            "type": "constant",
+            "sample": 0.24999518932027404
+        },
+        "q5.xy.y90_Square.wf.I": {
+            "type": "constant",
+            "sample": -0.0007754541766507173
+        },
+        "q5.xy.y90_Square.wf.Q": {
+            "type": "constant",
+            "sample": 0.12499759466013702
+        },
+        "q5.xy.-y90_Square.wf.I": {
+            "type": "constant",
+            "sample": 0.0007754541766507173
+        },
+        "q5.xy.-y90_Square.wf.Q": {
+            "type": "constant",
+            "sample": -0.12499759466013702
+        },
+        "q5.xy.saturation.wf.I": {
+            "type": "constant",
+            "sample": 0.25
+        },
+        "q5.xy.saturation.wf.Q": {
+            "type": "constant",
+            "sample": 0.0
+        },
+        "q5.z.const.wf": {
+            "type": "constant",
+            "sample": 0.25
+        },
+        "q5.z.flux_pulse.wf": {
+            "type": "constant",
+            "sample": 0.1
+        },
+        "q5.resonator.readout.wf.I": {
+            "type": "constant",
+            "sample": 0.043
+        },
+        "q5.resonator.readout.wf.Q": {
+            "type": "constant",
+            "sample": 0.0
+        },
+        "q5.resonator.const.wf.I": {
+            "type": "constant",
+            "sample": 0.125
+        },
+        "q5.resonator.const.wf.Q": {
+            "type": "constant",
+            "sample": 0.0
+        },
+        "coupler_q1_q2.const.wf": {
+            "type": "constant",
+            "sample": -0.0394572
+        },
+        "coupler_q1_q2.flux_pulse.wf": {
+            "type": "constant",
+            "sample": 0.1
+        },
+        "coupler_q2_q3.const.wf": {
+            "type": "constant",
+            "sample": -0.0394572
+        },
+        "coupler_q2_q3.flux_pulse.wf": {
+            "type": "constant",
+            "sample": 0.1
+        },
+        "coupler_q3_q4.const.wf": {
+            "type": "constant",
+            "sample": -0.0394572
+        },
+        "coupler_q3_q4.flux_pulse.wf": {
+            "type": "constant",
+            "sample": 0.1
+        },
+        "coupler_q4_q5.const.wf": {
+            "type": "constant",
+            "sample": -0.07
+        },
+        "coupler_q4_q5.flux_pulse.wf": {
+            "type": "constant",
+            "sample": 0.1
+        }
+    },
+    "digital_waveforms": {
+        "ON": {
+            "samples": [
+                [
+                    1,
+                    0
+                ]
+            ]
+        }
+    },
+    "integration_weights": {
+        "q1.resonator.readout.iw1": {
+            "cosine": [
+                [
+                    -0.3406463822918021,
+                    1632
+                ]
+            ],
+            "sine": [
+                [
+                    0.9401914923203184,
+                    1632
+                ]
+            ]
+        },
+        "q1.resonator.readout.iw2": {
+            "cosine": [
+                [
+                    -0.9401914923203184,
+                    1632
+                ]
+            ],
+            "sine": [
+                [
+                    -0.3406463822918021,
+                    1632
+                ]
+            ]
+        },
+        "q1.resonator.readout.iw3": {
+            "cosine": [
+                [
+                    0.9401914923203184,
+                    1632
+                ]
+            ],
+            "sine": [
+                [
+                    0.3406463822918021,
+                    1632
+                ]
+            ]
+        },
+        "q2.resonator.readout.iw1": {
+            "cosine": [
+                [
+                    0.685269895587282,
+                    608
+                ]
+            ],
+            "sine": [
+                [
+                    0.7282892078026391,
+                    608
+                ]
+            ]
+        },
+        "q2.resonator.readout.iw2": {
+            "cosine": [
+                [
+                    -0.7282892078026391,
+                    608
+                ]
+            ],
+            "sine": [
+                [
+                    0.685269895587282,
+                    608
+                ]
+            ]
+        },
+        "q2.resonator.readout.iw3": {
+            "cosine": [
+                [
+                    0.7282892078026391,
+                    608
+                ]
+            ],
+            "sine": [
+                [
+                    -0.685269895587282,
+                    608
+                ]
+            ]
+        },
+        "q3.resonator.readout.iw1": {
+            "cosine": [
+                [
+                    0.548506713330173,
+                    768
+                ]
+            ],
+            "sine": [
+                [
+                    0.8361461507605782,
+                    768
+                ]
+            ]
+        },
+        "q3.resonator.readout.iw2": {
+            "cosine": [
+                [
+                    -0.8361461507605782,
+                    768
+                ]
+            ],
+            "sine": [
+                [
+                    0.548506713330173,
+                    768
+                ]
+            ]
+        },
+        "q3.resonator.readout.iw3": {
+            "cosine": [
+                [
+                    0.8361461507605782,
+                    768
+                ]
+            ],
+            "sine": [
+                [
+                    -0.548506713330173,
+                    768
+                ]
+            ]
+        },
+        "q4.resonator.readout.iw1": {
+            "cosine": [
+                [
+                    -0.8919311580916389,
+                    352
+                ]
+            ],
+            "sine": [
+                [
+                    0.4521712167147616,
+                    352
+                ]
+            ]
+        },
+        "q4.resonator.readout.iw2": {
+            "cosine": [
+                [
+                    -0.4521712167147616,
+                    352
+                ]
+            ],
+            "sine": [
+                [
+                    -0.8919311580916389,
+                    352
+                ]
+            ]
+        },
+        "q4.resonator.readout.iw3": {
+            "cosine": [
+                [
+                    0.4521712167147616,
+                    352
+                ]
+            ],
+            "sine": [
+                [
+                    0.8919311580916389,
+                    352
+                ]
+            ]
+        },
+        "q5.resonator.readout.iw1": {
+            "cosine": [
+                [
+                    0.3215417238835185,
+                    992
+                ]
+            ],
+            "sine": [
+                [
+                    -0.9468954112266122,
+                    992
+                ]
+            ]
+        },
+        "q5.resonator.readout.iw2": {
+            "cosine": [
+                [
+                    0.9468954112266122,
+                    992
+                ]
+            ],
+            "sine": [
+                [
+                    0.3215417238835185,
+                    992
+                ]
+            ]
+        },
+        "q5.resonator.readout.iw3": {
+            "cosine": [
+                [
+                    -0.9468954112266122,
+                    992
+                ]
+            ],
+            "sine": [
+                [
+                    -0.3215417238835185,
+                    992
+                ]
+            ]
+        }
+    },
+    "mixers": {},
+    "oscillators": {},
+    "octaves": {
+        "octave1": {
+            "RF_outputs": {
+                "1": {
+                    "LO_frequency": 6200000000,
+                    "LO_source": "internal",
+                    "gain": 0,
+                    "output_mode": "always_on",
+                    "input_attenuators": "off",
+                    "I_connection": [
+                        "con1",
+                        1,
+                        1
+                    ],
+                    "Q_connection": [
+                        "con1",
+                        1,
+                        2
+                    ]
+                },
+                "2": {
+                    "LO_frequency": 4700000000,
+                    "LO_source": "internal",
+                    "gain": 0,
+                    "output_mode": "always_on",
+                    "input_attenuators": "off",
+                    "I_connection": [
+                        "con1",
+                        1,
+                        3
+                    ],
+                    "Q_connection": [
+                        "con1",
+                        1,
+                        4
+                    ]
+                },
+                "3": {
+                    "LO_frequency": 4700000000,
+                    "LO_source": "internal",
+                    "gain": 0,
+                    "output_mode": "always_on",
+                    "input_attenuators": "off",
+                    "I_connection": [
+                        "con1",
+                        1,
+                        5
+                    ],
+                    "Q_connection": [
+                        "con1",
+                        1,
+                        6
+                    ]
+                },
+                "4": {
+                    "LO_frequency": 4700000000,
+                    "LO_source": "internal",
+                    "gain": 0,
+                    "output_mode": "always_on",
+                    "input_attenuators": "off",
+                    "I_connection": [
+                        "con1",
+                        1,
+                        7
+                    ],
+                    "Q_connection": [
+                        "con1",
+                        1,
+                        8
+                    ]
+                }
+            },
+            "IF_outputs": {
+                "IF_out1": {
+                    "port": [
+                        "con1",
+                        1,
+                        1
+                    ],
+                    "name": "out1"
+                },
+                "IF_out2": {
+                    "port": [
+                        "con1",
+                        1,
+                        2
+                    ],
+                    "name": "out2"
+                }
+            },
+            "RF_inputs": {
+                "1": {
+                    "RF_source": "RF_in",
+                    "LO_frequency": 6200000000,
+                    "LO_source": "internal",
+                    "IF_mode_I": "direct",
+                    "IF_mode_Q": "direct"
+                }
+            },
+            "loopbacks": []
+        },
+        "octave2": {
+            "RF_outputs": {
+                "1": {
+                    "LO_frequency": 4700000000,
+                    "LO_source": "internal",
+                    "gain": 0,
+                    "output_mode": "always_on",
+                    "input_attenuators": "off",
+                    "I_connection": [
+                        "con1",
+                        2,
+                        1
+                    ],
+                    "Q_connection": [
+                        "con1",
+                        2,
+                        2
+                    ]
+                },
+                "2": {
+                    "LO_frequency": 4700000000,
+                    "LO_source": "internal",
+                    "gain": 0,
+                    "output_mode": "always_on",
+                    "input_attenuators": "off",
+                    "I_connection": [
+                        "con1",
+                        2,
+                        3
+                    ],
+                    "Q_connection": [
+                        "con1",
+                        2,
+                        4
+                    ]
+                }
+            },
+            "IF_outputs": {
+                "IF_out1": {
+                    "port": [
+                        "con1",
+                        2,
+                        1
+                    ],
+                    "name": "out1"
+                },
+                "IF_out2": {
+                    "port": [
+                        "con1",
+                        2,
+                        2
+                    ],
+                    "name": "out2"
+                }
+            },
+            "RF_inputs": {},
+            "loopbacks": []
+        },
+        "octave3": {
+            "RF_outputs": {},
+            "IF_outputs": {},
+            "RF_inputs": {},
+            "loopbacks": []
+        }
+    }
+}

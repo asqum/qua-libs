@@ -8,6 +8,9 @@ from quam_libs.macros import qua_declaration, multiplexed_readout, node_save
 import matplotlib.pyplot as plt
 import matplotlib
 
+# Class containing tools to help handling units and conversions.
+from qualang_tools.units import unit
+u = unit(coerce_to_integer=True)
 
 # todo: make sure to install: cirq, xarray, tqdm
 
@@ -21,6 +24,7 @@ qubits = machine.active_qubits
 num_qubits = len(qubits)
 qc = machine.qubits["q4"]
 qt = machine.qubits["q5"]
+readout_qubits = [qubit for qubit in machine.qubits.values() if qubit not in [qc, qt]]
 
 
 ##############################
@@ -39,34 +43,27 @@ def bake_phased_xz(baker: Baking, q, x, z, a):
     baker.frame_rotation_2pi(-(a + z) / 2, element)
 
 
-# single qubit phase corrections in units of 2pi applied after the CZ gate
-qubit1_frame_update = 0.23  # example values, should be taken from QPU parameters
-qubit2_frame_update = 0.12  # example values, should be taken from QPU parameters
+# TODO: single qubit phase corrections in units of 2pi applied after the CZ gate
+qubit1_frame_update = 0 #0.23  # example values, should be taken from QPU parameters
+qubit2_frame_update = 0 #0.12  # example values, should be taken from QPU parameters
 
 
 # defines the CZ gate that realizes the mapping |00> -> |00>, |01> -> |01>, |10> -> |10>, |11> -> -|11>
 def bake_cz(baker: Baking, q1, q2):
-    print("q1,q2: %s,%s" %(q1,q2))
+    # print("q1,q2: %s,%s" %(q1,q2))
     qc_xy_element = qc.xy.name
     qt_xy_element = qt.xy.name
-    # qc_z_element = qc.z.name
     coupler = (qc @ qt).coupler
 
-    z_amp = declare(fixed)
-    coupler_amp = declare(fixed)
-
-    cz_point = 0.01269*.9975 *1.0833333*1.017 #0.009082 #0.00914
-    cz_dur = 64
-    cz_coupler = -0.045366*1.0175*.9999167 # 60ns
-    scale = 0.0448 #0.05051 #0.226 #-0.57
-
+    # qc_z_element = qc.z.name
     # baker.play("cz", qc_z_element)
-    assign(z_amp, Cast.mul_fixed_by_int((cz_point - q1.z.min_offset + scale * cz_coupler), 10))
-    assign(coupler_amp, Cast.mul_fixed_by_int(cz_coupler, 10))
+    
     ########### Pulsed Version
-    wait(24 * u.ns)
-    qc.z.play("flux_pulse", duration=cz_dur//4, amplitude_scale=z_amp)
-    coupler.play("flux_pulse", duration=cz_dur//4, amplitude_scale=coupler_amp)
+    baker.wait(24 * u.ns)
+    baker.play("cz", qc.z.name)
+    baker.play("cz", coupler.name)
+    # qc.z.play("flux_pulse", duration=cz_dur//4, amplitude_scale=z_amp)
+    # coupler.play("flux_pulse", duration=cz_dur//4, amplitude_scale=coupler_amp)
     #############################
 
     baker.align()
@@ -81,12 +78,14 @@ def prep():
 
 
 def meas():
-    threshold1 = 0.  # threshold for state discrimination 0 <-> 1 using the I quadrature
-    threshold2 = 0.  # threshold for state discrimination 0 <-> 1 using the I quadrature
+    threshold1 = qc.resonator.operations["readout"].threshold  # threshold for state discrimination 0 <-> 1 using the I quadrature
+    threshold2 = qt.resonator.operations["readout"].threshold  # threshold for state discrimination 0 <-> 1 using the I quadrature
     I, I_st, Q, Q_st, n, n_st = qua_declaration(num_qubits=len([qc, qt]))
     state1 = declare(bool)
     state2 = declare(bool)
 
+    for other_qubit in readout_qubits:
+        other_qubit.resonator.play("readout")
     multiplexed_readout([qc, qt], I, I_st, Q, Q_st)
 
     assign(state1, I[0] > threshold1)  # assume that all information is in I

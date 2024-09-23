@@ -73,6 +73,7 @@ machine = QuAM.load()
 # Generate the OPX and Octave configurations
 if node.parameters.qubits is None:
     qubits = machine.active_qubits
+    readout_qubits = qubits
 else:
     qubits = [machine.qubits[q] for q in node.parameters.qubits.split(', ')]
 
@@ -116,7 +117,7 @@ with program() as drag_calibration:
         # Bring the active qubits to the minimum frequency point
         if flux_point == "independent":
             machine.apply_all_flux_to_min()
-            qubit.z.to_independent_idle()
+            # qubit.z.to_independent_idle()
         elif flux_point == "joint":
             machine.apply_all_flux_to_joint_idle()
         else:
@@ -132,6 +133,13 @@ with program() as drag_calibration:
                     play(option[0] * amp(1, 0, 0, a), qubit.xy.name)
                     play(option[1] * amp(1, 0, 0, a), qubit.xy.name)
                     align()
+
+                    # align()
+                    # Play the readout on the other resonator to measure in the same condition as when optimizing readout
+                    for other_qubit in readout_qubits:
+                        if other_qubit.resonator != qubit.resonator:
+                            other_qubit.resonator.play("readout")
+
                     qubit.resonator.measure("readout", qua_vars=(I[i], Q[i]))
                     assign(state[i], Cast.to_int(I[i] > qubit.resonator.operations["readout"].threshold))
                     save(state[i], state_stream[i])

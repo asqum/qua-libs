@@ -54,16 +54,17 @@ qmm = machine.connect()
 
 # Get the relevant QuAM components
 qubits = machine.active_qubits
-qubits = [machine.qubits["q4"]]
+readout_qubits = machine.active_qubits
+qubits = [machine.qubits["q5"]]
 
 ##############################
 # Program-specific variables #
 ##############################
 num_of_sequences = 40  # Number of random sequences
-n_avg = 300  # Number of averaging loops for each random sequence
-max_circuit_depth = 600  # Maximum circuit depth
+n_avg = 200  # Number of averaging loops for each random sequence
+max_circuit_depth = 300  # Maximum circuit depth
 delta_clifford = (
-    6  #  Play each sequence with a depth step equals to 'delta_clifford - Must be > 1
+    15  #  Play each sequence with a depth step equals to 'delta_clifford - Must be > 1
 )
 assert (
     max_circuit_depth / delta_clifford
@@ -229,13 +230,22 @@ def get_rb_program(qubit: Transmon):
                         # with strict_timing_():
                             # Play the random sequence of desired depth
                         play_sequence(sequence_list, depth, qubit)
+                        
                         # Align the two elements to measure after playing the circuit.
-                        qubit.resonator.align(qubit.xy.name)
+                        # qubit.resonator.align(qubit.xy.name)
+                        align()
+
                         # # Play through the 2nd resonator to be in the same condition as when the readout was optimized
                         # if qubit.resonator == q1.resonator:
                         #     q2.resonator.play("readout")
                         # else:
                         #     q1.resonator.play("readout")
+
+                        # Play the readout on the other resonator to measure in the same condition as when optimizing readout
+                        for other_qubit in readout_qubits:
+                            if other_qubit.resonator != qubit.resonator:
+                                other_qubit.resonator.play("readout")
+
                         # Make sure you updated the ge_threshold and angle if you want to use state discrimination
                         qubit.resonator.measure("readout", qua_vars=(I, Q))
                         save(I, I_st)

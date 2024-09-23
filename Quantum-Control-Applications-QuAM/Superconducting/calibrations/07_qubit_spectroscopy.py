@@ -60,6 +60,7 @@ qmm = machine.connect()
 
 # Get the relevant QuAM components
 qubits = machine.active_qubits
+qubits = [machine.qubits["q5"]]
 num_qubits = len(qubits)
 
 ###################
@@ -71,10 +72,12 @@ n_avg = 66000  # The number of averages
 # Adjust the pulse duration and amplitude to drive the qubit into a mixed state
 saturation_len = 20 * u.us  # In ns
 saturation_amp = (
-    0.0137  # pre-factor to the value defined in the config - restricted to [-2; 2)
+    0.337  # pre-factor to the value defined in the config - restricted to [-2; 2)
+    # 0.337 # for anharmonicity = gap * 2 
 )
 # Qubit detuning sweep with respect to their resonance frequencies
-dfs = np.arange(-20e6, +20e6, 0.01e6)
+dfs = np.arange(-300e6, +300e6, 1e6)
+# dfs = np.arange(-300e6, +300e6, 1e6) # wide-range to look for anharmonicity 
 
 with program() as multi_qubit_spec:
     # Macro to declare I, Q, n and their respective streams for a given number of qubit (defined in macros.py)
@@ -155,13 +158,14 @@ else:
             plt.subplot(2, num_qubits, i + 1)
             plt.cla()
             plt.plot(
-                (displayed_frequency + dfs) / u.MHz,
+                # (displayed_frequency + dfs) / u.MHz,
+                dfs / u.MHz,
                 np.abs(s),
             )
             plt.grid(True)
             plt.ylabel(r"R=$\sqrt{I^2 + Q^2}$ [V]")
             plt.title(f"{q.name} (f_01: {q.xy.rf_frequency / u.MHz} MHz)")
-            plt.axvline( (displayed_frequency) / u.MHz, color="r", linestyle="--")
+            plt.axvline( (displayed_frequency-q.xy.RF_frequency) / u.MHz, color="r", linestyle="--")
             plt.subplot(2, num_qubits, num_qubits + i + 1)
             plt.cla()
             plt.plot(
