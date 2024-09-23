@@ -215,7 +215,7 @@ class TwoQubitRb:
                     self._sequence_tracker.make_sequence(sequence)
                 job.insert_input_stream("__gates_len_is__", len(sequence))
                 for qe in self._rb_baker.all_elements:
-                    job.insert_input_stream(f"{qe}_is", self._decode_sequence_for_element(qe, sequence))
+                    job.insert_input_stream(f"{self._input_stream_name(qe)}_is", self._decode_sequence_for_element(qe, sequence))
 
                 if callback is not None:
                     callback(sequence)
