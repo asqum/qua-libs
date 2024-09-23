@@ -166,7 +166,7 @@ class TwoQubitRb:
             state_os = declare_stream()
             gates_len_is = declare_input_stream(int, name="__gates_len_is__", size=1)
             gates_is = {
-                qe: declare_input_stream(int, name=f"{qe}_is", size=self._buffer_length)
+                qe: declare_input_stream(int, name=f"{self._input_stream_name(qe)}_is", size=self._buffer_length)
                 for qe in self._rb_baker.all_elements
             }
 
@@ -190,6 +190,9 @@ class TwoQubitRb:
                 state_os.buffer(len(sequence_depths), num_repeats, num_averages).save("state")
                 progress_os.save("progress")
         return prog
+
+    def _input_stream_name(self, element: str):
+        return element.replace('.', '__dot__')
 
     def _decode_sequence_for_element(self, element: str, seq: list):
         seq = [self._rb_baker.decode(i, element) for i in seq]
