@@ -86,9 +86,9 @@ compensation_arr = np.array([[1, 0.177], [0.408, 1]])
 inv_arr = np.linalg.inv(compensation_arr)
 
 # Add qubit pulses
-q1.z.operations["flux_pulse"] = pulses.SquarePulse(length=100, amplitude=0.1)
-q2.z.operations["flux_pulse"] = pulses.SquarePulse(length=100, amplitude=0.1)
-coupler.operations["flux_pulse"] = pulses.SquarePulse(length=100, amplitude=0.1)
+# q1.z.operations["flux_pulse"] = pulses.SquarePulse(length=100, amplitude=0.1)
+# q2.z.operations["flux_pulse"] = pulses.SquarePulse(length=100, amplitude=0.1)
+# coupler.operations["flux_pulse"] = pulses.SquarePulse(length=100, amplitude=0.1)
 
 config = machine.generate_config()
 
@@ -104,23 +104,20 @@ config = machine.generate_config()
 n_avg = 137000
 # The flux pulse durations in clock cycles (4ns) - Must be larger than 4 clock cycles.
 # ts = np.arange(4, 40, 1)
-ts = np.arange(4, 50, 1)
+ts = np.arange(4, 260, 1)
 # ts = [30]
 # The flux bias sweep in V
-dcs = np.linspace(-0.0425, -0.03, 501) # for qc (4_5)
-# dcs = np.linspace(-0.0445, -0.025, 501) # for qc (4_5, n1)
-# dcs = np.linspace(-0.028, -0.01, 501) # for qc (3_4)
-# dcs = np.linspace(-0.025, 0.003, 501) # for qc (3_2) 
-# dcs = np.linspace(0.02, 0.025, 401) # for q4_5
-# dcs = np.linspace(0.018, 0.024, 401) # for q4_5_cn1
-# dcs = np.linspace(-0.12, -0.09, 401) # for q3_4
-# dcs = np.linspace(-0.10, -0.08, 401) # for q3_2
 # dcs = [-0.045]
-cz_point = 0.02275 #q3_2:-0.09529 #q3_4:-0.105 #q4_5:0.02275, 0.02075
-coupler_point = -0.04128*1.0113857 #*1.0178961 #q3_4_off: -0.02257, q4_5_off: -0.03479, -0.03663 
-scale = 0.0448 # q4_5: 0.0448, q3_4: 0.051, q3_2: -0.117 
+dcs = np.linspace(-0.4, 0.4, 501) 
+# dcs = np.linspace(-0.0184, 0, 501) # q4 (dc)
+# dcs = np.linspace(-0.647, -0.569, 501) # q4 (pulse) 
+# dcs = np.linspace(-0.2, -0.18, 501) # for qc (4_5)
 
-simulate = True
+cz_point = -0.08722 #q3_2:-0.09529 #q3_4:-0.105 #q4_5:0.02275, 0.02075
+coupler_point = 0 #q3_4_off: -0.02257, q4_5_off: -0.17835, 
+scale = 0.04958 #0.053 # q4_5: 0.0448, q3_4: 0.051, q3_2: -0.117 
+
+simulate = False
 mode = "pulse" # dc or pulse
 sweep_flux = "qc" # q4 or qc
 pulse_dc_factor = 1.0 #(0.00859 - q1.z.min_offset)/(0.00908 - q1.z.min_offset) * 1.08
@@ -164,19 +161,19 @@ with program() as cz:
                 coupler_dc_point = declare(fixed)
 
                 if sweep_flux == "q4":
-                    assign(z_amp, Cast.mul_fixed_by_int(pulse_dc_factor*((dc - qb.z.min_offset + scale * coupler_point)), 10))
-                    assign(coupler_amp, Cast.mul_fixed_by_int(pulse_dc_factor*(coupler_point), 10))
+                    assign(z_amp, Cast.mul_fixed_by_int(pulse_dc_factor*((dc - qb.z.min_offset + scale * coupler_point)), 5))
+                    assign(coupler_amp, Cast.mul_fixed_by_int(pulse_dc_factor*(coupler_point), 5))
                     assign(q1_dc_point, dc + scale * coupler_point)
                     assign(coupler_dc_point, coupler_point)
                 else:
-                    assign(z_amp, Cast.mul_fixed_by_int(pulse_dc_factor*((cz_point - qb.z.min_offset + scale * dc)), 10))
-                    assign(coupler_amp, Cast.mul_fixed_by_int(pulse_dc_factor*(dc), 10))
+                    assign(z_amp, Cast.mul_fixed_by_int(pulse_dc_factor*((cz_point - qb.z.min_offset + scale * dc)), 5))
+                    assign(coupler_amp, Cast.mul_fixed_by_int(pulse_dc_factor*(dc), 5))
                     assign(q1_dc_point, cz_point + scale * dc)
                     assign(coupler_dc_point, dc)
 
                 if mode == "pulse":
                     ########### Pulsed Version
-                    wait( (24) * u.ns, qb.z.name, coupler.name)
+                    wait( (24) * u.ns, qb.z.name, coupler.name) # another bug 
                     qb.z.play("flux_pulse", duration=t, amplitude_scale=z_amp)
                     coupler.play("flux_pulse", duration=t, amplitude_scale=coupler_amp)
                     # wait(64 * u.ns, qb.z.name)
@@ -264,12 +261,12 @@ else:
         plt.ylabel("Interaction time [ns]")
 
         # feedback from CZ-Pi: 
-        if sweep_flux=="qc":
-            plt.axvline( coupler_point, color="r", linestyle="--", linewidth=0.5)
-        else:
-            plt.axvline( cz_point, color="r", linestyle="--", linewidth=0.5)
-        plt.axhline( 60, color="r", linestyle="--", linewidth=0.5)
-        plt.axhline( 40, color="g", linestyle="--", linewidth=0.5)
+        # if sweep_flux=="qc":
+        #     plt.axvline( coupler_point, color="r", linestyle="--", linewidth=0.5)
+        # else:
+        #     plt.axvline( cz_point, color="r", linestyle="--", linewidth=0.5)
+        # plt.axhline( 60, color="r", linestyle="--", linewidth=0.5)
+        # plt.axhline( 40, color="g", linestyle="--", linewidth=0.5)
 
         plt.subplot(222)
         plt.cla()
@@ -284,12 +281,12 @@ else:
         plt.xlabel("Flux amplitude [V]")
 
         # feedback from CZ-Pi: 
-        if sweep_flux=="qc":
-            plt.axvline( coupler_point, color="r", linestyle="--", linewidth=0.5)
-        else:
-            plt.axvline( cz_point, color="r", linestyle="--", linewidth=0.5)
-        plt.axhline( 60, color="r", linestyle="--", linewidth=0.5)
-        plt.axhline( 40, color="g", linestyle="--", linewidth=0.5)
+        # if sweep_flux=="qc":
+        #     plt.axvline( coupler_point, color="r", linestyle="--", linewidth=0.5)
+        # else:
+        #     plt.axvline( cz_point, color="r", linestyle="--", linewidth=0.5)
+        # plt.axhline( 60, color="r", linestyle="--", linewidth=0.5)
+        # plt.axhline( 40, color="g", linestyle="--", linewidth=0.5)
 
         plt.tight_layout()
         plt.pause(0.3)
