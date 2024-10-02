@@ -215,14 +215,16 @@ class TwoQubitRb:
         for sequence_depth in sequence_depths:
             for repeat in range(num_repeats):
                 sequence = self._gen_rb_sequence(sequence_depth)
-                def has_cz(sequence):
-                    for command in sequence:
-                        for gate in self._sequence_tracker.command_registry.get_command_by_id(command):
-                            if 'CZ' in type(gate).__name__:
-                                return True
-                    return False
-                while has_cz(sequence):
-                    sequence = self._gen_rb_sequence(sequence_depth)
+                # UNCOMMENT FOR 1Q GATES ONLY
+                # def has_cz(sequence):
+                #     for command in sequence:
+                #         for gate in self._sequence_tracker.command_registry.get_command_by_id(command):
+                #             if 'CZ' in type(gate).__name__:
+                #                 return True
+                #     return False
+                # while has_cz(sequence):
+                #     sequence = self._gen_rb_sequence(sequence_depth)
+                # UNCOMMENT FOR 1Q GATES ONLY
                 if self._sequence_tracker is not None:
                     self._sequence_tracker.make_sequence(sequence)
                 job.insert_input_stream("__gates_len_is__", len(sequence))
