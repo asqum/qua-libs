@@ -26,12 +26,12 @@ from quam_libs.trackable_object import tracked_updates
 @dataclass
 class Parameters:
     qubits: Optional[str] = None
-    num_averages: int = 200
+    num_averages: int = 1000
     operation: str = "x180"
     min_amp_factor: float = 0.0001
-    max_amp_factor: float = 2.0
+    max_amp_factor: float = 1.0
     amp_factor_step: float = 0.05
-    max_number_pulses_per_sweep: int = 1
+    max_number_pulses_per_sweep: int = 15
     flux_point_joint_or_independent: Literal['joint', 'independent'] = "independent" #"joint"
     simulate: bool = False
 

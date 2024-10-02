@@ -5,6 +5,7 @@ from quam_libs.experiments.two_qubit_rb import TwoQubitRb
 from quam_libs.components import QuAM
 from quam_libs.macros import qua_declaration, multiplexed_readout, node_save
 
+import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib
 
@@ -109,7 +110,7 @@ rb = TwoQubitRb(
 )
 
 qmm = machine.connect()
-res = rb.run(qmm, circuit_depths=[1, 2, 3, 4, 5], num_circuits_per_depth=5, num_shots_per_circuit=100)
+res = rb.run(qmm, circuit_depths=np.arange(1, 100, 10), num_circuits_per_depth=15, num_shots_per_circuit=100)
 # circuit_depths ~ how many consecutive Clifford gates within one executed circuit
 # (https://qiskit.org/documentation/apidoc/circuit.html)
 # num_circuits_per_depth ~ how many random circuits within one depth
@@ -120,14 +121,11 @@ data = {}
 res.plot_hist()
 plt.show()
 
-res.plot_decay()
-plt.show()
-
-res.plot_fidelity()
+res.plot_with_fidelity()
 plt.show()
 
 A, alpha, B = res.fit_exponential()
-fidelity = res.get_fidelity()
+fidelity = res.get_fidelity(alpha)
 data["amplitude"] = A
 data["decay_rate"] = alpha
 data["mixed_state_probability"] = B
