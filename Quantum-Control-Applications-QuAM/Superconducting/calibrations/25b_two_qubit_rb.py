@@ -111,6 +111,11 @@ rb = TwoQubitRb(
 )
 
 qmm = machine.connect()
+
+# from quam_libs.experiments.two_qubit_rb import TwoQubitRbDebugger
+# rb_debugger = TwoQubitRbDebugger(rb)
+# rb_debugger.run_phased_xz_commands(qmm, num_averages=1000)
+
 res = rb.run(qmm, circuit_depths=np.arange(1, 100, 10), num_circuits_per_depth=15, num_shots_per_circuit=100)
 # circuit_depths ~ how many consecutive Clifford gates within one executed circuit
 # (https://qiskit.org/documentation/apidoc/circuit.html)
