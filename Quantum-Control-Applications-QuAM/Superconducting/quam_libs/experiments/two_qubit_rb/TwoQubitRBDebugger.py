@@ -6,8 +6,8 @@ from qm import Program, QuantumMachinesManager
 from qm.qua import *
 from tqdm import tqdm
 
-from TwoQubitRB import TwoQubitRb
-from verification import SequenceTracker
+from .TwoQubitRB import TwoQubitRb
+from .verification import SequenceTracker
 
 
 class TwoQubitRbDebugger:
