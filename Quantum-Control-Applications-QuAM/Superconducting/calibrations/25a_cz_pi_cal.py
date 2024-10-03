@@ -85,13 +85,15 @@ num_qubits = len(qubits)
 q1_number = machine.active_qubits.index(q1) + 1
 q2_number = machine.active_qubits.index(q2) + 1
 
+readout_qubits = [qubit for qubit in machine.qubits.values() if qubit not in [q1, q2]]
+
 ####################
 # Define variables #
 ####################
 
 # Qubit to flux-tune to reach some distance of Ec with another qubit, Qubit to meet with:
-qubit_to_flux_tune = q2
-qubit_to_meet_with = q1
+qubit_to_flux_tune = q1
+qubit_to_meet_with = q2
 play_cz = True
 
 # qubit to flux-tune is target
@@ -111,22 +113,25 @@ phis = np.arange(0, 3, 1 / points_per_cycle)
 # amps = np.linspace(0.7, 1.3, 25)
 # amps = np.linspace(0.9, 1.1, 25)
 # amps = np.linspace(0.97, 1.03, 25)
-amps = np.linspace(0.999, 1.001, 25)
+amps = np.linspace(0.995, 1.005, 25)
 # amps = np.linspace(-0.04085/-0.04128, -0.0425/-0.04128, 25)
-# amps = np.linspace(-0.040/-0.04128, -0.042/-0.04128, 25)
+# amps = np.linspace(-0.040/-0.04128, -0.042/-0.04128, 25) 
 
-cz_point = 0.02275 # 
+cz_dur = 68 #92
+# q3-q4: 
+# cz_point = -0.10219*.99
+# cz_coupler = -0.13210*1.0025*0.9875*.995 
+# q4-q5: 
+cz_point = -0.08652 
+cz_coupler = -0.20212   
 
-# cz_dur = 40
-# cz_coupler = -0.04613*1.175 *.9*.9775 # 40ns 
-cz_dur = 60
-cz_coupler = -0.04128  #*1.0113857 #*1.0178961*.9995833 #*1.125*.9963*.99925 # 60ns 
-scale = 0.0448 #0.05051 #0.226 #-0.57
-pulse_dc_factor = 1.0 #(0.00859 - q1.z.min_offset)/(0.00908 - q1.z.min_offset) * 1.08
+
+scale = 0.04958 # Ref: 22z_CZ_coupler_flex.py  
+pulse_dc_factor = 1.0 #(0.00859 - qubit_to_flux_tune.z.min_offset)/(0.00908 - qubit_to_flux_tune.z.min_offset) * 1.08
 print("pulse_dc_factor: %s" % pulse_dc_factor)
-print("q4's offset: %s" % q1.z.min_offset)
+print("%s's offset: %s" % (qubit_to_flux_tune.name, qubit_to_flux_tune.z.min_offset))
 
-sweep_flux = "qc" # q4 or qc
+sweep_flux = "qc" # qb or qc
 
 print("updated cz_coupler: %s" %cz_coupler)
 print("cz_coupler tuning from %s to %s" % (cz_coupler*amps[0], cz_coupler*amps[-1]))
@@ -160,39 +165,48 @@ with program() as cz_pi_cal:
 
                     # ramsey first pi/2
                     align()
-                    play("x90", qubit_to_flux_tune.xy.name)
+                    # play("x90", qubit_to_flux_tune.xy.name)
+                    play("x90", qubit_to_meet_with.xy.name)
 
                     align()
                     # Wait some time to ensure that the flux pulse will arrive after the x90 pulse
-                    # wait(20 * u.ns)
+                    wait(100 * u.ns)
 
                     # cz
                     if play_cz:
-                        if sweep_flux == "q4":
-                            assign(z_amp, Cast.mul_fixed_by_int(pulse_dc_factor*((ampp*cz_point - q1.z.min_offset + scale * cz_coupler)), 10))
-                            assign(coupler_amp, Cast.mul_fixed_by_int(pulse_dc_factor*(cz_coupler), 10))
+                        if sweep_flux == "qb":
+                            z_pulse_height = pulse_dc_factor*((ampp*cz_point - qubit_to_flux_tune.z.min_offset + scale * cz_coupler))
+                            assign(z_amp, Cast.mul_fixed_by_int(z_pulse_height, 5))
+                            c_pulse_height = pulse_dc_factor*(cz_coupler)
+                            assign(coupler_amp, Cast.mul_fixed_by_int(c_pulse_height, 5))
                         else:
-                            assign(z_amp, Cast.mul_fixed_by_int(pulse_dc_factor*((cz_point - q1.z.min_offset + scale * ampp*cz_coupler)), 10))
-                            assign(coupler_amp, Cast.mul_fixed_by_int(pulse_dc_factor*(ampp*cz_coupler), 10))
+                            z_pulse_height = pulse_dc_factor*((cz_point - qubit_to_flux_tune.z.min_offset + scale * ampp*cz_coupler))
+                            assign(z_amp, Cast.mul_fixed_by_int(z_pulse_height, 5))
+                            c_pulse_height = pulse_dc_factor*(ampp*cz_coupler)
+                            assign(coupler_amp, Cast.mul_fixed_by_int(c_pulse_height, 5))
                         ########### Pulsed Version
-                        wait(24 * u.ns)
-                        q1.z.play("flux_pulse", duration=cz_dur//4, amplitude_scale=z_amp)
+                        wait(24 * u.ns)  
+                        # wait( (24) * u.ns, qubit_to_flux_tune.z.name, coupler.name) # another bug
+                        qubit_to_flux_tune.z.play("flux_pulse", duration=cz_dur//4, amplitude_scale=z_amp)
                         coupler.play("flux_pulse", duration=cz_dur//4, amplitude_scale=coupler_amp)
                         #############################
 
                         # Wait some time to ensure that the flux pulse will end before the readout pulse
-                        # wait(20 * u.ns)
+                        wait(20 * u.ns)
 
                     # ramsey second pi/2
                     align()
-                    frame_rotation_2pi(phi, qubit_to_flux_tune.xy.name)
-                    play("x90", qubit_to_flux_tune.xy.name)
+                    # frame_rotation_2pi(phi, qubit_to_flux_tune.xy.name)
+                    # play("x90", qubit_to_flux_tune.xy.name)
+                    frame_rotation_2pi(phi, qubit_to_meet_with.xy.name)
+                    play("x90", qubit_to_meet_with.xy.name)
                     align()
 
+                    # wait(20 * u.ns)
+                    # Play the readout on the other resonators to measure in the same condition as when optimizing readout
+                    for other_qubit in readout_qubits:
+                        other_qubit.resonator.play("readout")
                     # Measure the state of the resonators
-                    # wait(4)
-
-                    # todo: fix multiplexed readout
                     multiplexed_readout(qubits, I, I_st, Q, Q_st)
 
                     # Wait for the qubit to decay to the ground state
@@ -263,8 +277,10 @@ else:
             # Fitting for phase
             # I_control_g = I1[:, i, 1]
             # I_control_e = I1[:, i, 0]
-            I_control_g = Q1[:, i, 1]
-            I_control_e = Q1[:, i, 0]
+            # I_control_g = Q1[:, i, 1]
+            # I_control_e = Q1[:, i, 0]
+            I_control_g = I2[:, i, 1]
+            I_control_e = I2[:, i, 0]
             try:
                 fit = Cosine(phis, I_control_g, plot=False)
                 phase_g = fit.out.get('phase')[0]
@@ -313,6 +329,17 @@ else:
     # Close the quantum machines at the end in order to put all flux biases to 0 so that the fridge doesn't heat-up
     qm.close()
     # plt.show()
+
+    print("cz_dur: %s" %cz_dur)
+    z_pulse_height = pulse_dc_factor*((cz_point - qubit_to_flux_tune.z.min_offset + scale * cz_coupler))
+    print("z_pulse_height: %s" %z_pulse_height)
+    c_pulse_height = pulse_dc_factor*(cz_coupler)
+    print("c_pulse_height: %s" %c_pulse_height)
+    if int(input("Update QUAM STATES for cz-pulse: (1/0) ")):
+        qubit_to_flux_tune.z.operations["cz"].length = cz_dur
+        coupler.operations["cz"].length = cz_dur
+        qubit_to_flux_tune.z.operations["cz"].amplitude = z_pulse_height
+        coupler.operations["cz"].amplitude = c_pulse_height
 
     save = True
     if save:
