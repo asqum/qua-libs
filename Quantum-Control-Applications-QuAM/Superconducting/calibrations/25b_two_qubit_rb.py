@@ -74,6 +74,7 @@ def bake_cz(baker: Baking, q1, q2):
 
 
 def prep():
+    machine.apply_all_flux_to_min()
     wait(machine.thermalization_time)
     align()
 
