@@ -7,6 +7,7 @@ from qm.qua import *
 from tqdm import tqdm
 
 from .TwoQubitRB import TwoQubitRb
+from .util import run_in_thread
 from .verification import SequenceTracker
 
 
@@ -35,15 +36,19 @@ class TwoQubitRbDebugger:
         for command in tqdm(commands, desc='Running test-commands', unit='command'):
             sequence = [command]
             self.sequence_tracker.make_sequence(sequence)
-            job.insert_input_stream("__gates_len_is__", len(sequence))
-            for qe in self.rb._rb_baker.all_elements:
-                job.insert_input_stream(f"{qe}_is", self.rb.decode_sequence_for_element(qe, sequence))
+            self._insert_all_input_stream(job, sequence)
 
         job.result_handles.wait_for_all_values()
         state = job.result_handles.get("state").fetch_all()
 
         self.sequence_tracker.print_sequences()
         self._analyze_phased_xz_commands_program(state)
+
+    @run_in_thread
+    def _insert_all_input_stream(self, job, sequence):
+        job.insert_input_stream("__gates_len_is__", len(sequence))
+        for qe in self.rb._rb_baker.all_elements:
+            job.insert_input_stream(f"{qe}_is", self.rb._decode_sequence_for_element(qe, sequence))
 
     def _phased_xz_commands_program(self, commands: List[int], num_averages: int) -> Program:
         with program() as prog:
