@@ -55,16 +55,16 @@ qmm = machine.connect()
 # Get the relevant QuAM components
 qubits = machine.active_qubits
 readout_qubits = machine.active_qubits
-qubits = [machine.qubits["q5"]]
+qubits = [machine.qubits["q2"]]
 
 ##############################
 # Program-specific variables #
 ##############################
 num_of_sequences = 40  # Number of random sequences
-n_avg = 200  # Number of averaging loops for each random sequence
+n_avg = 300  # Number of averaging loops for each random sequence
 max_circuit_depth = 300  # Maximum circuit depth
 delta_clifford = (
-    15  #  Play each sequence with a depth step equals to 'delta_clifford - Must be > 1
+    10  #  Play each sequence with a depth step equals to 'delta_clifford - Must be > 1
 )
 assert (
     max_circuit_depth / delta_clifford
@@ -396,10 +396,12 @@ else:
         # Plots
         fig_analysis = plt.figure()
         plt.errorbar(x, value_avg, yerr=error_avg, marker=".")
-        plt.plot(x, power_law(x, *pars), linestyle="--", linewidth=2)
+        plt.plot(x, power_law(x, *pars), linestyle="--", linewidth=2,
+                 label=f"Gate fidelity: {(1-r_g)*100:.3f}" )
         plt.xlabel("Number of Clifford gates")
         plt.ylabel("Sequence Fidelity")
         plt.title(f"Single qubit RB for {qubit.name}")
+        plt.legend()
 
         plt.show()
         # Close the quantum machines at the end in order to put all flux biases to 0 so that the fridge doesn't heat-up

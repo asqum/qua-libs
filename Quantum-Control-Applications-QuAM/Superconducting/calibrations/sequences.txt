@@ -1,0 +1,480 @@
+Sequence 0:
+	Command IDs: [6, 732, 6, 732]
+	Gates:
+		0: PXZ(1, amp=-0.5, z=0, a=0)
+		1: PXZ(2, amp=0, z=0, a=0)
+		2: PXZ(1, amp=0, z=1.0, a=0)
+		3: PXZ(2, amp=0, z=0, a=0)
+		4: PXZ(1, amp=-0.5, z=0, a=0)
+		5: PXZ(2, amp=0, z=0, a=0)
+		6: PXZ(1, amp=0, z=1.0, a=0)
+		7: PXZ(2, amp=0, z=0, a=0)
+
+Sequence 1:
+	Command IDs: [26, 722, 20, 722]
+	Gates:
+		0: PXZ(1, amp=0.5, z=0.5, a=0)
+		1: PXZ(2, amp=-0.5, z=1, a=0.5)
+		2: PXZ(1, amp=0, z=0, a=0)
+		3: PXZ(2, amp=1.0, z=0, a=0.5)
+		4: PXZ(1, amp=-0.5, z=-0.5, a=0.5)
+		5: PXZ(2, amp=-0.5, z=1, a=0.5)
+		6: PXZ(1, amp=0, z=0, a=0)
+		7: PXZ(2, amp=1.0, z=0, a=0.5)
+
+Sequence 2:
+	Command IDs: [3, 732, 4, 732]
+	Gates:
+		0: PXZ(1, amp=0, z=0, a=0)
+		1: PXZ(2, amp=-0.5, z=-0.5, a=0.5)
+		2: PXZ(1, amp=0, z=1.0, a=0)
+		3: PXZ(2, amp=0, z=0, a=0)
+		4: PXZ(1, amp=0, z=0, a=0)
+		5: PXZ(2, amp=0.5, z=0.5, a=0)
+		6: PXZ(1, amp=0, z=1.0, a=0)
+		7: PXZ(2, amp=0, z=0, a=0)
+
+Sequence 3:
+	Command IDs: [32, 733, 32, 723]
+	Gates:
+		0: PXZ(1, amp=0, z=0.5, a=0)
+		1: PXZ(2, amp=-0.5, z=1, a=0.5)
+		2: PXZ(1, amp=0, z=1.0, a=0)
+		3: PXZ(2, amp=1.0, z=0, a=0)
+		4: PXZ(1, amp=0, z=0.5, a=0)
+		5: PXZ(2, amp=-0.5, z=1, a=0.5)
+		6: PXZ(1, amp=0, z=0, a=0)
+		7: PXZ(2, amp=0, z=1.0, a=0)
+
+Sequence 4:
+	Command IDs: [33, 729, 34, 730]
+	Gates:
+		0: PXZ(1, amp=0, z=0.5, a=0)
+		1: PXZ(2, amp=-0.5, z=-0.5, a=0.5)
+		2: PXZ(1, amp=1.0, z=0, a=0.5)
+		3: PXZ(2, amp=1.0, z=0, a=0)
+		4: PXZ(1, amp=0, z=0.5, a=0)
+		5: PXZ(2, amp=0.5, z=0.5, a=0)
+		6: PXZ(1, amp=1.0, z=0, a=0.5)
+		7: PXZ(2, amp=1.0, z=0, a=0.5)
+
+Sequence 5:
+	Command IDs: [33, 730, 34, 731]
+	Gates:
+		0: PXZ(1, amp=0, z=0.5, a=0)
+		1: PXZ(2, amp=-0.5, z=-0.5, a=0.5)
+		2: PXZ(1, amp=1.0, z=0, a=0.5)
+		3: PXZ(2, amp=1.0, z=0, a=0.5)
+		4: PXZ(1, amp=0, z=0.5, a=0)
+		5: PXZ(2, amp=0.5, z=0.5, a=0)
+		6: PXZ(1, amp=1.0, z=0, a=0.5)
+		7: PXZ(2, amp=0, z=1.0, a=0)
+
+Sequence 6:
+	Command IDs: [13, 726, 13, 734]
+	Gates:
+		0: PXZ(1, amp=-0.5, z=1, a=0.5)
+		1: PXZ(2, amp=-0.5, z=0, a=0)
+		2: PXZ(1, amp=1.0, z=0, a=0)
+		3: PXZ(2, amp=1.0, z=0, a=0.5)
+		4: PXZ(1, amp=-0.5, z=1, a=0.5)
+		5: PXZ(2, amp=-0.5, z=0, a=0)
+		6: PXZ(1, amp=0, z=1.0, a=0)
+		7: PXZ(2, amp=1.0, z=0, a=0.5)
+
+Sequence 7:
+	Command IDs: [9, 730, 10, 731]
+	Gates:
+		0: PXZ(1, amp=-0.5, z=0, a=0)
+		1: PXZ(2, amp=-0.5, z=-0.5, a=0.5)
+		2: PXZ(1, amp=1.0, z=0, a=0.5)
+		3: PXZ(2, amp=1.0, z=0, a=0.5)
+		4: PXZ(1, amp=-0.5, z=0, a=0)
+		5: PXZ(2, amp=0.5, z=0.5, a=0)
+		6: PXZ(1, amp=1.0, z=0, a=0.5)
+		7: PXZ(2, amp=0, z=1.0, a=0)
+
+Sequence 8:
+	Command IDs: [28, 735, 21, 730]
+	Gates:
+		0: PXZ(1, amp=0.5, z=0.5, a=0)
+		1: PXZ(2, amp=0.5, z=0.5, a=0)
+		2: PXZ(1, amp=0, z=1.0, a=0)
+		3: PXZ(2, amp=0, z=1.0, a=0)
+		4: PXZ(1, amp=-0.5, z=-0.5, a=0.5)
+		5: PXZ(2, amp=-0.5, z=-0.5, a=0.5)
+		6: PXZ(1, amp=1.0, z=0, a=0.5)
+		7: PXZ(2, amp=1.0, z=0, a=0.5)
+
+Sequence 9:
+	Command IDs: [7, 733, 7, 732]
+	Gates:
+		0: PXZ(1, amp=-0.5, z=0, a=0)
+		1: PXZ(2, amp=-0.5, z=0, a=0)
+		2: PXZ(1, amp=0, z=1.0, a=0)
+		3: PXZ(2, amp=1.0, z=0, a=0)
+		4: PXZ(1, amp=-0.5, z=0, a=0)
+		5: PXZ(2, amp=-0.5, z=0, a=0)
+		6: PXZ(1, amp=0, z=1.0, a=0)
+		7: PXZ(2, amp=0, z=0, a=0)
+
+Sequence 10:
+	Command IDs: [32, 733, 13, 726, 21, 734]
+	Gates:
+		0: PXZ(1, amp=0, z=0.5, a=0)
+		1: PXZ(2, amp=-0.5, z=1, a=0.5)
+		2: PXZ(1, amp=0, z=1.0, a=0)
+		3: PXZ(2, amp=1.0, z=0, a=0)
+		4: PXZ(1, amp=-0.5, z=1, a=0.5)
+		5: PXZ(2, amp=-0.5, z=0, a=0)
+		6: PXZ(1, amp=1.0, z=0, a=0)
+		7: PXZ(2, amp=1.0, z=0, a=0.5)
+		8: PXZ(1, amp=-0.5, z=-0.5, a=0.5)
+		9: PXZ(2, amp=-0.5, z=-0.5, a=0.5)
+		10: PXZ(1, amp=0, z=1.0, a=0)
+		11: PXZ(2, amp=1.0, z=0, a=0.5)
+
+Sequence 11:
+	Command IDs: [0, 724, 11, 720, 11, 723]
+	Gates:
+		0: PXZ(1, amp=0, z=0, a=0)
+		1: PXZ(2, amp=0, z=0, a=0)
+		2: PXZ(1, amp=1.0, z=0, a=0)
+		3: PXZ(2, amp=0, z=0, a=0)
+		4: PXZ(1, amp=-0.5, z=0, a=0)
+		5: PXZ(2, amp=0, z=0.5, a=0)
+		6: PXZ(1, amp=0, z=0, a=0)
+		7: PXZ(2, amp=0, z=0, a=0)
+		8: PXZ(1, amp=-0.5, z=0, a=0)
+		9: PXZ(2, amp=0, z=0.5, a=0)
+		10: PXZ(1, amp=0, z=0, a=0)
+		11: PXZ(2, amp=0, z=1.0, a=0)
+
+Sequence 12:
+	Command IDs: [32, 735, 3, 725, 35, 728]
+	Gates:
+		0: PXZ(1, amp=0, z=0.5, a=0)
+		1: PXZ(2, amp=-0.5, z=1, a=0.5)
+		2: PXZ(1, amp=0, z=1.0, a=0)
+		3: PXZ(2, amp=0, z=1.0, a=0)
+		4: PXZ(1, amp=0, z=0, a=0)
+		5: PXZ(2, amp=-0.5, z=-0.5, a=0.5)
+		6: PXZ(1, amp=1.0, z=0, a=0)
+		7: PXZ(2, amp=1.0, z=0, a=0)
+		8: PXZ(1, amp=0, z=0.5, a=0)
+		9: PXZ(2, amp=0, z=0.5, a=0)
+		10: PXZ(1, amp=1.0, z=0, a=0.5)
+		11: PXZ(2, amp=0, z=0, a=0)
+
+Sequence 13:
+	Command IDs: [8, 730, 17, 728, 28, 726]
+	Gates:
+		0: PXZ(1, amp=-0.5, z=0, a=0)
+		1: PXZ(2, amp=-0.5, z=1, a=0.5)
+		2: PXZ(1, amp=1.0, z=0, a=0.5)
+		3: PXZ(2, amp=1.0, z=0, a=0.5)
+		4: PXZ(1, amp=-0.5, z=1, a=0.5)
+		5: PXZ(2, amp=0, z=0.5, a=0)
+		6: PXZ(1, amp=1.0, z=0, a=0.5)
+		7: PXZ(2, amp=0, z=0, a=0)
+		8: PXZ(1, amp=0.5, z=0.5, a=0)
+		9: PXZ(2, amp=0.5, z=0.5, a=0)
+		10: PXZ(1, amp=1.0, z=0, a=0)
+		11: PXZ(2, amp=1.0, z=0, a=0.5)
+
+Sequence 14:
+	Command IDs: [12, 724, 5, 726, 17, 722]
+	Gates:
+		0: PXZ(1, amp=-0.5, z=1, a=0.5)
+		1: PXZ(2, amp=0, z=0, a=0)
+		2: PXZ(1, amp=1.0, z=0, a=0)
+		3: PXZ(2, amp=0, z=0, a=0)
+		4: PXZ(1, amp=0, z=0, a=0)
+		5: PXZ(2, amp=0, z=0.5, a=0)
+		6: PXZ(1, amp=1.0, z=0, a=0)
+		7: PXZ(2, amp=1.0, z=0, a=0.5)
+		8: PXZ(1, amp=-0.5, z=1, a=0.5)
+		9: PXZ(2, amp=0, z=0.5, a=0)
+		10: PXZ(1, amp=0, z=0, a=0)
+		11: PXZ(2, amp=1.0, z=0, a=0.5)
+
+Sequence 15:
+	Command IDs: [16, 732, 19, 729, 32, 732]
+	Gates:
+		0: PXZ(1, amp=-0.5, z=1, a=0.5)
+		1: PXZ(2, amp=0.5, z=0.5, a=0)
+		2: PXZ(1, amp=0, z=1.0, a=0)
+		3: PXZ(2, amp=0, z=0, a=0)
+		4: PXZ(1, amp=-0.5, z=-0.5, a=0.5)
+		5: PXZ(2, amp=-0.5, z=0, a=0)
+		6: PXZ(1, amp=1.0, z=0, a=0.5)
+		7: PXZ(2, amp=1.0, z=0, a=0)
+		8: PXZ(1, amp=0, z=0.5, a=0)
+		9: PXZ(2, amp=-0.5, z=1, a=0.5)
+		10: PXZ(1, amp=0, z=1.0, a=0)
+		11: PXZ(2, amp=0, z=0, a=0)
+
+Sequence 16:
+	Command IDs: [8, 735, 31, 725, 21, 722]
+	Gates:
+		0: PXZ(1, amp=-0.5, z=0, a=0)
+		1: PXZ(2, amp=-0.5, z=1, a=0.5)
+		2: PXZ(1, amp=0, z=1.0, a=0)
+		3: PXZ(2, amp=0, z=1.0, a=0)
+		4: PXZ(1, amp=0, z=0.5, a=0)
+		5: PXZ(2, amp=-0.5, z=0, a=0)
+		6: PXZ(1, amp=1.0, z=0, a=0)
+		7: PXZ(2, amp=1.0, z=0, a=0)
+		8: PXZ(1, amp=-0.5, z=-0.5, a=0.5)
+		9: PXZ(2, amp=-0.5, z=-0.5, a=0.5)
+		10: PXZ(1, amp=0, z=0, a=0)
+		11: PXZ(2, amp=1.0, z=0, a=0.5)
+
+Sequence 17:
+	Command IDs: [17, 735, 2, 730, 15, 733]
+	Gates:
+		0: PXZ(1, amp=-0.5, z=1, a=0.5)
+		1: PXZ(2, amp=0, z=0.5, a=0)
+		2: PXZ(1, amp=0, z=1.0, a=0)
+		3: PXZ(2, amp=0, z=1.0, a=0)
+		4: PXZ(1, amp=0, z=0, a=0)
+		5: PXZ(2, amp=-0.5, z=1, a=0.5)
+		6: PXZ(1, amp=1.0, z=0, a=0.5)
+		7: PXZ(2, amp=1.0, z=0, a=0.5)
+		8: PXZ(1, amp=-0.5, z=1, a=0.5)
+		9: PXZ(2, amp=-0.5, z=-0.5, a=0.5)
+		10: PXZ(1, amp=0, z=1.0, a=0)
+		11: PXZ(2, amp=1.0, z=0, a=0)
+
+Sequence 18:
+	Command IDs: [7, 733, 33, 726, 20, 723]
+	Gates:
+		0: PXZ(1, amp=-0.5, z=0, a=0)
+		1: PXZ(2, amp=-0.5, z=0, a=0)
+		2: PXZ(1, amp=0, z=1.0, a=0)
+		3: PXZ(2, amp=1.0, z=0, a=0)
+		4: PXZ(1, amp=0, z=0.5, a=0)
+		5: PXZ(2, amp=-0.5, z=-0.5, a=0.5)
+		6: PXZ(1, amp=1.0, z=0, a=0)
+		7: PXZ(2, amp=1.0, z=0, a=0.5)
+		8: PXZ(1, amp=-0.5, z=-0.5, a=0.5)
+		9: PXZ(2, amp=-0.5, z=1, a=0.5)
+		10: PXZ(1, amp=0, z=0, a=0)
+		11: PXZ(2, amp=0, z=1.0, a=0)
+
+Sequence 19:
+	Command IDs: [28, 726, 16, 733, 34, 723]
+	Gates:
+		0: PXZ(1, amp=0.5, z=0.5, a=0)
+		1: PXZ(2, amp=0.5, z=0.5, a=0)
+		2: PXZ(1, amp=1.0, z=0, a=0)
+		3: PXZ(2, amp=1.0, z=0, a=0.5)
+		4: PXZ(1, amp=-0.5, z=1, a=0.5)
+		5: PXZ(2, amp=0.5, z=0.5, a=0)
+		6: PXZ(1, amp=0, z=1.0, a=0)
+		7: PXZ(2, amp=1.0, z=0, a=0)
+		8: PXZ(1, amp=0, z=0.5, a=0)
+		9: PXZ(2, amp=0.5, z=0.5, a=0)
+		10: PXZ(1, amp=0, z=0, a=0)
+		11: PXZ(2, amp=0, z=1.0, a=0)
+
+Sequence 20:
+	Command IDs: [23, 731, 15, 728, 4, 731, 11, 735]
+	Gates:
+		0: PXZ(1, amp=-0.5, z=-0.5, a=0.5)
+		1: PXZ(2, amp=0, z=0.5, a=0)
+		2: PXZ(1, amp=1.0, z=0, a=0.5)
+		3: PXZ(2, amp=0, z=1.0, a=0)
+		4: PXZ(1, amp=-0.5, z=1, a=0.5)
+		5: PXZ(2, amp=-0.5, z=-0.5, a=0.5)
+		6: PXZ(1, amp=1.0, z=0, a=0.5)
+		7: PXZ(2, amp=0, z=0, a=0)
+		8: PXZ(1, amp=0, z=0, a=0)
+		9: PXZ(2, amp=0.5, z=0.5, a=0)
+		10: PXZ(1, amp=1.0, z=0, a=0.5)
+		11: PXZ(2, amp=0, z=1.0, a=0)
+		12: PXZ(1, amp=-0.5, z=0, a=0)
+		13: PXZ(2, amp=0, z=0.5, a=0)
+		14: PXZ(1, amp=0, z=1.0, a=0)
+		15: PXZ(2, amp=0, z=1.0, a=0)
+
+Sequence 21:
+	Command IDs: [8, 724, 4, 726, 7, 726, 0, 720]
+	Gates:
+		0: PXZ(1, amp=-0.5, z=0, a=0)
+		1: PXZ(2, amp=-0.5, z=1, a=0.5)
+		2: PXZ(1, amp=1.0, z=0, a=0)
+		3: PXZ(2, amp=0, z=0, a=0)
+		4: PXZ(1, amp=0, z=0, a=0)
+		5: PXZ(2, amp=0.5, z=0.5, a=0)
+		6: PXZ(1, amp=1.0, z=0, a=0)
+		7: PXZ(2, amp=1.0, z=0, a=0.5)
+		8: PXZ(1, amp=-0.5, z=0, a=0)
+		9: PXZ(2, amp=-0.5, z=0, a=0)
+		10: PXZ(1, amp=1.0, z=0, a=0)
+		11: PXZ(2, amp=1.0, z=0, a=0.5)
+		12: PXZ(1, amp=0, z=0, a=0)
+		13: PXZ(2, amp=0, z=0, a=0)
+		14: PXZ(1, amp=0, z=0, a=0)
+		15: PXZ(2, amp=0, z=0, a=0)
+
+Sequence 22:
+	Command IDs: [16, 720, 34, 727, 30, 729, 16, 727]
+	Gates:
+		0: PXZ(1, amp=-0.5, z=1, a=0.5)
+		1: PXZ(2, amp=0.5, z=0.5, a=0)
+		2: PXZ(1, amp=0, z=0, a=0)
+		3: PXZ(2, amp=0, z=0, a=0)
+		4: PXZ(1, amp=0, z=0.5, a=0)
+		5: PXZ(2, amp=0.5, z=0.5, a=0)
+		6: PXZ(1, amp=1.0, z=0, a=0)
+		7: PXZ(2, amp=0, z=1.0, a=0)
+		8: PXZ(1, amp=0, z=0.5, a=0)
+		9: PXZ(2, amp=0, z=0, a=0)
+		10: PXZ(1, amp=1.0, z=0, a=0.5)
+		11: PXZ(2, amp=1.0, z=0, a=0)
+		12: PXZ(1, amp=-0.5, z=1, a=0.5)
+		13: PXZ(2, amp=0.5, z=0.5, a=0)
+		14: PXZ(1, amp=1.0, z=0, a=0)
+		15: PXZ(2, amp=0, z=1.0, a=0)
+
+Sequence 23:
+	Command IDs: [30, 727, 11, 727, 25, 720, 4, 735]
+	Gates:
+		0: PXZ(1, amp=0, z=0.5, a=0)
+		1: PXZ(2, amp=0, z=0, a=0)
+		2: PXZ(1, amp=1.0, z=0, a=0)
+		3: PXZ(2, amp=0, z=1.0, a=0)
+		4: PXZ(1, amp=-0.5, z=0, a=0)
+		5: PXZ(2, amp=0, z=0.5, a=0)
+		6: PXZ(1, amp=1.0, z=0, a=0)
+		7: PXZ(2, amp=0, z=1.0, a=0)
+		8: PXZ(1, amp=0.5, z=0.5, a=0)
+		9: PXZ(2, amp=-0.5, z=0, a=0)
+		10: PXZ(1, amp=0, z=0, a=0)
+		11: PXZ(2, amp=0, z=0, a=0)
+		12: PXZ(1, amp=0, z=0, a=0)
+		13: PXZ(2, amp=0.5, z=0.5, a=0)
+		14: PXZ(1, amp=0, z=1.0, a=0)
+		15: PXZ(2, amp=0, z=1.0, a=0)
+
+Sequence 24:
+	Command IDs: [14, 723, 27, 728, 4, 731, 8, 724]
+	Gates:
+		0: PXZ(1, amp=-0.5, z=1, a=0.5)
+		1: PXZ(2, amp=-0.5, z=1, a=0.5)
+		2: PXZ(1, amp=0, z=0, a=0)
+		3: PXZ(2, amp=0, z=1.0, a=0)
+		4: PXZ(1, amp=0.5, z=0.5, a=0)
+		5: PXZ(2, amp=-0.5, z=-0.5, a=0.5)
+		6: PXZ(1, amp=1.0, z=0, a=0.5)
+		7: PXZ(2, amp=0, z=0, a=0)
+		8: PXZ(1, amp=0, z=0, a=0)
+		9: PXZ(2, amp=0.5, z=0.5, a=0)
+		10: PXZ(1, amp=1.0, z=0, a=0.5)
+		11: PXZ(2, amp=0, z=1.0, a=0)
+		12: PXZ(1, amp=-0.5, z=0, a=0)
+		13: PXZ(2, amp=-0.5, z=1, a=0.5)
+		14: PXZ(1, amp=1.0, z=0, a=0)
+		15: PXZ(2, amp=0, z=0, a=0)
+
+Sequence 25:
+	Command IDs: [34, 733, 23, 723, 15, 724, 26, 722]
+	Gates:
+		0: PXZ(1, amp=0, z=0.5, a=0)
+		1: PXZ(2, amp=0.5, z=0.5, a=0)
+		2: PXZ(1, amp=0, z=1.0, a=0)
+		3: PXZ(2, amp=1.0, z=0, a=0)
+		4: PXZ(1, amp=-0.5, z=-0.5, a=0.5)
+		5: PXZ(2, amp=0, z=0.5, a=0)
+		6: PXZ(1, amp=0, z=0, a=0)
+		7: PXZ(2, amp=0, z=1.0, a=0)
+		8: PXZ(1, amp=-0.5, z=1, a=0.5)
+		9: PXZ(2, amp=-0.5, z=-0.5, a=0.5)
+		10: PXZ(1, amp=1.0, z=0, a=0)
+		11: PXZ(2, amp=0, z=0, a=0)
+		12: PXZ(1, amp=0.5, z=0.5, a=0)
+		13: PXZ(2, amp=-0.5, z=1, a=0.5)
+		14: PXZ(1, amp=0, z=0, a=0)
+		15: PXZ(2, amp=1.0, z=0, a=0.5)
+
+Sequence 26:
+	Command IDs: [27, 720, 3, 727, 9, 720, 12, 722]
+	Gates:
+		0: PXZ(1, amp=0.5, z=0.5, a=0)
+		1: PXZ(2, amp=-0.5, z=-0.5, a=0.5)
+		2: PXZ(1, amp=0, z=0, a=0)
+		3: PXZ(2, amp=0, z=0, a=0)
+		4: PXZ(1, amp=0, z=0, a=0)
+		5: PXZ(2, amp=-0.5, z=-0.5, a=0.5)
+		6: PXZ(1, amp=1.0, z=0, a=0)
+		7: PXZ(2, amp=0, z=1.0, a=0)
+		8: PXZ(1, amp=-0.5, z=0, a=0)
+		9: PXZ(2, amp=-0.5, z=-0.5, a=0.5)
+		10: PXZ(1, amp=0, z=0, a=0)
+		11: PXZ(2, amp=0, z=0, a=0)
+		12: PXZ(1, amp=-0.5, z=1, a=0.5)
+		13: PXZ(2, amp=0, z=0, a=0)
+		14: PXZ(1, amp=0, z=0, a=0)
+		15: PXZ(2, amp=1.0, z=0, a=0.5)
+
+Sequence 27:
+	Command IDs: [4, 722, 3, 728, 6, 734, 6, 727]
+	Gates:
+		0: PXZ(1, amp=0, z=0, a=0)
+		1: PXZ(2, amp=0.5, z=0.5, a=0)
+		2: PXZ(1, amp=0, z=0, a=0)
+		3: PXZ(2, amp=1.0, z=0, a=0.5)
+		4: PXZ(1, amp=0, z=0, a=0)
+		5: PXZ(2, amp=-0.5, z=-0.5, a=0.5)
+		6: PXZ(1, amp=1.0, z=0, a=0.5)
+		7: PXZ(2, amp=0, z=0, a=0)
+		8: PXZ(1, amp=-0.5, z=0, a=0)
+		9: PXZ(2, amp=0, z=0, a=0)
+		10: PXZ(1, amp=0, z=1.0, a=0)
+		11: PXZ(2, amp=1.0, z=0, a=0.5)
+		12: PXZ(1, amp=-0.5, z=0, a=0)
+		13: PXZ(2, amp=0, z=0, a=0)
+		14: PXZ(1, amp=1.0, z=0, a=0)
+		15: PXZ(2, amp=0, z=1.0, a=0)
+
+Sequence 28:
+	Command IDs: [12, 720, 12, 732, 18, 723, 24, 735]
+	Gates:
+		0: PXZ(1, amp=-0.5, z=1, a=0.5)
+		1: PXZ(2, amp=0, z=0, a=0)
+		2: PXZ(1, amp=0, z=0, a=0)
+		3: PXZ(2, amp=0, z=0, a=0)
+		4: PXZ(1, amp=-0.5, z=1, a=0.5)
+		5: PXZ(2, amp=0, z=0, a=0)
+		6: PXZ(1, amp=0, z=1.0, a=0)
+		7: PXZ(2, amp=0, z=0, a=0)
+		8: PXZ(1, amp=-0.5, z=-0.5, a=0.5)
+		9: PXZ(2, amp=0, z=0, a=0)
+		10: PXZ(1, amp=0, z=0, a=0)
+		11: PXZ(2, amp=0, z=1.0, a=0)
+		12: PXZ(1, amp=0.5, z=0.5, a=0)
+		13: PXZ(2, amp=0, z=0, a=0)
+		14: PXZ(1, amp=0, z=1.0, a=0)
+		15: PXZ(2, amp=0, z=1.0, a=0)
+
+Sequence 29:
+	Command IDs: [25, 722, 4, 733, 23, 725, 0, 735]
+	Gates:
+		0: PXZ(1, amp=0.5, z=0.5, a=0)
+		1: PXZ(2, amp=-0.5, z=0, a=0)
+		2: PXZ(1, amp=0, z=0, a=0)
+		3: PXZ(2, amp=1.0, z=0, a=0.5)
+		4: PXZ(1, amp=0, z=0, a=0)
+		5: PXZ(2, amp=0.5, z=0.5, a=0)
+		6: PXZ(1, amp=0, z=1.0, a=0)
+		7: PXZ(2, amp=1.0, z=0, a=0)
+		8: PXZ(1, amp=-0.5, z=-0.5, a=0.5)
+		9: PXZ(2, amp=0, z=0.5, a=0)
+		10: PXZ(1, amp=1.0, z=0, a=0)
+		11: PXZ(2, amp=1.0, z=0, a=0)
+		12: PXZ(1, amp=0, z=0, a=0)
+		13: PXZ(2, amp=0, z=0, a=0)
+		14: PXZ(1, amp=0, z=1.0, a=0)
+		15: PXZ(2, amp=0, z=1.0, a=0)
+

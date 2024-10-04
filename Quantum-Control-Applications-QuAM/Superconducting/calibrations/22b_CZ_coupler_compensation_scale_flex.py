@@ -59,8 +59,8 @@ config = machine.generate_config()
 qmm = machine.connect()
 
 # Get the relevant QuAM components
-q1 = machine.qubits["q4"]
-q2 = machine.qubits["q5"]
+q1 = machine.qubits["q3"]
+q2 = machine.qubits["q4"]
 
 try: 
     coupler = (q1 @ q2).coupler
@@ -83,17 +83,19 @@ qb = q1  # The qubit whose flux will be swept
 
 n_avg = 3000
 # The flux pulse durations in clock cycles (4ns) - Must be larger than 4 clock cycles.
-dcs = np.linspace(-0.2, -0.17835, 201)
-# dcs = np.linspace(-0.0325, -0.0225, 201) # q3_4
-# dcs = np.linspace(-0.04848, -0.0382, 501) # q4_5
-# dcs = [-0.046, -0.045]
 # The flux bias sweep in V
-# scales = np.linspace(-0.25, 0.35, 101) # q3_4
-scales = np.linspace(0.045, 0.055, 101) # q4_5
-# scales = np.linspace(-0.2, 0.2, 101)
+dcs = np.linspace(-0.3, 0.3, 501)
+dcs = np.linspace(-0.14196, -0.11, 501) # q3_4
+# dcs = np.linspace(-0.21, -0.17, 501) # q4_5
+# dcs = [-0.046, -0.045]
+
+scales = np.linspace(-0.2, 0.2, 101)
+scales = np.linspace(0, 0.08, 101) # q3_4
+# scales = np.linspace(0.015, 0.085, 101) # q4_5
 # scales = [0.4, 0.41]
-cz_dur = 300 #360
-cz_point = -0.08722 #-0.09529 #0.01269 #0.0088 #0.00914 #0.009082
+
+cz_dur = 92 #360
+cz_point = -0.10219 # when coupler=0 
 
 mode = "pulse" # dc or pulse
 simulate = False
@@ -129,9 +131,8 @@ with program() as cz:
                 z_amp = declare(fixed)
                 coupler_amp = declare(fixed)
 
-                # assign(z_amp, Cast.mul_fixed_by_int(1 * scale * dc, 10))
-                assign(z_amp, Cast.mul_fixed_by_int((cz_point + scale * dc) - qb.z.min_offset, 10))
-                assign(coupler_amp, Cast.mul_fixed_by_int(dc, 10))
+                assign(z_amp, Cast.mul_fixed_by_int((cz_point + scale * dc) - qb.z.min_offset, 5))
+                assign(coupler_amp, Cast.mul_fixed_by_int(dc, 5))
 
                 if mode == "pulse":
                     ########### Pulsed Version
@@ -164,7 +165,7 @@ with program() as cz:
                 # q2.z.set_dc_offset(q2.z.min_offset + 0.01 * -0.033)
 
                 # Wait some time to ensure that the flux pulse will end before the readout pulse
-                wait(600 * u.ns)
+                wait(200 * u.ns)
                 # Align the elements to measure after having waited a time "tau" after the qubit pulses.
                 align()
                 # Measure the state of the resonators
@@ -227,6 +228,10 @@ else:
         # plt.plot(cz_point, wait_time, color="r", marker="*")
         # plt.title(f"{q1.name} - I, f_01={int(q1.f_01 / u.MHz)} MHz")
         plt.ylabel("Compensation Scales")
+
+        # plt.axvline( coupler.operations["cz"].amplitude, color="r", linestyle="--", linewidth=1.5)
+        # plt.axhline( 0.04958, color="r", linestyle="--", linewidth=1.5)
+
         plt.subplot(223)
         plt.cla()
         # plt.pcolor(dcs * coupler.operations["const"].amplitude, scales, Q1)
@@ -236,8 +241,8 @@ else:
         plt.xlabel("Flux amplitude [V]")
         plt.ylabel("Compensation Scales")
 
-        cz_coupler = -0.045366*1.0175*.9999167
-        # plt.axvline( cz_coupler, color="r", linestyle="--", linewidth=1.5)
+        # plt.axvline( coupler.operations["cz"].amplitude, color="r", linestyle="--", linewidth=1.5)
+        # plt.axhline( 0.04958, color="r", linestyle="--", linewidth=1.5)
         
         plt.subplot(222)
         plt.cla()
@@ -253,7 +258,6 @@ else:
         plt.title(f"{q2.name} - Q")
         plt.xlabel("Flux amplitude [V]")
 
-        cz_coupler = -0.045366*1.0175*.9999167
         # plt.axvline( cz_coupler, color="r", linestyle="--", linewidth=1.5)
 
         plt.tight_layout()

@@ -19,6 +19,7 @@ import json
 with open("qua_config_calibration_db.json", "w+") as f:
    json.dump(config, f, indent=4)
 
-for qubit in [machine.qubits[q] for q in ["q4", "q5"]]:
+# for qubit in [machine.qubits[q] for q in ["q4", "q5"]]:
+for qubit in machine.active_qubits: 
     qm = qmm.open_qm(config)
     qubit.calibrate_octave(qm)

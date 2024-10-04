@@ -123,7 +123,7 @@
                         "length": 40,
                         "digital_marker": "ON",
                         "axis_angle": 0,
-                        "amplitude": 0.07968803766053557,
+                        "amplitude": 0.1215242574323167,
                         "sigma": 7,
                         "alpha": -1.6001,
                         "anharmonicity": "#/qubits/q1/anharmonicity",
@@ -133,7 +133,7 @@
                         "length": "#../x180_DragGaussian/length",
                         "digital_marker": "ON",
                         "axis_angle": 0,
-                        "amplitude": 0.09516779999999998,
+                        "amplitude": 0.06,
                         "sigma": "#../x180_DragGaussian/sigma",
                         "alpha": "#../x180_DragGaussian/alpha",
                         "anharmonicity": "#../x180_DragGaussian/anharmonicity",
@@ -142,8 +142,8 @@
                     "-x90_DragGaussian": {
                         "length": "#../x180_DragGaussian/length",
                         "digital_marker": "ON",
-                        "axis_angle": 0,
-                        "amplitude": -0.05,
+                        "axis_angle": 3.141592653589793,
+                        "amplitude": "#../x90_DragGaussian/amplitude",
                         "sigma": "#../x180_DragGaussian/sigma",
                         "alpha": "#../x180_DragGaussian/alpha",
                         "anharmonicity": "#../x180_DragGaussian/anharmonicity",
@@ -152,7 +152,7 @@
                     "y180_DragGaussian": {
                         "length": "#../x180_DragGaussian/length",
                         "digital_marker": "ON",
-                        "axis_angle": 1.577,
+                        "axis_angle": 1.5707963267948966,
                         "amplitude": "#../x180_DragGaussian/amplitude",
                         "sigma": "#../x180_DragGaussian/sigma",
                         "alpha": "#../x180_DragGaussian/alpha",
@@ -162,8 +162,8 @@
                     "y90_DragGaussian": {
                         "length": "#../x180_DragGaussian/length",
                         "digital_marker": "ON",
-                        "axis_angle": 1.577,
-                        "amplitude": 0.05,
+                        "axis_angle": 1.5707963267948966,
+                        "amplitude": "#../x90_DragGaussian/amplitude",
                         "sigma": "#../x180_DragGaussian/sigma",
                         "alpha": "#../x180_DragGaussian/alpha",
                         "anharmonicity": "#../x180_DragGaussian/anharmonicity",
@@ -172,8 +172,8 @@
                     "-y90_DragGaussian": {
                         "length": "#../x180_DragGaussian/length",
                         "digital_marker": "ON",
-                        "axis_angle": 1.577,
-                        "amplitude": -0.05,
+                        "axis_angle": -1.5707963267948966,
+                        "amplitude": "#../x90_DragGaussian/amplitude",
                         "sigma": "#../x180_DragGaussian/sigma",
                         "alpha": "#../x180_DragGaussian/alpha",
                         "anharmonicity": "#../x180_DragGaussian/anharmonicity",
@@ -246,7 +246,7 @@
                 "opx_output_Q": "#/ports/analog_outputs/con1/1/4",
                 "frequency_converter_up": "#/octaves/octave1/RF_outputs/2",
                 "intermediate_frequency": "#./inferred_intermediate_frequency",
-                "RF_frequency": 5079093629.99631
+                "RF_frequency": 5078946731.626952
             },
             "z": {
                 "operations": {
@@ -299,7 +299,7 @@
                 "RF_frequency": 5914243468
             },
             "anharmonicity": 201800000,
-            "T1": 4224,
+            "T1": 5048,
             "T2ramsey": 10256,
             "T2echo": -6757,
             "thermalization_time_factor": 10
@@ -312,7 +312,7 @@
                         "length": 40,
                         "digital_marker": "ON",
                         "axis_angle": 0,
-                        "amplitude": 0.05297659048970725,
+                        "amplitude": 0.05694983477643528,
                         "sigma": 7,
                         "alpha": -0.7501,
                         "anharmonicity": "#/qubits/q2/anharmonicity",
@@ -331,7 +331,7 @@
                     "-x90_DragGaussian": {
                         "length": "#../x180_DragGaussian/length",
                         "digital_marker": "ON",
-                        "axis_angle": 3.14159,
+                        "axis_angle": 3.141592653589793,
                         "amplitude": "#../x90_DragGaussian/amplitude",
                         "sigma": "#../x180_DragGaussian/sigma",
                         "alpha": "#../x180_DragGaussian/alpha",
@@ -341,7 +341,7 @@
                     "y180_DragGaussian": {
                         "length": "#../x180_DragGaussian/length",
                         "digital_marker": "ON",
-                        "axis_angle": 1.577,
+                        "axis_angle": 1.5707963267948966,
                         "amplitude": "#../x180_DragGaussian/amplitude",
                         "sigma": "#../x180_DragGaussian/sigma",
                         "alpha": "#../x180_DragGaussian/alpha",
@@ -351,7 +351,7 @@
                     "y90_DragGaussian": {
                         "length": "#../x180_DragGaussian/length",
                         "digital_marker": "ON",
-                        "axis_angle": 1.577,
+                        "axis_angle": 1.5707963267948966,
                         "amplitude": "#../x90_DragGaussian/amplitude",
                         "sigma": "#../x180_DragGaussian/sigma",
                         "alpha": "#../x180_DragGaussian/alpha",
@@ -361,7 +361,7 @@
                     "-y90_DragGaussian": {
                         "length": "#../x180_DragGaussian/length",
                         "digital_marker": "ON",
-                        "axis_angle": -1.577,
+                        "axis_angle": 4.71238898038469,
                         "amplitude": "#../x90_DragGaussian/amplitude",
                         "sigma": "#../x180_DragGaussian/sigma",
                         "alpha": "#../x180_DragGaussian/alpha",
@@ -435,7 +435,7 @@
                 "opx_output_Q": "#/ports/analog_outputs/con1/1/6",
                 "frequency_converter_up": "#/octaves/octave1/RF_outputs/3",
                 "intermediate_frequency": "#./inferred_intermediate_frequency",
-                "RF_frequency": 4432078656.769043
+                "RF_frequency": 4432293237.329991
             },
             "z": {
                 "operations": {
@@ -490,7 +490,7 @@
                 "RF_frequency": 6014269234
             },
             "anharmonicity": 214800000,
-            "T1": 17480,
+            "T1": 16312,
             "T2ramsey": 5536,
             "T2echo": 7772,
             "thermalization_time_factor": 10
@@ -503,7 +503,7 @@
                         "length": 40,
                         "digital_marker": "ON",
                         "axis_angle": 0,
-                        "amplitude": 0.05171682318240901,
+                        "amplitude": 0.04783806144372832,
                         "sigma": 7,
                         "alpha": -0.7001000000000001,
                         "anharmonicity": "#/qubits/q3/anharmonicity",
@@ -522,7 +522,7 @@
                     "-x90_DragGaussian": {
                         "length": "#../x180_DragGaussian/length",
                         "digital_marker": "ON",
-                        "axis_angle": 3.14159,
+                        "axis_angle": 3.141592653589793,
                         "amplitude": "#../x90_DragGaussian/amplitude",
                         "sigma": "#../x180_DragGaussian/sigma",
                         "alpha": "#../x180_DragGaussian/alpha",
@@ -532,7 +532,7 @@
                     "y180_DragGaussian": {
                         "length": "#../x180_DragGaussian/length",
                         "digital_marker": "ON",
-                        "axis_angle": 1.5707,
+                        "axis_angle": 1.5707963267948966,
                         "amplitude": "#../x180_DragGaussian/amplitude",
                         "sigma": "#../x180_DragGaussian/sigma",
                         "alpha": "#../x180_DragGaussian/alpha",
@@ -542,7 +542,7 @@
                     "y90_DragGaussian": {
                         "length": "#../x180_DragGaussian/length",
                         "digital_marker": "ON",
-                        "axis_angle": 1.577,
+                        "axis_angle": 1.5707963267948966,
                         "amplitude": "#../x90_DragGaussian/amplitude",
                         "sigma": "#../x180_DragGaussian/sigma",
                         "alpha": "#../x180_DragGaussian/alpha",
@@ -552,7 +552,7 @@
                     "-y90_DragGaussian": {
                         "length": "#../x180_DragGaussian/length",
                         "digital_marker": "ON",
-                        "axis_angle": -1.5707,
+                        "axis_angle": 4.71238898038469,
                         "amplitude": "#../x90_DragGaussian/amplitude",
                         "sigma": "#../x180_DragGaussian/sigma",
                         "alpha": "#../x180_DragGaussian/alpha",
@@ -626,7 +626,7 @@
                 "opx_output_Q": "#/ports/analog_outputs/con1/1/8",
                 "frequency_converter_up": "#/octaves/octave1/RF_outputs/4",
                 "intermediate_frequency": "#./inferred_intermediate_frequency",
-                "RF_frequency": 4463708489.305529
+                "RF_frequency": 4463703002.501385
             },
             "z": {
                 "operations": {
@@ -686,7 +686,7 @@
                 "RF_frequency": 5857408866
             },
             "anharmonicity": 211800000,
-            "T1": 16664,
+            "T1": 12640,
             "T2ramsey": 3589,
             "T2echo": 3465,
             "thermalization_time_factor": 10
@@ -699,7 +699,7 @@
                         "length": 40,
                         "digital_marker": "ON",
                         "axis_angle": 0,
-                        "amplitude": 0.06678428377535377,
+                        "amplitude": 0.06678428377535375,
                         "sigma": 7,
                         "alpha": -0.5501,
                         "anharmonicity": "#/qubits/q4/anharmonicity",
@@ -709,7 +709,7 @@
                         "length": "#../x180_DragGaussian/length",
                         "digital_marker": "ON",
                         "axis_angle": 0,
-                        "amplitude": 0.0329,
+                        "amplitude": 0.03335,
                         "sigma": "#../x180_DragGaussian/sigma",
                         "alpha": "#../x180_DragGaussian/alpha",
                         "anharmonicity": "#../x180_DragGaussian/anharmonicity",
@@ -718,7 +718,7 @@
                     "-x90_DragGaussian": {
                         "length": "#../x180_DragGaussian/length",
                         "digital_marker": "ON",
-                        "axis_angle": 3.14159,
+                        "axis_angle": 3.141592653589793,
                         "amplitude": "#../x90_DragGaussian/amplitude",
                         "sigma": "#../x180_DragGaussian/sigma",
                         "alpha": "#../x180_DragGaussian/alpha",
@@ -728,7 +728,7 @@
                     "y180_DragGaussian": {
                         "length": "#../x180_DragGaussian/length",
                         "digital_marker": "ON",
-                        "axis_angle": 1.5707,
+                        "axis_angle": 1.5707963267948966,
                         "amplitude": "#../x180_DragGaussian/amplitude",
                         "sigma": "#../x180_DragGaussian/sigma",
                         "alpha": "#../x180_DragGaussian/alpha",
@@ -738,7 +738,7 @@
                     "y90_DragGaussian": {
                         "length": "#../x180_DragGaussian/length",
                         "digital_marker": "ON",
-                        "axis_angle": 1.5707,
+                        "axis_angle": 1.5707963267948966,
                         "amplitude": "#../x90_DragGaussian/amplitude",
                         "sigma": "#../x180_DragGaussian/sigma",
                         "alpha": "#../x180_DragGaussian/alpha",
@@ -822,7 +822,7 @@
                 "opx_output_Q": "#/ports/analog_outputs/con1/2/2",
                 "frequency_converter_up": "#/octaves/octave2/RF_outputs/1",
                 "intermediate_frequency": "#./inferred_intermediate_frequency",
-                "RF_frequency": 4413822812.007374
+                "RF_frequency": 4413776820.347167
             },
             "z": {
                 "operations": {
@@ -837,8 +837,8 @@
                         "__class__": "quam.components.pulses.SquarePulse"
                     },
                     "cz": {
-                        "length": 92,
-                        "amplitude": -0.1370735292,
+                        "length": 52,
+                        "amplitude": -0.13663870782999998,
                         "__class__": "quam.components.pulses.SquarePulse"
                     }
                 },
@@ -882,7 +882,7 @@
                 "RF_frequency": 6037730991
             },
             "anharmonicity": 213000000,
-            "T1": 11492,
+            "T1": 15772,
             "T2ramsey": 2317,
             "T2echo": 1811,
             "thermalization_time_factor": 10
@@ -895,7 +895,7 @@
                         "length": 40,
                         "digital_marker": "ON",
                         "axis_angle": 0,
-                        "amplitude": 0.074,
+                        "amplitude": 0.07399999999999998,
                         "sigma": 7,
                         "alpha": -0.7301,
                         "anharmonicity": "#/qubits/q5/anharmonicity",
@@ -1018,7 +1018,7 @@
                 "opx_output_Q": "#/ports/analog_outputs/con1/2/4",
                 "frequency_converter_up": "#/octaves/octave2/RF_outputs/2",
                 "intermediate_frequency": "#./inferred_intermediate_frequency",
-                "RF_frequency": 4361746971.375998
+                "RF_frequency": 4361764845.17266
             },
             "z": {
                 "operations": {
@@ -1073,7 +1073,7 @@
                 "RF_frequency": 5943264487
             },
             "anharmonicity": 214400000,
-            "T1": 15640,
+            "T1": 19020,
             "T2ramsey": 4374,
             "T2echo": 2329,
             "thermalization_time_factor": 10
@@ -1165,8 +1165,8 @@
                         "__class__": "quam.components.pulses.SquarePulse"
                     },
                     "cz": {
-                        "length": 360,
-                        "amplitude": -0.19874,
+                        "length": 52,
+                        "amplitude": -0.2040885,
                         "__class__": "quam.components.pulses.SquarePulse"
                     }
                 },

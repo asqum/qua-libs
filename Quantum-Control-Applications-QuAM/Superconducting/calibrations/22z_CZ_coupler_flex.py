@@ -62,6 +62,7 @@ qmm = machine.connect()
 q1 = machine.qubits["q4"]
 q2 = machine.qubits["q5"]
 qn1 = machine.qubits["q3"]
+readout_qubits = [qubit for qubit in machine.qubits.values() if qubit not in [q1, q2]]
 
 try: 
     coupler = (q1 @ q2).coupler
@@ -70,8 +71,8 @@ except:
 
 qb = q1  # The qubit whose flux will be swept
 
-print("q1: %s" %q1.xy.RF_frequency)
-print("q2: %s" %q2.xy.RF_frequency)
+print("%s: %s" % (q1.name, q1.xy.RF_frequency))
+print("%s: %s" % (q2.name, q2.xy.RF_frequency))
 
 # neighbour coupling off:
 coupler_n1 = (qn1 @ q1).coupler
@@ -101,28 +102,37 @@ config = machine.generate_config()
 # The QUA program #
 ###################
 
-n_avg = 137000
-# The flux pulse durations in clock cycles (4ns) - Must be larger than 4 clock cycles.
-# ts = np.arange(4, 40, 1)
-ts = np.arange(4, 260, 1)
-# ts = [30]
-# The flux bias sweep in V
-# dcs = [-0.045]
-dcs = np.linspace(-0.4, 0.4, 501) 
-# dcs = np.linspace(-0.0184, 0, 501) # q4 (dc)
-# dcs = np.linspace(-0.647, -0.569, 501) # q4 (pulse) 
-# dcs = np.linspace(-0.2, -0.18, 501) # for qc (4_5)
-
-cz_point = -0.08722 #q3_2:-0.09529 #q3_4:-0.105 #q4_5:0.02275, 0.02075
-coupler_point = 0 #q3_4_off: -0.02257, q4_5_off: -0.17835, 
-scale = 0.04958 #0.053 # q4_5: 0.0448, q3_4: 0.051, q3_2: -0.117 
-
 simulate = False
 mode = "pulse" # dc or pulse
-sweep_flux = "qc" # q4 or qc
+sweep_flux = "qc" # qb or qc or others
+
+n_avg = 137000
+# The flux pulse durations in clock cycles (4ns) - Must be larger than 4 clock cycles.
+ts = np.arange(4, 40, 1)
+# ts = np.arange(4, 160, 1)
+
+# The flux bias sweep in V
+if sweep_flux == "qb": 
+    dcs = np.linspace(-0.3, 0.3, 501) 
+    # dcs = np.linspace(-0.0184, 0, 501) # qb (4_5) (dc)
+    dcs = np.linspace(-0.095, -0.080, 501) # qb (4_5) (pulse) 
+    # dcs = np.linspace(-0.12, -0.08, 501) # qb (3_4) (pulse) 
+elif sweep_flux == "qc": 
+    dcs = np.linspace(-0.4, 0.4, 501) 
+    dcs = np.linspace(-0.21, -0.195, 501) # qc (4_5) (pulse) 
+    # dcs = np.linspace(-0.147, -0.0915, 501) # qc (3_4) (pulse) 
+else: 
+    ts = [30]
+    dcs = [-0.045]
+
+# Guess points: 
+cz_point = -0.08652 #q3_2:-0.09529 #q3_4:-0.10219 #q4_5:-0.08722
+coupler_point = -0.19874 #q3_4_off: -0.11173, -0.13210 (op) #q4_5_off: -0.17835, -0.19874 (op)
+scale = 0.04958 # q4_5: 0.04958, q3_4: 0.0389, q3_2: -0.117 
+
 pulse_dc_factor = 1.0 #(0.00859 - q1.z.min_offset)/(0.00908 - q1.z.min_offset) * 1.08
 print("pulse_dc_factor: %s" % pulse_dc_factor)
-print("q4's offset: %s" % q1.z.min_offset)
+print("qb's offset: %s" % qb.z.min_offset)
 
 
 with program() as cz:
@@ -160,7 +170,7 @@ with program() as cz:
                 q1_dc_point = declare(fixed)
                 coupler_dc_point = declare(fixed)
 
-                if sweep_flux == "q4":
+                if sweep_flux == "qb":
                     assign(z_amp, Cast.mul_fixed_by_int(pulse_dc_factor*((dc - qb.z.min_offset + scale * coupler_point)), 5))
                     assign(coupler_amp, Cast.mul_fixed_by_int(pulse_dc_factor*(coupler_point), 5))
                     assign(q1_dc_point, dc + scale * coupler_point)
@@ -195,6 +205,9 @@ with program() as cz:
                 wait(600 * u.ns)
                 # Align the elements to measure after having waited a time "tau" after the qubit pulses.
                 align()
+                # Play the readout on the other resonators to measure in the same condition as when optimizing readout
+                for other_qubit in readout_qubits:
+                    other_qubit.resonator.play("readout")
                 # Measure the state of the resonators
                 multiplexed_readout([q1, q2], I, I_st, Q, Q_st)
                 # Wait for the qubits to decay to the ground state
@@ -252,6 +265,16 @@ else:
         # plt.plot(cz_point, wait_time, color="r", marker="*")
         # plt.title(f"{q1.name} - I, f_01={int(q1.f_01 / u.MHz)} MHz")
         plt.ylabel("Interaction time [ns]")
+        
+        # feedback from CZ-Pi: 
+        if sweep_flux=="qc":
+            plt.axvline( coupler.operations["cz"].amplitude, color="r", linestyle="--", linewidth=1.5)
+        else:
+            plt.axvline( q1.z.operations["cz"].amplitude + q1.z.min_offset - scale*coupler.operations["cz"].amplitude, color="r", linestyle="--", linewidth=1.5)
+        plt.axhline( q1.z.operations["cz"].length, color="r", linestyle="--", linewidth=1.5)
+        # plt.axhline( 60, color="g", linestyle="--", linewidth=0.57)
+        # plt.axhline( 40, color="y", linestyle="--", linewidth=0.57)
+        
         plt.subplot(223)
         plt.cla()
         plt.pcolor(dcs, 4 * ts, Q1)
@@ -259,14 +282,6 @@ else:
         plt.title(f"{q1.name} - Q")
         plt.xlabel("Flux amplitude [V]")
         plt.ylabel("Interaction time [ns]")
-
-        # feedback from CZ-Pi: 
-        # if sweep_flux=="qc":
-        #     plt.axvline( coupler_point, color="r", linestyle="--", linewidth=0.5)
-        # else:
-        #     plt.axvline( cz_point, color="r", linestyle="--", linewidth=0.5)
-        # plt.axhline( 60, color="r", linestyle="--", linewidth=0.5)
-        # plt.axhline( 40, color="g", linestyle="--", linewidth=0.5)
 
         plt.subplot(222)
         plt.cla()

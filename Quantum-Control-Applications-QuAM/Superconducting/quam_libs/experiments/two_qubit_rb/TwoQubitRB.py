@@ -187,7 +187,7 @@ class TwoQubitRb:
                         self._prep_func()
                         self._rb_baker.run(gates_is, length)
                         out1, out2 = self._measure_func()
-                        assign(state, (Cast.to_int(out2) << 1) + Cast.to_int(out1))
+                        assign(state, (Cast.to_int(out2) << 1) + Cast.to_int(out1)) # |out2,out1> = |qt,qc>  
                         save(state, state_os)
 
             with stream_processing():
@@ -215,7 +215,8 @@ class TwoQubitRb:
         for sequence_depth in sequence_depths:
             for repeat in range(num_repeats):
                 sequence = self._gen_rb_sequence(sequence_depth)
-                # # UNCOMMENT FOR 1Q GATES ONLY
+                # UNCOMMENT FOR 1Q GATES ONLY
+                # print("filtering 2q gate:  ") 
                 # def has_cz(sequence):
                 #     for command in sequence:
                 #         for gate in self._sequence_tracker.command_registry.get_command_by_id(command):
@@ -224,7 +225,7 @@ class TwoQubitRb:
                 #     return False
                 # while has_cz(sequence):
                 #     sequence = self._gen_rb_sequence(sequence_depth)
-                # # UNCOMMENT FOR 1Q GATES ONLY
+                # UNCOMMENT FOR 1Q GATES ONLY
                 if self._sequence_tracker is not None:
                     self._sequence_tracker.make_sequence(sequence)
                 job.insert_input_stream("__gates_len_is__", len(sequence))

@@ -61,7 +61,7 @@ operation = "x180"  # The qubit operation to play
 n_avg = 6000  # The number of averages
 
 # Pulse amplitude sweep (as a pre-factor of the qubit pulse amplitude) - must be within [-2; 2)
-amps = np.arange(0.1, 1.9, 0.025)
+amps = np.arange(0.15, 1.75, 0.025)
 # Number of applied Rabi pulses sweep
 N_pi = 40  # Maximum number of qubit pulses
 N_pi_vec = np.linspace(1, N_pi, N_pi).astype("int")[::2]
