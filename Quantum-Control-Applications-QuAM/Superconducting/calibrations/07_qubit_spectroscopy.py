@@ -60,7 +60,7 @@ qmm = machine.connect()
 
 # Get the relevant QuAM components
 qubits = machine.active_qubits
-qubits = [machine.qubits["q5"]]
+qubits = [machine.qubits["q1"]]
 num_qubits = len(qubits)
 
 ###################
@@ -72,11 +72,11 @@ n_avg = 66000  # The number of averages
 # Adjust the pulse duration and amplitude to drive the qubit into a mixed state
 saturation_len = 20 * u.us  # In ns
 saturation_amp = (
-    0.337  # pre-factor to the value defined in the config - restricted to [-2; 2)
+    0.058  # pre-factor to the value defined in the config - restricted to [-2; 2)
     # 0.337 # for anharmonicity = gap * 2 
 )
 # Qubit detuning sweep with respect to their resonance frequencies
-dfs = np.arange(-300e6, +300e6, 1e6)
+dfs = np.arange(-140e6, +140e6, 0.1e6)
 # dfs = np.arange(-300e6, +300e6, 1e6) # wide-range to look for anharmonicity 
 
 with program() as multi_qubit_spec:
@@ -165,7 +165,8 @@ else:
             plt.grid(True)
             plt.ylabel(r"R=$\sqrt{I^2 + Q^2}$ [V]")
             plt.title(f"{q.name} (f_01: {q.xy.rf_frequency / u.MHz} MHz)")
-            plt.axvline( (displayed_frequency-q.xy.RF_frequency) / u.MHz, color="r", linestyle="--")
+            plt.axvline( (0) / u.MHz, color="r", linestyle="--")
+            plt.axvline( (-q.anharmonicity/2) / u.MHz, color="g", linestyle="--")
             plt.subplot(2, num_qubits, num_qubits + i + 1)
             plt.cla()
             plt.plot(
@@ -216,7 +217,7 @@ else:
                 "fit_successful": True,
             }
 
-            print("fitted %s's RF frequency: %s" %(q.name, int(res["f"][0] * u.MHz)))
+            print("***fitted %s.f01: %s***" %(q.name, int(res["f"][0] * u.MHz)))
 
             # plt.tight_layout()
             data["fit_figure"] = fig_analysis
@@ -230,7 +231,12 @@ else:
     # update QUAM:
     for q in qubits:
         if int(input("Update QUAM STATES for %s: (1/0) " %q.name)):
-            q.xy.RF_frequency = float(input("%s: " %q.name))
+            print("Before: %s.f01(Ec): %s(%s)" % (q.name, q.xy.RF_frequency, q.anharmonicity))
+            peak_1 = float(input("Enter 1st peak for %s (MHz): " %q.name)) * u.MHz
+            peak_2 = float(input("Enter 2nd peak for %s (MHz): " %q.name)) * u.MHz
+            q.xy.RF_frequency = q.xy.LO_frequency + q.xy.intermediate_frequency + peak_1
+            q.anharmonicity = abs((peak_1 - peak_2) * 2)
+            print("After: %s.f01(Ec): %s(%s)" % (q.name, q.xy.RF_frequency, q.anharmonicity))
 
     # additional files
     # Save data from the node

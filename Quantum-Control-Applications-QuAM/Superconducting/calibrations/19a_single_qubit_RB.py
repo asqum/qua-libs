@@ -62,7 +62,7 @@ qubits = [machine.qubits["q2"]]
 ##############################
 num_of_sequences = 40  # Number of random sequences
 n_avg = 300  # Number of averaging loops for each random sequence
-max_circuit_depth = 300  # Maximum circuit depth
+max_circuit_depth = 700  # Maximum circuit depth
 delta_clifford = (
     10  #  Play each sequence with a depth step equals to 'delta_clifford - Must be > 1
 )

@@ -64,7 +64,8 @@ num_resonators = len(resonators)
 # UPDATE QUAM STATE #
 #####################
 # (sub)-component(s) to update:
-amp_list = [0.0180, 0.0657, 0.0662, 0.0587, 0.0425]
+amp_list = [0.0259, 0.090, 0.03, 0.09, 0.0244]
+# amp_list = [0.0259, 0.09, 0.0594, 0.09, 0.0244]
 from sys import exit
 from os.path import basename
 if int(input("update state.json (1/0): ")): 
@@ -86,7 +87,7 @@ n_avg = 3000  # The number of averages
 #     rr.operations["readout"].amplitude = 0.01
 
 # The readout amplitude sweep (as a pre-factor of the readout amplitude) - must be within [-2; 2)
-amps = np.arange(0.05, 1.99, 0.02)
+amps = np.arange(0.01, 1.99, 0.02)
 # The frequency sweep around the resonator resonance frequencies f_opt
 dfs = np.arange(-6e6, +6e6, 0.25e6)
 

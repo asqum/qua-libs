@@ -57,7 +57,7 @@ n_avg = 2000
 
 # The wait time sweep (in clock cycles = 4ns) - must be larger than 4 clock cycles
 # Linear sweep
-t_delay = np.arange(4, 10000, 40)
+t_delay = np.arange(4, 20000, 40)
 # Log sweep
 # t_delay = np.logspace(np.log10(4), np.log10(12 * u.us), 29)
 

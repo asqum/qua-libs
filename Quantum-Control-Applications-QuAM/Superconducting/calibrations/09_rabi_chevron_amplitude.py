@@ -47,6 +47,9 @@ machine = QuAM.load()
 
 # Get the relevant QuAM components
 qubits = machine.active_qubits
+# selected_qubits = ["q1", "q5", "q3" ,"q2","q4"]
+selected_qubits = ["q1","q3" ,"q5"] 
+selected_qubits = ["q2","q4"]
 num_qubits = len(qubits)
 
 
@@ -55,8 +58,9 @@ num_qubits = len(qubits)
 #####################
 # (sub)-component(s) to update:
 operation = "x180"  # The qubit operation to play
-amp_list = [0.1281, 0.0426, 0.0473, 0.0618, 0.0715]
-df_list = [14.8, 0, 9.1, 0, 0]
+amp_list = [q.xy.operations[operation].amplitude for q in qubits]
+# amp_list = [0.2, 0.0708, 0.282, 0.0618, 0.0964]
+df_list = [0, 0, 0, -18.9, 0]
 from sys import exit
 from os.path import basename
 if int(input("UPDATE STATE (1/0): ")):
@@ -108,7 +112,8 @@ with program() as rabi_chevron:
             with for_(*from_array(a, amps)):
                 # Play the qubit drives
                 for qubit in qubits:
-                    qubit.xy.play(operation, amplitude_scale=a)
+                    if qubit.name in selected_qubits:
+                        qubit.xy.play(operation, amplitude_scale=a)
                 # Align all elements to measure after playing the qubit pulse.
                 align()
                 # QUA macro the readout the state of the active resonators (defined in macros.py)
@@ -186,12 +191,11 @@ else:
     # Close the quantum machines at the end to put all flux biases to 0 and prevent the fridge from heating up
     qm.close()
 
-    # Update QUAM:
-    # for i,q in enumerate(qubits):
-    #     print("\n%s's x180-amplitude (previous): %s" %(q.name, q.xy.operations[operation].amplitude))
-    #     q.xy.operations[operation].amplitude = amp_list[i]
-    #     q.xy.RF_frequency = q.xy.RF_frequency + df_list[i]*u.MHz
-    #     print("%s's x180-amplitude (current): %s" %(q.name, q.xy.operations[operation].amplitude))
+    # Auto-Update QUAM:
+    for i,q in enumerate(qubits):
+        print("\n%s's x90-amplitude (previous): %s" %(q.name, q.xy.operations["x90"].amplitude))
+        q.xy.operations["x90"].amplitude = q.xy.operations["x180"].amplitude / 2 
+        print("%s's x90-amplitude (current): %s" %(q.name, q.xy.operations["x90"].amplitude))
 
     # Save data from the node
     data = {}

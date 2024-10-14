@@ -50,17 +50,17 @@ config = machine.generate_config()
 qmm = machine.connect()
 
 # Get the relevant QuAM components
-rr = machine.qubits["q4"].resonator  # The resonator to measure
+rr = machine.qubits["q1"].resonator  # The resonator to measure
 
 ###################
 # The QUA program #
 ###################
-n_avg = 100  # The number of averages
+n_avg = 6000  # The number of averages
 # The frequency sweep parameters
 ## rr1
 # frequencies = np.arange(10e6, 251e6, 1e6)
 # rr2
-frequencies = np.arange(-499e6, 499e6, 1e5)
+frequencies = np.arange(-99e6, 199e6, 0.2e5)
 
 with program() as resonator_spec:
     n = declare(int)  # QUA variable for the averaging loop
@@ -72,7 +72,7 @@ with program() as resonator_spec:
     n_st = declare_stream()  # Stream for the averaging iteration 'n'
 
     # Bring the active qubits to the minimum frequency point
-    machine.apply_all_flux_to_min()
+    # machine.apply_all_flux_to_min()
 
     with for_(n, 0, n < n_avg, n + 1):  # QUA for_ loop for averaging
         with for_(

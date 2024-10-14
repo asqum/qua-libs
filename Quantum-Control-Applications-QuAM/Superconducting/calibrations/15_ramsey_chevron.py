@@ -50,6 +50,9 @@ qmm = machine.connect()
 
 # Get the relevant QuAM components
 qubits = machine.active_qubits
+selected_qubits = ["q1", "q5", "q3" ,"q2","q4"]
+# selected_qubits = ["q1","q3" ,"q5"] 
+# selected_qubits = ["q2","q4"] 
 num_qubits = len(qubits)
 
 #####################
@@ -72,7 +75,7 @@ if int(input("update state.json (1/0): ")):
 ###################
 # The QUA program #
 ###################
-n_avg = 20  # Number of averaging loops
+n_avg = 3000  # Number of averaging loops
 
 # Frequency detuning sweep in Hz
 dfs = np.arange(-10e6, 10e6, 0.1e6)
@@ -99,9 +102,10 @@ with program() as ramsey:
 
             with for_(*from_array(t, t_delay)):
                 for qubit in qubits:
-                    qubit.xy.play("x90")
-                    qubit.xy.wait(t)
-                    qubit.xy.play("x90")
+                    if qubit.name in selected_qubits:
+                        qubit.xy.play("x90")
+                        qubit.xy.wait(t)
+                        qubit.xy.play("x90")
 
                 align()
                 # QUA macro the readout the state of the active resonators (defined in macros.py)

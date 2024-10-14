@@ -57,24 +57,24 @@ num_qubits = len(qubits)
 # UPDATE QUAM STATE #
 #####################
 # (sub)-component(s) to update:
-amp_list = [0.03, 0.012, 0.01238, 0.0787, 0.0581]
-from sys import exit
-from os.path import basename
-if int(input("update state.json (1/0): ")): 
-    for i,qubit in enumerate(qubits): 
-        qubit.resonator.operations["readout"].amplitude = amp_list[i]
+# amp_list = [0.03, 0.012, 0.01238, 0.0787, 0.0581]
+# from sys import exit
+# from os.path import basename
+# if int(input("update state.json (1/0): ")): 
+#     for i,qubit in enumerate(qubits): 
+#         qubit.resonator.operations["readout"].amplitude = amp_list[i]
 
-    filename = basename(__file__).split('.')[0]
-    node_save(machine, filename, dict(amp_list=amp_list))
-    exit()
+#     filename = basename(__file__).split('.')[0]
+#     node_save(machine, filename, dict(amp_list=amp_list))
+#     exit()
 
 ###################
 # The QUA program #
 ###################
-n_runs = 2000
+n_runs = 3000
 
 # The readout amplitude sweep (as a pre-factor of the readout amplitude) - must be within [-2; 2)
-amplitudes = np.arange(0.5, 1.99, 0.02)
+amplitudes = np.arange(0.1, 1.5, 0.02)
 
 with program() as ro_amp_opt:
     I_g, I_g_st, Q_g, Q_g_st, n, n_st = qua_declaration(num_qubits=num_qubits)
@@ -189,6 +189,8 @@ else:
         axes[i].set_title(f"{qubit.resonator.name}")
         axes[i].set_xlabel("Readout amplitude [V]")
         axes[i].set_ylabel("Fidelity [%]")
+        axes[i].axvline(qubit.resonator.operations["readout"].amplitude, color='k')
+        axes[i].axvline(qubit.resonator.operations["readout"].amplitude * amplitudes[np.argmax(fidelity_vec[i])], color='r')
 
     plt.tight_layout()
     plt.show()
@@ -207,16 +209,16 @@ else:
             qubit.resonator.operations["readout"].amplitude
             * amplitudes[np.argmax(fidelity_vec[i])]
         )
-        # qubit.resonator.operations["readout"].amplitude *= amplitudes[
-        #     np.argmax(fidelity_vec[i])
-        # ]
+
+        # Update the QUAM state: 
+        opt_readout_amplitude = qubit.resonator.operations["readout"].amplitude * amplitudes[np.argmax(fidelity_vec[i])]
+        print(f">>> The OPTIMAL readout amplitude is {opt_readout_amplitude} V (fidelity={max(fidelity_vec[i])})")
+        if input(f"Update {qubit.name} readout amplitude (y/n)") == 'y':
+            qubit.resonator.operations["readout"].amplitude *= amplitudes[
+                np.argmax(fidelity_vec[i])
+            ]
 
     data["figure"] = fig
-
-    # # Update the state
-    # rr1.operations["readout"].amplitude *= amplitudes[np.argmax(fidelity_vec[0])]
-    # rr2.operations["readout"].amplitude *= amplitudes[np.argmax(fidelity_vec[1])]
-
 
     node_save(machine, "readout_amplitude_optimization", data, additional_files=True)
 

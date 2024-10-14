@@ -56,7 +56,7 @@ num_qubits = len(qubits)
 ###################
 # The QUA program #
 ###################
-n_avg = 200  # The number of averages
+n_avg = 2000  # The number of averages
 
 # The frequency sweep parameters with respect to the resonators resonance frequencies
 dfs = np.arange(-3e6, 3e6, 0.02e6)
@@ -145,6 +145,7 @@ else:
         axes[i].plot(dfs, D_data[i])
         axes[i].set_xlabel("Readout detuning [MHz]")
         axes[i].set_ylabel("Distance between IQ blobs [a.u.]")
+        axes[i].axvline(dfs[np.argmax(D_data[i])], color='r')
         # axes[i].set_title(f"{qubit.name} - f_opt = {int(qubit.resonator.f_01 / u.MHz)} MHz")
         print(
             f"{qubit.resonator.name}: Shifting readout frequency by {dfs[np.argmax(D_data[i])]} Hz"
@@ -166,8 +167,12 @@ else:
         data[f"{qubit.resonator.name}_if_opt"] = (
             qubit.resonator.intermediate_frequency + dfs[np.argmax(D_data[i])]
         )
-        # Update the state
-        # qubit.resonator.intermediate_frequency += dfs[np.argmax(D_data[i])]
+
+        # Update the QUAM state: 
+        opt_readout_frequency = qubit.resonator.RF_frequency + dfs[np.argmax(D_data[i])]
+        print(f">>> The OPTIMAL readout frequency is {opt_readout_frequency} Hz (D_data={max(D_data[i])})")
+        if input(f"Update {qubit.name} readout frequency (y/n)") == 'y':
+            qubit.resonator.RF_frequency += dfs[np.argmax(D_data[i])]
 
     data["figure"] = fig
     node_save(machine, "readout_frequency_optimization", data, additional_files=True)

@@ -24,7 +24,10 @@ machine = QuAM.load()
 qubits = machine.active_qubits
 num_qubits = len(qubits)
 
-for q in qubits: print("%s: %s" %(q.name,q.xy.RF_frequency))
+for q in qubits: 
+    print("\n%s: " %(q.name))
+    print("qb.f01: %s" %(q.xy.RF_frequency))
+    print("ro.length: %s" %(q.resonator.operations["readout"].length))
 
 x_data = [q.name for q in qubits]
 y_data = [q.xy.RF_frequency for q in qubits]

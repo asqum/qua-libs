@@ -59,7 +59,7 @@ num_resonators = len(resonators)
 # The QUA program #
 ###################
 
-n_avg = 1000  # The number of averages
+n_avg = 3000  # The number of averages
 # The frequency sweep around the resonator resonance frequency f_opt
 dfs = np.arange(-10e6, +10e6, 0.1e6)
 # You can adjust the IF frequency here to manually adjust the resonator frequencies instead of updating the state
@@ -180,7 +180,9 @@ else:
             intermediate_frequency = int(res_1["f"][0] * u.MHz)
 
             # update QUAM:
-            if int(input("Update QUAM STATES: (1/0) ")):
+            print("default: %s" % (rr.RF_frequency))
+            print("fitted:  %s" % (rr.LO_frequency + intermediate_frequency))
+            if int(input("Update resonator-frequency for %s: (1/0) " % qubits[i].name)):
                 rr.RF_frequency = rr.LO_frequency + intermediate_frequency
 
             plt.legend((f"fr = {rr.RF_frequency:.3f} MHz",))

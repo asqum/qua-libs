@@ -53,6 +53,8 @@ qmm = machine.connect()
 qubits = machine.active_qubits
 num_qubits = len(qubits)
 selected_qubits = ["q1", "q5", "q3" ,"q2","q4"] 
+# selected_qubits = ["q1","q3" ,"q5"] 
+# selected_qubits = ["q2","q4"] 
 q3 = machine.qubits["q3"]
 q4 = machine.qubits["q4"]
 q5 = machine.qubits["q5"]
@@ -67,13 +69,14 @@ for q in qubits:
 ###################
 # The QUA program #
 ###################
-n_avg = 1200
+n_avg = 3000
 
 # Dephasing time sweep (in clock cycles = 4ns) - minimum is 4 clock cycles
-idle_times = np.arange(4, 600, 4)
+# idle_times = np.arange(4, 600, 4)
+idle_times = np.arange(4, 1500, 4)
 
 # Detuning converted into virtual Z-rotations to observe Ramsey oscillation and get the qubit frequency
-detuning = 2e6
+detuning = -2e6
 
 with program() as ramsey:
     I, I_st, Q, Q_st, n, n_st = qua_declaration(num_qubits=num_qubits)

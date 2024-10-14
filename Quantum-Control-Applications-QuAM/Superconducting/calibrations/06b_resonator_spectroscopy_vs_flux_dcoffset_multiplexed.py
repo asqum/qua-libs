@@ -59,15 +59,15 @@ num_resonators = len(resonators)
 # UPDATE QUAM STATE #
 #####################
 # (sub)-component(s) to update:
-min_offset_list = [0.0, 0.013, 0.023, 0.008, 0.018]
+min_offset_list = [0.182, 0.104, 0.091, 0.090, 0.072]
 from sys import exit
 from os.path import basename
 if int(input("UPDATE STATE (1/0): ")):
     for i,q in enumerate(qubits):
         if int(input("update %s (1/0): " %(q.name))): 
             print("\n%s's min_offset (previous): %s" %(q.name, q.z.min_offset))
-            # q.z.min_offset = min_offset_list[i]
-            q.z.min_offset *= 5
+            q.z.min_offset = min_offset_list[i]
+            # q.z.min_offset *= 5
             print("%s's min_offset (current): %s" %(q.name, q.z.min_offset))
 
         filename = basename(__file__).split('.')[0]
@@ -89,9 +89,9 @@ qmm = machine.connect()
 
 n_avg = 3000  # Number of averaging loops
 # Flux bias sweep in V
-dcs = np.linspace(-0.25, 0.25, 51)
+dcs = np.linspace(-0.5, 0.5, 101)
 # The frequency sweep around the resonator resonance frequency f_opt
-dfs = np.arange(-6e6, 6e6, 0.1e6)
+dfs = np.arange(-12e6, 12e6, 0.1e6)
 
 with program() as multi_res_spec_vs_flux:
     # Declare 'I' and 'Q' and the corresponding streams for the two resonators.

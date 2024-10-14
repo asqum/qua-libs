@@ -217,6 +217,11 @@ else:
                 data[f"{qubit.name}"] = {"successful_fit": True}
                 pass
 
+        # Auto-Update QUAM:
+        print("\n%s's x90-amplitude (previous): %s" %(qubit.name, qubit.xy.operations["x90"].amplitude))
+        qubit.xy.operations["x90"].amplitude = qubit.xy.operations["x180"].amplitude / 2 
+        print("%s's x90-amplitude (current): %s" %(qubit.name, qubit.xy.operations["x90"].amplitude))
+
     data["figure"] = fig
     # Save data from the node
     plt.show()
