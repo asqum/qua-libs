@@ -99,14 +99,15 @@ class XEB:
             amp_matrix (List): Amplitude matrix of the gate.
         """
         if self.xeb_config.gate_set.run_through_amp_matrix_modulation and amp_matrix is not None:
-            qubit.xy.play(self.xeb_config.baseline_gate_name, amplitude_scale=amp(*amp_matrix))
+            # qubit.xy.play(self.xeb_config.baseline_gate_name, amplitude_scale=amp(*amp_matrix))
+            qubit.xy.play('x90')
         else:
             with switch_(gate_idx, unsafe=True):
                 for i in range(len(self.xeb_config.gate_set)):
                     with case_(i):
                         self.xeb_config.gate_set[i].gate_macro(qubit)
 
-    def _xeb_prog(self, simulate: bool = False):
+    def _xeb_prog(self, machine, simulate: bool = False):
         """
         Generate the QUA program for the XEB experiment
         Args:
@@ -143,6 +144,9 @@ class XEB:
             gate_st = [
                 declare_stream() for _ in range(n_qubits)
             ]  # Stream for gate indices (enabling circuit reconstruction in post-processing)
+
+            # Bring the active qubits to the idle points: 
+            machine.apply_all_flux_to_min()
 
             # Setting seed for reproducibility
             r = Random()
@@ -244,6 +248,7 @@ class XEB:
                                 qua_vars=(I[q_idx], Q[q_idx]),
                             )
                             # State Estimation: returned as an integer, to be later converted to bit-strings
+                            print("ge_thresholds[%s]: %s" %(q_idx,ge_thresholds[q_idx]))
                             assign(state[q_idx], I[q_idx] > ge_thresholds[q_idx])
                             save(state[q_idx], state_st[q_idx])
                             save(I[q_idx], I_st[q_idx])
@@ -306,7 +311,8 @@ class XEB:
         # Compile the QUA program
 
         config = self.quam.generate_config()
-        xeb_prog = self._xeb_prog(simulate)
+        machine = self.quam.load()
+        xeb_prog = self._xeb_prog(machine, simulate)
         qmm = self.quam.connect()
         if simulate:
             qm = qmm.open_qm(config)

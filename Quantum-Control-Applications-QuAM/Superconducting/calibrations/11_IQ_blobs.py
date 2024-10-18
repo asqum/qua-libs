@@ -85,6 +85,7 @@ with program() as iq_blobs:
         for qubit in qubits:
             # excited iq blobs for all qubits
             qubit.xy.play("x180")
+            # qubit.xy.play("x90")
             wait(1000*u.ns)
         align()
         multiplexed_readout(qubits, I_e, I_e_st, Q_e, Q_e_st)
