@@ -67,7 +67,7 @@ def get_T1():
         
     data = {}
 
-    plt.cla()
+    plt.clf()
     for i, qubit in enumerate(qubits):
         try:
             from qualang_tools.plot.fitting import Fit
@@ -85,7 +85,7 @@ def get_T1():
             plt.legend((f"T1 = {np.round(np.abs(fit_res['T1'][0]) / 4) * 4:.0f} ns",))
             plt.pause(1)
         except (Exception,):
-            print("error fitting for %s" %qubit.name)
+            print("error fitting / plotting for %s" %qubit.name)
             pass
     return [q.T1 for q in qubits]
 
@@ -106,15 +106,20 @@ with open(file_name, mode='a', newline='') as file:
         while True:
             # Get current timestamp and temperature
             current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            temperature = get_T1()
-            # Write the data to the CSV file
-            writer.writerow([current_time] + temperature)
+            qubit_lifetime = get_T1()
+
+            # Only Write the legit data to the CSV file: 
+            if 0 in qubit_lifetime or sum(qubit_lifetime) > 100000000:
+                print("!!!Anomaly!!! detected in qubit_lifetime: %s" %qubit_lifetime)
+            else:
+                writer.writerow([current_time] + qubit_lifetime)
+
             # Force the data to be written to the file immediately
             file.flush()
             # Print the data for user feedback
-            print(f"Recorded at {current_time}: {temperature} ns")
+            print(f"Recorded qubit_lifetime at {current_time}: {qubit_lifetime} ns")
     except KeyboardInterrupt:
-        print("Temperature logging stopped.")
+        print("T1 logging stopped.")
 
 qm.close()
 # %%
