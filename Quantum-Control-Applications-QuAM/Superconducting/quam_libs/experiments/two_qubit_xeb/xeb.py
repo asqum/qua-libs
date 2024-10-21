@@ -99,8 +99,8 @@ class XEB:
             amp_matrix (List): Amplitude matrix of the gate.
         """
         if self.xeb_config.gate_set.run_through_amp_matrix_modulation and amp_matrix is not None:
-            # qubit.xy.play(self.xeb_config.baseline_gate_name, amplitude_scale=amp(*amp_matrix))
-            qubit.xy.play('x90')
+            qubit.xy.play(self.xeb_config.baseline_gate_name, amplitude_scale=amp(*amp_matrix))
+            # qubit.xy.play('x90')
         else:
             with switch_(gate_idx, unsafe=True):
                 for i in range(len(self.xeb_config.gate_set)):
@@ -164,6 +164,21 @@ class XEB:
                 for q in range(n_qubits):
                     assign(gate[q][0], r.rand_int(random_gates))
                     save(gate[q][0], gate_st[q])
+
+                    # Map indices into amplitude matrix arguments
+                    # (each index corresponds to a random gate)
+                    if self.xeb_config.gate_set.run_through_amp_matrix_modulation:
+                        self._assign_amplitude_matrix(
+                            gate[q][0],
+                            [amp_matrix[q][i][0] for i in range(4)],
+                        )
+                        if simulate:
+                            for amp_matrix_element in range(4):
+                                save(
+                                    amp_matrix[q][amp_matrix_element][0],
+                                    amp_st[q][amp_matrix_element],
+                                )
+
                 with for_(depth_, 1, depth_ < self.xeb_config.depths[-1], depth_ + 1):
                     for q in range(n_qubits):
                         assign(gate[q][depth_], r.rand_int(random_gates))
