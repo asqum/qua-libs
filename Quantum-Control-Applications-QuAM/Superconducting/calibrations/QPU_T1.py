@@ -47,7 +47,7 @@ with program() as T1:
         n_st.save("n")
 
 qm = qmm.open_qm(config)
-plt.figure()
+plt.figure(figsize=(15, 9))
 plt.suptitle("T1")
 
 def get_T1():
@@ -94,7 +94,7 @@ import csv
 from datetime import datetime
 
 # Open CSV file in append mode to continuously save data
-file_name="QPU_T1.csv"
+file_name="Quantum-Control-Applications-QuAM/Superconducting/data/T1-stat/QPU_T1_01.csv"
 with open(file_name, mode='a', newline='') as file:
     writer = csv.writer(file)
     # Write the header only once if the file is new

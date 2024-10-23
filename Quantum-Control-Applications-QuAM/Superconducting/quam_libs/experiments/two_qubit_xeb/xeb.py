@@ -972,8 +972,42 @@ class XEBResult:
                     data.append(self.measured_probs[i, :, :, j])
                     data.append(self.expected_probs[i, :, :, j])
 
-        for title, d in zip(titles, data):
-            create_plot(d, title)
+        num_plots = len(titles)
+        plots_per_fig = 4  # Adjust this value based on the desired grid size (e.g., 2x2 grid)
+        num_figs = (num_plots + plots_per_fig - 1) // plots_per_fig
+
+        for fig_idx in range(num_figs):
+            fig, axs = plt.subplots(2, 2, figsize=(10, 8))  # Adjust the grid size as needed
+            axs = axs.flatten()
+            start_idx = fig_idx * plots_per_fig
+            end_idx = min(start_idx + plots_per_fig, num_plots)
+
+            for plot_idx in range(start_idx, end_idx):
+                ax = axs[plot_idx - start_idx]
+                ax.pcolor(
+                    self.xeb_config.depths,
+                    range(self.xeb_config.seqs),
+                    np.abs(data[plot_idx]),
+                    vmin=0,
+                    vmax=1,
+                    cmap="viridis",
+                )
+                ax.set_title(titles[plot_idx])
+                ax.set_xlabel("Circuit depth")
+                ax.set_ylabel("Sequences")
+                ax.set_xticks(self.xeb_config.depths)
+                ax.set_yticks(np.arange(1, self.xeb_config.seqs + 1))
+                fig.colorbar(
+                    ax.pcolor(self.xeb_config.depths, range(self.xeb_config.seqs), np.abs(data[plot_idx]),
+                              vmin=0,vmax=1,),
+                    ax=ax,
+                )
+
+            plt.tight_layout()
+            plt.show()
+
+        # for title, d in zip(titles, data):
+        #     create_plot(d, title)
 
     def save(self):
         """
