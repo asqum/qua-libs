@@ -144,20 +144,63 @@ plt.show()
 
 plt.figure(figsize=(15, 9))
 
-plt.subplot(1, 2, 1)
-plt.title('All:')
-sns.histplot(df['q1-T1']/1000, kde=True, legend="q1")
-sns.histplot(df['q2-T1']/1000, kde=True, legend='q2')
-sns.histplot(df['q3-T1']/1000, kde=True, legend='q3')
-sns.histplot(df['q4-T1']/1000, kde=True, legend='q4')
-sns.histplot(df['q5-T1']/1000, kde=True, legend='q5')
-plt.legend(["q1","q2","q3","q4","q5"])
+# plt.subplot(1, 2, 1)
+# plt.title('All:')
+sns.histplot(df['q1-T1']/1000, kde=True, legend="q1", alpha=0.3,linewidth=1.7)
+sns.histplot(df['q2-T1']/1000, kde=True, legend='q2', alpha=0.3,linewidth=1.7)
+sns.histplot(df['q3-T1']/1000, kde=True, legend='q3', alpha=0.3,linewidth=1.7)
+sns.histplot(df['q4-T1']/1000, kde=True, legend='q4', alpha=0.3,linewidth=1.7)
+sns.histplot(df['q5-T1']/1000, kde=True, legend='q5', alpha=0.3,linewidth=1.7)
+sns.histplot((df['q1-T1']+df['q2-T1']+df['q3-T1']+df['q4-T1']+df['q5-T1'])/5000, kde=True, color='black',linewidth=1.7)
+plt.legend(["q1","q2","q3","q4","q5","sum"])
 plt.xlabel('T1 (us)')
 
-plt.subplot(1, 2, 2)
-plt.title('Averaged T1 across all 5q:')
-sns.histplot((df['q1-T1']+df['q2-T1']+df['q3-T1']+df['q4-T1']+df['q5-T1'])/5000, kde=True, color='black')
-plt.xlabel('T1 (us)')
+# plt.subplot(1, 2, 2)
+# plt.title('Averaged T1 across all 5q:')
+# sns.histplot((df['q1-T1']+df['q2-T1']+df['q3-T1']+df['q4-T1']+df['q5-T1'])/5000, kde=True, color='black')
+# sns.histplot((1/(1/df['q1-T1']+1/df['q2-T1']+1/df['q3-T1']+1/df['q4-T1']+1/df['q5-T1']))/5000, kde=True, color='black')
+# plt.xlabel('T1 (us)')
 
 plt.tight_layout()
+plt.show()
+
+import matplotlib.pyplot as plt
+import numpy as np
+from mpl_toolkits.mplot3d import Axes3D
+from scipy.stats import gaussian_kde
+
+# Perform KDE
+kde1 = gaussian_kde(df['q1-T1']/1000)
+kde2 = gaussian_kde(df['q2-T1']/1000)
+kde3 = gaussian_kde(df['q3-T1']/1000)
+kde4 = gaussian_kde(df['q4-T1']/1000)
+kde5 = gaussian_kde(df['q5-T1']/1000)
+
+x = np.linspace(3, 75, 1000)
+
+# Create figure
+fig = plt.figure(figsize=(15, 9))
+ax = fig.add_subplot(111, projection='3d')
+
+# Calculate KDE values
+z1 = kde1(x)
+z2 = kde2(x)
+z3 = kde3(x)
+z4 = kde4(x)
+z5 = kde5(x)
+
+# Plot
+ax.plot(x, np.ones_like(x)*0.1, z1, label='q1', color='b', linewidth=5.7)
+ax.plot(x, np.ones_like(x)*0.2, z2, label='q2', color='r', linewidth=5.7)
+ax.plot(x, np.ones_like(x)*0.3, z3, label='q3', color='g', linewidth=5.7)
+ax.plot(x, np.ones_like(x)*0.4, z4, label='q4', color='m', linewidth=5.7)
+ax.plot(x, np.ones_like(x)*0.5, z5, label='q5', color='k', linewidth=5.7)
+
+# Labels
+ax.set_xlabel('T1 (us)')
+# ax.set_ylabel('Distribution')
+ax.set_yticks([])
+ax.set_zlabel('Density')
+
+plt.legend()
 plt.show()

@@ -977,7 +977,7 @@ class XEBResult:
         num_figs = (num_plots + plots_per_fig - 1) // plots_per_fig
 
         for fig_idx in range(num_figs):
-            fig, axs = plt.subplots(2, 2, figsize=(10, 8))  # Adjust the grid size as needed
+            fig, axs = plt.subplots(2, 2, figsize=(15, 9))  # Adjust the grid size as needed
             axs = axs.flatten()
             start_idx = fig_idx * plots_per_fig
             end_idx = min(start_idx + plots_per_fig, num_plots)
@@ -997,6 +997,7 @@ class XEBResult:
                 ax.set_ylabel("Sequences")
                 ax.set_xticks(self.xeb_config.depths)
                 ax.set_yticks(np.arange(1, self.xeb_config.seqs + 1))
+                ax.tick_params(axis='x', rotation=37)
                 fig.colorbar(
                     ax.pcolor(self.xeb_config.depths, range(self.xeb_config.seqs), np.abs(data[plot_idx]),
                               vmin=0,vmax=1,),

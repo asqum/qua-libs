@@ -87,10 +87,11 @@ with program() as ramsey:
 
     # Bring the active qubits to the minimum frequency point
     machine.apply_all_flux_to_min()
-    coupler.set_dc_offset(0.0)
+    # coupler.set_dc_offset(0.0)
     # # measure T2* at certain flux-point
     # coupler.set_dc_offset(-0.039)
-    # q4.z.set_dc_offset(q4.z.min_offset + 0.05 * -0.039)  
+    coupler.to_decouple_idle()
+    # q4.z.set_dc_offset(q4.z.min_offset + -0.0121 * coupler.decouple_offset)  
 
     with for_(n, 0, n < n_avg, n + 1):
         save(n, n_st)

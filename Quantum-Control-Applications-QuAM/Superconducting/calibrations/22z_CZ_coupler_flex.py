@@ -69,10 +69,11 @@ try:
 except:
     coupler = (q2 @ q1).coupler 
 
-qb = q1  # The qubit whose flux will be swept
+qb = q2  # The qubit whose flux will be swept
 
 print("%s: %s" % (q1.name, q1.xy.RF_frequency))
 print("%s: %s" % (q2.name, q2.xy.RF_frequency))
+print("coupler idle at: %s" %coupler.decouple_offset)
 
 # neighbour coupling off:
 coupler_n1 = (qn1 @ q1).coupler
@@ -108,27 +109,28 @@ sweep_flux = "qc" # qb or qc or others
 
 n_avg = 137000
 # The flux pulse durations in clock cycles (4ns) - Must be larger than 4 clock cycles.
-ts = np.arange(4, 40, 1)
-# ts = np.arange(4, 160, 1)
+ts = np.arange(4, 60, 1)
+ts = np.arange(4, 150, 1)
 
 # The flux bias sweep in V
 if sweep_flux == "qb": 
     dcs = np.linspace(-0.3, 0.3, 501) 
     # dcs = np.linspace(-0.0184, 0, 501) # qb (4_5) (dc)
-    dcs = np.linspace(-0.095, -0.080, 501) # qb (4_5) (pulse) 
+    dcs = np.linspace(-0.105, -0.095, 301) # qb (4_5) (pulse) 
     # dcs = np.linspace(-0.12, -0.08, 501) # qb (3_4) (pulse) 
 elif sweep_flux == "qc": 
     dcs = np.linspace(-0.4, 0.4, 501) 
-    dcs = np.linspace(-0.21, -0.195, 501) # qc (4_5) (pulse) 
+    dcs = np.linspace(0.175, 0.275, 301) # qc (4_5) (pulse) 
+    dcs = np.linspace(-0.2, 0.2, 301)
     # dcs = np.linspace(-0.147, -0.0915, 501) # qc (3_4) (pulse) 
 else: 
     ts = [30]
     dcs = [-0.045]
 
 # Guess points: 
-cz_point = -0.08652 #q3_2:-0.09529 #q3_4:-0.10219 #q4_5:-0.08722
-coupler_point = -0.19874 #q3_4_off: -0.11173, -0.13210 (op) #q4_5_off: -0.17835, -0.19874 (op)
-scale = 0.04958 # q4_5: 0.04958, q3_4: 0.0389, q3_2: -0.117 
+cz_point = -0.09953 #q3_2:-0.09529 #q3_4:-0.10219 #q4_5:-0.09953
+coupler_point = 0 #q3_4_off: -0.11173, -0.13210 (op) #q4_5_off: 0.2264, -0.19874 (op)
+scale = -0.0121 # q4_5: -0.0121, q3_4: 0.0389, q3_2: -0.117 
 
 pulse_dc_factor = 1.0 #(0.00859 - q1.z.min_offset)/(0.00908 - q1.z.min_offset) * 1.08
 print("pulse_dc_factor: %s" % pulse_dc_factor)
@@ -142,6 +144,7 @@ with program() as cz:
 
     # Bring the active qubits to the minimum frequency point
     machine.apply_all_flux_to_min()
+    coupler.to_decouple_idle()
 
     # turn off neighboring coupler(s)
     # coupler_n1.set_dc_offset(-0.02257)
@@ -176,7 +179,7 @@ with program() as cz:
                     assign(q1_dc_point, dc + scale * coupler_point)
                     assign(coupler_dc_point, coupler_point)
                 else:
-                    assign(z_amp, Cast.mul_fixed_by_int(pulse_dc_factor*((cz_point - qb.z.min_offset + scale * dc)), 5))
+                    assign(z_amp, Cast.mul_fixed_by_int(pulse_dc_factor*((cz_point - qb.z.min_offset + scale * (dc + coupler.decouple_offset))), 5))
                     assign(coupler_amp, Cast.mul_fixed_by_int(pulse_dc_factor*(dc), 5))
                     assign(q1_dc_point, cz_point + scale * dc)
                     assign(coupler_dc_point, dc)
@@ -267,10 +270,10 @@ else:
         plt.ylabel("Interaction time [ns]")
         
         # feedback from CZ-Pi: 
-        if sweep_flux=="qc":
-            plt.axvline( coupler.operations["cz"].amplitude, color="r", linestyle="--", linewidth=1.5)
-        else:
-            plt.axvline( q1.z.operations["cz"].amplitude + q1.z.min_offset - scale*coupler.operations["cz"].amplitude, color="r", linestyle="--", linewidth=1.5)
+        # if sweep_flux=="qc":
+        #     plt.axvline( coupler.operations["cz"].amplitude, color="r", linestyle="--", linewidth=1.5)
+        # else:
+        #     plt.axvline( q1.z.operations["cz"].amplitude + q1.z.min_offset - scale*coupler.operations["cz"].amplitude, color="r", linestyle="--", linewidth=1.5)
         plt.axhline( q1.z.operations["cz"].length, color="r", linestyle="--", linewidth=1.5)
         # plt.axhline( 60, color="g", linestyle="--", linewidth=0.57)
         # plt.axhline( 40, color="y", linestyle="--", linewidth=0.57)
@@ -327,6 +330,12 @@ else:
         f"qubit_flux": qb.name,
         "figure": fig,
     }
+
+    # update QUAM state:  
+    if int(input("Update QUAM STATES for coupler %s: (1/0) " %coupler.id)):
+        coupler.decouple_offset = float(input("idling coupler at: "))
+        print("updated: coupler idle at: %s" %coupler.decouple_offset)
+
     node_save(machine, "CZ_chevron_coupler_working", data)
 
 # %%

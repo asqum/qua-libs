@@ -59,8 +59,8 @@ config = machine.generate_config()
 qmm = machine.connect()
 
 # Get the relevant QuAM components
-q1 = machine.qubits["q3"]
-q2 = machine.qubits["q4"]
+q1 = machine.qubits["q4"]
+q2 = machine.qubits["q5"]
 
 try: 
     coupler = (q1 @ q2).coupler
@@ -79,23 +79,23 @@ inv_arr = np.linalg.inv(compensation_arr)
 ###################
 # The QUA program #
 ###################
-qb = q1  # The qubit whose flux will be swept
+qb = q2  # The qubit whose flux will be swept
 
 n_avg = 3000
 # The flux pulse durations in clock cycles (4ns) - Must be larger than 4 clock cycles.
 # The flux bias sweep in V
 dcs = np.linspace(-0.3, 0.3, 501)
-dcs = np.linspace(-0.14196, -0.11, 501) # q3_4
-# dcs = np.linspace(-0.21, -0.17, 501) # q4_5
+# dcs = np.linspace(-0.14196, -0.11, 501) # q3_4
+dcs = np.linspace(0.2277, 0.2821, 501) # q4_5
 # dcs = [-0.046, -0.045]
 
 scales = np.linspace(-0.2, 0.2, 101)
-scales = np.linspace(0, 0.08, 101) # q3_4
-# scales = np.linspace(0.015, 0.085, 101) # q4_5
+# scales = np.linspace(0, 0.08, 101) # q3_4
+scales = np.linspace(-0.03, 0.01, 101) # q4_5
 # scales = [0.4, 0.41]
 
-cz_dur = 92 #360
-cz_point = -0.10219 # when coupler=0 
+cz_dur = 60 # 92, 360
+cz_point = -0.09953 # when coupler=0 
 
 mode = "pulse" # dc or pulse
 simulate = False

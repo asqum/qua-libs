@@ -54,6 +54,10 @@ resonators = [qubit.resonator for qubit in machine.active_qubits]
 num_qubits = len(qubits)
 num_resonators = len(resonators)
 
+q4 = machine.qubits["q4"]
+q5 = machine.qubits["q5"]
+coupler = (q4 @ q5).coupler
+
 
 #####################
 # UPDATE QUAM STATE #
@@ -102,6 +106,7 @@ with program() as multi_res_spec_vs_flux:
 
     # Bring the active qubits to the minimum frequency point
     machine.apply_all_flux_to_min()
+    coupler.to_decouple_idle()
     wait(25)
 
     with for_(n, 0, n < n_avg, n + 1):  # QUA for_ loop for averaging
