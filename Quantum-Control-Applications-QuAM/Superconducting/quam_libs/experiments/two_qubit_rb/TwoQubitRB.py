@@ -158,6 +158,7 @@ class TwoQubitRb:
         sequence_depths: list[int],
         num_repeats: int,
         num_averages: int,
+        unsafe: bool
     ):
         with program() as prog:
             sequence_depth = declare(int)
@@ -185,7 +186,7 @@ class TwoQubitRb:
                     assign(length, gates_len_is[0])
                     with for_(n_avg, 0, n_avg < num_averages, n_avg + 1):
                         self._prep_func()
-                        self._rb_baker.run(gates_is, length)
+                        self._rb_baker.run(gates_is, length, unsafe=unsafe)
                         out1, out2 = self._measure_func()
                         assign(state, (Cast.to_int(out2) << 1) + Cast.to_int(out1)) # |out2,out1> = |qt,qc>  
                         save(state, state_os)
@@ -241,6 +242,7 @@ class TwoQubitRb:
         circuit_depths: List[int],
         num_circuits_per_depth: int,
         num_shots_per_circuit: int,
+        unsafe: bool = True,
         **kwargs,
     ):
         """
@@ -253,10 +255,13 @@ class TwoQubitRb:
             circuit_depths (List[int]): A list of the number of Cliffords per circuit (not including inverse).
             num_circuits_per_depth (int): The number of different circuit randomizations per depth.
             num_shots_per_circuit (int): The number of shots per particular circuit.
+            unsafe (bool): Refers to the option of compiling a QUA switch-case "safely", which
+                           guarantees correct behaviour but can lead to gaps, or "unsafely",
+                           which reduces gaps but can cause unwanted behaviour. Note: as of
+                           QOP 3.2.3, there seems to be an issue with "unsafe" compilation.
 
         """
-
-        prog = self._gen_qua_program(circuit_depths, num_circuits_per_depth, num_shots_per_circuit)
+        prog = self._gen_qua_program(circuit_depths, num_circuits_per_depth, num_shots_per_circuit, unsafe)
 
         qm = qmm.open_qm(self._config)
         job = qm.execute(prog)

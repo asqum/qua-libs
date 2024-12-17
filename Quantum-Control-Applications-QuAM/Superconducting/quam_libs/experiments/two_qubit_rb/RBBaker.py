@@ -148,7 +148,7 @@ class RBBaker:
         b.run()
         b.get_qe_set = orig_get_qe_set
 
-    def run(self, op_list_per_qe: dict, length, unsafe=True):
+    def run(self, op_list_per_qe: dict, length, unsafe=False):
         if set(op_list_per_qe.keys()) != self._all_elements:
             raise RuntimeError(f"must specify ops for all elements: {', '.join(self._all_elements)} ")
 

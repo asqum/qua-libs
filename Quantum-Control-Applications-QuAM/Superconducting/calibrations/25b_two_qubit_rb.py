@@ -112,6 +112,7 @@ def meas():
 ##  Two-qubit RB execution  ##
 ##############################
 # create RB experiment from configuration and defined functions
+unsafe = False
 rb = TwoQubitRb(
     config=config,
     single_qubit_gate_generator=bake_phased_xz,
@@ -126,11 +127,11 @@ qmm = machine.connect()
 
 # run simpler experiment to verify `bake_phased_xz`, `prep` and `meas`
 rb_debugger = TwoQubitRbDebugger(rb)
-rb_debugger.run_phased_xz_commands(qmm, 280)
+rb_debugger.run_phased_xz_commands(qmm, 280, unsafe=unsafe)
 plt.show()
 
 # run 2Q-RB experiment
-# res = rb.run(qmm, circuit_depths=np.arange(1, 300, 5), num_circuits_per_depth=60, num_shots_per_circuit=30)
+res = rb.run(qmm, circuit_depths=np.arange(1, 300, 5), num_circuits_per_depth=60, num_shots_per_circuit=30, unsafe=unsafe)
 # circuit_depths ~ how many consecutive Clifford gates within one executed circuit
 # (https://qiskit.org/documentation/apidoc/circuit.html)
 # num_circuits_per_depth ~ how many random circuits within one depth
