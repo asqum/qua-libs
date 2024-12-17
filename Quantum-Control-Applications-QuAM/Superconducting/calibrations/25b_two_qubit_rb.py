@@ -50,7 +50,7 @@ def bake_phased_xz(baker: Baking, q, x, z, a):
 
 
 # TODO: single qubit phase corrections in units of 2pi applied after the CZ gate
-phi_to_flux_tune, phi_to_meet_with = 0.263, -0.459 
+phi_to_flux_tune, phi_to_meet_with = 0.880, -0.404 
 qubit1_frame_update = phi_to_flux_tune #0.23  # example values, should be taken from QPU parameters
 qubit2_frame_update = phi_to_meet_with #0.12  # example values, should be taken from QPU parameters
 

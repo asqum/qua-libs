@@ -114,12 +114,12 @@ amps = np.linspace(0.5, 1.5, 25)
 amps = np.linspace(0.7, 1.3, 25)
 # amps = np.linspace(0.9, 1.1, 25)
 amps = np.linspace(0.95, 1.05, 25)
-amps = np.linspace(0.995, 1.005, 25)
+# amps = np.linspace(0.995, 1.005, 25)
 # amps = np.linspace(-0.04085/-0.04128, -0.0425/-0.04128, 25)
 # amps = np.linspace(-0.040/-0.04128, -0.042/-0.04128, 25) 
 
 # cz_dur = 60
-cz_dur = 88
+cz_dur = 80
 
 # Ref: 22z_CZ_coupler_flex.py 
 if coupler.name=="coupler_q4_q5": 
@@ -138,10 +138,10 @@ if coupler.name=="coupler_q2_q3":
     cz_coupler = -0.10223*.9583333*1.0166667*1.0083333
     phi_to_flux_tune, phi_to_meet_with = 0, 0
 if coupler.name=="coupler_q1_q2": 
-    cz_point, scale =  0.055533, 0.0828 #0.05594, 0.0397
+    cz_point, scale =  0.06149, 0.091 #0.05594, 0.0397
     # cz_coupler = -0.05457*1.025*1.0175*1.0020833    
-    cz_coupler = -0.04912*1.0041667*1.005  
-    phi_to_flux_tune, phi_to_meet_with = 0, 0
+    cz_coupler = -0.0457 #*1.05*1.0041667   
+    phi_to_flux_tune, phi_to_meet_with = 0.880, -0.404 
 
 pulse_dc_factor = 1.0 #(0.00859 - qubit_to_flux_tune.z.min_offset)/(0.00908 - qubit_to_flux_tune.z.min_offset) * 1.08
 print("pulse_dc_factor: %s" % pulse_dc_factor)
@@ -307,7 +307,7 @@ else:
         # Progress bar
         progress_counter(n, n_avg, start_time=results.start_time)
 
-        plt.suptitle(f"q{q1_number}->q{q2_number}: amp_scale, pha_diff_deg ({n}/{n_avg})")
+        plt.suptitle(f"q{q1_number}->q{q2_number}: amp_scale, |pha_diff-180| ({n}/{n_avg})")
         for i in range(len(amps)):
             ax[int(i // 5), int(i % 5)].cla()
 
@@ -333,7 +333,7 @@ else:
             except Exception as e:
                 print(e)
             ax[int(i // 5), int(i % 5)].plot(phis, I_control_e, '.r', phis, I_control_g, '.b')
-            ax[int(i // 5), int(i % 5)].set_title("%.7f, %.1f" % (amps[i], dphase))
+            ax[int(i // 5), int(i % 5)].set_title("%.7f, %.1f" % (amps[i], min([abs(dphase-180),abs(dphase+180)]) ))
 
             # I10 = I1[:,i,0]
             # I10 /= np.max(I10)

@@ -26,8 +26,8 @@ from quam_libs.macros import active_reset, readout_state
 # %% {Node_parameters}
 class Parameters(NodeParameters):
     qubits: Optional[List[str]] = ["q1","q2","q3","q4","q5"]
-    control_qubit_post_cz_phase_corrections: List[float] = [0.263, 0.484, 0.384, -0.278] #None
-    target_qubit_post_cz_phase_corrections: List[float] = [-0.459, 0.374, 0.449, -0.830] #None
+    control_qubit_post_cz_phase_corrections: List[float] = [0.880, 0.484, 0.384, -0.278] #None
+    target_qubit_post_cz_phase_corrections: List[float] = [-0.404, 0.374, 0.449, -0.830] #None
     num_averages: int = 1000
     # flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
     reset_type: Literal['active', 'thermal'] = "thermal"

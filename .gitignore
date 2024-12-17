@@ -4,6 +4,7 @@ __pycache__
 **.egg-info
 build
 data/
+xeb_data/
 .DS_Store
 NOTE.md
 

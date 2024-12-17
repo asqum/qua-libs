@@ -67,9 +67,14 @@ except: coupler = (q2 @ q1).coupler
 qb = q1  # The qubit whose flux will be swept
 
 mode = "pulse" # dc or pulse
-sweep_flux = "qc" # qb or qc or others
-coupler_point = 0 # coupler.decouple_offset # -0.020 
+sweep_flux = "qb" # qb or qc or others
+coupler_point = -0.0 # coupler.decouple_offset # -0.020 
 # NOTE: always start from 0, turn ~20-40mV left to the FAST LANE. 
+coupler_point = -0.0457
+
+check_cz_pulse = True
+if check_cz_pulse: 
+    print("Coupler setpoint: %s" % (coupler.operations["cz"].amplitude + coupler.decouple_offset) )
 
 config = machine.generate_config()
 
@@ -92,15 +97,15 @@ if sweep_flux == "qb":
     if coupler.name=="coupler_q4_q5": dcs = np.linspace(-0.070, -0.044, 301) # (q5<q4, Top-Left) 
     if coupler.name=="coupler_q3_q4": dcs = np.linspace(-0.100, -0.072, 301) # (q3<q4, Top-Left) 
     if coupler.name=="coupler_q2_q3": dcs = np.linspace(0.050, 0.072, 301) # (q3>q2, Top-Left)
-    if coupler.name=="coupler_q1_q2": dcs = np.linspace(0.0519, 0.0591, 301) # (q1>q2, Top-Left) 
+    if coupler.name=="coupler_q1_q2": dcs = np.linspace(0.057, 0.066, 301) # (q1>q2, Top-Left) 
     # dcs = np.linspace(-0.3, 0.3, 501) # default wide-sweep 
 elif sweep_flux == "qc": 
     if coupler.name=="coupler_q4_q5": dcs = np.linspace(-0.084, -0.051, 301) 
     if coupler.name=="coupler_q3_q4": dcs = np.linspace(-0.082, -0.048, 301) 
     if coupler.name=="coupler_q2_q3": dcs = np.linspace(-0.108, -0.060, 301) 
-    if coupler.name=="coupler_q1_q2": dcs = np.linspace(-0.062, -0.015, 301) 
+    if coupler.name=="coupler_q1_q2": dcs = np.linspace(-0.057, -0.015, 301) 
     # dcs = np.linspace(-0.4, 0.4, 501) # default wide-sweep 
-    # dcs = np.linspace(-0.15, 0.4, 501) # Catching Sweet-Spot 
+    # dcs = np.linspace(-0.15, 0.15, 501) # Catching Sweet-Spot 
 else: 
     ts = [30]
     dcs = [-0.045]
@@ -108,7 +113,7 @@ else:
 if coupler.name=="coupler_q4_q5": cz_point, scale = -0.05884, -0.0039
 if coupler.name=="coupler_q3_q4": cz_point, scale = -0.09082, 0.0338 
 if coupler.name=="coupler_q2_q3": cz_point, scale = 0.06053, -0.0087
-if coupler.name=="coupler_q1_q2": cz_point, scale = 0.055533, 0.0828 
+if coupler.name=="coupler_q1_q2": cz_point, scale = 0.06149, 0.091 
 
 print("%s: %s" % (q1.name, q1.xy.RF_frequency))
 print("%s: %s" % (q2.name, q2.xy.RF_frequency))
@@ -240,9 +245,9 @@ else:
         progress_counter(n, n_avg, start_time=results.start_time)
 
         if sweep_flux == "qc":
-            cz_dur = 88 # coupler.operations["cz"].length
+            cz_dur = 80 #88 # coupler.operations["cz"].length
         if sweep_flux == "qb": 
-            cz_dur = 240 
+            cz_dur = 80 
 
         # Plot
         plt.suptitle("CZ chevron (compensation: %s, cz_dur: %sns, %s/%s)" % (scale, cz_dur, n, n_avg ))
@@ -254,6 +259,11 @@ else:
         plt.subplot(322)
         plt.cla()
         plt.plot(dcs, I2[:][list(ts).index(cz_dur//4)])
+        if check_cz_pulse: 
+            if sweep_flux=="qc":
+                plt.axvline(coupler.operations["cz"].amplitude + coupler.decouple_offset, color="r", linestyle="--", linewidth=1.25)
+            else:
+                plt.axvline( q1.z.operations[("cz%s_%s"%(q1.name,q2.name)).replace("q","")].amplitude + q1.z.min_offset - scale*coupler.operations["cz"].amplitude, color="r", linestyle="--", linewidth=1.25)
 
         plt.subplot(323)
         plt.cla()
@@ -306,8 +316,9 @@ else:
 
         # feedback from CZ-Pi: 
         if sweep_flux=="qc":
+            if check_cz_pulse: 
+                plt.axvline(coupler.operations["cz"].amplitude + coupler.decouple_offset, color="r", linestyle="--", linewidth=1.25)
             if coupler.decouple_offset>dcs[0] and coupler.decouple_offset<dcs[-1]:
-                # plt.axvline( coupler.operations["cz"].amplitude, color="r", linestyle="--", linewidth=1.5)
                 plt.axvline(coupler.decouple_offset, color="b", linestyle="--", linewidth=1.0)
         else:
             if cz_point>dcs[0] and cz_point<dcs[-1]:

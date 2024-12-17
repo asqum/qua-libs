@@ -59,8 +59,8 @@ config = machine.generate_config()
 qmm = machine.connect()
 
 # Get the relevant QuAM components
-q1 = machine.qubits["q5"]
-q2 = machine.qubits["q4"]
+q1 = machine.qubits["q1"]
+q2 = machine.qubits["q2"]
 
 readout_qubits = [qubit for qubit in machine.qubits.values() if qubit not in [q1, q2]]
 
@@ -87,21 +87,21 @@ n_avg = 3000
 # The flux pulse durations in clock cycles (4ns) - Must be larger than 4 clock cycles.
 # The flux bias sweep in V
 dcs = np.linspace(-0.3, 0.3, 501)
-dcs = np.linspace(-0.09, -0.05, 301) # q4_5
+# dcs = np.linspace(-0.09, -0.05, 301) # q4_5
 # dcs = np.linspace(-0.088, -0.053, 301) # q3_4
 # dcs = np.linspace(-0.115, -0.049, 301) # q2_3
-# dcs = np.linspace(-0.057, -0.016, 301) # q1_2
+dcs = np.linspace(-0.057, -0.016, 301) # q1_2
 # dcs = [-0.046, -0.045]
 
 scales = np.linspace(-0.25, 0.25, 101)
-scales = np.linspace(-0.05, 0.05, 101) # q4_5
+# scales = np.linspace(-0.05, 0.05, 101) # q4_5
 # scales = np.linspace(-0.030, 0.115, 101) # q3_4
 # scales = np.linspace(-0.06, 0.055, 101) # q2_3
-# scales = np.linspace(-0.05, 0.2, 101) # q1_2
+scales = np.linspace(-0.05, 0.2, 101) # q1_2
 # scales = [0.4, 0.41]
 
 cz_dur = 100 #360
-cz_point = -0.05870 # when coupler = 0 
+cz_point = 0.06149 # when coupler = 0 
 
 mode = "pulse" # dc or pulse
 simulate = False
