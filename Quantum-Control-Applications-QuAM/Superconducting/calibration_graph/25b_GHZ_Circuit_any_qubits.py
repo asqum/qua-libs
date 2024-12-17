@@ -20,14 +20,14 @@ from qualibrate import NodeParameters, QualibrationNode
 from quam_libs.components import QuAM
 from quam_libs.macros import active_reset, readout_state
 
-matplotlib.use("TKAgg")
+# matplotlib.use("TKAgg")
 
 
 # %% {Node_parameters}
 class Parameters(NodeParameters):
-    qubits: Optional[List[str]] = None
-    control_qubit_post_cz_phase_corrections: List[float] = None
-    target_qubit_post_cz_phase_corrections: List[float] = None
+    qubits: Optional[List[str]] = ["q1","q2","q3","q4","q5"]
+    control_qubit_post_cz_phase_corrections: List[float] = [0.263, 0.484, 0.384, -0.278] #None
+    target_qubit_post_cz_phase_corrections: List[float] = [-0.459, 0.374, 0.449, -0.830] #None
     num_averages: int = 1000
     # flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
     reset_type: Literal['active', 'thermal'] = "thermal"
@@ -76,7 +76,7 @@ readout_qubits = [qubit for qubit in machine.qubits.values() if qubit not in qub
 
 
 with program() as ghz_circuit:
-    state = [declare(bool) for _ in range(len(qubits))]
+    state = [declare(int) for _ in range(len(qubits))]
     state_st = [declare_stream() for _ in range(len(qubits))]
     n = declare(int)
     n_st = declare_stream()
@@ -101,22 +101,29 @@ with program() as ghz_circuit:
             qc = qp.qubit_control
             qt = qp.qubit_target
 
+            qc_index = int(get_qubit_index_from_name(qc.name))
+            qt_index = int(get_qubit_index_from_name(qt.name))
+
+            q_lower_index = qc if qc_index < qt_index else qt
+            q_higher_index = qt if qc_index < qt_index else qc 
+            
             if i == 0:
-                qc.xy.play("y90")
-            qt.xy.play("-y90")
+                q_lower_index.xy.play("y90")
+            q_higher_index.xy.play("-y90")
 
             qp.align()
 
             # assumes a CZ gate exists with name e.g. `cz1_2`, when q1 is the control and q2 is the target.
             qc.z.play(f"cz{get_qubit_index_from_name(qc.name)}_{get_qubit_index_from_name(qt.name)}")
             qp.coupler.play("cz")
+            wait(150 * u.ns)
 
             qp.align()
 
             qc.xy.frame_rotation_2pi(node.parameters.control_qubit_post_cz_phase_corrections[i])
             qt.xy.frame_rotation_2pi(node.parameters.target_qubit_post_cz_phase_corrections[i])
 
-            qt.xy.play("y90")
+            q_higher_index.xy.play("y90")
 
         # play readout pulse on other qubits for multiplexing
         for readout_qubit in readout_qubits:
@@ -131,7 +138,7 @@ with program() as ghz_circuit:
     with stream_processing():
         n_st.save("n")
         for i in range(len(qubits)):
-            state_st[i].average().save(f"state_{qubits[i].name}")
+            state_st[i].save_all(f"state_{qubits[i].name}")
 
 
 if not node.parameters.simulate:
@@ -150,8 +157,11 @@ if not node.parameters.simulate:
         # Progress bar
         progress_counter(n, node.parameters.shots, start_time=results.start_time)
 
-        bitstrings = [''.join(str(state)) for state in zip(states)]
-        all_possible_bitstrings = [fr"|{''.join(bits)}\rangle" for bits in product('01', repeat=len(qubits))]
+        bitstrings = []
+        for i in range(len(states[0])):
+            bitstrings.append(''.join([str(s[i]) for s in states]))
+
+        all_possible_bitstrings = [''.join(bits) for bits in product('01', repeat=len(qubits))]
 
         bitstring_counts = Counter(bitstrings)
         counts = [bitstring_counts.get(bit, 0) for bit in all_possible_bitstrings]
@@ -159,14 +169,14 @@ if not node.parameters.simulate:
         total = sum(counts)
         normalized_counts = [count / total for count in counts] if total > 0 else [0] * len(counts)
 
-        plt.figure(figsize=(12, 6))
-        plt.bar(all_possible_bitstrings, normalized_counts, color='skyblue', edgecolor='black', width=0.4)
-        plt.xlabel("States")
+        all_possible_bitstrings = [fr"$|{''.join(bits)}\rangle$" for bits in product('01', repeat=len(qubits))]
+        plt.cla()
+        plt.bar(all_possible_bitstrings, normalized_counts, color='blue', width=0.4)
+        plt.xlabel(fr"States in the form $|{''.join([qubits[i].name for i in range(len(qubits))])}\rangle$")
         plt.ylabel("Normalized Count")
         plt.title(f"{len(qubits)}-qubit state probability after GHZ circuit.")
         plt.xticks(rotation=90)
         plt.tight_layout()
-        plt.show()
 
         plt.tight_layout()
         plt.pause(0.3)

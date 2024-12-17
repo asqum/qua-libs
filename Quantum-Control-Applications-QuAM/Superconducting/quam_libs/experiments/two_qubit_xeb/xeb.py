@@ -1,17 +1,21 @@
+import json
 import warnings
-from dataclasses import asdict
-from typing import Union, List, Optional, Dict, Tuple
+from typing import Union, List, Optional, Dict, Tuple, Literal
 import numpy as np
 from qm.qua import *
 from .macros import (
     qua_declaration,
     reset_qubit,
-    cross_entropy,
     binary,
     exponential_decay,
     fit_exponential_decay,
     get_parallel_gate_combinations as gate_combinations,
     align_transmon_pair,
+    generate_circuits,
+    compute_log_fidelity,
+    evaluate_log_fidelity,
+    update_record,
+    update_data_frame,
 )
 import matplotlib.pyplot as plt
 from qiskit_aer import AerJob
@@ -23,45 +27,33 @@ from qiskit.transpiler import CouplingMap
 from qiskit.quantum_info import Statevector
 from qualang_tools.results import DataHandler
 
-from quam_libs.components import QuAM, Transmon, TransmonPair
-from quam_libs.macros import multiplexed_readout, node_save
-from qm import SimulationConfig
+from quam_libs.components import QuAM, Transmon
+from qm import SimulationConfig, QuantumMachinesManager
 from qm.jobs.running_qm_job import RunningQmJob
 from qm.jobs.simulated_job import SimulatedJob
 import seaborn as sns
-from copy import deepcopy
 from warnings import warn
 
+from qualang_tools.units import unit
+
+u = unit(coerce_to_integer=True)
 
 
 class XEB:
-    def __init__(self, xeb_config: XEBConfig, quam: QuAM):
+    def __init__(self, xeb_config: XEBConfig, machine: QuAM):
         """
         Initialize the XEB experiment
         Args:
             xeb_config: XEBConfig object containing the parameters of the experiment
-            quam: QuAM object containing the Quantum Machine configuration
+            machine: Machine object containing the Quantum Machine configuration
         """
         self.xeb_config = xeb_config
-        self.quam = quam
-        self.readout_qubits: List[Transmon] = xeb_config.readout_qubits
-        self.qubits: List[Transmon] = xeb_config.qubits
+        self.machine = machine
         self.qubit_dict: Dict = {i: qubit for i, qubit in enumerate(self.qubits)}
-        self.qubit_dict2: Dict = {qubit: i for i, qubit in enumerate(self.qubits)}
-        self.qubit_pairs: List[TransmonPair] = xeb_config.qubit_pairs
+
         if len(self.qubit_pairs) == 0:
             warn("No qubit pairs provided. The experiment will run with single qubit gates only.")
 
-        # Create CouplingMap from QuAM qubit pairs
-        coupling_map = CouplingMap()
-        for q in range(len(self.qubits)):
-            coupling_map.add_physical_qubit(q)
-        for qubit_pair in self.qubit_pairs:
-            if qubit_pair.qubit_control not in self.qubits or qubit_pair.qubit_target not in self.qubits:
-                raise ValueError("Qubit pairs must be formed by qubits present in the qubits list")
-            coupling_map.add_edge(self.qubit_dict2[qubit_pair.qubit_control], self.qubit_dict2[qubit_pair.qubit_target])
-        self.coupling_map = coupling_map
-        self.available_combinations: List[Tuple[Tuple[int, int]]] = gate_combinations(self.coupling_map)
         try:
             self.qubit_drive_channels = [qubit.xy for qubit in self.qubits]
             self.readout_channels = [qubit.resonator for qubit in self.qubits]
@@ -70,7 +62,56 @@ class XEB:
                 "Qubit objects must have 'xy' and 'resonator' attributes, "
                 "Contact CS Team if your QuAM structure is different."
             )
+
+        # Create CouplingMap from QuAM qubit pairs
+        qubit_dict = {qubit: i for i, qubit in enumerate(self.qubits)}
+        coupling_map = CouplingMap()
+        for qubit in range(len(self.qubits)):
+            coupling_map.add_physical_qubit(qubit)
+        for qubit_pair in self.qubit_pairs:
+            if qubit_pair.qubit_control not in self.qubits or qubit_pair.qubit_target not in self.qubits:
+                raise ValueError("Qubit pairs must be formed by qubits present in the qubits list")
+            coupling_map.add_edge(qubit_dict[qubit_pair.qubit_control], qubit_dict[qubit_pair.qubit_target])
+        self._coupling_map = coupling_map
+        self._available_combinations = gate_combinations(self.coupling_map)
+        self.xeb_config.available_combinations = self.available_combinations
+        self.xeb_config.coupling_map = self.coupling_map
         self.data_handler = DataHandler(name="XEB", root_data_folder=xeb_config.save_dir)
+
+    @property
+    def qubit_pairs(self):
+        """
+        Returns the qubit pairs for the XEB experiment
+        """
+        return self.xeb_config.qubit_pairs
+
+    @property
+    def qubits(self):
+        """
+        Returns the qubits for the XEB experiment
+        """
+        return self.xeb_config.qubits
+
+    @property
+    def readout_qubits(self):
+        """
+        Returns the readout qubits for the XEB experiment
+        """
+        return self.xeb_config.readout_qubits
+
+    @property
+    def available_combinations(self):
+        """
+        Returns the available combinations of qubit pairs for the XEB experiment
+        """
+        return self._available_combinations
+
+    @property
+    def coupling_map(self) -> CouplingMap:
+        """
+        Returns the coupling map for the XEB experiment
+        """
+        return self._coupling_map
 
     def _assign_amplitude_matrix(self, gate_idx, amp_matrix, amp_stream=None):
         """
@@ -110,7 +151,7 @@ class XEB:
         if self.xeb_config.gate_set.run_through_amp_matrix_modulation and amp_matrix is not None:
             # Play all gates through real-time amplitude matrix modulation
             qubit.xy.play(self.xeb_config.baseline_gate_name, amplitude_scale=amp(*amp_matrix))
-            # qubit.xy.play('x90') # NOTE: for debugging purposes  
+            # qubit.xy.play('x90') # NOTE: for debugging purposes
         else:
             # Play all gates through switch case over the gate index
             with switch_(gate_idx, unsafe=True):
@@ -155,10 +196,10 @@ class XEB:
             gate_st = [
                 declare_stream() for _ in range(n_qubits)
             ]  # Stream for gate indices (enabling circuit reconstruction in post-processing)
-
-            # Bring the active qubits to the idle points: 
-            self.quam.apply_all_flux_to_min()
-            self.quam.apply_all_couplers_to_min()
+            amp_st = [declare_stream() for _ in range(n_qubits)]  # Stream for amplitude matrices
+            # Bring the active qubits to the idle points:
+            self.machine.apply_all_flux_to_min()
+            self.machine.apply_all_couplers_to_min()
             # for q, qubit in enumerate(self.qubits):
             #     qubit.z.to_independent_idle()
 
@@ -168,9 +209,8 @@ class XEB:
 
             # If simulating, update the frequency to 0 to visualize sequence
             if simulate:
-                amp_st = [declare_stream() for _ in range(n_qubits)]
-                # for qubit in self.qubit_drive_channels:
-                #     update_frequency(qubit.name, 0)
+                for qubit in self.qubit_drive_channels:
+                    update_frequency(qubit.name, 0)
 
             # Generate the random sequences
             with for_(s, 0, s < self.xeb_config.seqs, s + 1):
@@ -187,7 +227,7 @@ class XEB:
                         self._assign_amplitude_matrix(
                             gate[q][0],
                             [amp_matrix[q][i][0] for i in range(4)],
-                            amp_st[q] if simulate else None,
+                            amp_st[q],
                         )
 
                 with for_(depth_, 1, depth_ < self.xeb_config.depths[-1], depth_ + 1):
@@ -206,7 +246,7 @@ class XEB:
                             self._assign_amplitude_matrix(
                                 gate[q][depth_],
                                 [amp_matrix[q][i][depth_] for i in range(4)],
-                                amp_st[q] if simulate else None,
+                                amp_st[q],
                             )
 
                 # Run the XEB sequence
@@ -232,13 +272,13 @@ class XEB:
                                         for i, combination in enumerate(self.available_combinations):
                                             with case_(i):
                                                 for pair in combination:
-                                                    for ctrl_idx, tgt_idx in pair:
-                                                        qubit_ctrl = self.qubit_dict[ctrl_idx]
-                                                        qubit_tgt = self.qubit_dict[tgt_idx]
-                                                        align_transmon_pair(qubit_ctrl @ qubit_tgt)
-                                                        # Two qubit gate macro
-                                                        self.xeb_config.two_qb_gate.gate_macro(qubit_ctrl @ qubit_tgt)
-                                                        align_transmon_pair(qubit_ctrl @ qubit_tgt)
+                                                    ctrl_idx, tgt_idx = pair
+                                                    qubit_ctrl = self.qubit_dict[ctrl_idx]
+                                                    qubit_tgt = self.qubit_dict[tgt_idx]
+                                                    align_transmon_pair(qubit_ctrl @ qubit_tgt)
+                                                    # Two qubit gate macro
+                                                    self.xeb_config.two_qb_gate.gate_macro(qubit_ctrl @ qubit_tgt)
+                                                    align_transmon_pair(qubit_ctrl @ qubit_tgt)
 
                                     with if_(two_qubit_gate_pattern == len(self.available_combinations) - 1):
                                         assign(two_qubit_gate_pattern, 0)
@@ -251,9 +291,9 @@ class XEB:
                                     align_transmon_pair(qubit_pair)
 
                         # Measure the state
+                        wait(150 * u.ns)
                         align()
                         for q_idx, qubit in enumerate(self.qubits):
-                            
                             # Play the readout on the other resonator to measure in the same condition as when optimizing readout
                             for other_qubit in self.readout_qubits:
                                 if other_qubit.resonator != qubit.resonator:
@@ -304,22 +344,26 @@ class XEB:
                     state_st[q].boolean_to_int().buffer(self.xeb_config.n_shots).map(FUNCTIONS.average()).buffer(
                         len(self.xeb_config.depths)
                     ).save_all(f"state{q}")
+                    amp_st[q].buffer(self.xeb_config.depths[-1], 2, 2).save_all(f"amp_matrix_q{q}")
                 for i in range(dim):
                     string = "s" + binary(i, n_qubits)
                     counts_st[i].buffer(len(self.xeb_config.depths)).save_all(string)
 
-                if simulate:
-                    for q in range(n_qubits):
-                        amp_st[q].buffer(self.xeb_config.depths[-1], 2, 2).save_all(f"amp_matrix_q{q + 1}")
-
         return xeb_prog
 
-    def run(self, simulate: bool = False, simulation_config: SimulationConfig = None, **simulate_kwargs):
+    def run(
+        self,
+        simulate: bool = False,
+        simulation_config: Optional[SimulationConfig] = None,
+        qmm_cloud_simulator: Optional[QuantumMachinesManager] = None,
+        **simulate_kwargs,
+    ):
         """
         Run QUA program for the XEB experiment
         Args:
             simulate: Indicate if output should be simulated or not
-            simulation_time: The time in clock-cycles to simulate the program.
+            simulation_config: SimulationConfig object containing the parameters of the simulation
+            qmm_cloud_simulator: QuantumMachinesManager object to simulate the experiment
             simulate_kwargs: Optional additional keyword arguments passed to `qm.simulate`
 
         Returns: XEBJob object containing the information about the experiment (including results)
@@ -327,18 +371,23 @@ class XEB:
         """
         # Compile the QUA program
 
-        config = self.quam.generate_config()
+        config = self.machine.generate_config()
         if simulation_config is None:
             simulation_config = SimulationConfig(duration=10_000)
-        xeb_prog = self._xeb_prog(simulate=True)  # set simulate=True to get the amplitude matrix
-        qmm = self.quam.connect()
+        xeb_prog = self._xeb_prog(simulate=simulate)  # set simulate=True to get the amplitude matrix
+        if simulate and qmm_cloud_simulator is not None:
+            qmm = qmm_cloud_simulator
+        else:
+            qmm = self.machine.connect()
         qm = qmm.open_qm(config)
         if simulate:
             job = qm.simulate(xeb_prog, simulate=simulation_config, **simulate_kwargs)
         elif self.xeb_config.generate_new_data:
             job = qm.execute(xeb_prog)
         else:
-            raise NotImplementedError("Data fetching from previous runs is not yet implemented")
+            warnings.warn("Running deactivated. Set generate_new_data to True to run the experiment."
+                          "Use XEBResult.from_data() method to load data from a previous run.")
+            return 
 
         return XEBJob(job, self.xeb_config, self.data_handler, self.available_combinations, False, simulate)
 
@@ -435,7 +484,7 @@ class XEBJob:
         data_handler: DataHandler,
         available_combinations: List[Tuple[Tuple[int, int]]],
         simulate=False,
-        hardware_simulate=False
+        hardware_simulate=False,
     ):
         self.job = running_job
         self.available_combinations = available_combinations
@@ -446,8 +495,9 @@ class XEBJob:
             self._result_handles.wait_for_all_values()
         self.xeb_config = xeb_config
         self.data_handler = data_handler
-        self._gate_sequences = []
-        self._sq_indices = []
+        self._gate_indices = np.zeros(
+            (self.xeb_config.seqs, self.xeb_config.n_qubits, self.xeb_config.depths[-1]), dtype=int
+        )
         self._circuits = self._get_circuits()
 
     def _get_circuits(self):
@@ -476,47 +526,28 @@ class XEBJob:
             max_depth = self.xeb_config.depths[-1]
             n_qubits = self.xeb_config.n_qubits
             g = [self._result_handles.get(f"g{q}").fetch_all()["value"] for q in range(n_qubits)]
-            two_qubit_gate_pattern = 0
 
             for s in range(self.xeb_config.seqs):
-                self._sq_indices.append(np.zeros((n_qubits, max_depth), dtype=int))
                 for d in range(max_depth):
                     for q in range(n_qubits):
-                        self._sq_indices[s][q, d] = g[q][s, d]
+                        self._gate_indices[s, q, d] = g[q][s, d]
 
-            for s in range(self.xeb_config.seqs):
-                circuits.append([])
-                for d_, depth in enumerate(self.xeb_config.depths):
-                    qc = QuantumCircuit(n_qubits)
-                    for d in range(depth):
-                        for q in range(n_qubits):
-                            sq_gate = self.xeb_config.gate_set[self._sq_indices[s][q, d]].gate
-                            qc.append(sq_gate, [q])
-                        qc.barrier()
-                        if self.xeb_config.two_qb_gate is not None:
-                            for i, combination in enumerate(self.available_combinations):
-                                if i == two_qubit_gate_pattern:
-                                    for pair in combination:
-                                        qc.append(self.xeb_config.two_qb_gate.gate, pair)
-                                    qc.barrier()
-                                    break
-                            if two_qubit_gate_pattern == len(self.available_combinations) - 1:
-                                two_qubit_gate_pattern = 0
-                            else:
-                                two_qubit_gate_pattern += 1
-
-                            # qc.append(self.xeb_config.two_qb_gate.gate, [0, 1])
-                    qc.measure_all()
-                    circuits[s].append(qc)
-                    two_qubit_gate_pattern = 0
+            circuits = generate_circuits(self.xeb_config, self.gate_indices, self.available_combinations)
         return circuits
 
-    def result(self):
+    def result(self, disjoint_processing: Optional[bool] = None):
         """
         Returns the results of the XEB experiment
+
+        Args:
+            disjoint_processing: Indicate if disjoint processing should be applied to the results
         Returns: XEBResult object containing the results of the experiment
 
         """
+
+        if disjoint_processing is not None:
+            assert isinstance(disjoint_processing, bool), "disjoint_processing should be a boolean"
+            self.xeb_config.disjoint_processing = disjoint_processing
         if self._simulate:
             result = self.job.result()
             counts = result.get_counts()
@@ -525,12 +556,12 @@ class XEBJob:
                 for key in [binary(i, self.xeb_config.n_qubits) for i in range(self.xeb_config.dim)]:
                     if key not in count.keys():
                         count[key] = 0
-            states = [{f"state{q}": 0.0 for q in range(self.xeb_config.n_qubits)} for _ in range(len(counts))]
+            states = [{f"state_{qubit.name}": 0.0 for qubit in self.xeb_config.qubits} for _ in range(len(counts))]
             for c, count in enumerate(counts):
                 for key, value in count.items():
                     for i, bit in enumerate(reversed(key)):
                         if bit == "1":
-                            states[c][f"state{i}"] += value
+                            states[c][f"state_{self.xeb_config.qubits[i].name}"] += value
             states = {
                 key: np.reshape(
                     [state[key] / self.xeb_config.n_shots for state in states],
@@ -549,56 +580,38 @@ class XEBJob:
 
             saved_data = {"counts": counts, "states": states, "density_matrices": dms}
         else:
-            gate_indices = {
-                f"g{q}": self._result_handles.get(f"g{q}").fetch_all()["value"] for q in range(self.xeb_config.n_qubits)
-            }
-            quadratures = {
-                f"{i}_{q}": self._result_handles.get(f"{i}{q}").fetch_all()["value"]
-                for i in ["I", "Q"]
-                for q in range(self.xeb_config.n_qubits)
-            }
-            states = {
-                f"state{q}": self._result_handles.get(f"state{q}").fetch_all()["value"]
-                for q in range(self.xeb_config.n_qubits)
-            }
-            counts = {
-                binary(i, self.xeb_config.n_qubits): self._result_handles.get(
-                    f"s{binary(i, self.xeb_config.n_qubits)}"
-                ).fetch_all()["value"]
-                for i in range(self.xeb_config.dim)
-            }
+
+            gate_indices, states, counts, quadratures, amp_st = {}, {}, {}, {}, {}
+            result = self._result_handles
+            for q, qubit in enumerate(self.xeb_config.qubits):
+                gate_indices[f"g_{qubit.name}"] = result.get(f"g{q}").fetch_all()["value"]
+                quadratures[f"I_{qubit.name}"] = result.get(f"I{q}").fetch_all()["value"]
+                quadratures[f"Q_{qubit.name}"] = result.get(f"Q{q}").fetch_all()["value"]
+                states[f"state_{qubit.name}"] = result.get(f"state{q}").fetch_all()["value"]
+                if self.xeb_config.gate_set.run_through_amp_matrix_modulation:
+                    amp_st[f"amp_matrix_{qubit.name}"] = result.get(f"amp_matrix_q{q}").fetch_all()["value"]
+
+            n_qubits = self.xeb_config.n_qubits
+            for i in range(self.xeb_config.dim):
+                counts[binary(i, n_qubits)] = result.get(f"s{binary(i, n_qubits)}").fetch_all()["value"]
+
             saved_data = {
-                "quadratures": quadratures,
-                "states": states,
-                "counts": counts,
-                "gate_indices": gate_indices,
+                **quadratures,
+                **states,
+                **counts,
+                **amp_st,
+                "gate_indices": self.gate_indices,
+                "gate_sequences": self.gate_sequences,
             }
 
-            amp_res = self._result_handles.get("amp_matrix_q0")
-            if amp_res is not None:
-                try:
-                    amp_st = {
-                        f"amp_matrix_q{q + 1}": self._result_handles.get(f"amp_matrix_q{q + 1}").fetch_all()["value"]
-                        for q in range(self.xeb_config.n_qubits)
-                    }
-                    saved_data["amp_st"] = (amp_st,)
-
-                except KeyError:
-                    pass
-
-        if self.xeb_config.should_save_data:
-            xeb_config = asdict(self.xeb_config)
-            xeb_config["two_qb_gate"] = self.xeb_config.two_qb_gate.gate.name
-            if self.xeb_config.should_save_data:
-                self.data_handler.save_data(
-                    data={
-                        "xeb_config": xeb_config,
-                        "sq_indices": self._sq_indices,
-                        **deepcopy(saved_data),
-                    }
-                )
-
-        return XEBResult(self.xeb_config, self.circuits, saved_data, self.data_handler)
+        return XEBResult(
+            self.xeb_config,
+            self.circuits,
+            counts,
+            states,
+            saved_data,
+            self.data_handler if self.xeb_config.should_save_data else None,
+        )
 
     @property
     def circuits(self):
@@ -621,6 +634,28 @@ class XEBJob:
     def hardware_simulate(self):
         return self._hardware_simulate
 
+    @property
+    def gate_indices(self):
+        """
+        Returns the gate indices of the XEB experiment in the form of a 3D numpy array (sequence, qubit, depth)
+        """
+        return self._gate_indices
+
+    @property
+    def gate_sequences(self):
+        """
+        Returns the gate sequences of the XEB experiment in the form of a 3D numpy array (sequence, qubit, depth)
+        """
+        gate_sequences = np.zeros(
+            (self.xeb_config.seqs, self.xeb_config.n_qubits, self.xeb_config.depths[-1]), dtype=str
+        )
+        for s in range(self.xeb_config.seqs):
+            for q in range(self.xeb_config.n_qubits):
+                for d in range(self.xeb_config.depths[-1]):
+                    gate_sequences[s, q, d] = self.xeb_config.gate_set[self.gate_indices[s, q, d]].name
+
+        return gate_sequences
+
     def plot_simulated_samples(self):
         if self.hardware_simulate:
             samples = self.job.get_simulated_samples()
@@ -637,25 +672,93 @@ class XEBJob:
 
 class XEBResult:
     def __init__(
-        self,
-        xeb_config: XEBConfig,
-        circuits,
-        saved_data,
-        data_handler: DataHandler = None,
+        self, xeb_config: XEBConfig, circuits, counts: Dict, states: Dict, saved_data, data_handler: DataHandler = None
     ):
         self.xeb_config = xeb_config
         self.circuits: List[List[QuantumCircuit]] = circuits
-        self.saved_data = saved_data
+        self.counts = counts
+        self.states = states
+        self.data = saved_data
         self.data_handler = data_handler
         (
-            self._measured_probs,
-            self._expected_probs,
+            self._joint_measured_probs,
+            self._disjoint_measured_probs,
+            self._joint_expected_probs,
+            self._disjoint_expected_probs,
             self._records,
             self._log_fidelities,
             self._linear_fidelities,
             self._singularities,
             self._outliers,
         ) = self.retrieve_data()
+
+        self.data.update(
+            {
+                "joint_measured_probs": self._joint_measured_probs,
+                "disjoint_measured_probs": self._disjoint_measured_probs,
+                "joint_expected_probs": self._joint_expected_probs,
+                "disjoint_expected_probs": self._disjoint_expected_probs,
+                "log_fidelities": self._log_fidelities,
+                "linear_fidelities": (
+                    np.array(self.linear_fidelities["fidelity"])
+                    if not self.xeb_config.disjoint_processing
+                    else np.array([fidelity["fidelity"] for fidelity in self.linear_fidelities])
+                ),
+                "singularities": self._singularities,
+                "outliers": self._outliers,
+            }
+        )
+
+        if self.xeb_config.should_save_data and self.data_handler is not None:
+            save_data = {}
+            for key in save_data.keys(): # Remove the amplitude matrices from the saved data
+                if 'amp_matrix' in key:
+                    continue
+                save_data[key] = self.data[key]
+            self.data_handler.save_data(saved_data,
+                                        self.xeb_config.data_folder_name,
+                                        metadata=self.xeb_config.as_dict())
+
+    @classmethod
+    def from_data(
+        cls, directory: str, disjoint_processing: Optional[bool] = None, data_handler: Optional[DataHandler] = None
+    ):
+        """
+        Retrieve the XEBResult object from a saved data file (JSON format)
+
+        Args:
+            directory: Directory of the saved data files (should contain data.json and node.json)
+            disjoint_processing: Indicate if disjoint processing should be applied to the results
+            data_handler: DataHandler object to handle the data
+        """
+        data: Dict = json.load(open(directory + "/data.json", "r"))
+        arrays: Dict = np.load(directory + "/arrays.npz")
+        metadata: Dict = json.load(open(directory + "/node.json", "r"))
+        xeb_config = XEBConfig.from_dict(metadata["metadata"])
+        if disjoint_processing is not None:
+            assert isinstance(disjoint_processing, bool), "disjoint_processing should be a boolean"
+            xeb_config.disjoint_processing = disjoint_processing
+        gate_indices = arrays["gate_indices"]
+        circuits = generate_circuits(xeb_config, gate_indices, xeb_config.available_combinations)
+
+        new_data = {"states": {}, "counts": {}, "quadratures": {}, "amp_st": {}}
+
+        for key, value in data.items():
+            if "state" in key:
+                new_data["states"][key] = arrays[key]
+            elif key.isnumeric():
+                new_data["counts"][key] = arrays[key]
+            elif "amp_matrix" in key:
+                new_data["amp_st"][key] = arrays[key]
+            elif key.startswith("I") or key.startswith("Q"):
+                new_data["quadratures"][key] = arrays[key]
+            else:
+                if key in arrays:
+                    new_data[key] = arrays[key]
+                else:
+                    new_data[key] = value
+
+        return cls(xeb_config, circuits, new_data["counts"], new_data["states"], new_data, data_handler)
 
     def retrieve_data(self):
         """
@@ -674,13 +777,27 @@ class XEBResult:
         n_qubits = len(self.xeb_config.qubits)
         seqs = self.xeb_config.seqs
         depths = self.xeb_config.depths
-        counts = self.saved_data["counts"]
-        states = self.saved_data["states"]
+        counts = self.counts
+        states = self.states
+
+        existing_data = "joint_expected_probs" in self.data.keys()
+
+        if not existing_data:
+            joint_expected_probs = np.zeros((seqs, len(depths), dim))
+            joint_measured_probs = np.zeros((seqs, len(depths), dim))
+
+            disjoint_expected_probs = np.zeros((n_qubits, seqs, len(depths), 2))
+            disjoint_measured_probs = np.zeros((n_qubits, seqs, len(depths), 2))
+        else:
+            joint_expected_probs = self.data["joint_expected_probs"]
+            joint_measured_probs = self.data["joint_measured_probs"]
+
+            disjoint_expected_probs = self.data["disjoint_expected_probs"]
+            disjoint_measured_probs = self.data["disjoint_measured_probs"]
+
         if not self.xeb_config.disjoint_processing:
             records, singularity, outlier = [], [], []
             incoherent_distribution = np.ones(dim) / dim
-            expected_probs = np.zeros((seqs, len(depths), dim))
-            measured_probs = np.zeros((seqs, len(depths), dim))
             log_fidelities = np.zeros((seqs, len(depths)))
 
         else:
@@ -688,111 +805,66 @@ class XEBResult:
             singularity = [[] for _ in range(n_qubits)]
             outlier = [[] for _ in range(n_qubits)]
             incoherent_distribution = np.ones(2) / 2
-            expected_probs = np.zeros((n_qubits, seqs, len(depths), 2))
-            measured_probs = np.zeros((n_qubits, seqs, len(depths), 2))
             log_fidelities = np.zeros((n_qubits, seqs, len(depths)))
 
         for s in range(seqs):
-            for d_, d in enumerate(depths):
+            for d_, depth in enumerate(depths):
                 qc = self.circuits[s][d_].remove_final_measurements(inplace=False)
-
-                if not self.xeb_config.disjoint_processing:
-                    expected_probs[s, d_] = np.round(Statevector(qc).probabilities(), 5)
-                    measured_probs[s, d_] = (
+                if not existing_data:
+                    statevector = Statevector(qc)
+                    joint_expected_probs[s, d_] = statevector.probabilities(decimals=5)
+                    joint_measured_probs[s, d_] = (
                         np.array([counts[binary(i, n_qubits)][s][d_] for i in range(dim)]) / self.xeb_config.n_shots
                     )
 
-                    # Calculate the cross-entropy fidelities (logarithmic)
-                    xe_incoherent = cross_entropy(incoherent_distribution, expected_probs[s, d_])
-                    xe_measured = cross_entropy(measured_probs[s, d_], expected_probs[s, d_])
-                    xe_expected = cross_entropy(expected_probs[s, d_], expected_probs[s, d_])
+                    for q in range(n_qubits):
+                        disjoint_expected_probs[q, s, d_] = statevector.probabilities([q], 5)
+                        qubit_state = states[f"state_{self.qubit_names[q]}"][s, d_]
+                        disjoint_measured_probs[q, s, d_] = np.array([1 - qubit_state, qubit_state])
 
-                    f_xeb = (xe_incoherent - xe_measured) / (xe_incoherent - xe_expected)
-                    if np.isinf(f_xeb) or np.isnan(f_xeb):
-                        singularity.append((s, d_))
-                        log_fidelities[s, d_] = np.nan  # Set all singularities to NaN
-                    elif f_xeb < 0 or f_xeb > 1:
-                        outlier.append(((s, d_), f_xeb))
-                        log_fidelities[s, d_] = np.nan  # Set all outliers to NaN
-                    else:
-                        log_fidelities[s, d_] = f_xeb
+                if not self.xeb_config.disjoint_processing:
+                    # Calculate the cross-entropy fidelities (logarithmic)
+                    f_xeb = compute_log_fidelity(
+                        incoherent_distribution, joint_expected_probs[s, d_], joint_measured_probs[s, d_]
+                    )
+                    log_fidelities[s, d_] = evaluate_log_fidelity(f_xeb, singularity, outlier, s, int(depth))
 
                     # Store records for linear XEB post-processing
-                    records += [
-                        {
-                            "sequence": s,
-                            "depth": depths[d_],
-                            "pure_probs": expected_probs[s, d_],
-                            "sampled_probs": measured_probs[s, d_],
-                        }
-                    ]
+                    records = update_record(
+                        records, s, depth, joint_expected_probs[s, d_], joint_measured_probs[s, d_], dim
+                    )
 
                 else:
-                    for q in range(n_qubits):
-                        expected_probs[q, s, d_] = np.round(Statevector(qc).probabilities([q]), 5)
-                        measured_probs[q, s, d_] = np.array(
-                            [1 - states[f"state{q}"][s][d_], states[f"state{q}"][s][d_]]
-                        )
-
+                    for q, qubit_name in enumerate(self.qubit_names):
                         # Calculate the cross-entropy fidelities (logarithmic)
-                        xe_incoherent = cross_entropy(incoherent_distribution, expected_probs[q, s, d_])
-                        xe_measured = cross_entropy(measured_probs[q, s, d_], expected_probs[q, s, d_])
-                        xe_expected = cross_entropy(expected_probs[q, s, d_], expected_probs[q, s, d_])
-
-                        f_xeb = (xe_incoherent - xe_measured) / (xe_incoherent - xe_expected)
-                        if np.isinf(f_xeb) or np.isnan(f_xeb):
-                            singularity[q].append((s, d_))
-                            log_fidelities[q, s, d_] = np.nan
-                        elif f_xeb < 0 or f_xeb > 1:
-                            outlier[q].append(((s, d_), f_xeb))
-                            log_fidelities[q, s, d_] = np.nan
-                        else:
-                            log_fidelities[q, s, d_] = f_xeb
-                            # Store records for linear XEB post-processing
-                        records[q] += [
-                            {
-                                "sequence": s,
-                                "depth": depths[d_],
-                                "pure_probs": expected_probs[q, s, d_],
-                                "sampled_probs": measured_probs[q, s, d_],
-                            }
-                        ]
+                        f_xeb = compute_log_fidelity(
+                            incoherent_distribution,
+                            disjoint_expected_probs[q, s, d_],
+                            disjoint_measured_probs[q, s, d_],
+                        )
+                        log_fidelities[q, s, d_] = evaluate_log_fidelity(f_xeb, singularity[q], outlier[q], 
+                                                                         s, int(depth))
+                        # Store records for linear XEB post-processing
+                        records[q] = update_record(
+                            records[q],
+                            s,
+                            depth,
+                            disjoint_expected_probs[q, s, d_],
+                            disjoint_measured_probs[q, s, d_],
+                            2,
+                        )
 
         def per_cycle_depth(df):
             fid_lsq = df["numerator"].sum() / df["denominator"].sum()
             return pd.Series({"fidelity": fid_lsq})
 
         if not self.xeb_config.disjoint_processing:
-            for record in records:
-                e_u = np.sum(record["pure_probs"] ** 2)
-                u_u = np.sum(record["pure_probs"]) / dim
-                m_u = np.sum(record["pure_probs"] * record["sampled_probs"])
-                record.update(e_u=e_u, u_u=u_u, m_u=m_u)
-            df = pd.DataFrame(records)
-            try:
-                df["y"] = df["m_u"] - df["u_u"]
-                df["x"] = df["e_u"] - df["u_u"]
-            except KeyError:
-                raise ValueError("The records for linear XEB are empty. Please rerun the experiment.")
-
-            df["numerator"] = df["x"] * df["y"]
-            df["denominator"] = df["x"] ** 2
+            df = update_data_frame(pd.DataFrame(records))
             linear_fidelities = df.groupby("depth").apply(per_cycle_depth).reset_index()
         else:
-            linear_fidelities = []
-            df = []
+            df, linear_fidelities = [], []
             for q in range(n_qubits):
-                for record in records[q]:
-                    e_u = np.sum(record["pure_probs"] ** 2)
-                    u_u = np.sum(record["pure_probs"]) / 2
-                    m_u = np.sum(record["pure_probs"] * record["sampled_probs"])
-                    record.update(e_u=e_u, u_u=u_u, m_u=m_u)
-                df_q = pd.DataFrame(records[q])
-                df_q["y"] = df_q["m_u"] - df_q["u_u"]
-                df_q["x"] = df_q["e_u"] - df_q["u_u"]
-
-                df_q["numerator"] = df_q["x"] * df_q["y"]
-                df_q["denominator"] = df_q["x"] ** 2
+                df_q = update_data_frame(pd.DataFrame(records[q]))
                 linear_fidelities.append(df_q.groupby("depth").apply(per_cycle_depth).reset_index())
                 df.append(df_q)
 
@@ -800,8 +872,10 @@ class XEBResult:
             warnings.warn("All fidelities computed from log-entropies are singularities.")
 
         return (
-            measured_probs,
-            expected_probs,
+            joint_measured_probs,
+            disjoint_measured_probs,
+            joint_expected_probs,
+            disjoint_expected_probs,
             df,
             log_fidelities,
             linear_fidelities,
@@ -809,127 +883,116 @@ class XEBResult:
             outlier,
         )
 
-    def plot_fidelities(self, fit_linear: bool = True, fit_log_entropy: bool = True):
+    def get_layer_fidelity(self, fidelity_metric: Literal["log", "linear"] = "linear", disjoint_processing: bool = None):
+        """
+        Returns the layer fidelities for the XEB experiment
+        Args:
+            fidelity_metric: Indicate which fidelity metric should be computed: "log" or "linear"
+            disjoint_processing: Indicate if disjoint processing should be applied to the results
+        """
+        if disjoint_processing is not None:
+            assert isinstance(disjoint_processing, bool), "disjoint_processing should be a boolean"
+        else:
+            disjoint_processing = self.xeb_config.disjoint_processing
+        
+        if disjoint_processing:
+            if fidelity_metric == "log":
+                Fxeb = np.nanmean(self.log_fidelities, axis=1)
+            else:
+                Fxeb = np.array([fidelity["fidelity"] for fidelity in self.linear_fidelities])
+            
+            a = [None] * len(self.qubit_names)
+            layer_fid = [None] * len(self.qubit_names)
+            for q, qubit in enumerate(self.qubit_names):
+                a[q], layer_fid[q], *_ = fit_exponential_decay(self.xeb_config.depths, Fxeb[q])
+        else:
+            if fidelity_metric == "log":
+                Fxeb = np.nanmean(self.log_fidelities, axis=0)
+            else:
+                Fxeb = np.array(self.linear_fidelities["fidelity"])
+            a, layer_fid, *_ = fit_exponential_decay(self.xeb_config.depths, Fxeb)
+        return layer_fid
+
+
+    def plot_fidelities(self, fit_linear: bool = True, fit_log_entropy: bool = True, separate_plots: bool = False):
         """
         Plot the cross-entropy fidelities for the XEB experiment
         Args:
             fit_linear: Indicate if the linear XEB data should be fitted
             fit_log_entropy: Indicate if the log-entropy XEB data should be fitted
+            separate_plots: Indicate if the fidelities should be plotted on separate plots (one per qubit, relevant
+                only when disjoint_processing is True)
         Returns:
         """
-
+        figs = [plt.figure()]
         plt.rcParams["text.usetex"] = False
 
-        if self.xeb_config.disjoint_processing:
-            for q in range(len(self.xeb_config.qubits)):
-                linear_fidelities = self._linear_fidelities[q]
-                xx = np.linspace(0, linear_fidelities["depth"].max())
-                try:  # Fit the data for the linear XEB
-                    if fit_linear:
-                        (
-                            a_lin,
-                            layer_fid_lin,
-                            a_std_lin,
-                            layer_fid_std_lin,
-                        ) = fit_exponential_decay(linear_fidelities["depth"], linear_fidelities["fidelity"])
-                        plt.plot(
-                            xx,
-                            exponential_decay(xx, a_lin, layer_fid_lin),
-                            label=f"Fit (Linear XEB Qubit {q}), layer_fidelity={layer_fid_lin * 100:.1f}%",
-                        )
-                except Exception as e:
-                    warnings.warn("Fit for Linear XEB data failed")
-
-                Fxeb = np.nanmean(self.log_fidelities[q], axis=0)
-                try:  # Fit the data for the log-entropy XEB
-                    if fit_log_entropy:
-                        (
-                            a_log,
-                            layer_fid_log,
-                            a_std_log,
-                            layer_fid_std_log,
-                        ) = fit_exponential_decay(self.xeb_config.depths, Fxeb)
-                        plt.plot(
-                            xx,
-                            exponential_decay(xx, a_log, layer_fid_log),
-                            label=f"Fit (Log XEB Qubit {q}), layer_fidelity={layer_fid_log * 100:.1f}%",
-                        )
-                except Exception as e:
-                    warnings.warn("Fit for Log XEB data failed")
-
-                mask_lin = (linear_fidelities["fidelity"] > 0) & (linear_fidelities["fidelity"] < 1)
-                masked_linear_depths = linear_fidelities["depth"][mask_lin]
-                masked_linear_fids = linear_fidelities["fidelity"][mask_lin]
+        def plot_fidelity_data(xx, depths, linear_fidelities, Fxeb, qubit_label=""):
+            try:
                 if fit_linear:
-                    label = f"Linear XEB Data Qubit {q}"
-                    plt.scatter(masked_linear_depths, masked_linear_fids, label=label)
-
-                mask_log = (Fxeb > 0) & (Fxeb < 1)
-
-                if fit_log_entropy and not np.isnan(Fxeb).all():
-                    plt.scatter(
-                        self.xeb_config.depths[mask_log],
-                        Fxeb[mask_log],
-                        label=f"Log XEB Data Qubit {q}",
+                    a_lin, layer_fid_lin, *_ = fit_exponential_decay(
+                        linear_fidelities["depth"], linear_fidelities["fidelity"]
                     )
-                else:
-                    warnings.warn(f"Log XEB data for qubit {q} is a singularity.")
-
-        else:
-            xx = np.linspace(0, self.linear_fidelities["depth"].max())
-            try:  # Fit the data for the linear XEB
-                if fit_linear:
-                    (
-                        a_lin,
-                        layer_fid_lin,
-                        a_std_lin,
-                        layer_fid_std_lin,
-                    ) = fit_exponential_decay(self.linear_fidelities["depth"], self.linear_fidelities["fidelity"])
                     plt.plot(
                         xx,
                         exponential_decay(xx, a_lin, layer_fid_lin),
-                        label="Fit (Linear XEB), layer_fidelity={:.1f}%".format(layer_fid_lin * 100),
-                        color="red",
+                        label=f"Fit (Linear XEB{qubit_label}), layer_fidelity={layer_fid_lin * 100:.1f}%",
                     )
-            except Exception as e:
+            except Exception:
                 warnings.warn("Fit for Linear XEB data failed")
 
-            Fxeb = np.nanmean(self.log_fidelities, axis=0)
-            try:  # Fit the data for the log-entropy XEB
+            try:
                 if fit_log_entropy:
-                    (
-                        a_log,
-                        layer_fid_log,
-                        a_std_log,
-                        layer_fid_std_log,
-                    ) = fit_exponential_decay(self.xeb_config.depths, Fxeb)
+                    a_log, layer_fid_log, *_ = fit_exponential_decay(depths, Fxeb)
                     plt.plot(
                         xx,
                         exponential_decay(xx, a_log, layer_fid_log),
-                        label="Fit (Log XEB), layer_fidelity={:.1f}%".format(layer_fid_log * 100),
-                        color="green",
+                        label=f"Fit (Log XEB{qubit_label}), layer_fidelity={layer_fid_log * 100:.1f}%",
                     )
-            except Exception as e:
+            except Exception:
                 warnings.warn("Fit for Log XEB data failed")
 
-            mask_lin = (self.linear_fidelities["fidelity"] > 0) & (self.linear_fidelities["fidelity"] < 1)
-            masked_linear_depths = self.linear_fidelities["depth"][mask_lin]
-            masked_linear_fids = self.linear_fidelities["fidelity"][mask_lin]
             if fit_linear:
-                plt.scatter(masked_linear_depths, masked_linear_fids, label="Linear XEB Data", color="blue")
+                mask_lin = (linear_fidelities["fidelity"] > 0) & (linear_fidelities["fidelity"] < 1)
+                plt.scatter(
+                    linear_fidelities["depth"][mask_lin],
+                    linear_fidelities["fidelity"][mask_lin],
+                    label=f"Linear XEB Data {qubit_label}",
+                )
 
-            mask_log = (Fxeb > 0) & (Fxeb < 1)
             if fit_log_entropy and not np.isnan(Fxeb).all():
-                plt.scatter(self.xeb_config.depths[mask_log], Fxeb[mask_log], label="Log XEB Data", color="orange")
+                mask_log = (Fxeb > 0) & (Fxeb < 1)
+                plt.scatter(depths[mask_log], Fxeb[mask_log], label=f"Log XEB Data {qubit_label}")
             else:
-                warnings.warn("Log XEB data does not contain any physical values.")
+                warnings.warn(f"Log XEB data for {qubit_label} is a singularity.")
 
-        plt.ylabel("Circuit fidelity", fontsize=20)
-        plt.xlabel("Cycle Depth $d$", fontsize=20)
-        plt.title("XEB Fidelity")
-        plt.legend(loc="best")
-        plt.tight_layout()
-        plt.show()
+        if self.xeb_config.disjoint_processing:
+            for q, qubit in enumerate(self.qubit_names):
+                if separate_plots and q > 0:
+                    figs.append(plt.figure())
+                linear_fidelities = self.linear_fidelities[q]
+                xx = np.linspace(0, linear_fidelities["depth"].max())
+                Fxeb = np.nanmean(self.log_fidelities[q], axis=0)
+                plot_fidelity_data(xx, self.xeb_config.depths, linear_fidelities, Fxeb, f" {qubit}")
+                plt.ylabel("Circuit fidelity", fontsize=20)
+                plt.xlabel("Cycle Depth $d$", fontsize=20)
+                plt.title("XEB Fidelity")
+                plt.legend(loc="best")
+                if separate_plots:
+                    plt.tight_layout()
+                    plt.show()
+        else:
+            xx = np.linspace(0, self.linear_fidelities["depth"].max())
+            Fxeb = np.nanmean(self.log_fidelities, axis=0)
+            plot_fidelity_data(xx, self.xeb_config.depths, self.linear_fidelities, Fxeb)
+            plt.ylabel("Circuit fidelity", fontsize=20)
+            plt.xlabel("Cycle Depth $d$", fontsize=20)
+            plt.title("XEB Fidelity")
+            plt.legend(loc="best")
+            plt.tight_layout()
+            plt.show()
+
+        return figs
 
     def plot_records(self):
         """
@@ -938,7 +1001,6 @@ class XEBResult:
 
         """
         depths = self.xeb_config.depths
-        n_qubits = self.xeb_config.n_qubits
         colors = sns.cubehelix_palette(n_colors=len(depths))
         colors = {k: colors[i] for i, k in enumerate(depths)}
         _lines = []
@@ -964,10 +1026,10 @@ class XEBResult:
             plt.tight_layout()
         else:
             fids = []
-            for i in range(n_qubits):
+            for i, q in enumerate(self.qubit_names):
                 _lines = []
                 plt.figure()
-                fids.append(self.records[i].groupby("depth").apply(per_cycle_depth).reset_index())
+                fids.append(self.records[i].groupby("depth").apply(per_cycle_depth, _lines).reset_index())
                 plt.xlabel(r"$e_U - u_U$", fontsize=18)
                 plt.ylabel(r"$m_U - u_U$", fontsize=18)
                 _lines = np.asarray(_lines)
@@ -975,7 +1037,7 @@ class XEBResult:
                 plt.title(
                     "q-%s: Fxeb_linear = %s"
                     % (
-                        self.xeb_config.qubits_ids[i],
+                        q,
                         [fids[i]["fidelity"][x] for x in [0, 1]],
                     )
                 )
@@ -1001,12 +1063,12 @@ class XEBResult:
                 data.append(self.measured_probs[:, :, i])
                 data.append(self.expected_probs[:, :, i])
         else:
-            for i, q in enumerate(self.xeb_config.qubits):
+            for i, q in enumerate(self.qubit_names):
                 for j in range(2):
-                    titles.append(f"q{q}<{j}> Measured")
-                    titles.append(f"q{q}<{j}> Expected")
-                    data.append(self.measured_probs[i, :, :, j])
-                    data.append(self.expected_probs[i, :, :, j])
+                    titles.append(f"{q}<{j}> Measured")
+                    titles.append(f"{q}<{j}> Expected")
+                    data.append(self.disjoint_measured_probs[i, :, :, j])
+                    data.append(self.disjoint_expected_probs[i, :, :, j])
 
         num_plots = len(titles)
         plots_per_fig = 4  # Adjust this value based on the desired grid size (e.g., 2x2 grid)
@@ -1034,32 +1096,18 @@ class XEBResult:
                 ax.set_xticks(self.xeb_config.depths)
                 ax.set_yticks(np.arange(1, self.xeb_config.seqs + 1))
                 fig.colorbar(
-                    ax.pcolor(self.xeb_config.depths, range(self.xeb_config.seqs), np.abs(data[plot_idx]),
-                              vmin=0,
-                              vmax=1,
-                              ),
+                    ax.pcolor(
+                        self.xeb_config.depths,
+                        range(self.xeb_config.seqs),
+                        np.abs(data[plot_idx]),
+                        vmin=0,
+                        vmax=1,
+                    ),
                     ax=ax,
                 )
 
             plt.tight_layout()
             plt.show()
-
-    def save(self):
-        """
-        Save the results of the XEB experiment
-        """
-        self.data_handler.save_data(
-            data={
-                "config": asdict(self.xeb_config),
-                "fidelities": self.log_fidelities,
-                "linear_fidelities": self.linear_fidelities,
-                "records": self.records,
-                "measured_probs": self.measured_probs,
-                "expected_probs": self.expected_probs,
-                "singularity": self.singularities,
-                "outliers": self.outliers,
-            }
-        )
 
     @property
     def measured_probs(self):
@@ -1067,7 +1115,15 @@ class XEBResult:
         Measured probabilities of the states
         Returns: Measured probabilities of the states
         """
-        return self._measured_probs
+        return self._joint_measured_probs
+
+    @property
+    def disjoint_measured_probs(self):
+        """
+        Measured probabilities of the states for disjoint processing
+        Returns: Measured probabilities of the states for disjoint processing
+        """
+        return self._disjoint_measured_probs
 
     @property
     def expected_probs(self):
@@ -1075,7 +1131,15 @@ class XEBResult:
         Expected probabilities of the states
         Returns: Expected probabilities of the states
         """
-        return self._expected_probs
+        return self._joint_expected_probs
+
+    @property
+    def disjoint_expected_probs(self):
+        """
+        Expected probabilities of the states for disjoint processing
+        Returns: Expected probabilities of the states for disjoint processing
+        """
+        return self._disjoint_expected_probs
 
     @property
     def records(self):
@@ -1099,7 +1163,11 @@ class XEBResult:
         Linear fidelities
         Returns: Linear fidelities
         """
-        return self._linear_fidelities
+        if self.xeb_config.disjoint_processing:
+            fidelities = [self._linear_fidelities[q] for q in range(self.xeb_config.n_qubits)]
+        else:
+            fidelities = self._linear_fidelities
+        return fidelities
 
     @property
     def singularities(self):
@@ -1128,3 +1196,10 @@ class XEBResult:
         )
         purities = np.var(self.measured_probs, axis=-1) / var_pt
         return purities
+
+    @property
+    def qubit_names(self):
+        """
+        Qubit names
+        """
+        return [qubit.name if isinstance(qubit, Transmon) else qubit for qubit in self.xeb_config.qubits]

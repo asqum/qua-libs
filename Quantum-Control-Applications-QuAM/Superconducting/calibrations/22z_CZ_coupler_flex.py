@@ -84,31 +84,31 @@ config = machine.generate_config()
 simulate = False
 n_avg = 1373 #137000
 # The flux pulse durations in clock cycles (4ns) - Must be larger than 4 clock cycles.
-ts = np.arange(4, 20, 1)
-# ts = np.arange(4, 200, 2)
+ts = np.arange(4, 30, 1)
+# ts = np.arange(4, 600, 4)
 
 # The flux bias sweep in V
 if sweep_flux == "qb": 
     if coupler.name=="coupler_q4_q5": dcs = np.linspace(-0.070, -0.044, 301) # (q5<q4, Top-Left) 
     if coupler.name=="coupler_q3_q4": dcs = np.linspace(-0.100, -0.072, 301) # (q3<q4, Top-Left) 
     if coupler.name=="coupler_q2_q3": dcs = np.linspace(0.050, 0.072, 301) # (q3>q2, Top-Left)
-    if coupler.name=="coupler_q1_q2": dcs = np.linspace(0.045, 0.070, 301) # (q1>q2, Top-Left) 
+    if coupler.name=="coupler_q1_q2": dcs = np.linspace(0.0519, 0.0591, 301) # (q1>q2, Top-Left) 
     # dcs = np.linspace(-0.3, 0.3, 501) # default wide-sweep 
 elif sweep_flux == "qc": 
-    if coupler.name=="coupler_q4_q5": dcs = np.linspace(-0.087, -0.065, 301) 
-    if coupler.name=="coupler_q3_q4": dcs = np.linspace(-0.083, -0.060, 301) 
-    if coupler.name=="coupler_q2_q3": dcs = np.linspace(-0.120, -0.053, 301) 
-    if coupler.name=="coupler_q1_q2": dcs = np.linspace(-0.062, -0.057, 301) 
+    if coupler.name=="coupler_q4_q5": dcs = np.linspace(-0.084, -0.051, 301) 
+    if coupler.name=="coupler_q3_q4": dcs = np.linspace(-0.082, -0.048, 301) 
+    if coupler.name=="coupler_q2_q3": dcs = np.linspace(-0.108, -0.060, 301) 
+    if coupler.name=="coupler_q1_q2": dcs = np.linspace(-0.062, -0.015, 301) 
     # dcs = np.linspace(-0.4, 0.4, 501) # default wide-sweep 
     # dcs = np.linspace(-0.15, 0.4, 501) # Catching Sweet-Spot 
 else: 
     ts = [30]
     dcs = [-0.045]
 
-if coupler.name=="coupler_q4_q5": cz_point, scale = -0.05758, -0.0119
-if coupler.name=="coupler_q3_q4": cz_point, scale = -0.0900, 0.0287 
-if coupler.name=="coupler_q2_q3": cz_point, scale = 0.06154, -0.0087
-if coupler.name=="coupler_q1_q2": cz_point, scale = 0.05594, 0.0397
+if coupler.name=="coupler_q4_q5": cz_point, scale = -0.05884, -0.0039
+if coupler.name=="coupler_q3_q4": cz_point, scale = -0.09082, 0.0338 
+if coupler.name=="coupler_q2_q3": cz_point, scale = 0.06053, -0.0087
+if coupler.name=="coupler_q1_q2": cz_point, scale = 0.055533, 0.0828 
 
 print("%s: %s" % (q1.name, q1.xy.RF_frequency))
 print("%s: %s" % (q2.name, q2.xy.RF_frequency))
@@ -238,16 +238,22 @@ else:
         Q2 = u.demod2volts(Q2, q2.resonator.operations["readout"].length)
         # Progress bar
         progress_counter(n, n_avg, start_time=results.start_time)
+
+        if sweep_flux == "qc":
+            cz_dur = 88 # coupler.operations["cz"].length
+        if sweep_flux == "qb": 
+            cz_dur = 240 
+
         # Plot
-        plt.suptitle("CZ chevron (compensation: %s, %s/%s)" % (scale, n, n_avg ))
-        
+        plt.suptitle("CZ chevron (compensation: %s, cz_dur: %sns, %s/%s)" % (scale, cz_dur, n, n_avg ))
+
         plt.subplot(321)
         plt.cla()
-        plt.plot(dcs, I1[:][list(ts).index(coupler.operations["cz"].length//4)])
+        plt.plot(dcs, I1[:][list(ts).index(cz_dur//4)])
         
         plt.subplot(322)
         plt.cla()
-        plt.plot(dcs, I2[:][list(ts).index(coupler.operations["cz"].length//4)])
+        plt.plot(dcs, I2[:][list(ts).index(cz_dur//4)])
 
         plt.subplot(323)
         plt.cla()
@@ -266,9 +272,9 @@ else:
                 # plt.axvline( q1.z.operations["cz"].amplitude + q1.z.min_offset - scale*coupler.operations["cz"].amplitude, color="r", linestyle="--", linewidth=1.5)
                 plt.axvline(cz_point, color="b", linestyle="--", linewidth=1.0)
         # plt.axhline( q1.z.operations["cz"].length, color="r", linestyle="--", linewidth=1.5)
-        plt.axhline( 60, color="g", linestyle="--", linewidth=0.57)
-        plt.axhline( 40, color="y", linestyle="--", linewidth=0.57)
-        plt.axhline( 48, color="r", linestyle="--", linewidth=0.57)
+        plt.axhline( cz_dur, color="k", linestyle="--", linewidth=0.57)
+        # plt.axhline( 40, color="y", linestyle="--", linewidth=0.57)
+        # plt.axhline( 48, color="r", linestyle="--", linewidth=0.57)
         
         plt.subplot(325)
         plt.cla()
@@ -288,9 +294,9 @@ else:
                 # plt.axvline( q1.z.operations["cz"].amplitude + q1.z.min_offset - scale*coupler.operations["cz"].amplitude, color="r", linestyle="--", linewidth=1.5)
                 plt.axvline(cz_point, color="b", linestyle="--", linewidth=1.0)
         # plt.axhline( q1.z.operations["cz"].length, color="r", linestyle="--", linewidth=1.5)
-        plt.axhline( 60, color="g", linestyle="--", linewidth=0.57)
-        plt.axhline( 40, color="y", linestyle="--", linewidth=0.57)
-        plt.axhline( 48, color="r", linestyle="--", linewidth=0.57)
+        plt.axhline( cz_dur, color="k", linestyle="--", linewidth=0.57)
+        # plt.axhline( 40, color="y", linestyle="--", linewidth=0.57)
+        # plt.axhline( 48, color="r", linestyle="--", linewidth=0.57)
 
         plt.subplot(324)
         plt.cla()
@@ -308,9 +314,9 @@ else:
                 # plt.axvline( q1.z.operations["cz"].amplitude + q1.z.min_offset - scale*coupler.operations["cz"].amplitude, color="r", linestyle="--", linewidth=1.5)
                 plt.axvline(cz_point, color="b", linestyle="--", linewidth=1.0)
         # plt.axhline( q1.z.operations["cz"].length, color="r", linestyle="--", linewidth=1.5)
-        plt.axhline( 60, color="g", linestyle="--", linewidth=0.57)
-        plt.axhline( 40, color="y", linestyle="--", linewidth=0.57)
-        plt.axhline( 48, color="r", linestyle="--", linewidth=0.57)
+        plt.axhline( cz_dur, color="k", linestyle="--", linewidth=0.57)
+        # plt.axhline( 40, color="y", linestyle="--", linewidth=0.57)
+        # plt.axhline( 48, color="r", linestyle="--", linewidth=0.57)
 
         plt.subplot(326)
         plt.cla()
@@ -326,9 +332,6 @@ else:
     qm.close()
 
     # plt.show()
-
-    # q1.z.cz.length =
-    # q1.z.cz.level =
 
     # Save data from the node
     data = {

@@ -36,8 +36,8 @@ qmm = machine.connect()
 # Get the relevant QuAM components
 qubits = machine.active_qubits
 num_qubits_full = len(qubits)
-q1 = machine.qubits["q5"]
-q2 = machine.qubits["q4"]
+q1 = machine.qubits["q1"]
+q2 = machine.qubits["q2"]
 q1_number = qubits.index(q1) + 1
 q2_number = qubits.index(q2) + 1
 
@@ -67,17 +67,17 @@ bitstrings = ['00', '01', '10', '11']
 cx_control, cx_target = q1_number, q2_number  
 th_control, th_target = q1.resonator.operations["readout"].threshold, q2.resonator.operations["readout"].threshold
 phis_corr = np.linspace(-0.9, 0.9, 360)
-phis_corr = np.linspace(0, 3, 360)
+# phis_corr = np.linspace(0, 2, 360)
 
 check_phase ="01" # 12: to_flux_tune, 01: to_meet_with
 if coupler.name=="coupler_q4_q5": 
-    phi_to_flux_tune, phi_to_meet_with = 2.306, 0
+    phi_to_flux_tune, phi_to_meet_with = -0.278, -0.830
 if coupler.name=="coupler_q3_q4": 
-    phi_to_flux_tune, phi_to_meet_with = 1.713, 2.448
+    phi_to_flux_tune, phi_to_meet_with = 0.384, 0.449
 if coupler.name=="coupler_q2_q3": 
-    phi_to_flux_tune, phi_to_meet_with = 0.844, 0.49
+    phi_to_flux_tune, phi_to_meet_with = 0.484, 0.374
 if coupler.name=="coupler_q1_q2": 
-    phi_to_flux_tune, phi_to_meet_with = 0.819, 0.518
+    phi_to_flux_tune, phi_to_meet_with = 0.263, -0.459
 
 with program() as cz_ops:
 
@@ -132,7 +132,7 @@ with program() as cz_ops:
             # CZ-gate:  
             q1.z.play("cz%s_%s"%(q1_number,q2_number))
             coupler.play("cz")
-
+            wait(150 * u.ns)
             align()
 
             # Bell: 
@@ -182,7 +182,7 @@ if not simulate:
         # Progress bar
         progress_counter(n, shots, start_time=results.start_time)
 
-        Bell_SNR = (state00+state11)/(state01+state10)
+        Bell_SNR = (state00+state11)/(state01+state10) *(state00*state11)
 
         plt.suptitle(f"Optimizing Phase compensation for CZ ({n}/{shots})")
         plt.subplot(121)

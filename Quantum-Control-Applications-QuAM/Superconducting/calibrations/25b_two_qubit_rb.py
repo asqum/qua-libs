@@ -50,7 +50,7 @@ def bake_phased_xz(baker: Baking, q, x, z, a):
 
 
 # TODO: single qubit phase corrections in units of 2pi applied after the CZ gate
-phi_to_flux_tune, phi_to_meet_with = 0, 0 #0.83, 0.52
+phi_to_flux_tune, phi_to_meet_with = 0.263, -0.459 
 qubit1_frame_update = phi_to_flux_tune #0.23  # example values, should be taken from QPU parameters
 qubit2_frame_update = phi_to_meet_with #0.12  # example values, should be taken from QPU parameters
 
@@ -71,7 +71,7 @@ def bake_cz(baker: Baking, q1, q2):
     baker.play("cz", coupler.name)
     #############################
     
-    # baker.wait(20 * u.ns)
+    baker.wait(60 * u.ns)
     baker.align(qc.z.name, coupler.name, qc_xy_element, qt_xy_element)
     baker.frame_rotation_2pi(qubit1_frame_update, qc_xy_element)
     baker.frame_rotation_2pi(qubit2_frame_update, qt_xy_element)

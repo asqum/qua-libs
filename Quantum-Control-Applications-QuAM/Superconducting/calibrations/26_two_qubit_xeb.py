@@ -59,7 +59,7 @@ xeb_config = XEBConfig(
 simulate = False  # Set to True to simulate the experiment with Qiskit Aer instead of running it on the QPU
 hardware_simulate = True
 
-xeb = XEB(xeb_config, quam=machine)
+xeb = XEB(xeb_config, machine=machine)
 if simulate:
     job = xeb.simulate(backend=fake_backend)
 else:

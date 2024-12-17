@@ -33,11 +33,11 @@ from quam_libs.lib.cryoscope_tools import cryoscope_frequency, estimate_fir_coef
 
 # %% {Node_parameters}
 class Parameters(NodeParameters):
-    qubits: Optional[List[str]] = ['q2']
-    num_averages: int = 10000
-    amplitude_factor: float = 0.5
+    qubits: Optional[List[str]] = ['q5']
+    num_averages: int = 8000
+    amplitude_factor: float = 1.55 
     cryoscope_len: int = 240
-    reset_type_active_or_thermal: Literal['active', 'thermal'] = 'active'
+    reset_type_active_or_thermal: Literal['active', 'thermal'] = 'thermal'
     flux_point_joint_or_independent: Literal['joint', 'independent'] = "independent"
     simulate: bool = False
     timeout: int = 100
@@ -323,6 +323,7 @@ if not node.parameters.simulate:
                                            sg_order=sg_order,
                                            sg_range=sg_range, plot=plot_process)
     plt.show()
+    # node.results['figure_flux_cryoscope'] = flux_cryoscope_q #NOTE: how to save this figure? 
 
 # %%
 if not node.parameters.simulate:
@@ -341,6 +342,8 @@ if not node.parameters.simulate:
     axs[0].axvline(drop_index, color='r')
     flux_cryoscope_tp.plot(ax = axs[1])
     plt.show()
+    node.results['figure_rise_drop'] = f
+    
 # %%
 if not node.parameters.simulate:
     # Fit two exponents
@@ -367,13 +370,15 @@ if not node.parameters.simulate:
         print('two exp fit failed')
         
     if plot_process:
+        f,axs = plt.subplots()
         da.plot(marker = '.')
         # plt.plot(filtered_flux_cryoscope_q.time, filtered_flux_cryoscope_q, label = 'filtered')
-        plt.plot(da.time, expdecay(da.time, *fit), label = 'fit single exp')
+        axs.plot(da.time, expdecay(da.time, *fit), label = 'fit single exp')
         if fit2 is not None:
-            plt.plot(da.time, two_expdecay(da.time, *fit2), label = 'fit two exp')
-        plt.legend()
+            axs.plot(da.time, two_expdecay(da.time, *fit2), label = 'fit two exp')
+        axs.legend()
         plt.show()
+        node.results['figure_fit_exp'] = f
 
     # Print fit2 parameters nicely (two_expdecay function)
     if fit2 is not None:
@@ -439,6 +444,7 @@ if not node.parameters.simulate:
         ax.set_ylim([final_vals*0.95,final_vals*1.05])
         ax.legend()
         plt.show()
+        node.results['figure_filtered_long_time'] = f
 
 # %%
 if not node.parameters.simulate:

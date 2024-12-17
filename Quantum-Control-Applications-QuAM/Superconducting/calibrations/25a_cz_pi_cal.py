@@ -74,7 +74,7 @@ qmm = machine.connect()
 # Get the relevant QuAM components
 num_qubits_full = len(machine.active_qubits)
 
-q1 = machine.qubits["q3"]
+q1 = machine.qubits["q1"]
 q2 = machine.qubits["q2"]
 
 try: coupler = (q1 @ q2).coupler
@@ -108,42 +108,47 @@ cz_corr = 0 # float(eval(f"cz{q2_number}_{q1_number}_2pi_dev"))
 simulate = False
 with_set_dc = False
 
-n_avg = 6000  # The number of averages
+n_avg = 10000  # The number of averages
 phis = np.arange(0, 3, 1 / points_per_cycle)
 amps = np.linspace(0.5, 1.5, 25)
 amps = np.linspace(0.7, 1.3, 25)
-amps = np.linspace(0.9, 1.1, 25)
-# amps = np.linspace(0.97, 1.03, 25)
-# amps = np.linspace(0.995, 1.005, 25)
+# amps = np.linspace(0.9, 1.1, 25)
+amps = np.linspace(0.95, 1.05, 25)
+amps = np.linspace(0.995, 1.005, 25)
 # amps = np.linspace(-0.04085/-0.04128, -0.0425/-0.04128, 25)
 # amps = np.linspace(-0.040/-0.04128, -0.042/-0.04128, 25) 
 
-cz_dur = 48 #92
+# cz_dur = 60
+cz_dur = 88
 
 # Ref: 22z_CZ_coupler_flex.py 
 if coupler.name=="coupler_q4_q5": 
-    cz_point, scale = -0.05758, -0.0119
-    cz_coupler = -0.07951*1.4166667*.975*1.025
+    cz_point, scale = -0.05884, -0.0039
+    # cz_coupler = -0.06815*1.5*1.25  
+    cz_coupler = -0.06815*1.4583333 
     phi_to_flux_tune, phi_to_meet_with = 0, 0
 if coupler.name=="coupler_q3_q4": 
-    cz_point, scale = -0.0900, 0.0287 
-    cz_coupler = -0.07978*1.3*.995
+    cz_point, scale = -0.09082, 0.0338 
+    cz_coupler = -0.07457*1.481637 
+    # cz_coupler = -0.07457*.958333*.98333
     phi_to_flux_tune, phi_to_meet_with = 0, 0
 if coupler.name=="coupler_q2_q3": 
-    cz_point, scale = 0.06154, -0.0087
-    cz_coupler = -0.10547*.9166667*1.0833333*1.0166667
-    phi_to_flux_tune, phi_to_meet_with = 0, 0.49
+    cz_point, scale = 0.06053, -0.0087
+    # cz_coupler = -0.10223*1.0291667*1.0041667
+    cz_coupler = -0.10223*.9583333*1.0166667*1.0083333
+    phi_to_flux_tune, phi_to_meet_with = 0, 0
 if coupler.name=="coupler_q1_q2": 
-    cz_point, scale = 0.05594, 0.0397
-    cz_coupler = -0.0589468373*1.00125
-    phi_to_flux_tune, phi_to_meet_with = 0.83, 0.52
+    cz_point, scale =  0.055533, 0.0828 #0.05594, 0.0397
+    # cz_coupler = -0.05457*1.025*1.0175*1.0020833    
+    cz_coupler = -0.04912*1.0041667*1.005  
+    phi_to_flux_tune, phi_to_meet_with = 0, 0
 
 pulse_dc_factor = 1.0 #(0.00859 - qubit_to_flux_tune.z.min_offset)/(0.00908 - qubit_to_flux_tune.z.min_offset) * 1.08
 print("pulse_dc_factor: %s" % pulse_dc_factor)
 print("%s's offset: %s" % (qubit_to_flux_tune.name, qubit_to_flux_tune.z.min_offset))
 
 sweep_flux = "qc" # qb or qc
-check_phase = "01" # 12: to_flux_tune, 01: to_meet_with
+check_phase = "12" # 12: to_flux_tune, 01: to_meet_with
 check_cz_pulse = False
 
 print("updated cz_coupler: %s" %cz_coupler)
@@ -222,7 +227,7 @@ with program() as cz_pi_cal:
                         #############################
 
                         # Wait some time to ensure that the flux pulse will end before the readout pulse
-                        # wait(20 * u.ns)
+                        wait(150 * u.ns)
 
                     # ramsey second pi/2
                     align()
@@ -234,7 +239,7 @@ with program() as cz_pi_cal:
                         play("x90", qubit_to_meet_with.xy.name)
                     align()
 
-                    wait(20 * u.ns)
+                    wait(30 * u.ns) # to prevent the readout being overlapped by the flux tail  
                     # Play the readout on the other resonators to measure in the same condition as when optimizing readout
                     # for other_qubit in readout_qubits:
                     #     other_qubit.resonator.play("readout")
@@ -302,7 +307,7 @@ else:
         # Progress bar
         progress_counter(n, n_avg, start_time=results.start_time)
 
-        plt.suptitle(f"q{q2_number}->q{q1_number}: amp_scale, pha_diff_deg ({n}/{n_avg})")
+        plt.suptitle(f"q{q1_number}->q{q2_number}: amp_scale, pha_diff_deg ({n}/{n_avg})")
         for i in range(len(amps)):
             ax[int(i // 5), int(i % 5)].cla()
 

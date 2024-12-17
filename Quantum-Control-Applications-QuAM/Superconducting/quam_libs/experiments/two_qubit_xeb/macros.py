@@ -2,11 +2,13 @@
 This script contains useful QUA macros for the two-qubit cross-entropy benchmarking use case.
 
 Author: Arthur Strauss - Quantum Machines
-Last updated: 2024-08-11
+Last updated: 2024-12-08
 """
 
 from matplotlib import pyplot as plt
 from qiskit.transpiler import CouplingMap
+from qiskit.circuit import QuantumCircuit, QuantumRegister
+from typing import List
 from qm.qua import *
 from qualang_tools.addons.variables import assign_variables_to_element
 import numpy as np
@@ -189,6 +191,43 @@ def get_parallel_gate_combinations(coupling_map: CouplingMap, direction="forward
     return max_parallel_combinations
 
 
+def generate_circuits(xeb_config, gate_indices: np.ndarray, available_combinations) -> List[List[QuantumCircuit]]:
+    two_qubit_gate_pattern = 0
+    n_qubits = xeb_config.n_qubits
+    circuits = []
+    if all([isinstance(qubit, Transmon) for qubit in xeb_config.qubits]):
+        qubit_names = [qubit.name for qubit in xeb_config.qubits]
+    else:
+        qubit_names = xeb_config.qubits
+    for s in range(xeb_config.seqs):
+        circuits.append([])
+        for d_, depth in enumerate(xeb_config.depths):
+            q_regs = [QuantumRegister(1, qubit_name) for qubit_name in qubit_names]
+            qc = QuantumCircuit(*q_regs)
+            for d in range(depth):
+                for q in range(n_qubits):
+                    sq_gate = xeb_config.gate_set[gate_indices[s, q, d]].gate
+                    qc.append(sq_gate, [q])
+                qc.barrier()
+                if xeb_config.two_qb_gate is not None:
+                    for i, combination in enumerate(available_combinations):
+                        if i == two_qubit_gate_pattern:
+                            for pair in combination:
+                                qc.append(xeb_config.two_qb_gate.gate, pair)
+                            qc.barrier()
+                            break
+                    if two_qubit_gate_pattern == len(available_combinations) - 1:
+                        two_qubit_gate_pattern = 0
+                    else:
+                        two_qubit_gate_pattern += 1
+
+                    # qc.append(self.xeb_config.two_qb_gate.gate, [0, 1])
+            qc.measure_all()
+            circuits[s].append(qc)
+            two_qubit_gate_pattern = 0
+    return circuits
+
+
 def binary(n, length):
     """
     Convert an integer to a binary string of a given length
@@ -214,6 +253,73 @@ def cross_entropy(p, q, epsilon=1e-15):
     q = np.maximum(q, epsilon)  # Avoid taking the logarithm of zero
     x_entropy = -np.sum(p * np.log(q))
     return x_entropy
+
+
+def compute_log_fidelity(incoherent_dist, expected_probs, measured_probs):
+    """
+    Compute the log fidelity between the expected and measured distributions.
+
+    Parameters:
+    - incoherent_dist: numpy array, the incoherent distribution
+    - expected_probs: numpy array, the expected probabilities
+    - measured_probs: numpy array, the measured probabilities
+
+    Returns:
+    - The log fidelity between the expected and measured distributions
+    """
+    # Compute the cross entropy between the incoherent distribution and the expected probabilities
+    xe_incoherent = cross_entropy(incoherent_dist, expected_probs)
+    xe_measured = cross_entropy(measured_probs, expected_probs)
+    xe_expected = cross_entropy(expected_probs, expected_probs)
+
+    f_xeb = (xe_incoherent - xe_measured) / (xe_incoherent - xe_expected)
+    return f_xeb
+
+
+def evaluate_log_fidelity(f_xeb, singularity, outlier, seq, depth):
+    """
+    Evaluate the log fidelity and return the corresponding value.
+    """
+    if np.isnan(f_xeb) or np.isinf(f_xeb):
+        singularity.append((seq, depth))
+        return np.nan
+    elif f_xeb < 0 or f_xeb > 1:
+        outlier.append((seq, depth))
+        return np.nan
+    return f_xeb
+
+
+def update_record(records, seq, depth, expected_probs, measured_probs, dim):
+    """
+    Update the record to compute linear fidelities (Cirq like processing).
+    """
+    records += [
+        {
+            "sequence": seq,
+            "depth": depth,
+            "pure_probs": expected_probs,
+            "measured_probs": measured_probs,
+            "e_u": np.sum(expected_probs**2),
+            "u_u": np.sum(expected_probs) / dim,
+            "m_u": np.sum(measured_probs * expected_probs),
+        }
+    ]
+    return records
+
+
+def update_data_frame(df):
+    """
+    Update the data frame to compute linear fidelities (Cirq like processing).
+    """
+    try:
+        df["y"] = df["m_u"] - df["u_u"]
+        df["x"] = df["e_u"] - df["u_u"]
+        df["numerator"] = df["x"] * df["y"]
+        df["denominator"] = df["x"] ** 2
+        return df
+
+    except KeyError:
+        raise ValueError("The records for linear XEB are empty. Please rerun the experiment.")
 
 
 def create_subplot(data, subplot_number, title, depths, seqs):

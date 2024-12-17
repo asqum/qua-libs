@@ -59,8 +59,10 @@ config = machine.generate_config()
 qmm = machine.connect()
 
 # Get the relevant QuAM components
-q1 = machine.qubits["q1"]
-q2 = machine.qubits["q2"]
+q1 = machine.qubits["q5"]
+q2 = machine.qubits["q4"]
+
+readout_qubits = [qubit for qubit in machine.qubits.values() if qubit not in [q1, q2]]
 
 try: 
     coupler = (q1 @ q2).coupler
@@ -85,23 +87,23 @@ n_avg = 3000
 # The flux pulse durations in clock cycles (4ns) - Must be larger than 4 clock cycles.
 # The flux bias sweep in V
 dcs = np.linspace(-0.3, 0.3, 501)
-# dcs = np.linspace(-0.17, -0.11, 501) # q4_5
-# dcs = np.linspace(-0.135, -0.088, 501) # q3_4
-# dcs = np.linspace(-0.115, -0.049, 501) # q2_3
-dcs = np.linspace(-0.12, -0.07, 501) # q1_2
+dcs = np.linspace(-0.09, -0.05, 301) # q4_5
+# dcs = np.linspace(-0.088, -0.053, 301) # q3_4
+# dcs = np.linspace(-0.115, -0.049, 301) # q2_3
+# dcs = np.linspace(-0.057, -0.016, 301) # q1_2
 # dcs = [-0.046, -0.045]
 
-scales = np.linspace(-0.2, 0.2, 101)
-# scales = np.linspace(-0.02, 0.00, 101) # q4_5
-# scales = np.linspace(0, 0.06, 101) # q3_4
-# scales = np.linspace(-0.05, 0.02, 101) # q2_3
-scales = np.linspace(0, 0.1, 101) # q1_2
+scales = np.linspace(-0.25, 0.25, 101)
+scales = np.linspace(-0.05, 0.05, 101) # q4_5
+# scales = np.linspace(-0.030, 0.115, 101) # q3_4
+# scales = np.linspace(-0.06, 0.055, 101) # q2_3
+# scales = np.linspace(-0.05, 0.2, 101) # q1_2
 # scales = [0.4, 0.41]
 
 cz_dur = 100 #360
-cz_point = -0.0977 # when coupler = 0 
+cz_point = -0.05870 # when coupler = 0 
 
-mode = "dc" # dc or pulse
+mode = "pulse" # dc or pulse
 simulate = False
 scope_debug = False
 
@@ -169,9 +171,12 @@ with program() as cz:
                 # q2.z.set_dc_offset(q2.z.min_offset + 0.01 * -0.033)
 
                 # Wait some time to ensure that the flux pulse will end before the readout pulse
-                wait(200 * u.ns)
+                wait(150 * u.ns)
                 # Align the elements to measure after having waited a time "tau" after the qubit pulses.
                 align()
+                # Play the readout on the other resonators to measure in the same condition as when optimizing readout
+                for other_qubit in readout_qubits:
+                    other_qubit.resonator.play("readout")
                 # Measure the state of the resonators
                 multiplexed_readout([q1, q2], I, I_st, Q, Q_st)
                 # Wait for the qubits to decay to the ground state
