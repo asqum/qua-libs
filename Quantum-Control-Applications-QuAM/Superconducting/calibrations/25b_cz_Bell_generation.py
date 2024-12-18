@@ -77,7 +77,7 @@ if coupler.name=="coupler_q3_q4":
 if coupler.name=="coupler_q2_q3": 
     phi_to_flux_tune, phi_to_meet_with = 0.484, 0.374
 if coupler.name=="coupler_q1_q2": 
-    phi_to_flux_tune, phi_to_meet_with = 0.880, -0.404 
+    phi_to_flux_tune, phi_to_meet_with = 0.634, 0.504  # 0.880, -0.404 
 
 with program() as cz_ops:
 

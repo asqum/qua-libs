@@ -70,7 +70,7 @@ mode = "pulse" # dc or pulse
 sweep_flux = "qb" # qb or qc or others
 coupler_point = -0.0 # coupler.decouple_offset # -0.020 
 # NOTE: always start from 0, turn ~20-40mV left to the FAST LANE. 
-coupler_point = -0.0457
+coupler_point = coupler.operations["cz"].amplitude + coupler.decouple_offset
 
 check_cz_pulse = True
 if check_cz_pulse: 

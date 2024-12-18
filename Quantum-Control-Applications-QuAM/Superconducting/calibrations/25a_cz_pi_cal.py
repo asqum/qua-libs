@@ -140,8 +140,8 @@ if coupler.name=="coupler_q2_q3":
 if coupler.name=="coupler_q1_q2": 
     cz_point, scale =  0.06149, 0.091 #0.05594, 0.0397
     # cz_coupler = -0.05457*1.025*1.0175*1.0020833    
-    cz_coupler = -0.0457 #*1.05*1.0041667   
-    phi_to_flux_tune, phi_to_meet_with = 0.880, -0.404 
+    cz_coupler = -0.0457*1.0587312686355892 #*.975   
+    phi_to_flux_tune, phi_to_meet_with = 0.634, 0.504  #0.880, -0.404 
 
 pulse_dc_factor = 1.0 #(0.00859 - qubit_to_flux_tune.z.min_offset)/(0.00908 - qubit_to_flux_tune.z.min_offset) * 1.08
 print("pulse_dc_factor: %s" % pulse_dc_factor)
