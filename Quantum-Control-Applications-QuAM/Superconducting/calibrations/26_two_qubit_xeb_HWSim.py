@@ -1,3 +1,4 @@
+import matplotlib.pyplot as plt
 import numpy as np
 from quam_libs.components import QuAM, TransmonPair
 from quam_libs.experiments.two_qubit_xeb import (
@@ -91,6 +92,4 @@ else:
 
 
 job.plot_simulated_samples()
-
-
-
+plt.show()

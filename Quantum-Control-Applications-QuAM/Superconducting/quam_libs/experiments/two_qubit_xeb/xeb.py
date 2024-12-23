@@ -28,7 +28,7 @@ from qiskit.quantum_info import Statevector
 from qualang_tools.results import DataHandler
 
 from quam_libs.components import QuAM, Transmon
-from qm import SimulationConfig, QuantumMachinesManager
+from qm import SimulationConfig, QuantumMachinesManager, generate_qua_script
 from qm.jobs.running_qm_job import RunningQmJob
 from qm.jobs.simulated_job import SimulatedJob
 import seaborn as sns
@@ -381,6 +381,8 @@ class XEB:
             qmm = self.machine.connect()
         qm = qmm.open_qm(config)
         if simulate:
+            with open("debug.py", "w+") as f:
+                f.write(generate_qua_script(xeb_prog, config))
             job = qm.simulate(xeb_prog, simulate=simulation_config, **simulate_kwargs)
         elif self.xeb_config.generate_new_data:
             job = qm.execute(xeb_prog)

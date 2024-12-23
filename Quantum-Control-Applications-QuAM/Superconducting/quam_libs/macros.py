@@ -109,11 +109,11 @@ def readout_state_gef(
     Q = declare(fixed)
     diff = declare(fixed, size=3)
 
-    qubit.resonator.update_frequency(qubit.resonator.intermediate_frequency - qubit.resonator.GEF_frequency_shift)
+    qubit.resonator.update_frequency(qubit.resonator.intermediate_frequency + qubit.resonator.GEF_frequency_shift)
     qubit.resonator.measure(pulse_name, qua_vars=(I, Q))
     qubit.resonator.update_frequency(qubit.resonator.intermediate_frequency)
 
-    gef_centers = [qubit.resonator.gef_centers.g, qubit.resonator.gef_centers.e, qubit.resonator.gef_centers.f]
+    gef_centers = [qubit.resonator.gef_centers[0], qubit.resonator.gef_centers[1], qubit.resonator.gef_centers[2]]
     for p in range(3):
         assign(
             diff[p],
@@ -128,6 +128,7 @@ def active_reset_gef(
     readout_pulse_name: str = "readout",
     pi_01_pulse_name: str = "x180",
     pi_12_pulse_name: str = "EF_x180",
+    max_attempts: int = 10,
 ):
     res_ar = declare(int)
     success = declare(int)
@@ -135,9 +136,8 @@ def active_reset_gef(
     attempts = declare(int)
     assign(attempts, 0)
     qubit.align()
-    with while_(success < 2):
+    with while_((success < 2) & (attempts < max_attempts)):
         readout_state_gef(qubit, res_ar, readout_pulse_name)
-        wait(qubit.rr.res_deplete_time // 4, qubit.xy.name)
         qubit.align()
         with if_(res_ar == 0):
             assign(success, success + 1)  # we need to measure 'g' two times in a row to increase our confidence
@@ -157,6 +157,27 @@ def active_reset_gef(
         qubit.align()
         assign(attempts, attempts + 1)
 
+def active_reset_simple(
+        qubit: Transmon,
+        save_qua_var: Optional[StreamType] = None,
+        pi_pulse_name: str = "x180",
+        readout_pulse_name: str = "readout"):
+    """
+    Simple active reset for a qubit
+    """
+    pulse = qubit.resonator.operations[readout_pulse_name]
+
+    I = declare(fixed)
+    Q = declare(fixed)
+    state = declare(bool)
+    qubit.align()
+    qubit.resonator.measure("readout", qua_vars=(I, Q))
+    assign(state, I > pulse.threshold)
+    wait(qubit.resonator.depletion_time // 4, qubit.resonator.name)
+    qubit.align()
+    qubit.xy.play(pi_pulse_name, condition=state)
+    qubit.align()
+
 
 def active_reset(
         qubit: Transmon,
@@ -174,14 +195,16 @@ def active_reset(
     qubit.align()
     qubit.resonator.measure("readout", qua_vars=(I, Q))
     assign(state, I > pulse.threshold)
-    wait(qubit.resonator.depletion_time // 2, qubit.resonator.name)
+    wait(qubit.resonator.depletion_time // 4, qubit.resonator.name)
+    qubit.align()
     qubit.xy.play(pi_pulse_name, condition=state)
     qubit.align()
     with while_((I > pulse.rus_exit_threshold) & (attempts < max_attempts)):
         qubit.align()
         qubit.resonator.measure("readout", qua_vars=(I, Q))
         assign(state, I > pulse.threshold)
-        wait(qubit.resonator.depletion_time // 2, qubit.resonator.name)
+        wait(qubit.resonator.depletion_time // 4, qubit.resonator.name)
+        qubit.align()
         qubit.xy.play(pi_pulse_name, condition=state)
         qubit.align()
         assign(attempts, attempts + 1)
