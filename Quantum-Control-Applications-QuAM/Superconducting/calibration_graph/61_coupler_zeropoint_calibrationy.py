@@ -300,8 +300,8 @@ if not node.parameters.simulate:
 
         sec_ax = ax.secondary_xaxis('top', functions=(flux_to_detuning, detuning_to_flux))
         sec_ax.set_xlabel('Detuning [MHz]')
-        ax.set_xlabel('Qubit flux shift [V]')
-        ax.set_ylabel('Coupler flux [V]')
+        ax.set_xlabel('Qubit flux shift [mV]')
+        ax.set_ylabel('Coupler flux [mV]')
     grid.fig.suptitle('Control')
     plt.tight_layout()
     plt.show()
@@ -341,7 +341,7 @@ if not node.parameters.simulate:
 if not node.parameters.simulate:
     with node.record_state_updates():
         for qp in qubit_pairs:
-            # qp.coupler.decouple_offset = node.results["results"][qp.name]["flux_coupler_min"]
+            qp.coupler.decouple_offset = node.results["results"][qp.name]["flux_coupler_min"]
             qp.detuning = node.results["results"][qp.name]["flux_qubit_max"]
 
 # %% {Save_results}

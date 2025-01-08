@@ -269,10 +269,12 @@ else:
         ax.set_ylabel("Distance between IQ blobs [m.v.]")
         ax.legend()
     plt.tight_layout()
-    plt.show()
+    # plt.show()
     node.results["figure"] = grid.fig
 
-    grid = QubitGrid(ds, [f"q-{i}_0" for i in range(num_qubits)])
+    # grid = QubitGrid(ds, [f"q-{i}_0" for i in range(num_qubits)])
+    grid_names = [q.grid_location for q in qubits]
+    grid = QubitGrid(ds, grid_names)
     for ax, qubit in grid_iter(grid):
         (1e3 * ds.assign_coords(freq_MHz=ds.freq / 1e6).IQ_abs_g.loc[qubit]).plot(
             ax=ax, x="freq_MHz", label="g.s."
@@ -287,7 +289,7 @@ else:
         ax.set_ylabel("Resonator response [mV]")
         ax.legend()
     plt.tight_layout()
-    plt.show()
+    # plt.show()
     node.results["figure2"] = grid.fig
 
     # %% {Update_state}

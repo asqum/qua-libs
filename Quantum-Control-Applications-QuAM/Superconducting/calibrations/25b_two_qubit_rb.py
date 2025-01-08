@@ -50,7 +50,7 @@ def bake_phased_xz(baker: Baking, q, x, z, a):
 
 
 # TODO: single qubit phase corrections in units of 2pi applied after the CZ gate
-phi_to_flux_tune, phi_to_meet_with = 0.880, -0.404 
+phi_to_flux_tune, phi_to_meet_with = 0.709, -0.414 
 qubit1_frame_update = phi_to_flux_tune #0.23  # example values, should be taken from QPU parameters
 qubit2_frame_update = phi_to_meet_with #0.12  # example values, should be taken from QPU parameters
 
@@ -82,6 +82,7 @@ def prep():
     machine.apply_all_flux_to_min()
     machine.apply_all_couplers_to_min()
     wait(machine.thermalization_time * u.ns)
+    print("machine.thermalization_time * u.ns: %s" %(machine.thermalization_time * u.ns))
     align()
 
 
@@ -131,7 +132,7 @@ rb_debugger.run_phased_xz_commands(qmm, 280, unsafe=unsafe)
 plt.show()
 
 # run 2Q-RB experiment
-res = rb.run(qmm, circuit_depths=np.arange(1, 300, 5), num_circuits_per_depth=60, num_shots_per_circuit=30, unsafe=unsafe)
+res = rb.run(qmm, circuit_depths=np.arange(0, 20, 1), num_circuits_per_depth=60, num_shots_per_circuit=30, unsafe=unsafe)
 # circuit_depths ~ how many consecutive Clifford gates within one executed circuit
 # (https://qiskit.org/documentation/apidoc/circuit.html)
 # num_circuits_per_depth ~ how many random circuits within one depth

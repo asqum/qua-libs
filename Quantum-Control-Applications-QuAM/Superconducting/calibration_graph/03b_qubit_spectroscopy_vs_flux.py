@@ -109,6 +109,11 @@ with program() as multi_qubit_spec_vs_flux:
 
     machine.apply_all_couplers_to_min()
     for i, qubit in enumerate(qubits):
+
+        # Fixed qubit for debugging unknown flux-dependency: 
+        fixed_qubit = machine.qubits[qubit.name]
+        fixed_qubit = machine.qubits["q4"]
+
         # Bring the active qubits to the minimum frequency point
         machine.set_all_fluxes(flux_point=flux_point, target=qubit)
         qubit.z.settle()
@@ -119,14 +124,14 @@ with program() as multi_qubit_spec_vs_flux:
 
             with for_(*from_array(df, dfs)):
                 # Update the qubit frequency
-                qubit.xy.update_frequency(df + qubit.xy.intermediate_frequency)
+                fixed_qubit.xy.update_frequency(df + qubit.xy.intermediate_frequency)
                 with for_(*from_array(dc, dcs)):
                     # Flux sweeping for a qubit
                     duration = operation_len * u.ns if operation_len is not None else qubit.xy.operations[operation].length * u.ns
                     # Bring the qubit to the desired point during the saturation pulse
                     qubit.z.play("const", amplitude_scale=dc / qubit.z.operations["const"].amplitude, duration=duration)
                     # Apply saturation pulse to all qubits
-                    qubit.xy.play(
+                    fixed_qubit.xy.play(
                         operation,
                         amplitude_scale=operation_amp,
                         duration=duration,

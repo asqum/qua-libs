@@ -54,11 +54,11 @@ def cz_gate(qubit_pair: TransmonPair):
 cz_qua = QUAGate("cz", cz_gate)
 
 xeb_config = XEBConfig(
-    seqs=88, #128, #81,
+    seqs=4, #128, #81,
     # depths=np.arange(1, 1200, 24),
-    depths=np.arange(1, 32, 1),
+    depths=np.arange(1, 8, 1),
     # depths=list(np.arange(1, 9, 1)),
-    n_shots=512, #1000,
+    n_shots=1, #1000,
     readout_qubits=readout_qubits, 
     qubits=target_qubits,
     qubit_pairs=target_qubit_pairs,
@@ -81,6 +81,7 @@ xeb_runtime = xeb_config.seqs * len(xeb_config.depths) * xeb_config.n_shots / (1
 print("time required: %s min" % (xeb_runtime))
 
 
+#################### Simulating Hardware ####################
 from qm import SimulationConfig
 
 simulate = False  # Set to True to simulate the experiment with Qiskit Aer instead of running it on the QPU
@@ -89,7 +90,6 @@ if simulate:
     job = xeb.simulate(backend=fake_backend)
 else:
     job = xeb.run(simulate=True, simulation_config=SimulationConfig(duration=200000))  # If simulate is False, job is run on the QPU, else pulse output is simulated
-
 
 job.plot_simulated_samples()
 plt.show()

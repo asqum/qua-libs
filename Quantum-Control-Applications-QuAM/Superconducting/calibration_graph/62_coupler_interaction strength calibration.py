@@ -61,18 +61,18 @@ from quam_libs.components.gates.two_qubit_gates import SWAP_Coupler_Gate
 # %% {Node_parameters}
 class Parameters(NodeParameters):
 
-    qubit_pairs: Optional[List[str]] =  ["coupler_q2_q3"]
+    qubit_pairs: Optional[List[str]] =  ["coupler_q1_q2"]
     num_averages: int = 100
     flux_point_joint_or_independent_or_pairwise: Literal["joint", "independent", "pairwise"] = "joint"
-    reset_type: Literal['active', 'thermal'] = "active"
+    reset_type: Literal['active', 'thermal'] = "thermal"
     simulate: bool = False
     timeout: int = 100
     load_data_id: Optional[int] = None
-    coupler_flux_min : float = -0.15
-    coupler_flux_max : float = -0.1
-    coupler_flux_step : float = 0.001
+    coupler_flux_min : float = -0.35#0.15
+    coupler_flux_max : float = 0.35
+    coupler_flux_step : float = 0.01
     idle_time_min : int = 16
-    idle_time_max : int = 2000
+    idle_time_max : int = 600
     idle_time_step : int = 4
     use_state_discrimination: bool = True
     
@@ -162,9 +162,9 @@ with program() as CPhase_Oscillations:
                     
                     
                     if "coupler_qubit_crosstalk" in qp.extras:
-                        assign(comp_flux_qubit, flux_qubit  +  qp.extras["coupler_qubit_crosstalk"] * flux_coupler )
+                        assign(comp_flux_qubit, qp.detuning  +  qp.extras["coupler_qubit_crosstalk"] * flux_coupler )
                     else:
-                        assign(comp_flux_qubit, flux_qubit)
+                        assign(comp_flux_qubit, qp.detuning)
                     qp.align()
                     
                     # setting both qubits ot the initial state

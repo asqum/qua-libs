@@ -184,6 +184,7 @@ if node.parameters.simulate:
         samples[con].plot()
         plt.title(con)
     plt.tight_layout()
+    plt.show()
     # Save the figure
     node.results = {"figure": plt.gcf()}
     node.machine = machine
