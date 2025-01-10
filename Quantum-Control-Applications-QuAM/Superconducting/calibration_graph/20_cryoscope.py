@@ -33,12 +33,12 @@ from quam_libs.lib.cryoscope_tools import cryoscope_frequency, estimate_fir_coef
 
 # %% {Node_parameters}
 class Parameters(NodeParameters):
-    qubits: Optional[List[str]] = ['q5']
-    num_averages: int = 8000
+    qubits: Optional[List[str]] = ['q2']
+    num_averages: int = 2000
     amplitude_factor: float = 1.55 
     cryoscope_len: int = 240
-    reset_type_active_or_thermal: Literal['active', 'thermal'] = 'thermal'
-    flux_point_joint_or_independent: Literal['joint', 'independent'] = "independent"
+    reset_type_active_or_thermal: Literal['active', 'thermal'] = 'active'
+    flux_point_joint_or_independent: Literal['joint', 'independent'] = "joint"
     simulate: bool = False
     timeout: int = 100
     reset_filters: bool = False
@@ -299,10 +299,10 @@ else:
 
 # %%
 
-# %%
+# %% {Data_fetching_and_dataset_creation}
+# Fetch the data from the OPX and convert it into a xarray with corresponding axes (from most inner to outer loop)
 if not node.parameters.simulate:
-    # %% {Data_fetching_and_dataset_creation}
-    # Fetch the data from the OPX and convert it into a xarray with corresponding axes (from most inner to outer loop)
+
     ds = fetch_results_as_xarray(job.result_handles, [qubit], {"axis": ["x","y"], "time": cryoscope_time})
     plot_process = True
 

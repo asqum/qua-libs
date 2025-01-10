@@ -25,7 +25,7 @@ Next steps before going to the next node:
 # %% {Imports}
 from qualibrate import QualibrationNode, NodeParameters
 from quam_libs.components import QuAM
-from quam_libs.macros import qua_declaration, active_reset
+from quam_libs.macros import qua_declaration, active_reset, active_reset_simple
 from quam_libs.lib.qua_datasets import convert_IQ_to_V
 from quam_libs.lib.plot_utils import QubitGrid, grid_iter
 from quam_libs.lib.save_utils import fetch_results_as_xarray, load_dataset
@@ -44,12 +44,12 @@ import xarray as xr
 # %% {Node_parameters}
 class Parameters(NodeParameters):
 
-    qubits: Optional[List[str]] = None
-    num_runs: int = 140#2000
-    reset_type_thermal_or_active: Literal["thermal", "active"] = "thermal"
+    qubits: Optional[List[str]] = ["q1","q2"] #None
+    num_runs: int = 4000#2000
+    reset_type_thermal_or_active: Literal["thermal", "active"] = "active"
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
     operation_name: str = "readout"  # or "readout_QND"
-    simulate: bool = True
+    simulate: bool = False
     simulation_duration_ns: int = 4000
     timeout: int = 100
     load_data_id: Optional[int] = None
@@ -100,10 +100,11 @@ with program() as iq_blobs:
             # ground iq blobs for all qubits
             save(n, n_st)
             if reset_type == "active":
-                active_reset(qubit, "readout")
+                active_reset_simple(qubit, "readout")
             elif reset_type == "thermal":
                 if node.parameters.simulate: qubit.wait(16 * u.ns)
-                else: qubit.wait(qubit.thermalization_time * u.ns)
+                # else: qubit.wait(qubit.thermalization_time * u.ns)
+                else: qubit.wait(machine.thermalization_time * u.ns)
             else:
                 raise ValueError(f"Unrecognized reset type {reset_type}.")
 
@@ -121,7 +122,8 @@ with program() as iq_blobs:
                 active_reset(qubit, "readout")
             elif reset_type == "thermal":
                 if node.parameters.simulate: qubit.wait(16 * u.ns)
-                else: qubit.wait(qubit.thermalization_time * u.ns)
+                # else: qubit.wait(qubit.thermalization_time * u.ns)
+                else: qubit.wait(machine.thermalization_time * u.ns)
             else:
                 raise ValueError(f"Unrecognized reset type {reset_type}.")
             qubit.align()

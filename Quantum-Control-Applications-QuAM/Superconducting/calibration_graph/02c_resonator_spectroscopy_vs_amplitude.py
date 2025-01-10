@@ -289,7 +289,7 @@ if not node.parameters.simulate:
 
     grid.fig.suptitle("Resonator spectroscopy VS. power at base")
     plt.tight_layout()
-    plt.show()
+    # plt.show()
     node.results["figure"] = grid.fig
 
     # %% {Update_state}

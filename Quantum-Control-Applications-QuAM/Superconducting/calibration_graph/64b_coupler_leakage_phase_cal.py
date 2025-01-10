@@ -58,21 +58,21 @@ from quam_libs.lib.pulses import FluxPulse
 # %% {Node_parameters}
 class Parameters(NodeParameters):
 
-    qubit_pairs: Optional[List[str]] = ["coupler_q2_q3"]
+    qubit_pairs: Optional[List[str]] = ["coupler_q1_q2"]
     num_averages: int = 100
     flux_point_joint_or_independent_or_pairwise: Literal["joint", "independent", "pairwise"] = "joint"
     reset_type: Literal['active', 'thermal'] = "active"
     simulate: bool = False
     timeout: int = 100
     load_data_id: Optional[int] = None
-    coupler_flux_min : float = -0.1
-    coupler_flux_max : float = -0.05
+    coupler_flux_min : float = -0.26
+    coupler_flux_max : float = -0.23
     coupler_flux_step : float = 0.001
-    qubit_flux_min : float = -0.08
-    qubit_flux_max : float = -0.05
+    qubit_flux_min : float = -0.085
+    qubit_flux_max : float = -0.055
     qubit_flux_step : float = 0.001 
     use_state_discrimination: bool = True
-    pulse_duration_ns: int = 48
+    pulse_duration_ns: int = 100
     num_frames : int = 10
     
     
@@ -280,7 +280,7 @@ if not node.parameters.simulate:
     node.results["results"] = {}
 
     ## HARD CODED FROM EXPERIMENT
-    node.results["results"]["coupler_q2_q3"] = {"flux_coupler_Cz": -0.092, "flux_qubit_Cz": 0.095}
+    node.results["results"]["coupler_q1_q2"] = {"flux_coupler_Cz": -0.243, "flux_qubit_Cz": 0.081}
 
     
 # %% {Plotting}

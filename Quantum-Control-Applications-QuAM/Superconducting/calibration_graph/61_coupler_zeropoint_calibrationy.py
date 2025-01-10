@@ -58,20 +58,21 @@ from quam_libs.lib.pulses import FluxPulse
 # %% {Node_parameters}
 class Parameters(NodeParameters):
 
-    qubit_pairs: Optional[List[str]] = ["coupler_q2_q3"]
-    num_averages: int = 100
+    qubit_pairs: Optional[List[str]] = ["coupler_q1_q2"]
+    num_averages: int = 200
     flux_point_joint_or_independent_or_pairwise: Literal["joint", "independent", "pairwise"] = "joint"
     reset_type: Literal['active', 'thermal'] = "active"
     simulate: bool = False
     timeout: int = 100
     load_data_id: Optional[int] = None
-    coupler_flux_min : float = -0.1
-    coupler_flux_max : float = 0.0
-    coupler_flux_step : float = 0.001
-    qubit_flux_span : float = 0.02
-    qubit_flux_step : float = 0.0005   
+    coupler_flux_min : float = 0.12
+    coupler_flux_max : float = 0.185
+    coupler_flux_step : float = 0.0005
+    qubit_flux_span : float = 0.06
+    qubit_flux_step : float = 0.001   
     use_state_discrimination: bool = True
     pulse_duration_ns: int = 100
+    reset_coupler_bias : bool = False
     
 
 node = QualibrationNode(
@@ -122,7 +123,7 @@ for qp in qubit_pairs:
     fluxes_qp[qp.name] = fluxes_qubit + est_flux_shift
     
 pulse_duration = node.parameters.pulse_duration_ns // 4
-reset_coupler_bias = False
+reset_coupler_bias = node.parameters.reset_coupler_bias
 
 with program() as CPhase_Oscillations:
     n = declare(int)
@@ -246,9 +247,9 @@ if not node.parameters.simulate:
 detuning_mode = "quadratic" # "cosine" or "quadratic"
 if not node.parameters.simulate:
     if reset_coupler_bias:
-        flux_coupler_full = np.array([fluxes_coupler + qp.coupler.decouple_offset for qp in qubit_pairs])
+        flux_coupler_full = np.array([fluxes_coupler for qp in qubit_pairs])     
     else:
-        flux_coupler_full = np.array([fluxes_coupler for qp in qubit_pairs])
+        flux_coupler_full = np.array([fluxes_coupler + qp.coupler.decouple_offset for qp in qubit_pairs])
     if detuning_mode == "quadratic":
         detuning = np.array([-fluxes_qp[qp.name] ** 2 * qp.qubit_control.freq_vs_flux_01_quad_term  for qp in qubit_pairs])
     elif detuning_mode == "cosine":
@@ -341,7 +342,7 @@ if not node.parameters.simulate:
 if not node.parameters.simulate:
     with node.record_state_updates():
         for qp in qubit_pairs:
-            qp.coupler.decouple_offset = node.results["results"][qp.name]["flux_coupler_min"]
+            # qp.coupler.decouple_offset = node.results["results"][qp.name]["flux_coupler_min"]
             qp.detuning = node.results["results"][qp.name]["flux_qubit_max"]
 
 # %% {Save_results}

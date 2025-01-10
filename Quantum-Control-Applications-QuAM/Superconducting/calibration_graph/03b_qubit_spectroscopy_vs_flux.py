@@ -112,7 +112,7 @@ with program() as multi_qubit_spec_vs_flux:
 
         # Fixed qubit for debugging unknown flux-dependency: 
         fixed_qubit = machine.qubits[qubit.name]
-        fixed_qubit = machine.qubits["q4"]
+        # fixed_qubit = machine.qubits["q4"]
 
         # Bring the active qubits to the minimum frequency point
         machine.set_all_fluxes(flux_point=flux_point, target=qubit)
