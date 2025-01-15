@@ -53,14 +53,14 @@ from quam_libs.lib.pulses import FluxPulse
 # %% {Node_parameters}
 class Parameters(NodeParameters):
 
-    qubit_pairs: Optional[List[str]] = ["coupler_q2_q3"]
-    num_averages: int = 100
+    qubit_pairs: Optional[List[str]] = ["coupler_q1_q2"]
+    num_averages: int = 300
     max_time_in_ns: int = 200
     flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
     reset_type: Literal['active', 'thermal'] = "active"
     simulate: bool = False
     timeout: int = 100
-    amp_range : float = 0.2
+    amp_range : float = 0.3
     amp_step : float = 0.005
     load_data_id: Optional[int] = None  
 

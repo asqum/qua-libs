@@ -62,14 +62,20 @@ from quam_libs.components.gates.two_qubit_gates import SWAP_Coupler_Gate
 class Parameters(NodeParameters):
 
     qubit_pairs: Optional[List[str]] =  ["coupler_q1_q2"]
-    num_averages: int = 200 
+    num_averages: int = 60 
     flux_point_joint_or_independent_or_pairwise: Literal["joint", "independent", "pairwise"] = "joint"
     reset_type: Literal['active', 'thermal'] = "active"
     simulate: bool = False
     timeout: int = 100
     load_data_id: Optional[int] = None
-    coupler_flux_min : float = 0.09 #-0.21
-    coupler_flux_max : float = 0.185 #-0.15
+
+    # zone (a):
+    # coupler_flux_min : float = 0.09 #-0.21
+    # coupler_flux_max : float = 0.185 #-0.15
+    # zone (b):
+    coupler_flux_min : float = -0.28
+    coupler_flux_max : float = -0.22
+
     coupler_flux_step : float = 0.0002
     idle_time_min : int = 16
     idle_time_max : int = 500
@@ -239,10 +245,6 @@ if not node.parameters.simulate:
         
     node.results = {"ds": ds}
 
-
-
-
-
 # %%
 if not node.parameters.simulate:
     ds = ds.assign_coords(idle_time = ds.idle_time * 4)
@@ -275,8 +277,8 @@ if not node.parameters.simulate:
             values_to_plot = ds.state_control.sel(qubit=qp['qubit'])
         else:
             values_to_plot = ds.Q_control.sel(qubit=qp['qubit'])
-        values_to_plot.plot(ax = ax, cmap = 'viridis', y = 'idle_time', x = 'flux_coupler_full')
-        ax.set_title(qp['qubit'])
+        values_to_plot.plot(ax = ax, cmap = 'viridis', y = 'idle_time', x = 'flux_coupler')
+        ax.set_title(f"{qp['qubit']}, from offset of {machine.qubit_pairs[qp['qubit']].coupler.decouple_offset}")
     grid.fig.suptitle('I Control')
     plt.tight_layout()
     plt.show()
@@ -288,8 +290,8 @@ if not node.parameters.simulate:
             values_to_plot = ds.state_target.sel(qubit=qp['qubit'])
         else:
             values_to_plot = ds.Q_target.sel(qubit=qp['qubit'])
-        values_to_plot.plot(ax = ax, cmap = 'viridis', y = 'idle_time', x = 'flux_coupler_full')
-        ax.set_title(qp['qubit'])
+        values_to_plot.plot(ax = ax, cmap = 'viridis', y = 'idle_time', x = 'flux_coupler')
+        ax.set_title(f"{qp['qubit']}, from offset of {machine.qubit_pairs[qp['qubit']].coupler.decouple_offset}")
     grid.fig.suptitle('I Target')
     plt.tight_layout()
     plt.show()
@@ -297,16 +299,19 @@ if not node.parameters.simulate:
     
     grid = QubitPairGrid(grid_names, qubit_pair_names)    
     for ax, qp in grid_iter(grid):
-        (1e3*ds.dominant_frequency.sel(qubit=qp['qubit'])).plot(ax = ax, marker = '.', ls = 'None', x = 'flux_coupler_full')
-        ax.axvline(x = coupler_flux_pulse.sel(qubit=qp['qubit']), color = 'red', lw = 0.5, ls = '--')
-        ax.axvline(x = coupler_flux_min.sel(qubit=qp['qubit']), color = 'green', lw = 0.5, ls = '--')
-        ax.set_title(qp['qubit'])
+        (1e3*ds.dominant_frequency.sel(qubit=qp['qubit'])).plot(ax = ax, marker = '.', ls = 'None', x = 'flux_coupler')
+        ax.axvline(x = coupler_flux_pulse.sel(qubit=qp['qubit']) - machine.qubit_pairs[qp['qubit']].coupler.decouple_offset, color = 'red', lw = 0.5, ls = '--')
+        ax.axvline(x = coupler_flux_min.sel(qubit=qp['qubit'])- machine.qubit_pairs[qp['qubit']].coupler.decouple_offset, color = 'green', lw = 0.5, ls = '--')
+        ax.set_title(f"{qp['qubit']}, from offset of {machine.qubit_pairs[qp['qubit']].coupler.decouple_offset}")
         ax.set_xlabel('Flux Coupler')
         ax.set_ylabel('Frequency (MHz)')
+        print(f"For $0 MHz interaction we need a pulse of {coupler_flux_pulse.sel(qubit=qp['qubit']) - machine.qubit_pairs[qp['qubit']].coupler.decouple_offset}")    
+
     grid.fig.suptitle('Dominant Frequency')
     plt.tight_layout()
     plt.show()
     node.results['figure_dominant_frequency'] = grid.fig
+
 # %%
 # from importlib import reload
 # import quam_libs.components.gates.two_qubit_gates as two_qubit_gates

@@ -65,14 +65,20 @@ class Parameters(NodeParameters):
     simulate: bool = False
     timeout: int = 100
     load_data_id: Optional[int] = None
-    coupler_flux_min : float = -0.26
-    coupler_flux_max : float = -0.23
+
+    # zone (a): 
+    # coupler_flux_min : float = 0.155
+    # coupler_flux_max : float = 0.175
+    # zone (b):
+    coupler_flux_min : float = -0.240
+    coupler_flux_max : float = -0.220
+
     coupler_flux_step : float = 0.001
-    qubit_flux_min : float = -0.085
-    qubit_flux_max : float = -0.055
-    qubit_flux_step : float = 0.001 
+    qubit_flux_min : float = -0.08
+    qubit_flux_max : float = -0.06
+    qubit_flux_step : float = 0.0002 
     use_state_discrimination: bool = True
-    pulse_duration_ns: int = 100
+    pulse_duration_ns: int = 60
     num_frames : int = 10
     
     

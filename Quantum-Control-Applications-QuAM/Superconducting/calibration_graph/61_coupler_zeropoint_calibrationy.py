@@ -59,19 +59,31 @@ from quam_libs.lib.pulses import FluxPulse
 class Parameters(NodeParameters):
 
     qubit_pairs: Optional[List[str]] = ["coupler_q1_q2"]
-    num_averages: int = 200
+    num_averages: int = 60
     flux_point_joint_or_independent_or_pairwise: Literal["joint", "independent", "pairwise"] = "joint"
     reset_type: Literal['active', 'thermal'] = "active"
     simulate: bool = False
     timeout: int = 100
     load_data_id: Optional[int] = None
-    coupler_flux_min : float = 0.12
-    coupler_flux_max : float = 0.185
-    coupler_flux_step : float = 0.0005
+
+    # wide range:
+    # coupler_flux_min : float = -0.6
+    # coupler_flux_max : float = 0.3
+    # zoom-in (a)
+    # coupler_flux_min : float = 0.12
+    # coupler_flux_max : float = 0.185
+    # zoom-in (b)
+    coupler_flux_min : float = -0.28
+    coupler_flux_max : float = -0.22
+    # zoom-in (c)
+    # coupler_flux_min : float = 0.52
+    # coupler_flux_max : float = 0.585
+
+    coupler_flux_step : float = 0.0002
     qubit_flux_span : float = 0.06
-    qubit_flux_step : float = 0.001   
+    qubit_flux_step : float = 0.0005   
     use_state_discrimination: bool = True
-    pulse_duration_ns: int = 100
+    pulse_duration_ns: int = 60
     reset_coupler_bias : bool = False
     
 
@@ -116,6 +128,8 @@ flux_point = node.parameters.flux_point_joint_or_independent_or_pairwise  # 'ind
 # Loop parameters
 fluxes_coupler = np.arange(node.parameters.coupler_flux_min, node.parameters.coupler_flux_max+0.0001, node.parameters.coupler_flux_step)
 fluxes_qubit = np.arange(-node.parameters.qubit_flux_span / 2, node.parameters.qubit_flux_span / 2 + 0.0001, node.parameters.qubit_flux_step)
+print(f"Number of points: {len(fluxes_coupler) * len(fluxes_qubit)}")
+
 fluxes_qp = {}
 for qp in qubit_pairs:
     # estimate the flux shift to get the control qubit to the target qubit frequency
@@ -124,6 +138,9 @@ for qp in qubit_pairs:
     
 pulse_duration = node.parameters.pulse_duration_ns // 4
 reset_coupler_bias = node.parameters.reset_coupler_bias
+
+import time
+start = time.time()
 
 with program() as CPhase_Oscillations:
     n = declare(int)
@@ -274,6 +291,8 @@ if not node.parameters.simulate:
         flux_qubit_max = fluxes_qp[qp.name][qubit_max_arg]
         node.results["results"][qp.name] = {"flux_coupler_min": float(flux_coupler_min.values), "flux_qubit_max": float(flux_qubit_max)}
 
+stop = time.time()
+print(f"Time elapsed: {stop - start} s")
 
 # %% {Plotting}
 if not node.parameters.simulate:
