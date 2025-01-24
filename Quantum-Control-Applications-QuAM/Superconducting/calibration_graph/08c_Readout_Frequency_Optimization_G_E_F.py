@@ -295,10 +295,12 @@ else:
     # %% {Update_state}
     for q in qubits:
         with node.record_state_updates():
-            q.GEF_frequency_shift = int(fit_results[q.name]["GEF_detuning"])
+            q.resonator.GEF_frequency_shift = int(fit_results[q.name]["GEF_detuning"])
 
     # %% {Save_results}
     node.outcomes = {q.name: "successful" for q in qubits}
     node.results["initial_parameters"] = node.parameters.model_dump()
     node.machine = machine
     node.save()
+
+# %%

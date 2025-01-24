@@ -56,27 +56,41 @@ qubit2_frame_update = phi_to_meet_with #0.12  # example values, should be taken 
 
 
 # defines the CZ gate that realizes the mapping |00> -> |00>, |01> -> |01>, |10> -> |10>, |11> -> -|11>
-def bake_cz(baker: Baking, q1, q2):
-    # print("q1,q2: %s,%s" %(q1,q2))
-    qc_xy_element = qc.xy.name
-    qt_xy_element = qt.xy.name
+# def bake_cz(baker: Baking, q1, q2):
+#     # print("q1,q2: %s,%s" %(q1,q2))
+#     qc_xy_element = qc.xy.name
+#     qt_xy_element = qt.xy.name
     
-    try: coupler = (qc @ qt).coupler
-    except: coupler = (qt @ qc).coupler
+#     try: coupler = (qc @ qt).coupler
+#     except: coupler = (qt @ qc).coupler
     
-    ########### Pulsed Version
-    # baker.wait(100 * u.ns)
-    # baker.wait(24 * u.ns)
-    baker.play(("cz%s_%s"%(qc.name,qt.name)).replace("q",""), qc.z.name)
-    baker.play("cz", coupler.name)
-    #############################
+#     ########### Pulsed Version
+#     # baker.wait(100 * u.ns)
+#     # baker.wait(24 * u.ns)
+#     baker.play(("cz%s_%s"%(qc.name,qt.name)).replace("q",""), qc.z.name)
+#     baker.play("cz", coupler.name)
+#     #############################
     
-    baker.wait(60 * u.ns)
-    baker.align(qc.z.name, coupler.name, qc_xy_element, qt_xy_element)
-    baker.frame_rotation_2pi(qubit1_frame_update, qc_xy_element)
-    baker.frame_rotation_2pi(qubit2_frame_update, qt_xy_element)
-    baker.align(qc.z.name, coupler.name, qc_xy_element, qt_xy_element)
+#     baker.wait(60 * u.ns)
+#     baker.align(qc.z.name, coupler.name, qc_xy_element, qt_xy_element)
+#     baker.frame_rotation_2pi(qubit1_frame_update, qc_xy_element)
+#     baker.frame_rotation_2pi(qubit2_frame_update, qt_xy_element)
+#     baker.align(qc.z.name, coupler.name, qc_xy_element, qt_xy_element)
 
+QP = machine.qubit_pairs["coupler_q1_q2"]
+def bake_cz(baker: Baking, q1, q2):
+    baker.align()
+
+    baker.play(
+        "Cz.CZ_snz_qubitC4",qc.z.name
+    )
+    amp_scale = QP.gates["Cz"].compensations[0]["shift"] / Q_aux.z.operations["const"].amplitude
+    baker.play("const" , Q_aux.z.name)
+
+    baker.align()
+    baker.frame_rotation_2pi(QP.gates["Cz_SNZ"].phase_shift_control, qc.xy.name)
+    baker.frame_rotation_2pi(QP.gates["Cz_SNZ"].phase_shift_target, qt.xy.name)
+    baker.align()
 
 def prep():
     machine.apply_all_flux_to_min()

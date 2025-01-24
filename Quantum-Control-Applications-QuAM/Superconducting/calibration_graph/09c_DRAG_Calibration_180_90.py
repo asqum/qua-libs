@@ -23,7 +23,7 @@ Next steps before going to the next node:
 # %% {Imports}
 from qualibrate import QualibrationNode, NodeParameters
 from quam_libs.components import QuAM
-from quam_libs.macros import qua_declaration, active_reset
+from quam_libs.macros import qua_declaration, active_reset, active_reset_simple
 from quam_libs.lib.plot_utils import QubitGrid, grid_iter
 from quam_libs.lib.save_utils import fetch_results_as_xarray, load_dataset
 from quam_libs.trackable_object import tracked_updates
@@ -42,7 +42,7 @@ import xarray as xr
 # %% {Node_parameters}
 class Parameters(NodeParameters):
     qubits: Optional[List[str]] = None
-    num_averages: int = 888
+    num_averages: int = 600
     operation: str = "x180"
     min_amp_factor: float = 0.0001
     max_amp_factor: float = 2.0
@@ -53,7 +53,7 @@ class Parameters(NodeParameters):
     simulation_duration_ns: int = 2500
     timeout: int = 100
     load_data_id: Optional[int] = None
-    multiplexed: bool = False
+    multiplexed: bool = True
 
 node = QualibrationNode(name="09c_DRAG_Calibration_180_90", parameters=Parameters())
 
@@ -117,7 +117,7 @@ with program() as drag_calibration:
                 with for_(*from_array(a, amps)):
                     # Initialize the qubits
                     if reset_type == "active":
-                        active_reset(qubit, "readout")
+                        active_reset_simple(qubit, "readout")
                     else:
                         qubit.wait(machine.thermalization_time * u.ns)
 
@@ -231,3 +231,5 @@ if not node.parameters.simulate:
         node.results["initial_parameters"] = node.parameters.model_dump()
         node.machine = machine
         node.save()
+
+# %%

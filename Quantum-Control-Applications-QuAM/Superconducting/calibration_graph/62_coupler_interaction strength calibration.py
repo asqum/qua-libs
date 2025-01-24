@@ -61,24 +61,24 @@ from quam_libs.components.gates.two_qubit_gates import SWAP_Coupler_Gate
 # %% {Node_parameters}
 class Parameters(NodeParameters):
 
-    qubit_pairs: Optional[List[str]] =  ["coupler_q1_q2"]
-    num_averages: int = 60 
+    qubit_pairs: Optional[List[str]] =  ["coupler_q4_q5"]
+    num_averages: int = 280
     flux_point_joint_or_independent_or_pairwise: Literal["joint", "independent", "pairwise"] = "joint"
     reset_type: Literal['active', 'thermal'] = "active"
     simulate: bool = False
     timeout: int = 100
     load_data_id: Optional[int] = None
 
-    # zone (a):
-    # coupler_flux_min : float = 0.09 #-0.21
-    # coupler_flux_max : float = 0.185 #-0.15
-    # zone (b):
-    coupler_flux_min : float = -0.28
-    coupler_flux_max : float = -0.22
+    # coupler_q1_q2:
+    # coupler_flux_min : float = 0.135
+    # coupler_flux_max : float = 0.179
+    # coupler_q4_q5:
+    coupler_flux_min : float = 0.269
+    coupler_flux_max : float = 0.450
 
-    coupler_flux_step : float = 0.0002
+    coupler_flux_step : float = 0.0005
     idle_time_min : int = 16
-    idle_time_max : int = 500
+    idle_time_max : int = 1200
     idle_time_step : int = 4
     use_state_discrimination: bool = True
     
@@ -103,6 +103,9 @@ else:
 #     warnings.warn("Found qubit pairs without a flux line. Skipping")
 
 num_qubit_pairs = len(qubit_pairs)
+
+for qp in qubit_pairs:
+    print("control: %s, target: %s" %(qp.qubit_control.name, qp.qubit_target.name))
 
 # Generate the OPX and Octave configurations
 config = machine.generate_config()
@@ -151,7 +154,7 @@ with program() as CPhase_Oscillations:
     
     for i, qp in enumerate(qubit_pairs):
         # Bring the active qubits to the minimum frequency point
-        machine.set_all_fluxes(flux_point, qp)
+        machine.set_all_fluxes("joint", qp)
 
         with for_(n, 0, n < n_avg, n + 1):
             save(n, n_st)         
@@ -175,10 +178,8 @@ with program() as CPhase_Oscillations:
                     
                     # setting both qubits ot the initial state
                     qp.qubit_control.xy.play("x180")
-
-                    qp.align()
-                    # qp.qubit_control.z.wait(qp.qubit_control.xy.operations["x180"].length >> 2)
-                    # qp.coupler.wait(qp.qubit_control.xy.operations["x180"].length >> 2)             
+                    qp.qubit_control.z.wait(qp.qubit_control.xy.operations["x180"].length >> 2)
+                    qp.coupler.wait(qp.qubit_control.xy.operations["x180"].length >> 2)             
                     
                     # Play the flux pulse on the qubit control and coupler
                     qp.qubit_control.z.play("const", amplitude_scale = comp_flux_qubit / qp.qubit_control.z.operations["const"].amplitude, duration = idle_time)
@@ -265,7 +266,7 @@ if not node.parameters.simulate:
     # Plot the dominant frequencies
     # Find the values of flux_coupler_full for which the dominant frequencies are max and min
     interaction_max = (ds.dominant_frequency * (ds.dominant_frequency<0.04)).max(dim='flux_coupler')
-    coupler_flux_pulse = ds.flux_coupler_full.isel(flux_coupler=(ds.dominant_frequency * (ds.dominant_frequency<0.04)).argmax(dim='flux_coupler'))
+    coupler_flux_pulse = ds.flux_coupler.isel(flux_coupler=(ds.dominant_frequency * (ds.dominant_frequency<0.04)).argmax(dim='flux_coupler'))
     coupler_flux_min = ds.flux_coupler_full.isel(flux_coupler=ds.dominant_frequency.argmin(dim='flux_coupler'))
 
 # %% {Plotting}
@@ -278,7 +279,8 @@ if not node.parameters.simulate:
         else:
             values_to_plot = ds.Q_control.sel(qubit=qp['qubit'])
         values_to_plot.plot(ax = ax, cmap = 'viridis', y = 'idle_time', x = 'flux_coupler')
-        ax.set_title(f"{qp['qubit']}, from offset of {machine.qubit_pairs[qp['qubit']].coupler.decouple_offset}")
+        qubit_pair = machine.qubit_pairs[qp['qubit']]
+        ax.set_title(f"{qp['qubit']}, coupler set point: {qubit_pair.coupler.decouple_offset}", fontsize = 10)
     grid.fig.suptitle('I Control')
     plt.tight_layout()
     plt.show()
@@ -291,7 +293,8 @@ if not node.parameters.simulate:
         else:
             values_to_plot = ds.Q_target.sel(qubit=qp['qubit'])
         values_to_plot.plot(ax = ax, cmap = 'viridis', y = 'idle_time', x = 'flux_coupler')
-        ax.set_title(f"{qp['qubit']}, from offset of {machine.qubit_pairs[qp['qubit']].coupler.decouple_offset}")
+        qubit_pair = machine.qubit_pairs[qp['qubit']]
+        ax.set_title(f"{qp['qubit']}, coupler set point: {qubit_pair.coupler.decouple_offset}", fontsize = 10)
     grid.fig.suptitle('I Target')
     plt.tight_layout()
     plt.show()
@@ -300,27 +303,16 @@ if not node.parameters.simulate:
     grid = QubitPairGrid(grid_names, qubit_pair_names)    
     for ax, qp in grid_iter(grid):
         (1e3*ds.dominant_frequency.sel(qubit=qp['qubit'])).plot(ax = ax, marker = '.', ls = 'None', x = 'flux_coupler')
-        ax.axvline(x = coupler_flux_pulse.sel(qubit=qp['qubit']) - machine.qubit_pairs[qp['qubit']].coupler.decouple_offset, color = 'red', lw = 0.5, ls = '--')
-        ax.axvline(x = coupler_flux_min.sel(qubit=qp['qubit'])- machine.qubit_pairs[qp['qubit']].coupler.decouple_offset, color = 'green', lw = 0.5, ls = '--')
-        ax.set_title(f"{qp['qubit']}, from offset of {machine.qubit_pairs[qp['qubit']].coupler.decouple_offset}")
+        qubit_pair = machine.qubit_pairs[qp['qubit']]
+        ax.axvline(x = coupler_flux_pulse.sel(qubit=qp['qubit']), color = 'red', lw = 0.5, ls = '--')
+        ax.axvline(x = coupler_flux_min.sel(qubit=qp['qubit']) - qubit_pair.coupler.decouple_offset, color = 'green', lw = 0.5, ls = '--')
+        ax.set_title(f"{qp['qubit']}, coupler set point: {qubit_pair.coupler.decouple_offset}", fontsize = 10)
         ax.set_xlabel('Flux Coupler')
         ax.set_ylabel('Frequency (MHz)')
-        print(f"For $0 MHz interaction we need a pulse of {coupler_flux_pulse.sel(qubit=qp['qubit']) - machine.qubit_pairs[qp['qubit']].coupler.decouple_offset}")    
-
     grid.fig.suptitle('Dominant Frequency')
     plt.tight_layout()
     plt.show()
     node.results['figure_dominant_frequency'] = grid.fig
-
-# %%
-# from importlib import reload
-# import quam_libs.components.gates.two_qubit_gates as two_qubit_gates
-# reload(two_qubit_gates)
-# from quam_libs.components.gates.two_qubit_gates import SWAP_Coupler_Gate
-
-# # If you need to use the reloaded SWAP_Coupler_Gate specifically:
-# SWAP_Coupler_Gate = two_qubit_gates.SWAP_Coupler_Gate
-
 
 # %% {Update_state}
 if not node.parameters.simulate:
@@ -339,7 +331,7 @@ if not node.parameters.simulate:
             # qp.coupler.decouple_offset = float(coupler_flux_min.sel(qubit = qp.name).values)
             # qp.gates['SWAP_Coupler'] = SWAP_Coupler_Gate(flux_pulse_control = FluxPulse(length = gate_time_including_zeros, amplitude = qubit_flux_pulse_amp, zero_padding = zero_padding, id = 'flux_pulse_control_' + qp.qubit_target.name), 
             #                                              coupler_pulse_control = FluxPulse(length = gate_time_including_zeros, amplitude = coupler_flux_pulse_amp, zero_padding = zero_padding, id = 'coupler_pulse_control_' + qp.qubit_target.name))
-            qp.extras["flux_values"] = ds.flux_coupler_full.sel(qubit = qp.name).values.tolist()
+            qp.extras["flux_values"] = ds.flux_coupler.values.tolist()
             qp.extras["J_vs_flux"] = ds.dominant_frequency.sel(qubit = qp.name).values.tolist()
 # %% {Save_results}
 if not node.parameters.simulate:    

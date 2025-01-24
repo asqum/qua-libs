@@ -16,7 +16,7 @@ Next steps before going to the next node:
 # %% {Imports}
 from qualibrate import QualibrationNode, NodeParameters
 from quam_libs.components import QuAM
-from quam_libs.macros import qua_declaration, active_reset, readout_state
+from quam_libs.macros import qua_declaration, active_reset, readout_state, active_reset_simple
 from quam_libs.lib.qua_datasets import convert_IQ_to_V
 from quam_libs.lib.plot_utils import QubitGrid, grid_iter
 from quam_libs.lib.save_utils import fetch_results_as_xarray, load_dataset
@@ -35,18 +35,18 @@ import numpy as np
 # %% {Node_parameters}
 class Parameters(NodeParameters):
     qubits: Optional[List[str]] = None
-    num_averages: int = 100
+    num_averages: int = 200
     min_wait_time_in_ns: int = 16
     max_wait_time_in_ns: int = 100000
     wait_time_step_in_ns: int = 600
     flux_point_joint_or_independent_or_arbitrary: Literal["joint", "independent", "arbitrary"] = "independent"
-    reset_type: Literal["active", "thermal"] = "thermal"
+    reset_type: Literal["active", "thermal"] = "active"
     use_state_discrimination: bool = False
     simulate: bool = False
     simulation_duration_ns: int = 2500
     timeout: int = 100
     load_data_id: Optional[int] = None
-    multiplexed: bool = False
+    multiplexed: bool = True
 
 node = QualibrationNode(name="05_T1", parameters=Parameters())
 
@@ -106,7 +106,8 @@ with program() as t1:
             save(n, n_st)
             with for_(*from_array(t, idle_times)):
                 if node.parameters.reset_type == "active":
-                    active_reset(qubit, "readout")
+                    # active_reset(qubit, "readout")
+                    active_reset_simple(qubit, "readout")
                 else:
                     qubit.resonator.wait(qubit.thermalization_time * u.ns)
                     qubit.align()

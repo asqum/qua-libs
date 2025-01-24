@@ -58,28 +58,22 @@ from quam_libs.lib.pulses import FluxPulse
 # %% {Node_parameters}
 class Parameters(NodeParameters):
 
-    qubit_pairs: Optional[List[str]] = ["coupler_q1_q2"]
+    qubit_pairs: Optional[List[str]] = ["coupler_q4_q5"]
     num_averages: int = 100
     flux_point_joint_or_independent_or_pairwise: Literal["joint", "independent", "pairwise"] = "joint"
     reset_type: Literal['active', 'thermal'] = "active"
     simulate: bool = False
     timeout: int = 100
     load_data_id: Optional[int] = None
-
-    # zone (a): 
-    # coupler_flux_min : float = 0.155
-    # coupler_flux_max : float = 0.175
-    # zone (b):
-    coupler_flux_min : float = -0.240
-    coupler_flux_max : float = -0.220
-
-    coupler_flux_step : float = 0.001
-    qubit_flux_min : float = -0.08
-    qubit_flux_max : float = -0.06
-    qubit_flux_step : float = 0.0002 
+    coupler_flux_min : float = 0.15 # relative to the coupler set point 
+    coupler_flux_max : float = 0.35 # relative to the coupler set point
+    coupler_flux_step : float = 0.005
+    qubit_flux_min : float = -0.12 # relative to the qubit pair detuning
+    qubit_flux_max : float = -0.03 # relative to the qubit pair detuning
+    qubit_flux_step : float = 0.002 
     use_state_discrimination: bool = True
     pulse_duration_ns: int = 60
-    num_frames : int = 10
+    num_frames : int = 20
     
     
 
@@ -187,9 +181,10 @@ with program() as CPhase_Oscillations:
                             if "coupler_qubit_crosstalk" in qp.extras:
                                 assign(comp_flux_qubit, flux_qubit  +  qp.extras["coupler_qubit_crosstalk"] * flux_coupler )
                             else:
-                                assign(comp_flux_qubit, flux_qubit)                            # setting both qubits ot the initial state
-                            qp.qubit_control.xy.play("x180", condition=control_initial == 1)
-                            # qp.qubit_control.xy.play("x180")
+                                assign(comp_flux_qubit, flux_qubit)   
+                            # setting both qubits ot the initial state
+                            with if_(control_initial == 1, unsafe = True):
+                                qp.qubit_control.xy.play("x180")
                             qp.qubit_target.xy.play("x90")
                             align()
                             qp.qubit_control.z.play("const", amplitude_scale = comp_flux_qubit / qp.qubit_control.z.operations["const"].amplitude, duration = qua_pulse_duration)                
@@ -279,15 +274,14 @@ if not node.parameters.simulate:
     fit_data = fit_oscillation(ds.state_target, "frame")
     phase = fix_oscillation_phi_2pi(fit_data)
     phase_diff = phase.diff(dim="control_ax")
-
-    # %%
   
     # %%
     node.results["results"] = {}
 
+    # %%
     ## HARD CODED FROM EXPERIMENT
-    node.results["results"]["coupler_q1_q2"] = {"flux_coupler_Cz": -0.243, "flux_qubit_Cz": 0.081}
-
+    node.results["results"]["coupler_q1_q2"] = {"flux_coupler_Cz": 0.1679, "flux_qubit_Cz": 0.0685}
+    node.results["results"]["coupler_q4_q5"] = {"flux_coupler_Cz": 0.235, "flux_qubit_Cz": 0.055}
     
 # %% {Plotting}
 if not node.parameters.simulate:
@@ -296,7 +290,8 @@ if not node.parameters.simulate:
     for ax, qp in grid_iter(grid):
         values_to_plot = ds.state_control_f.mean(dim = "frame").sel(control_ax = 1).sel(qubit = qp['qubit'])
         values_to_plot.assign_coords({"flux_qubit_mV": 1e3*values_to_plot.flux_qubit_full, "flux_coupler_mV": 1e3*values_to_plot.flux_coupler_full}).plot(ax = ax, cmap = 'viridis', x = 'flux_qubit_mV', y = 'flux_coupler_mV')
-        ax.set_title(qp['qubit'])
+        qubit_pair = machine.qubit_pairs[qp['qubit']]
+        ax.set_title(f"{qp['qubit']}, coupler set point: {qubit_pair.coupler.decouple_offset}", fontsize = 10)
         ax.axhline(1e3*node.results["results"][qp["qubit"]]["flux_coupler_Cz"], color = 'red', lw = 0.5, ls = '--')
         ax.axvline(1e3*node.results["results"][qp["qubit"]]["flux_qubit_Cz"], color = 'red', lw =0.5, ls = '--')
         # Create a secondary x-axis for detuning
@@ -315,6 +310,7 @@ if not node.parameters.simulate:
         ax.set_xlabel('Qubit flux shift [V]')
         ax.set_ylabel('Coupler flux [V]')
     grid.fig.suptitle('Leakage')
+    plt.minorticks_on()
     plt.tight_layout()
     plt.show()
     node.results['figure_leakage'] = grid.fig
@@ -325,7 +321,8 @@ if not node.parameters.simulate:
         values_to_plot = (((phase_diff+0.5 )% 1 -0.5)*360).sel(qubit = qp['qubit'])
         
         values_to_plot.assign_coords({"flux_qubit_mV": 1e3*values_to_plot.flux_qubit_full, "flux_coupler_mV": 1e3*values_to_plot.flux_coupler_full}).plot(ax = ax, x = 'flux_qubit_mV', y = 'flux_coupler_mV')
-        ax.set_title(qp['qubit'])
+        qubit_pair = machine.qubit_pairs[qp['qubit']]
+        ax.set_title(f"{qp['qubit']}, coupler set point: {qubit_pair.coupler.decouple_offset}", fontsize = 10)
         ax.axhline(1e3*node.results["results"][qp["qubit"]]["flux_coupler_Cz"], color = 'k', lw = 0.5, ls = '--')
         ax.axvline(1e3*node.results["results"][qp["qubit"]]["flux_qubit_Cz"], color = 'k', lw =0.5, ls = '--')
         # Create a secondary x-axis for detuning
@@ -344,6 +341,7 @@ if not node.parameters.simulate:
         ax.set_xlabel('Qubit flux shift [V]')
         ax.set_ylabel('Coupler flux [V]')
     grid.fig.suptitle('Conditional phase $\phi$')
+    plt.minorticks_on()
     plt.tight_layout()
     plt.show()
     node.results['figure_target'] = grid.fig

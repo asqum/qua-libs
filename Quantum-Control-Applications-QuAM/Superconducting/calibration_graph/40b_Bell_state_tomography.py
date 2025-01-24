@@ -35,7 +35,7 @@ Outcomes:
 # %% {Imports}
 from qualibrate import QualibrationNode, NodeParameters
 from quam_libs.components import QuAM
-from quam_libs.macros import active_reset, readout_state, readout_state_gef, active_reset_gef
+from quam_libs.macros import active_reset, readout_state, readout_state_gef, active_reset_gef, active_reset_simple
 from quam_libs.lib.plot_utils import QubitPairGrid, grid_iter, grid_pair_names
 from quam_libs.lib.save_utils import fetch_results_as_xarray, load_dataset
 from qualang_tools.results import progress_counter, fetching_tool
@@ -58,7 +58,7 @@ from quam_libs.lib.pulses import FluxPulse
 # %% {Node_parameters}
 class Parameters(NodeParameters):
 
-    qubit_pairs: Optional[List[str]] = None
+    qubit_pairs: Optional[List[str]] = ["coupler_q1_q2"]
     num_shots: int = 2000
     flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
     reset_type: Literal['active', 'thermal'] = "active"
@@ -288,8 +288,8 @@ with program() as CPhase_Oscillations:
     state_st_control = [declare_stream() for _ in range(num_qubit_pairs)]
     state_st_target = [declare_stream() for _ in range(num_qubit_pairs)]
     state_st = [declare_stream() for _ in range(num_qubit_pairs)]
-    tomo_axis_control = declare(int)
-    tomo_axis_target = declare(int)
+    # tomo_axis_control = declare(int)
+    # tomo_axis_target = declare(int)
     
     for i, qp in enumerate(qubit_pairs):
         # Bring the active qubits to the minimum frequency point
@@ -297,29 +297,44 @@ with program() as CPhase_Oscillations:
 
         with for_(n, 0, n < n_shots, n + 1):
             save(n, n_st) 
-            with for_(tomo_axis_control, 0, tomo_axis_control < 3, tomo_axis_control + 1):
-                with for_(tomo_axis_target, 0, tomo_axis_target < 3, tomo_axis_target + 1):
+            # with for_(tomo_axis_control, 0, tomo_axis_control < 3, tomo_axis_control + 1):
+                # with for_(tomo_axis_target, 0, tomo_axis_target < 3, tomo_axis_target + 1):
+            for tomo_axis_control in [0,1,2]:
+                for tomo_axis_target in [0,1,2]:
                     # reset
                     if node.parameters.reset_type == "active":
-                            active_reset(qp.qubit_control)
-                            active_reset(qp.qubit_target)
+                            wait(2*qp.qubit_control.thermalization_time * u.ns)
+                            active_reset_simple(qp.qubit_control)
+                            active_reset_simple(qp.qubit_target)
+                            active_reset_simple(qp.qubit_control)
+                            active_reset_simple(qp.qubit_target)   
                     else:
                         wait(5*qp.qubit_control.thermalization_time * u.ns)
                     qp.align()
                     # Bell state
                     qp.qubit_control.xy.play("-y90")
                     qp.qubit_target.xy.play("y90")
+                    qp.align()
                     qp.gates['Cz'].execute()
+                    qp.align()
                     qp.qubit_control.xy.play("y90")
                     qp.align()
                     # tomography pulses
-                    with if_(tomo_axis_control == 0): #X axis
+                    # with if_(tomo_axis_control == 0): #X axis
+                    #     qp.qubit_control.xy.play("y90")
+                    # with if_(tomo_axis_control == 1): #Y axis
+                    #     qp.qubit_control.xy.play("x90")
+                    # with if_(tomo_axis_target == 0): #X axis
+                    #     qp.qubit_target.xy.play("y90")
+                    # with if_(tomo_axis_target == 1): #Y axis
+                    #     qp.qubit_target.xy.play("x90")
+                    if tomo_axis_control == 0:
                         qp.qubit_control.xy.play("y90")
-                    with elif_(tomo_axis_control == 1): #Y axis
+                    if tomo_axis_control == 1:
                         qp.qubit_control.xy.play("x90")
-                    with if_(tomo_axis_target == 0): #X axis
+                    if tomo_axis_target == 0:
                         qp.qubit_target.xy.play("y90")
-                    with elif_(tomo_axis_target == 1): #Y axis
+                    if tomo_axis_target == 1:
                         qp.qubit_target.xy.play("x90")
                     qp.align()            
                     # readout
@@ -348,7 +363,7 @@ if node.parameters.simulate:
     node.machine = machine
     node.save()
 elif node.parameters.load_data_id is None:
-    with qm_session(qmm, config, timeout=node.parameters.timeout, keep_dc_offsets_when_closing=True) as qm:
+    with qm_session(qmm, config, timeout=node.parameters.timeout ) as qm:
         job = qm.execute(CPhase_Oscillations)
 
         results = fetching_tool(job, ["n"], mode="live")

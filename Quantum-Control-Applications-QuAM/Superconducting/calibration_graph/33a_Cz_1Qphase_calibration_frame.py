@@ -34,7 +34,7 @@ Outcomes:
 # %% {Imports}
 from qualibrate import QualibrationNode, NodeParameters
 from quam_libs.components import QuAM
-from quam_libs.macros import active_reset, readout_state, readout_state_gef, active_reset_gef
+from quam_libs.macros import active_reset, readout_state, readout_state_gef, active_reset_gef, active_reset_simple
 from quam_libs.lib.plot_utils import QubitPairGrid, grid_iter, grid_pair_names
 from quam_libs.lib.save_utils import fetch_results_as_xarray, load_dataset
 from qualang_tools.results import progress_counter, fetching_tool
@@ -57,13 +57,13 @@ from quam_libs.lib.pulses import FluxPulse
 # %% {Node_parameters}
 class Parameters(NodeParameters):
 
-    qubit_pairs: Optional[List[str]] = None
+    qubit_pairs: Optional[List[str]] = ["coupler_q1_q2"]
     num_averages: int = 1000
     flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
     reset_type: Literal['active', 'thermal'] = "active"
     simulate: bool = False
     timeout: int = 100
-    num_frames: int = 21
+    num_frames: int = 60 #21
     load_data_id: Optional[int] = None
     plot_raw : bool = False
     measure_leak : bool = False
@@ -139,10 +139,12 @@ with program() as CPhase_Oscillations:
                 for qubit, state_q, state_st in [(qp.qubit_control, state_control[i], state_st_control[i]), (qp.qubit_target, state_target[i], state_st_target[i])]:
                     # reset
                     if node.parameters.reset_type == "active":
-                            active_reset(qp.qubit_control)
-                            qp.align()
-                            active_reset(qp.qubit_target)
-                            qp.align()
+                            # active_reset(qp.qubit_control)
+                            # qp.align()
+                            # active_reset(qp.qubit_target)
+                            # qp.align()
+                        active_reset_simple(qp.qubit_control)
+                        active_reset_simple(qp.qubit_target)
                     else:
                         wait(qp.qubit_control.thermalization_time * u.ns)
                     qp.align()
@@ -182,7 +184,7 @@ if node.parameters.simulate:
     node.machine = machine
     node.save()
 elif node.parameters.load_data_id is None:
-    with qm_session(qmm, config, timeout=node.parameters.timeout, keep_dc_offsets_when_closing=True) as qm:
+    with qm_session(qmm, config, timeout=node.parameters.timeout ) as qm:
         job = qm.execute(CPhase_Oscillations)
 
         results = fetching_tool(job, ["n"], mode="live")
@@ -271,17 +273,6 @@ for qp in qubit_pairs:
     A_target[qp.name] = float(fit_data_target.sel(qubit=qp.name, fit_vals="a"))
     offset_control[qp.name] = float(fit_data_control.sel(qubit=qp.name, fit_vals="offset"))
     offset_target[qp.name] = float(fit_data_target.sel(qubit=qp.name, fit_vals="offset"))
-    
-    # qp.gates['Cz'].phase_shift_control -= (phase_control / params['cz_num'])
-    # qp.gates['Cz'].phase_shift_control = qp.gates['Cz'].phase_shift_control  % (1.0)
-    # qp.gates['Cz'].phase_shift_target -= (phase_target/ params['cz_num'])
-    # qp.gates['Cz'].phase_shift_target = qp.gates['Cz'].phase_shift_target  % (1.0)
-    # qp.gates['Cz'].extras['A_control'] = A_control
-    # qp.gates['Cz'].extras['A_target'] = A_target
-    # qp.gates['Cz'].extras['offset_control'] = offset_control
-    # qp.gates['Cz'].extras['offset_target'] = offset_target
-    
-    
 
 # %% {Update_state}
 if not node.parameters.simulate:

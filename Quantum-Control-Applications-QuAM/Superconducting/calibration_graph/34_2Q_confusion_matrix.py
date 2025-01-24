@@ -35,7 +35,7 @@ Outcomes:
 # %% {Imports}
 from qualibrate import QualibrationNode, NodeParameters
 from quam_libs.components import QuAM
-from quam_libs.macros import active_reset, readout_state, readout_state_gef, active_reset_gef
+from quam_libs.macros import active_reset, readout_state, readout_state_gef, active_reset_gef, active_reset_simple
 from quam_libs.lib.plot_utils import QubitPairGrid, grid_iter, grid_pair_names
 from quam_libs.lib.save_utils import fetch_results_as_xarray, load_dataset
 from qualang_tools.results import progress_counter, fetching_tool
@@ -58,7 +58,7 @@ from quam_libs.lib.pulses import FluxPulse
 # %% {Node_parameters}
 class Parameters(NodeParameters):
 
-    qubit_pairs: Optional[List[str]] = None
+    qubit_pairs: Optional[List[str]] = ["coupler_q1_q2"]
     num_shots: int = 2000
     flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
     reset_type: Literal['active', 'thermal'] = "active"
@@ -137,9 +137,13 @@ with program() as CPhase_Oscillations:
                 with for_(*from_array(target_initial, [0,1])):
                     # reset
                     if node.parameters.reset_type == "active":
-                            active_reset(qp.qubit_control)
-                            active_reset(qp.qubit_target)
-                            qp.align()
+                            # active_reset(qp.qubit_control)
+                            # active_reset(qp.qubit_target)
+                            wait(2*qp.qubit_control.thermalization_time * u.ns)
+                            active_reset_simple(qp.qubit_control)
+                            active_reset_simple(qp.qubit_target)
+                            active_reset_simple(qp.qubit_control)
+                            active_reset_simple(qp.qubit_target)                            
                     else:
                         wait(5*qp.qubit_control.thermalization_time * u.ns)
                     qp.align()
@@ -177,7 +181,7 @@ if node.parameters.simulate:
     node.machine = machine
     node.save()
 elif node.parameters.load_data_id is None:
-    with qm_session(qmm, config, timeout=node.parameters.timeout, keep_dc_offsets_when_closing=True) as qm:
+    with qm_session(qmm, config, timeout=node.parameters.timeout ) as qm:
         job = qm.execute(CPhase_Oscillations)
 
         results = fetching_tool(job, ["n"], mode="live")

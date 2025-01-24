@@ -55,13 +55,13 @@ class Parameters(NodeParameters):
 
     qubit_pairs: Optional[List[str]] = ["coupler_q1_q2"]
     num_averages: int = 300
-    max_time_in_ns: int = 200
+    max_time_in_ns: int = 300 #200
     flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
     reset_type: Literal['active', 'thermal'] = "active"
     simulate: bool = False
     timeout: int = 100
-    amp_range : float = 0.3
-    amp_step : float = 0.005
+    amp_range : float = 0.3 #0.1
+    amp_step : float = 0.001
     load_data_id: Optional[int] = None  
 
 node = QualibrationNode(
@@ -282,7 +282,7 @@ if not node.parameters.simulate:
         # print(f"parameters for {qp.name}: amp={flux_amp}, time={flux_time}")
         amplitudes[qp.name] =  flux_amp
         detunings[qp.name] = -flux_amp ** 2 * qp.qubit_control.freq_vs_flux_01_quad_term
-        lengths[qp.name] = flux_time-flux_time%4+4
+        lengths[qp.name] = flux_time-flux_time%4+16 # NOTE: Hard-coded fine-tuning of the duration
         zero_paddings[qp.name]=lengths[qp.name]-flux_time
         fitted_ds[qp.name]  = ds_qp.assign({'fitted': oscillation_decay_exp(ds_qp.time,
                                                                 fit_data.sel(
@@ -303,7 +303,7 @@ if not node.parameters.simulate:
             Js[qp.name] = J
             detunings[qp.name] = f0
             amplitudes[qp.name] = np.sqrt(-detunings[qp.name]/qp.qubit_control.freq_vs_flux_01_quad_term)
-            flux_time = int(1/(2*J)*1e9)
+            flux_time = int(1/(2*J)*1e9)+4
             lengths[qp.name] = flux_time-flux_time%4+4
             zero_paddings[qp.name]=lengths[qp.name]-flux_time    
         except Exception as e:
@@ -313,6 +313,7 @@ if not node.parameters.simulate:
             amplitudes[qp.name] = np.sqrt(-detunings[qp.name]/qp.qubit_control.freq_vs_flux_01_quad_term)
             lengths[qp.name] = lengths[qp.name]
             zero_paddings[qp.name] = zero_paddings[qp.name]
+                        
 # %%
 if not node.parameters.simulate:
     grid_names, qubit_pair_names = grid_pair_names(qubit_pairs)
@@ -390,7 +391,7 @@ if not node.parameters.simulate:
                 qp.gates['Cz'] = f"#./Cz_unipolar"
                 
                 qp.J2 = Js[qp.name]
-                qp.detuning = detunings[qp.name]
+                # qp.detuning = detunings[qp.name]
                 
 # %% {Save_results}
 if not node.parameters.simulate:
