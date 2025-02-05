@@ -83,7 +83,6 @@ with program() as ramsey:
         state_st = [declare_stream() for _ in range(num_qubits)]
 
     for multiplexed_qubits in qubits.batch():
-        # todo: is this the right behaviour?
         for qubit in multiplexed_qubits.values():
             machine.set_all_fluxes(flux_point, target=qubit)
 
@@ -119,9 +118,10 @@ with program() as ramsey:
                             save(Q[i], Q_st[i])
                     align()
 
-                    for i, qubit in multiplexed_qubits.items():
-                        qubit.resonator.wait(qubit.thermalization_time * u.ns)
-                        reset_frame(qubit.xy.name)
+                    if not node.parameters.simulate:
+                        for i, qubit in multiplexed_qubits.items():
+                            qubit.resonator.wait(qubit.thermalization_time * u.ns)
+                            reset_frame(qubit.xy.name)
 
     with stream_processing():
         n_st.save("n")
