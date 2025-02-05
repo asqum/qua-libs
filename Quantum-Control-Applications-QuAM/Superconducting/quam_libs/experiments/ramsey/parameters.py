@@ -43,9 +43,9 @@ def get_idle_times_in_clock_cycles(node_parameters: RamseyParameters) -> np.ndar
     The minimum is 4 clock cycles.
     """
     if node_parameters.log_or_linear_sweep == "linear":
-        idle_times = _get_idle_times_linear_sweep_in_clock_cycles()
+        idle_times = _get_idle_times_linear_sweep_in_clock_cycles(node_parameters)
     elif node_parameters.log_or_linear_sweep == "log":
-        idle_times = _get_idle_times_log_sweep_in_clock_cycles()
+        idle_times = _get_idle_times_log_sweep_in_clock_cycles(node_parameters)
     else:
         raise ValueError(f"Expected sweep type to be 'log' or 'linear', got {node_parameters.log_or_linear_sweep}")
 
