@@ -48,7 +48,7 @@ class Parameters(NodeParameters):
     max_amp_factor: float = 2.0
     amp_factor_step: float = 0.02
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
-    reset_type_thermal_or_active: Literal["thermal", "active"] = "thermal"
+    reset_type_thermal_or_active: Literal["thermal", "active"] = "active"
     simulate: bool = False
     simulation_duration_ns: int = 2500
     timeout: int = 100

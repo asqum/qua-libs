@@ -58,18 +58,18 @@ from quam_libs.lib.pulses import FluxPulse
 # %% {Node_parameters}
 class Parameters(NodeParameters):
 
-    qubit_pairs: Optional[List[str]] = ["coupler_q4_q5"] # ["coupler_q1_q2"]
+    qubit_pairs: Optional[List[str]] = ["coupler_q1_q2"] # ["coupler_q1_q2"]
     num_averages: int = 200
     flux_point_joint_or_independent_or_pairwise: Literal["joint", "independent", "pairwise"] = "joint"
     reset_type: Literal['active', 'thermal'] = "active"
     simulate: bool = False
     timeout: int = 100
     load_data_id: Optional[int] = None
-    coupler_flux_min : float = 0.269 #relative to the coupler set point
-    coupler_flux_max : float = 0.340 #relative to the coupler set point
-    coupler_flux_step : float = 0.0002
-    qubit_flux_span : float = 0.030 # relative to the known/calculated detuning between the qubits
-    qubit_flux_step : float = 0.0002  
+    coupler_flux_min : float = 0.150 #relative to the coupler set point
+    coupler_flux_max : float = 0.230 #relative to the coupler set point
+    coupler_flux_step : float = 0.0001
+    qubit_flux_span : float = 0.015 # relative to the known/calculated detuning between the qubits
+    qubit_flux_step : float = 0.0001  
     use_state_discrimination: bool = True
     pulse_duration_ns: int = 240
     
