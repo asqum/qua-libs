@@ -66,7 +66,7 @@ if node.parameters.load_data_id is None:
 
 # %% {QUA_program}
 n_avg = node.parameters.num_averages
-idle_times = node.parameters.get_idle_times_in_clock_cycles()
+idle_times = get_idle_times_in_clock_cycles(node.parameters)
 detuning = node.parameters.frequency_detuning_in_mhz * u.MHz
 flux_point = node.parameters.flux_point_joint_or_independent
 
