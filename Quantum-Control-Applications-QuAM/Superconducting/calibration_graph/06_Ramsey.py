@@ -23,7 +23,7 @@ from qualibrate import QualibrationNode
 from quam_libs.components import QuAM
 from quam_libs.experiments.ramsey.analysis.fetch_dataset import fetch_dataset
 from quam_libs.experiments.ramsey.analysis.fitting import fit_frequency_detuning_and_t2_decay
-from quam_libs.experiments.ramsey.parameters import Parameters
+from quam_libs.experiments.ramsey.parameters import Parameters, get_idle_times_in_clock_cycles
 from quam_libs.experiments.ramsey.plotting import plot_ramseys_data_with_fit
 from quam_libs.experiments.simulation import simulate_and_plot
 from quam_libs.macros import qua_declaration, readout_state
