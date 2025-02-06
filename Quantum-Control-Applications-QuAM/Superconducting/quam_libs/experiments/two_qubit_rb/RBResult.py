@@ -95,7 +95,7 @@ class RBResult:
         """
         decay_curve = self.get_decay_curve()
 
-        popt, _ = curve_fit(rb_decay_curve, self.circuit_depths, decay_curve, p0=[1, 0.9, 0.25], maxfev=10000)
+        popt, _ = curve_fit(rb_decay_curve, self.circuit_depths, decay_curve, p0=[0.75, 0.9, 0.25], maxfev=10000)
         A, alpha, B = popt
 
         return A, alpha, B
