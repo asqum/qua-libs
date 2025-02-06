@@ -64,24 +64,50 @@ class RBResult:
     def plot_with_fidelity(self):
         """
         Plots the RB fidelity as a function of circuit depth, including a fit to an exponential decay model.
-        The fitted curve is overlaid with the raw data points.
+        The fitted curve is overlaid with the raw data points, and error bars are included.
         """
         A, alpha, B = self.fit_exponential()
         fidelity = self.get_fidelity(alpha)
 
+        # Compute error bars
+        error_bars = (self.data == 0).mean(dim="average").std(dim="repeat").state.data
+
         plt.figure()
-        plt.plot(self.circuit_depths, self.get_decay_curve(), "o", label="Data")
-        plt.plot(
+        plt.errorbar(
             self.circuit_depths,
-            rb_decay_curve(np.array(self.circuit_depths), A, alpha, B),
-            "-",
-            label=f"Fidelity={fidelity*100:.3f}%\nalpha={alpha:.4f}",
+            self.get_decay_curve(),
+            yerr=error_bars,
+            fmt=".",
+            capsize=2,
+            elinewidth=1,
+            color='k',
+            label="Experimental Data",
         )
+
+        circuit_depths_smooth_axis = np.linspace(self.circuit_depths[0], self.circuit_depths[-1], 100)
+        plt.plot(
+            circuit_depths_smooth_axis,
+            rb_decay_curve(np.array(circuit_depths_smooth_axis), A, alpha, B),
+            "r--",
+            label=f"Exponential Fit"
+        )
+        
+        plt.text(
+            0.95,
+            0.95,
+            f"2Q Clifford Fidelity = {fidelity * 100:.2f}%",
+            horizontalalignment="right",
+            verticalalignment="top",
+            fontdict={"fontsize": "large", "fontweight": "bold"},
+            transform=plt.gca().transAxes,
+        )
+
         plt.xlabel("Circuit Depth")
-        plt.ylabel("Fidelity")
-        plt.title("2Q Randomized Benchmarking Fidelity")
-        plt.legend()
+        plt.ylabel(fr"Probability to recover to $|00\rangle$")
+        plt.title("2Q Randomized Benchmarking")
+        plt.legend(framealpha=0)
         plt.show()
+
 
     def fit_exponential(self):
         """
