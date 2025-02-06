@@ -176,8 +176,8 @@ class TwoQubitRb:
             }
 
             assign(progress, 0)
-            with for_each_(sequence_depth, sequence_depths):
-                with for_(repeat, 0, repeat < num_repeats, repeat + 1):
+            with for_(repeat, 0, repeat < num_repeats, repeat + 1):
+                with for_each_(sequence_depth, sequence_depths):
                     assign(progress, progress + 1)
                     save(progress, progress_os)
                     advance_input_stream(gates_len_is)
@@ -192,8 +192,9 @@ class TwoQubitRb:
                         save(state, state_os)
 
             with stream_processing():
-                state_os.buffer(len(sequence_depths), num_repeats, num_averages).save("state")
+                state_os.buffer(num_repeats, len(sequence_depths), num_averages).save("state")
                 progress_os.save("progress")
+
         return prog
 
     def _input_stream_name(self, element: str):
@@ -213,8 +214,8 @@ class TwoQubitRb:
         num_repeats: int,
         callback: Optional[Callable[[List[int]], None]] = None,
     ):
-        for sequence_depth in sequence_depths:
-            for repeat in range(num_repeats):
+        for repeat in range(num_repeats):
+            for sequence_depth in sequence_depths:
                 sequence = self._gen_rb_sequence(sequence_depth)
                 # UNCOMMENT FOR 1Q GATES ONLY
                 # print("filtering 2q gate:  ") 

@@ -27,10 +27,10 @@ class RBResult:
         Initializes the xarray Dataset to store the RB experiment data.
         """
         self.data = xr.Dataset(
-            data_vars={"state": (["circuit_depth", "repeat", "average"], self.state)},
+            data_vars={"state": (["repeat", "circuit_depth", "average"], self.state)},
             coords={
-                "circuit_depth": self.circuit_depths,
                 "repeat": range(self.num_repeats),
+                "circuit_depth": self.circuit_depths,
                 "average": range(self.num_averages),
             },
         )
