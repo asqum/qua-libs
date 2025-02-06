@@ -82,14 +82,15 @@ def bake_cz(baker: Baking, q1, q2):
     baker.align()
 
     baker.play(
-        "Cz.CZ_snz_qubitC4",qc.z.name
+        "Cz_unipolar.flux_pulse_control_q2",qc.z.name
     )
-    amp_scale = QP.gates["Cz"].compensations[0]["shift"] / Q_aux.z.operations["const"].amplitude
-    baker.play("const" , Q_aux.z.name)
+    baker.play("Cz_unipolar.coupler_flux_pulse_q2", QP.coupler.name)
+    # amp_scale = QP.gates["Cz"].compensations[0]["shift"] / Q_aux.z.operations["const"].amplitude
+    # baker.play("const" , Q_aux.z.name)
 
     baker.align()
-    baker.frame_rotation_2pi(QP.gates["Cz_SNZ"].phase_shift_control, qc.xy.name)
-    baker.frame_rotation_2pi(QP.gates["Cz_SNZ"].phase_shift_target, qt.xy.name)
+    baker.frame_rotation_2pi(QP.gates["Cz"].phase_shift_control, qc.xy.name)
+    baker.frame_rotation_2pi(QP.gates["Cz"].phase_shift_target, qt.xy.name)
     baker.align()
 
 def prep():
@@ -142,11 +143,12 @@ qmm = machine.connect()
 
 # run simpler experiment to verify `bake_phased_xz`, `prep` and `meas`
 rb_debugger = TwoQubitRbDebugger(rb)
-rb_debugger.run_phased_xz_commands(qmm, 280, unsafe=unsafe)
+rb_debugger.run_phased_xz_commands(qmm, 2000, unsafe=unsafe)
+rb.print_sequences()
 plt.show()
 
 # run 2Q-RB experiment
-res = rb.run(qmm, circuit_depths=np.arange(0, 20, 1), num_circuits_per_depth=60, num_shots_per_circuit=30, unsafe=unsafe)
+# res = rb.run(qmm, circuit_depths=np.arange(0, 5, 1), num_circuits_per_depth=60, num_shots_per_circuit=200, unsafe=unsafe)
 # circuit_depths ~ how many consecutive Clifford gates within one executed circuit
 # (https://qiskit.org/documentation/apidoc/circuit.html)
 # num_circuits_per_depth ~ how many random circuits within one depth

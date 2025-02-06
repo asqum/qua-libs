@@ -68,6 +68,7 @@ if node.parameters.load_data_id is None:
 
 qubits = machine.get_qubits_used_in_node(node.parameters)
 num_qubits = len(qubits)
+print(num_qubits)
 
 config = machine.generate_config()
 
@@ -85,16 +86,17 @@ with program() as iq_blobs:
         machine.set_all_fluxes(flux_point=flux_point, target=list(multiplexed_qubits.values())[0])
 
         with for_(n, 0, n < n_runs, n + 1):
+            save(n, n_st)
 
-            # measure ground-state IQ blob for all qubits
-            for i, qubit in multiplexed_qubits.items():
-                save(n, n_st)
-                if reset_type == "active":
-                    active_reset(qubit, "readout")
-                elif reset_type == "thermal":
-                    qubit.wait(4 * qubit.thermalization_time * u.ns)
-                else:
-                    raise ValueError(f"Unrecognized reset type {reset_type}.")
+            if not node.parameters.simulate:
+                # measure ground-state IQ blob for all qubits
+                for i, qubit in multiplexed_qubits.items():
+                    if reset_type == "active":
+                        active_reset(qubit, "readout")
+                    elif reset_type == "thermal":
+                        qubit.wait(4 * qubit.thermalization_time * u.ns)
+                    else:
+                        raise ValueError(f"Unrecognized reset type {reset_type}.")
 
             align()
             for i, qubit in multiplexed_qubits.items():
@@ -103,20 +105,21 @@ with program() as iq_blobs:
                 save(I_g[i], I_g_st[i])
                 save(Q_g[i], Q_g_st[i])
 
-            # measure excited-state IQ blob for all qubits
-            align()
-            for i, qubit in multiplexed_qubits.items():
-                if reset_type == "active":
-                    active_reset(qubit, "readout")
-                elif reset_type == "thermal":
-                    qubit.wait(qubit.thermalization_time * u.ns)
-                else:
-                    raise ValueError(f"Unrecognized reset type {reset_type}.")
+            if not node.parameters.simulate:
+                # measure excited-state IQ blob for all qubits
+                align()
+                for i, qubit in multiplexed_qubits.items():
+                    if reset_type == "active":
+                        active_reset(qubit, "readout")
+                    elif reset_type == "thermal":
+                        qubit.wait(qubit.thermalization_time * u.ns)
+                    else:
+                        raise ValueError(f"Unrecognized reset type {reset_type}.")
 
             align()
             for i, qubit in multiplexed_qubits.items():
                 qubit.xy.play("x180")
-                qubit.align()
+                qubit.resonator.wait(qubit.xy.operations["x180"].length) # qubit.align()
                 qubit.resonator.measure(operation_name, qua_vars=(I_e[i], Q_e[i]))
                 qubit.resonator.wait(qubit.resonator.depletion_time * u.ns)
                 save(I_e[i], I_e_st[i])
