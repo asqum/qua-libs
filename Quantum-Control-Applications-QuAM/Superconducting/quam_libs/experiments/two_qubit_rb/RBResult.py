@@ -108,6 +108,23 @@ class RBResult:
         plt.legend(framealpha=0)
         plt.show()
 
+    def plot_two_qubit_state_distribution(self):
+        plt.plot(self.circuit_depths, (self.data.state == 0).mean(dim="average").mean(dim="repeat").data,
+                 label=r"$|00\rangle$", marker=".", color="c", linewidth=3)
+        plt.plot(self.circuit_depths, (self.data.state == 1).mean(dim="average").mean(dim="repeat").data,
+                 label=r"$|01\rangle$", marker=".", color="b", linewidth=1)
+        plt.plot(self.circuit_depths, (self.data.state == 2).mean(dim="average").mean(dim="repeat").data,
+                 label=r"$|10\rangle$", marker=".", color="y", linewidth=1)
+        plt.plot(self.circuit_depths, (self.data.state == 3).mean(dim="average").mean(dim="repeat").data,
+                 label=r"$|11\rangle$", marker=".", color="r", linewidth=1)
+        plt.axhline(0.25, color="grey", linestyle="--", linewidth=2, label="2Q mixed-state")
+
+        plt.xlabel("Circuit Depth")
+        plt.ylabel(fr"Probability to recover to a given state $|q_cq_t\rangle$")
+        plt.title("2Q State Distribution vs. Circuit Depth")
+        plt.legend(framealpha=0)
+        plt.show()
+
 
     def fit_exponential(self):
         """
