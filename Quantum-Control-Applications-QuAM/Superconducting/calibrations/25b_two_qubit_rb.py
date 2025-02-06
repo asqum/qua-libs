@@ -169,6 +169,7 @@ data["decay_rate"] = alpha
 data["mixed_state_probability"] = B
 data["fidelity"] = fidelity
 data["figure"] = plt.gcf()
+data["state"] = res.state
 
 node_save(machine, "two_qubit_randomized_benchmarking", data, additional_files=True)
 
