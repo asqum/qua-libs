@@ -62,7 +62,7 @@ from quam_libs.components.gates.two_qubit_gates import SWAP_Coupler_Gate
 class Parameters(NodeParameters):
 
     qubit_pairs: Optional[List[str]] =  ["coupler_q1_q2"]
-    num_averages: int = 280
+    num_averages: int = 380
     flux_point_joint_or_independent_or_pairwise: Literal["joint", "independent", "pairwise"] = "joint"
     reset_type: Literal['active', 'thermal'] = "active"
     simulate: bool = False
@@ -70,15 +70,15 @@ class Parameters(NodeParameters):
     load_data_id: Optional[int] = None
 
     # coupler_q1_q2:
-    coupler_flux_min : float = 0.200
-    coupler_flux_max : float = 0.240
+    coupler_flux_min : float = 0.170
+    coupler_flux_max : float = 0.235
     # coupler_q4_q5:
     # coupler_flux_min : float = 0.269
     # coupler_flux_max : float = 0.450
 
-    coupler_flux_step : float = 0.0005
+    coupler_flux_step : float = 0.0002
     idle_time_min : int = 16
-    idle_time_max : int = 1200
+    idle_time_max : int = 500
     idle_time_step : int = 4
     use_state_discrimination: bool = True
     

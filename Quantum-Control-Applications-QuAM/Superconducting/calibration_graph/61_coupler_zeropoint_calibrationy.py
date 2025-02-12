@@ -67,9 +67,9 @@ class Parameters(NodeParameters):
     load_data_id: Optional[int] = None
     coupler_flux_min : float = 0.150 #relative to the coupler set point
     coupler_flux_max : float = 0.230 #relative to the coupler set point
-    coupler_flux_step : float = 0.0001
+    coupler_flux_step : float = 0.0005
     qubit_flux_span : float = 0.015 # relative to the known/calculated detuning between the qubits
-    qubit_flux_step : float = 0.0001  
+    qubit_flux_step : float = 0.0002  
     use_state_discrimination: bool = True
     pulse_duration_ns: int = 240
     
@@ -181,6 +181,7 @@ with program() as CPhase_Oscillations:
                     qp.qubit_control.xy.play("x180")
                     # qp.qubit_target.xy.play("x180")
                     align()
+                    # wait(8)
                     qp.qubit_control.z.play("const", amplitude_scale = comp_flux_qubit / qp.qubit_control.z.operations["const"].amplitude, duration = qua_pulse_duration)                
                     qp.coupler.play("const", amplitude_scale = flux_coupler / qp.coupler.operations["const"].amplitude, duration = qua_pulse_duration)
                     align()

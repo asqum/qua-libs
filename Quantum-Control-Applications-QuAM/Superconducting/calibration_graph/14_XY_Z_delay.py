@@ -17,7 +17,7 @@ from quam_libs.trackable_object import tracked_updates
 class Parameters(NodeParameters):
     qubits: Optional[str] = ["q1"]
     num_averages: int = 200
-    zeros_before_after_pulse: int = 36  # Beginning/End of the flux pulse (before we put zeros to see the rising time)
+    zeros_before_after_pulse: int = 40#36  # Beginning/End of the flux pulse (before we put zeros to see the rising time)
     z_pulse_amplitude: float = 0.1  # defines how much you want to detune the qubit in frequency
     flux_point_joint_or_independent: Literal['joint', 'independent'] = "joint"
     reset_type_thermal_or_active: Literal['thermal', 'active'] = "active"

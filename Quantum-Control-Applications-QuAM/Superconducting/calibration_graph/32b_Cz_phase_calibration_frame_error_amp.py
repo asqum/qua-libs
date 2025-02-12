@@ -64,7 +64,7 @@ class Parameters(NodeParameters):
     simulate: bool = False
     timeout: int = 100
     amp_range : float = 0.06
-    amp_step : float = 0.004
+    amp_step : float = 0.002
     num_frames: int = 10
     num_repeats: int = 15
     load_data_id: Optional[int] = None

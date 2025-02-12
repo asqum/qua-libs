@@ -30,13 +30,13 @@ import xarray as xr
 # %% {Node_parameters}
 
 class Parameters(NodeParameters):
-    qubits: Optional[List[str]] = ["q1", "q4", "q5"]
-    duration_ns: int = 44
+    qubits: Optional[List[str]] = None #["q1", "q4", "q5"]
+    duration_ns: int = 100
     timeout: int = 100
-    target_qubit_frequency_in_ghz: float = 0.05
-    num_averages: int = 400
+    target_qubit_frequency_in_ghz: float = 0.6
+    num_averages: int = 300
     amplitude_step: float = 0.01
-    max_amplitude: float = 0.4
+    max_amplitude: float = 0.5
     flux_point_joint_or_independent: Literal['joint', 'independent'] = "joint"
     reset_type_thermal_or_active: Literal["thermal", "active"] = "thermal"
     simulate: bool = False

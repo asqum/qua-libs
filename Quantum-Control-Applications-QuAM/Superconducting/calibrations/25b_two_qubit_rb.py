@@ -142,10 +142,10 @@ rb = TwoQubitRb(
 qmm = machine.connect()
 
 # run simpler experiment to verify `bake_phased_xz`, `prep` and `meas`
-# rb_debugger = TwoQubitRbDebugger(rb)
-# rb_debugger.run_phased_xz_commands(qmm, 2000, unsafe=unsafe)
-# rb.print_sequences()
-# plt.show()
+rb_debugger = TwoQubitRbDebugger(rb)
+rb_debugger.run_phased_xz_commands(qmm, 2000, unsafe=unsafe)
+rb.print_sequences()
+plt.show()
 
 # run 2Q-RB experiment
 res = rb.run(qmm, circuit_depths=np.arange(0, 5, 1), num_circuits_per_depth=10, num_shots_per_circuit=30, unsafe=unsafe)
