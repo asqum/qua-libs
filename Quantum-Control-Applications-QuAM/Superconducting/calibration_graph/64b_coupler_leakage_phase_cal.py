@@ -72,7 +72,7 @@ class Parameters(NodeParameters):
     qubit_flux_max : float = -0.055 # relative to the qubit pair detuning
     qubit_flux_step : float = 0.0005 
     use_state_discrimination: bool = True
-    pulse_duration_ns: int = 52
+    pulse_duration_ns: int = 72
     num_frames : int = 10#20
     
     
@@ -280,7 +280,7 @@ if not node.parameters.simulate:
 
     # %%
     ## HARD CODED FROM EXPERIMENT
-    node.results["results"]["coupler_q1_q2"] = {"flux_coupler_Cz": 0.2275, "flux_qubit_Cz": 0.073}
+    node.results["results"]["coupler_q1_q2"] = {"flux_coupler_Cz": 0.222, "flux_qubit_Cz": 0.0713}
     node.results["results"]["coupler_q4_q5"] = {"flux_coupler_Cz": 0.235, "flux_qubit_Cz": 0.055}
     
 # %% {Plotting}
