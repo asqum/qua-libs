@@ -1,9 +1,9 @@
 from qm.qua import *
 from qualang_tools.bakery.bakery import Baking
 
-from quam_libs.experiments.two_qubit_rb import TwoQubitRb, TwoQubitRbDebugger
+from qualang_tools.characterization.two_qubit_rb import TwoQubitRb, TwoQubitRbDebugger
 from quam_libs.components import QuAM
-from quam_libs.macros import qua_declaration, multiplexed_readout, node_save
+from quam_libs.macros import qua_declaration, multiplexed_readout, node_save, readout_state_gef
 from quam_libs.macros import qua_declaration, readout_state
 
 import numpy as np
@@ -120,6 +120,7 @@ def meas():
     align()
     for i in range(num_qubits):
         readout_state(machine.qubits[f"q{i+1}"], state[i])
+        # readout_state_gef(machine.qubits[f"q{i+1}"], state[i])
 
     return state[qc_index - 1], state[qt_index - 1]
 
@@ -142,13 +143,13 @@ rb = TwoQubitRb(
 qmm = machine.connect()
 
 # run simpler experiment to verify `bake_phased_xz`, `prep` and `meas`
-rb_debugger = TwoQubitRbDebugger(rb)
-rb_debugger.run_phased_xz_commands(qmm, 2000, unsafe=unsafe)
-rb.print_sequences()
-plt.show()
+# rb_debugger = TwoQubitRbDebugger(rb)
+# rb_debugger.run_phased_xz_commands(qmm, 2000, unsafe=unsafe)
+# rb.print_sequences()
+# plt.show()
 
 # run 2Q-RB experiment
-res = rb.run(qmm, circuit_depths=np.arange(0, 5, 1), num_circuits_per_depth=10, num_shots_per_circuit=30, unsafe=unsafe)
+res = rb.run(qmm, circuit_depths=np.arange(0, 6, 1), num_circuits_per_depth=20, num_shots_per_circuit=150, unsafe=unsafe)
 # circuit_depths ~ how many consecutive Clifford gates within one executed circuit
 # (https://qiskit.org/documentation/apidoc/circuit.html)
 # num_circuits_per_depth ~ how many random circuits within one depth
@@ -156,25 +157,20 @@ res = rb.run(qmm, circuit_depths=np.arange(0, 5, 1), num_circuits_per_depth=10, 
 
 data = {}
 
-res.plot_hist()
-plt.show()
+data["data"] = res.data
+node_save(machine, "two_qubit_randomized_benchmarking", data, additional_files=True)
 
-res.plot_with_fidelity()
-plt.show()
+fit = res.fit()
+fig = res.plot(fit)
+data["figure_fidelity"] = fig
 
-A, alpha, B = res.fit_exponential()
-fidelity = res.get_fidelity(alpha)
-data["amplitude"] = A
-data["decay_rate"] = alpha
-data["mixed_state_probability"] = B
-data["fidelity"] = fidelity
-data["figure"] = plt.gcf()
-data["state"] = res.state
+fig = res.plot_two_qubit_state_distribution()
+data["figure_states"] = fig
 
 node_save(machine, "two_qubit_randomized_benchmarking", data, additional_files=True)
 
 # verify/save the random sequences created during the experiment
-rb.save_sequences_to_file("sequences.txt")  # saves the gates used in each random sequence
+# rb.save_sequences_to_file("sequences.txt")  # saves the gates used in each random sequence
 # rb.save_command_mapping_to_file('commands.txt')  # saves mapping from "command id" to sequence
 # rb.print_sequences()
 # rb.print_command_mapping()
