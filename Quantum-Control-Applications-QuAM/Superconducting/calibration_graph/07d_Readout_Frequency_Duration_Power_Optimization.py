@@ -28,26 +28,25 @@ from tqdm import tqdm
 from qm import Program, generate_qua_script
 from qualibrate import QualibrationNode
 
-from quam_experiments.experiments.readout_optimization_3d.analysis.calculate_readout_fidelity import \
+from quam_libs.experiments.readout_optimization_3d.analysis.calculate_readout_fidelity import \
     calculate_readout_fidelity, get_maximum_fidelity_per_qubit
-from quam_experiments.experiments.readout_optimization_3d.analysis.combine_batches import combine_batches
-from quam_experiments.experiments.readout_optimization_3d.analysis.fetch_dataset import fetch_dataset
-from quam_experiments.experiments.readout_optimization_3d.analysis.filtering import filter_readout_fidelity
-from quam_experiments.experiments.readout_optimization_3d.analysis.plotting import plot_fidelity_3d, plot_fidelity_2d
-from quam_experiments.experiments.readout_optimization_3d.make_qua_streams_per_qubit import make_qua_streams_per_qubit
-from quam_experiments.experiments.readout_optimization_3d.make_qua_variables_per_qubit import \
+from quam_libs.experiments.readout_optimization_3d.analysis.combine_batches import combine_batches
+from quam_libs.experiments.readout_optimization_3d.analysis.fetch_dataset import fetch_dataset
+from quam_libs.experiments.readout_optimization_3d.analysis.filtering import filter_readout_fidelity
+from quam_libs.experiments.readout_optimization_3d.analysis.plotting import plot_fidelity_3d, plot_fidelity_2d
+from quam_libs.experiments.readout_optimization_3d.make_qua_streams_per_qubit import make_qua_streams_per_qubit
+from quam_libs.experiments.readout_optimization_3d.make_qua_variables_per_qubit import \
     make_qua_variables_per_qubit
-from quam_experiments.experiments.readout_optimization_3d.measurement_batching import \
+from quam_libs.experiments.readout_optimization_3d.measurement_batching import \
     generate_measurement_batches, get_max_accumulated_readouts
-from quam_experiments.parameters.qubits_experiment import get_qubits_used_in_node
 from quam_libs.trackable_object import tracked_updates
-from quam_config import QuAM
-from quam_experiments.experiments.readout_optimization_3d.parameters import Parameters, get_durations
-from quam_experiments.experiments.readout_optimization_3d.parameters import (
+from quam_libs.components import QuAM
+from quam_libs.experiments.readout_optimization_3d.parameters import Parameters, get_durations
+from quam_libs.experiments.readout_optimization_3d.parameters import (
     get_frequency_detunings_in_hz,
     get_amplitude_factors
 )
-from quam_experiments.workflow.simulation import simulate_and_plot
+from quam_libs.experiments.simulation import simulate_and_plot
 
 from qualang_tools.results import progress_counter, fetching_tool
 from qualang_tools.loops import from_array
@@ -90,7 +89,7 @@ machine = QuAM.load()
 if node.parameters.load_data_id is None:
     qmm = machine.connect()
 
-qubits = get_qubits_used_in_node(machine, node.parameters)
+qubits = machine.get_qubits_used_in_node(node.parameters)
 num_qubits = len(qubits)
 
 readout_pulse_name = "readout"
