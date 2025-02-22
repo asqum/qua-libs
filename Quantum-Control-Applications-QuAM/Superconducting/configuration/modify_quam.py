@@ -152,11 +152,11 @@ print("coupler_q4_q5's decouple_offset: %s" %(coupler_q4_q5.coupler.decouple_off
 # (q2 @ q3).coupler.decouple_offset = 0.109
 # (q1 @ q2).coupler.decouple_offset = 0.130 
 # INITIAL guess for couplers' offset:
-coupler_q1_q2.coupler.decouple_offset = 0.2
-coupler_q2_q3.coupler.decouple_offset = 0.2
-coupler_q3_q4.coupler.decouple_offset = 0.2
-coupler_q4_q5.coupler.decouple_offset = 0.2
-print("\ncouplers' offset updated.........\n")
+# coupler_q1_q2.coupler.decouple_offset = 0.2
+# coupler_q2_q3.coupler.decouple_offset = 0.2
+# coupler_q3_q4.coupler.decouple_offset = 0.2
+# coupler_q4_q5.coupler.decouple_offset = 0.2
+# print("\ncouplers' offset updated.........\n")
 
 # %%
 # Add qubit pulses
@@ -171,6 +171,12 @@ print("\ncouplers' offset updated.........\n")
 # q4.resonator.operations["readout"].length = 1800
 # q5.resonator.operations["readout"].length = 1800
 
+# %%
+# reset filters:
+for qubit in machine.qubits:
+    machine.qubits[qubit].z.filter_fir_taps = None
+    machine.qubits[qubit].z.filter_iir_taps = None
+    
 # %%
 # save into state.json
 save_machine(machine, path)
