@@ -32,6 +32,7 @@ class XEBConfig:
         should_save_data (bool): Whether to save the data
         generate_new_data (bool): Whether to generate new data
         disjoint_processing (bool): Whether to process the data in a disjoint manner (that is compute qubit states independently, relevant only when no two-qubit gate is provided)
+        seed (int): Seed for the random number generator
 
 
     """
@@ -59,6 +60,7 @@ class XEBConfig:
     data_folder_name: Optional[str] = None
     generate_new_data: bool = True
     disjoint_processing: bool = False
+    seed: int = 1234
 
     def __post_init__(self):
         if isinstance(self.depths, List):

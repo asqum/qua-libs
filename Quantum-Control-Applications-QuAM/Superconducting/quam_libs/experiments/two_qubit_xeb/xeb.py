@@ -204,8 +204,7 @@ class XEB:
             #     qubit.z.to_independent_idle()
 
             # Setting seed for reproducibility
-            r = Random()
-            r.set_seed(12321)
+            r = Random(seed=self.xeb_config.seed)
 
             # If simulating, update the frequency to 0 to visualize sequence
             if simulate:
