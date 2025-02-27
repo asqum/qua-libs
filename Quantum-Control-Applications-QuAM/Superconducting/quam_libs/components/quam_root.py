@@ -31,6 +31,11 @@ __all__ = ["QuAM", "FEMQuAM", "OPXPlusQuAM"]
 
 from ..experiments.node_parameters import QubitsExperimentNodeParameters, MultiplexableNodeParameters
 
+try:
+    import tomllib  # Python 3.11+
+except ModuleNotFoundError:
+    import tomli as tomllib
+
 
 @quam_dataclass
 class QuAM(QuamRoot):
