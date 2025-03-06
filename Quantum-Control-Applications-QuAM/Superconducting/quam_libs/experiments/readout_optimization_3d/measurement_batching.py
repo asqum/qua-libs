@@ -40,7 +40,7 @@ def get_max_accumulated_readouts(qubits: Sequence[Transmon], node_parameters: Pa
     return max_reads
 
 
-def generate_measurement_batches(qubits: Sequence[AnyTransmon], max_accumulated_readouts: int):
+def generate_measurement_batches(qubits: Sequence, max_accumulated_readouts: int):
     """
     Generate fair measurement groups ensuring all qubits are measured equally.
 
