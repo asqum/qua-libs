@@ -25,12 +25,12 @@ from quam_libs.macros import active_reset, readout_state
 
 # %% {Node_parameters}
 class Parameters(NodeParameters):
-    qubits: Optional[List[str]] = ["q1","q2","q3","q4","q5"]
-    control_qubit_post_cz_phase_corrections: List[float] = [0.709, 0.484, 0.384, -0.278] #None
-    target_qubit_post_cz_phase_corrections: List[float] = [-0.414, 0.374, 0.449, -0.830] #None
+    qubits: Optional[List[str]] = ["q1","q2","q3"] #["q1","q2","q3","q4","q5"]
+    # control_qubit_post_cz_phase_corrections: List[float] = [0.709, 0.484, 0.384, -0.278] #None
+    # target_qubit_post_cz_phase_corrections: List[float] = [-0.414, 0.374, 0.449, -0.830] #None
     num_averages: int = 1000
     # flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
-    reset_type: Literal['active', 'thermal'] = "thermal"
+    reset_type: Literal['active', 'thermal'] = "active"
     simulate: bool = False
     timeout: int = 100
     shots: int = 2048
@@ -114,14 +114,13 @@ with program() as ghz_circuit:
             qp.align()
 
             # assumes a CZ gate exists with name e.g. `cz1_2`, when q1 is the control and q2 is the target.
-            qc.z.play(f"cz{get_qubit_index_from_name(qc.name)}_{get_qubit_index_from_name(qt.name)}")
-            qp.coupler.play("cz")
-            wait(150 * u.ns)
-
-            qp.align()
-
-            qc.xy.frame_rotation_2pi(node.parameters.control_qubit_post_cz_phase_corrections[i])
-            qt.xy.frame_rotation_2pi(node.parameters.target_qubit_post_cz_phase_corrections[i])
+            # qc.z.play(f"cz{get_qubit_index_from_name(qc.name)}_{get_qubit_index_from_name(qt.name)}")
+            # qp.coupler.play("cz")
+            # wait(150 * u.ns)
+            # qp.align()
+            # qc.xy.frame_rotation_2pi(node.parameters.control_qubit_post_cz_phase_corrections[i])
+            # qt.xy.frame_rotation_2pi(node.parameters.target_qubit_post_cz_phase_corrections[i])
+            qp.gates['Cz'].execute()
 
             q_higher_index.xy.play("y90")
 

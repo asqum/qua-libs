@@ -59,7 +59,8 @@ from quam_libs.lib.pulses import FluxPulse
 class Parameters(NodeParameters):
 
     qubit_pairs: Optional[List[str]] = ["coupler_q1_q2"]
-    num_shots: int = 2000
+    circuit: str = "BELL2" # "BELL1", "BELL2", "H", "CX"
+    num_shots: int = 64
     flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
     reset_type: Literal['active', 'thermal'] = "active"
     simulate: bool = False
@@ -141,10 +142,40 @@ with program() as CPhase_Oscillations:
                 wait(5*qp.qubit_control.thermalization_time * u.ns)
             qp.align()
             # Bell state
-            qp.qubit_control.xy.play("y90")
-            qp.qubit_target.xy.play("y90")
-            qp.gates['Cz'].execute()
-            qp.qubit_control.xy.play("-y90")
+            if node.parameters.circuit == "BELL1":
+                # 1. 
+                qp.qubit_control.xy.play("y90")
+                qp.qubit_target.xy.play("y90")
+                qp.gates['Cz'].execute()
+                qp.qubit_control.xy.play("-y90")
+            if node.parameters.circuit == "BELL2":
+                # 2.
+                qp.qubit_control.xy.play("y90")
+                qp.qubit_target.xy.play("-y90")
+                qp.gates['Cz'].execute()
+                qp.qubit_target.xy.play("y90")
+
+            # Hadamard test
+            if node.parameters.circuit == "H":
+                qp.qubit_control.xy.play("y90")
+                qp.qubit_control.xy.play("x180")
+                for x in range(4):
+                    qp.qubit_target.xy.play("y90")
+                    qp.qubit_target.xy.play("x180")
+                    qp.qubit_target.xy.play("y90")
+                    qp.qubit_target.xy.play("x180")
+
+            # CX test: 
+            if node.parameters.circuit == "CX":
+                qp.qubit_control.xy.play("x180") 
+                for x in range(1):
+                    qp.qubit_target.xy.play("y90")
+                    qp.qubit_target.xy.play("x180")
+                    qp.gates['Cz'].execute()
+                    qp.qubit_target.xy.play("y90")
+                    qp.qubit_target.xy.play("x180")
+            
+
             qp.align()
             # readout
             qp.align()            

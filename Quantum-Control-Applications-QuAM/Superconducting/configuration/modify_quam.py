@@ -176,7 +176,15 @@ print("coupler_q4_q5's decouple_offset: %s" %(coupler_q4_q5.coupler.decouple_off
 for qubit in machine.qubits:
     machine.qubits[qubit].z.filter_fir_taps = None
     machine.qubits[qubit].z.filter_iir_taps = None
+print("filters resetted.........\n")
     
+# %%
+# reset crosstalk-matrix: 
+for fem_dict in machine.ports.analog_outputs['con1'].values():
+    for output_port in fem_dict.values():
+        output_port.crosstalk = None
+print("crosstalk-matrix resetted.........\n")
+        
 # %%
 # save into state.json
 save_machine(machine, path)

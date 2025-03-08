@@ -11,7 +11,7 @@ from qualang_tools.plot import interrupt_on_close
 from qualang_tools.loops import from_array
 from qualang_tools.units import unit
 from quam_libs.components import QuAM
-from quam_libs.macros import qua_declaration, active_reset, readout_state
+from quam_libs.macros import qua_declaration, active_reset, readout_state, active_reset_simple
 from quam.components import pulses
 import copy
 import matplotlib.pyplot as plt
@@ -33,12 +33,12 @@ class Parameters(NodeParameters):
     qubits: Optional[List[str]] = None #["q1", "q4", "q5"]
     duration_ns: int = 100
     timeout: int = 100
-    target_qubit_frequency_in_ghz: float = 0.6
-    num_averages: int = 300
+    target_qubit_frequency_in_ghz: float = 0.7
+    num_averages: int = 1200
     amplitude_step: float = 0.01
     max_amplitude: float = 0.5
     flux_point_joint_or_independent: Literal['joint', 'independent'] = "joint"
-    reset_type_thermal_or_active: Literal["thermal", "active"] = "thermal"
+    reset_type_thermal_or_active: Literal["thermal", "active"] = "active"
     simulate: bool = False
     load_data_id: Optional[int] = None
 
@@ -103,7 +103,7 @@ with program() as cross_talk_sequential:
                 with for_(amp, 0.0, amp < node.parameters.max_amplitude, amp + node.parameters.amplitude_step):
 
                     if node.parameters.reset_type_thermal_or_active == "active":
-                        active_reset(qubit, "readout")
+                        active_reset_simple(qubit, "readout")
                     else:
                         qubit.wait(qubit.thermalization_time * u.ns)
 
@@ -249,7 +249,7 @@ if not node.parameters.simulate:
                 fit_params = fit.sel(qubit_pair=qubit_pair)
                 amplitude = fit_params.sel(fit_vals='a').values
                 frequency = fit_params.sel(fit_vals='f').values
-                if np.abs(amplitude) > 0.2:
+                if np.abs(amplitude) > 0.02: # NOTE: This is a threshold value that can be adjusted
                     f_0 = detunings[qubits[j].name]
                     delta_f = np.abs(frequency) / (node.parameters.duration_ns * 1e-9)
                     quad = np.abs(qubits[j].freq_vs_flux_01_quad_term)

@@ -58,7 +58,7 @@ from quam_libs.lib.pulses import FluxPulse
 # %% {Node_parameters}
 class Parameters(NodeParameters):
 
-    qubit_pairs: Optional[List[str]] = ["coupler_q2_q3"] # ["coupler_q1_q2"]
+    qubit_pairs: Optional[List[str]] = ["coupler_q1_q2"] # ["coupler_q1_q2"]
     num_averages: int = 200
     flux_point_joint_or_independent_or_pairwise: Literal["joint", "independent", "pairwise"] = "joint"
     reset_type: Literal['active', 'thermal'] = "active"
@@ -67,11 +67,11 @@ class Parameters(NodeParameters):
     load_data_id: Optional[int] = None
     
     # q1_q2:
-    # coupler_flux_min : float = 0.175 #relative to the coupler set point
-    # coupler_flux_max : float = 0.240 #relative to the coupler set point
+    coupler_flux_min : float = 0.175 #relative to the coupler set point
+    coupler_flux_max : float = 0.240 #relative to the coupler set point
     # q2_q3:
-    coupler_flux_min : float = 0.180 #relative to the coupler set point
-    coupler_flux_max : float = 0.255 #relative to the coupler set point
+    # coupler_flux_min : float = 0.180 #relative to the coupler set point
+    # coupler_flux_max : float = 0.255 #relative to the coupler set point
     # q3_q4:
     # coupler_flux_min : float = 0.177 #relative to the coupler set point
     # coupler_flux_max : float = 0.230 #relative to the coupler set point

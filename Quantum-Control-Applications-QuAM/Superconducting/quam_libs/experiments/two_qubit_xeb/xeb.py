@@ -151,7 +151,9 @@ class XEB:
         if self.xeb_config.gate_set.run_through_amp_matrix_modulation and amp_matrix is not None:
             # Play all gates through real-time amplitude matrix modulation
             qubit.xy.play(self.xeb_config.baseline_gate_name, amplitude_scale=amp(*amp_matrix))
-            # qubit.xy.play('x90') # NOTE: for debugging purposes
+            # qubit.xy.play('x180') # NOTE: for debugging purposes
+            # qubit.xy.play('x180') # NOTE: for debugging purposes
+            # pass # NOTE: for debugging purposes
         else:
             # Play all gates through switch case over the gate index
             with switch_(gate_idx, unsafe=True):
@@ -285,9 +287,9 @@ class XEB:
                                         assign(two_qubit_gate_pattern, two_qubit_gate_pattern + 1)
                                 else:  # Two-qubit XEB case (no need for switch case)
                                     qubit_pair = self.qubit_pairs[0]
-                                    align_transmon_pair(qubit_pair)
+                                    # align_transmon_pair(qubit_pair)
                                     self.xeb_config.two_qb_gate.gate_macro(qubit_pair)
-                                    align_transmon_pair(qubit_pair)
+                                    # align_transmon_pair(qubit_pair)
 
                         # Measure the state
                         wait(150 * u.ns)

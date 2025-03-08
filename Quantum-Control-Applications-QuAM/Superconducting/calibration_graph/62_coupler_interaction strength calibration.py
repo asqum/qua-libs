@@ -73,8 +73,8 @@ class Parameters(NodeParameters):
     coupler_flux_min : float = 0.195
     coupler_flux_max : float = 0.280
     # coupler_q2_q3:
-    # coupler_flux_min : float = 0.200 
-    # coupler_flux_max : float = 0.250
+    # coupler_flux_min : float = 0.190 
+    # coupler_flux_max : float = 0.260
     # q3_q4:
     # coupler_flux_min : float = 0.200 
     # coupler_flux_max : float = 0.250  
@@ -82,7 +82,7 @@ class Parameters(NodeParameters):
     # coupler_flux_min : float = 0.269
     # coupler_flux_max : float = 0.450
 
-    coupler_flux_step : float = 0.0002
+    coupler_flux_step : float = 0.0005
     idle_time_min : int = 16
     idle_time_max : int = 500
     idle_time_step : int = 4

@@ -25,8 +25,8 @@ config = machine.generate_config()
 qubits = machine.active_qubits
 num_qubits = len(qubits)
 
-qc_index = 1  # i.e., qc = q1
-qt_index = 2  # i.e., qt = q2
+qc_index = 3#1  # i.e., qc = q1
+qt_index = 2#2  # i.e., qt = q2
 qc = machine.qubits[f"q{qc_index}"]
 qt = machine.qubits[f"q{qt_index}"]
 
@@ -50,9 +50,9 @@ def bake_phased_xz(baker: Baking, q, x, z, a):
 
 
 # TODO: single qubit phase corrections in units of 2pi applied after the CZ gate
-phi_to_flux_tune, phi_to_meet_with = 0.709, -0.414 
-qubit1_frame_update = phi_to_flux_tune #0.23  # example values, should be taken from QPU parameters
-qubit2_frame_update = phi_to_meet_with #0.12  # example values, should be taken from QPU parameters
+# phi_to_flux_tune, phi_to_meet_with = 0.709, -0.414 
+# qubit1_frame_update = phi_to_flux_tune #0.23  # example values, should be taken from QPU parameters
+# qubit2_frame_update = phi_to_meet_with #0.12  # example values, should be taken from QPU parameters
 
 
 # defines the CZ gate that realizes the mapping |00> -> |00>, |01> -> |01>, |10> -> |10>, |11> -> -|11>
@@ -77,16 +77,16 @@ qubit2_frame_update = phi_to_meet_with #0.12  # example values, should be taken 
 #     baker.frame_rotation_2pi(qubit2_frame_update, qt_xy_element)
 #     baker.align(qc.z.name, coupler.name, qc_xy_element, qt_xy_element)
 
-QP = machine.qubit_pairs["coupler_q1_q2"]
+QP = machine.qubit_pairs["coupler_q2_q3"]
 def bake_cz(baker: Baking, q1, q2):
     baker.align()
 
+    baker.wait(100)
     baker.play(
-        "Cz_unipolar.flux_pulse_control_q2",qc.z.name
+        "Cz_unipolar.flux_pulse_control_q2_q3",qc.z.name
     )
-    baker.play("Cz_unipolar.coupler_flux_pulse_q2", QP.coupler.name)
-    # amp_scale = QP.gates["Cz"].compensations[0]["shift"] / Q_aux.z.operations["const"].amplitude
-    # baker.play("const" , Q_aux.z.name)
+    baker.play("Cz_unipolar.coupler_flux_pulse_q2_q3", QP.coupler.name)
+    baker.wait(100)
 
     baker.align()
     baker.frame_rotation_2pi(QP.gates["Cz"].phase_shift_control, qc.xy.name)
@@ -96,7 +96,7 @@ def bake_cz(baker: Baking, q1, q2):
 def prep():
     machine.apply_all_flux_to_min()
     machine.apply_all_couplers_to_min()
-    wait(machine.thermalization_time * u.ns)
+    wait(10 * machine.thermalization_time * u.ns)
     print("machine.thermalization_time * u.ns: %s" %(machine.thermalization_time * u.ns))
     align()
 
@@ -149,7 +149,7 @@ rb.print_sequences()
 plt.show()
 
 # run 2Q-RB experiment
-res = rb.run(qmm, circuit_depths=np.arange(0, 6, 1), num_circuits_per_depth=20, num_shots_per_circuit=150, unsafe=unsafe)
+res = rb.run(qmm, circuit_depths=np.arange(0, 28, 2), num_circuits_per_depth=32, num_shots_per_circuit=32, unsafe=unsafe)
 # circuit_depths ~ how many consecutive Clifford gates within one executed circuit
 # (https://qiskit.org/documentation/apidoc/circuit.html)
 # num_circuits_per_depth ~ how many random circuits within one depth

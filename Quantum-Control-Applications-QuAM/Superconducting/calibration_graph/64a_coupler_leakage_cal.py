@@ -71,7 +71,7 @@ class Parameters(NodeParameters):
     # coupler_flux_max : float = 0.250 # relative to the coupler set point
     # q2_q3:
     coupler_flux_min : float = 0.210 #relative to the coupler set point
-    coupler_flux_max : float = 0.260 #relative to the coupler set point
+    coupler_flux_max : float = 0.245 #relative to the coupler set point
     # q3_q4:
     # coupler_flux_min : float = 0.210 #relative to the coupler set point
     # coupler_flux_max : float = 0.248 #relative to the coupler set point
@@ -79,10 +79,10 @@ class Parameters(NodeParameters):
     coupler_flux_step : float = 0.0002
     
     # wide scan: 
-    qubit_flux_min : float = 0.030 #-0.2 # relative to the qubit pair detuning
-    qubit_flux_max : float = 0.070 #0.2 # relative to the qubit pair detuning
+    qubit_flux_min : float = -0.075 #-0.2 # relative to the qubit pair detuning
+    qubit_flux_max : float = -0.040 #0.2 # relative to the qubit pair detuning
     
-    qubit_flux_step : float = 0.0002   
+    qubit_flux_step : float = 0.001   
     use_state_discrimination: bool = True
     pulse_duration_ns: int = 80
     
@@ -271,7 +271,7 @@ node.results["results"] = {}
 
 ## HARD CODED FROM EXPERIMENT
 node.results["results"]["coupler_q1_q2"] = {"flux_coupler_Cz": 0.160, "flux_qubit_Cz": 0.07}
-node.results["results"]["coupler_q2_q3"] = {"flux_coupler_Cz": 0.244, "flux_qubit_Cz": 0.189}
+node.results["results"]["coupler_q2_q3"] = {"flux_coupler_Cz": 0.230, "flux_qubit_Cz": 0.078}
 node.results["results"]["coupler_q3_q4"] = {"flux_coupler_Cz": 0.2345, "flux_qubit_Cz": 0.129}
 node.results["results"]["coupler_q4_q5"] = {"flux_coupler_Cz": 0.235, "flux_qubit_Cz": 0.055}
 

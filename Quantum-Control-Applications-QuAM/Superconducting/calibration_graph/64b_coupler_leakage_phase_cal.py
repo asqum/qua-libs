@@ -82,8 +82,8 @@ class Parameters(NodeParameters):
     # qubit_flux_min : float = -0.085 # relative to the qubit pair detuning
     # qubit_flux_max : float = -0.055 # relative to the qubit pair detuning
     # q2_q3:
-    qubit_flux_min : float = 0.03 # relative to the qubit pair detuning
-    qubit_flux_max : float = 0.07 # relative to the qubit pair detuning
+    qubit_flux_min : float = -0.075 # relative to the qubit pair detuning
+    qubit_flux_max : float = -0.040 # relative to the qubit pair detuning
     # q3_q4:
     # qubit_flux_min : float = -0.070 # relative to the qubit pair detuning
     # qubit_flux_max : float = -0.030 # relative to the qubit pair detuning
@@ -298,8 +298,8 @@ if not node.parameters.simulate:
 
     # %%
     ## HARD CODED FROM EXPERIMENT
-    node.results["results"]["coupler_q1_q2"] = {"flux_coupler_Cz": 0.235, "flux_qubit_Cz": 0.0719}
-    node.results["results"]["coupler_q2_q3"] = {"flux_coupler_Cz": 0.244, "flux_qubit_Cz": 0.189}
+    node.results["results"]["coupler_q1_q2"] = {"flux_coupler_Cz": 0.2353, "flux_qubit_Cz": 0.0719}
+    node.results["results"]["coupler_q2_q3"] = {"flux_coupler_Cz": 0.2415, "flux_qubit_Cz": 0.079}
     node.results["results"]["coupler_q4_q5"] = {"flux_coupler_Cz": 0.235, "flux_qubit_Cz": 0.055}
     
 # %% {Plotting}
