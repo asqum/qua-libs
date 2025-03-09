@@ -66,9 +66,13 @@ class Parameters(NodeParameters):
     timeout: int = 100
     load_data_id: Optional[int] = None
     
+    # General:
+    coupler_flux_min : float = 0.150 #relative to the coupler set point
+    coupler_flux_max : float = 0.260 #relative to the coupler set point
+
     # q1_q2:
-    coupler_flux_min : float = 0.175 #relative to the coupler set point
-    coupler_flux_max : float = 0.240 #relative to the coupler set point
+    # coupler_flux_min : float = 0.175 #relative to the coupler set point
+    # coupler_flux_max : float = 0.240 #relative to the coupler set point
     # q2_q3:
     # coupler_flux_min : float = 0.180 #relative to the coupler set point
     # coupler_flux_max : float = 0.255 #relative to the coupler set point
@@ -303,6 +307,7 @@ if not node.parameters.simulate:
         qubit_pair = machine.qubit_pairs[qp['qubit']]
         ax.set_title(f"{qp['qubit']}, coupler set point: {qubit_pair.coupler.decouple_offset}", fontsize = 10)
         ax.axhline(1e3*node.results["results"][qp["qubit"]]["flux_coupler_min"], color = 'red', lw = 0.5, ls = '--')
+        ax.axhline(1e3*machine.qubit_pairs[qp['qubit']].coupler.decouple_offset, color = 'blue', lw =0.5, ls = '--')
         ax.axvline(1e3*node.results["results"][qp["qubit"]]["flux_qubit_max"], color = 'red', lw =0.5, ls = '--')
         # Create a secondary x-axis for detuning
         flux_qubit_data = ds.sel(qubit=qp['qubit']).flux_qubit_full.values*1e3
@@ -334,6 +339,7 @@ if not node.parameters.simulate:
         qubit_pair = machine.qubit_pairs[qp['qubit']]
         ax.set_title(f"{qp['qubit']}, coupler set point: {qubit_pair.coupler.decouple_offset}", fontsize = 10)
         ax.axhline(1e3*node.results["results"][qp["qubit"]]["flux_coupler_min"], color = 'red', lw = 0.5, ls = '--')
+        ax.axhline(1e3*machine.qubit_pairs[qp['qubit']].coupler.decouple_offset, color = 'blue', lw =0.5, ls = '--')
         ax.axvline(1e3*node.results["results"][qp["qubit"]]["flux_qubit_max"], color = 'red', lw =0.5, ls = '--')
         # Create a secondary x-axis for detuning
         flux_qubit_data = ds.sel(qubit=qp['qubit']).flux_qubit_full.values*1e3
@@ -358,7 +364,7 @@ if not node.parameters.simulate:
 if not node.parameters.simulate:
     with node.record_state_updates():
         for qp in qubit_pairs:
-            # qp.coupler.decouple_offset = node.results["results"][qp.name]["flux_coupler_min"]
+            # qp.coupler.decouple_offset = 0.184 #node.results["results"][qp.name]["flux_coupler_min"]
             qp.detuning = node.results["results"][qp.name]["flux_qubit_max"]
 
 # %% {Save_results}

@@ -274,12 +274,18 @@ class XEB:
                                             with case_(i):
                                                 for pair in combination:
                                                     ctrl_idx, tgt_idx = pair
-                                                    qubit_ctrl = self.qubit_dict[ctrl_idx]
-                                                    qubit_tgt = self.qubit_dict[tgt_idx]
-                                                    align_transmon_pair(qubit_ctrl @ qubit_tgt)
+                                                    # qubit_ctrl = self.qubit_dict[ctrl_idx]
+                                                    # qubit_tgt = self.qubit_dict[tgt_idx]
+                                                    if tgt_idx < ctrl_idx:
+                                                        ctrl_idx, tgt_idx = tgt_idx, ctrl_idx
+                                                    qubit_pair = self.machine.qubit_pairs["coupler_q{}_q{}".format(ctrl_idx+1, tgt_idx+1)]
+                                                    # align_transmon_pair(qubit_ctrl @ qubit_tgt)
+                                                    align_transmon_pair(qubit_pair)
                                                     # Two qubit gate macro
-                                                    self.xeb_config.two_qb_gate.gate_macro(qubit_ctrl @ qubit_tgt)
-                                                    align_transmon_pair(qubit_ctrl @ qubit_tgt)
+                                                    # self.xeb_config.two_qb_gate.gate_macro(qubit_ctrl @ qubit_tgt)
+                                                    self.xeb_config.two_qb_gate.gate_macro(qubit_pair)
+                                                    # align_transmon_pair(qubit_ctrl @ qubit_tgt)
+                                                    align_transmon_pair(qubit_pair)
 
                                     with if_(two_qubit_gate_pattern == len(self.available_combinations) - 1):
                                         assign(two_qubit_gate_pattern, 0)
