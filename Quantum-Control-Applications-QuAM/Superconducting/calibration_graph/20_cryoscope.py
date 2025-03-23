@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 from qualang_tools.results import fetching_tool, progress_counter
 from qualang_tools.plot import interrupt_on_close
 from qualang_tools.multi_user import qm_session
-from quam_libs.macros import qua_declaration, multiplexed_readout, node_save, active_reset
+from quam_libs.macros import qua_declaration, multiplexed_readout, node_save, active_reset, active_reset_simple
 import numpy as np
 from qualang_tools.units import unit
 from quam_libs.components import QuAM
@@ -33,10 +33,10 @@ from quam_libs.lib.cryoscope_tools import cryoscope_frequency, estimate_fir_coef
 
 # %% {Node_parameters}
 class Parameters(NodeParameters):
-    qubits: Optional[List[str]] = ['q5']
-    num_averages: int = 15000
-    amplitude_factor: float = 1.57 #1.55 
-    cryoscope_len: int = 240
+    qubits: Optional[List[str]] = ['q3']
+    num_averages: int = 25000
+    amplitude_factor: float = 1.53 #1.55 
+    cryoscope_len: int = 240#240
     reset_type_active_or_thermal: Literal['active', 'thermal'] = 'active'
     flux_point_joint_or_independent: Literal['joint', 'independent'] = "joint"
     simulate: bool = False

@@ -42,14 +42,14 @@ import numpy as np
 class Parameters(NodeParameters):
 
     qubits: Optional[List[str]] = None
-    num_averages: int = 200
+    num_averages: int = 15
     operation_x180_or_any_90: Literal["x180", "x90", "-x90", "y90", "-y90"] = "x180"
     min_amp_factor: float = 0.001
     max_amp_factor: float = 2.0
-    amp_factor_step: float = 0.002#005
+    amp_factor_step: float = 0.005#005
     max_number_rabi_pulses_per_sweep: int = 40 #1
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
-    reset_type_thermal_or_active: Literal["thermal", "active"] = "active"
+    reset_type_thermal_or_active: Literal["thermal", "active"] = "thermal"
     state_discrimination: bool = False
     update_x90: bool = True
     simulate: bool = False

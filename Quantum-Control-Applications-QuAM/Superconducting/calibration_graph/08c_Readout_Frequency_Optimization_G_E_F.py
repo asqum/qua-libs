@@ -37,8 +37,8 @@ import numpy as np
 # %% {Node_parameters}
 class Parameters(NodeParameters):
 
-    qubits: Optional[List[str]] = None
-    num_averages: int = 40
+    qubits: Optional[List[str]] = None #["q1","q3","q5"] #None
+    num_averages: int = 100
     frequency_span_in_mhz: float = 30
     frequency_step_in_mhz: float = 0.05
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"

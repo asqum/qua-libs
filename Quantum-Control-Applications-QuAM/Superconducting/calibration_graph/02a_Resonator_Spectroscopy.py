@@ -41,7 +41,7 @@ class Parameters(NodeParameters):
 
     qubits: Optional[List[str]] = None
     num_averages: int = 100
-    frequency_span_in_mhz: float = 30.0
+    frequency_span_in_mhz: float = 20.0
     frequency_step_in_mhz: float = 0.1
     simulate: bool = False
     simulation_duration_ns: int = 2500

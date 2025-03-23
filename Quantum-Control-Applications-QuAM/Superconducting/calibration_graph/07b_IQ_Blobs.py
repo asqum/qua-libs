@@ -31,7 +31,7 @@ from quam_libs.components import QuAM
 from quam_libs.experiments.iq_blobs.fetch_dataset import fetch_dataset
 from quam_libs.experiments.iq_blobs.parameters import Parameters
 from quam_libs.experiments.simulation import simulate_and_plot
-from quam_libs.macros import qua_declaration, active_reset
+from quam_libs.macros import qua_declaration, active_reset, active_reset_simple
 from quam_libs.lib.qua_datasets import convert_IQ_to_V
 from quam_libs.lib.plot_utils import QubitGrid, grid_iter
 from quam_libs.lib.save_utils import fetch_results_as_xarray
@@ -50,7 +50,7 @@ node = QualibrationNode(
         qubits=None,
         multiplexed=True,
         flux_point_joint_or_independent="joint",
-        num_runs=2000,
+        num_runs=4000,
         load_data_id=None,
         simulate=False,
         simulation_duration_ns=1000,

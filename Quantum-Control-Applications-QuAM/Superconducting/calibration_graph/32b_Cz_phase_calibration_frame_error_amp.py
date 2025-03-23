@@ -57,16 +57,16 @@ from quam_libs.lib.pulses import FluxPulse
 # %% {Node_parameters}
 class Parameters(NodeParameters):
 
-    qubit_pairs: Optional[List[str]] = ["coupler_q1_q2"]
-    num_averages: int = 600
+    qubit_pairs: Optional[List[str]] = ["coupler_q3_q4"]
+    num_averages: int = 700
     flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
     reset_type: Literal['active', 'thermal'] = "active"
     simulate: bool = False
     timeout: int = 100
-    amp_range : float = 0.1
+    amp_range : float = 0.10 #0.12
     amp_step : float = 0.002
-    num_frames: int = 10
-    num_repeats: int = 12
+    num_frames: int = 13
+    num_repeats: int = 12 #12
     load_data_id: Optional[int] = None
     measure_leak : bool = True
 
@@ -292,7 +292,7 @@ if not node.parameters.simulate:
             return -1e-6 * (flux/1e3)**2 * quad
         
         ax2 = ax.secondary_yaxis('right', functions=(detuning_to_flux, flux_to_detuning))
-        ax.axhline(y=1e6*flux_to_detuning(optimal_amps[qubit_pair['qubit']], quad), color='k', linestyle='--', lw = 0.57)
+        ax.axhline(y=1e6*flux_to_detuning(optimal_amps[qubit_pair['qubit']], quad), color='k', linestyle='--', lw = 0.62)
         ax.axhline(y=1e6*flux_to_detuning(qubit_pairs[0].gates['Cz'].flux_pulse_control.amplitude), color='b', linestyle='--', lw = 0.57)
         ax2.set_ylabel('Flux amplitude [V]')
         ax.set_ylabel('Detuning [MHz]')
@@ -321,7 +321,7 @@ if not node.parameters.simulate:
             return -1e-6 * (flux/1e3)**2 * quad
         
         ax2 = ax.secondary_yaxis('right', functions=(detuning_to_flux, flux_to_detuning))
-        ax.axhline(y=1e6*flux_to_detuning(optimal_amps[qubit_pair['qubit']], quad), color='r', linestyle='--', lw = 0.57)
+        ax.axhline(y=1e6*flux_to_detuning(optimal_amps[qubit_pair['qubit']], quad), color='r', linestyle='--', lw = 0.62)
         ax.axhline(y=1e6*flux_to_detuning(qubit_pairs[0].gates['Cz'].flux_pulse_control.amplitude), color='b', linestyle='--', lw = 0.57)        
         ax2.set_ylabel('Flux amplitude [V]')
         ax.set_ylabel('Detuning [MHz]')

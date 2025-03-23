@@ -152,7 +152,7 @@ class XEB:
             # Play all gates through real-time amplitude matrix modulation
             qubit.xy.play(self.xeb_config.baseline_gate_name, amplitude_scale=amp(*amp_matrix))
             # qubit.xy.play('x180') # NOTE: for debugging purposes
-            # qubit.xy.play('x180') # NOTE: for debugging purposes
+            # qubit.xy.play('x90') # NOTE: for debugging purposes
             # pass # NOTE: for debugging purposes
         else:
             # Play all gates through switch case over the gate index
@@ -957,6 +957,7 @@ class XEBResult:
                         xx,
                         exponential_decay(xx, a_log, layer_fid_log),
                         label=f"Fit (Log XEB{qubit_label}), layer_fidelity={layer_fid_log * 100:.1f}%",
+                        linewidth=5.7, color="red",
                     )
             except Exception:
                 warnings.warn("Fit for Log XEB data failed")
@@ -971,7 +972,8 @@ class XEBResult:
 
             if fit_log_entropy and not np.isnan(Fxeb).all():
                 mask_log = (Fxeb > 0) & (Fxeb < 1)
-                plt.scatter(depths[mask_log], Fxeb[mask_log], label=f"Log XEB Data {qubit_label}")
+                plt.scatter(depths[mask_log], Fxeb[mask_log], label=f"Log XEB Data {qubit_label}", 
+                            s=13.5, c="blue")
             else:
                 warnings.warn(f"Log XEB data for {qubit_label} is a singularity.")
 

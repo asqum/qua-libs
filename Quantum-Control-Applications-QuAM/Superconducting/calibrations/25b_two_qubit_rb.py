@@ -25,8 +25,8 @@ config = machine.generate_config()
 qubits = machine.active_qubits
 num_qubits = len(qubits)
 
-qc_index = 1#1  # i.e., qc = q1
-qt_index = 2#2  # i.e., qt = q2
+qc_index = 3#1  # i.e., qc = q1
+qt_index = 4#2  # i.e., qt = q2
 qc = machine.qubits[f"q{qc_index}"]
 qt = machine.qubits[f"q{qt_index}"]
 
@@ -77,15 +77,16 @@ def bake_phased_xz(baker: Baking, q, x, z, a):
 #     baker.frame_rotation_2pi(qubit2_frame_update, qt_xy_element)
 #     baker.align(qc.z.name, coupler.name, qc_xy_element, qt_xy_element)
 
-QP = machine.qubit_pairs["coupler_q1_q2"]
+try: QP = machine.qubit_pairs["coupler_%s_%s" %(qc.name,qt.name)]
+except: QP = machine.qubit_pairs["coupler_%s_%s" %(qt.name,qc.name)]
 def bake_cz(baker: Baking, q1, q2):
     baker.align()
 
     baker.wait(100)
     baker.play(
-        "Cz_unipolar.flux_pulse_control_q2",qc.z.name
+        "Cz_unipolar.flux_pulse_control_%s_%s" %(qt.name,qc.name),qc.z.name
     )
-    baker.play("Cz_unipolar.coupler_flux_pulse_q2", QP.coupler.name)
+    baker.play("Cz_unipolar.coupler_flux_pulse_%s_%s" %(qt.name,qc.name), QP.coupler.name)
     baker.wait(100)
 
     baker.align()
@@ -146,7 +147,7 @@ data = {}
 
 # run simpler experiment to verify `bake_phased_xz`, `prep` and `meas`
 rb_debugger = TwoQubitRbDebugger(rb)
-fig = rb_debugger.run_phased_xz_commands(qmm, 128, unsafe=unsafe)
+fig = rb_debugger.run_phased_xz_commands(qmm, 16, unsafe=unsafe)
 rb.print_sequences()
 data["figure_circuits"] = fig
 
@@ -156,7 +157,7 @@ data["figure_circuits"] = fig
 # num_circuits_per_depth ~ how many random circuits within one depth
 # num_shots_per_circuit ~ repetitions of the same circuit (averaging)
 res = rb.run(qmm, 
-             circuit_depths=np.arange(0, 24, 2), 
+             circuit_depths=np.arange(0, 12, 1), 
              num_circuits_per_depth=16, 
              num_shots_per_circuit=32, 
              unsafe=unsafe)

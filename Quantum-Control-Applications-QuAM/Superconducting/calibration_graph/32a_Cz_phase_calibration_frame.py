@@ -57,7 +57,7 @@ from quam_libs.lib.pulses import FluxPulse
 # %% {Node_parameters}
 class Parameters(NodeParameters):
 
-    qubit_pairs: Optional[List[str]] = ["coupler_q1_q2"]
+    qubit_pairs: Optional[List[str]] = ["coupler_q3_q4"]
     num_averages: int = 700
     flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
     reset_type: Literal['active', 'thermal'] = "active"
@@ -311,6 +311,7 @@ if not node.parameters.simulate:
         for ax, qubit_pair in grid_iter(grid):
             leaks[qubit_pair['qubit']].plot(ax=ax, x = 'amp_full')
             ax.axvline(optimal_amps[qubit_pair['qubit']],color = 'r', linestyle='--',lw=0.5)
+            ax.axvline((qubit_pairs[0].gates['Cz'].flux_pulse_control.amplitude), color='b', linestyle='--', lw = 0.57)
             ax.set_title(qubit_pair['qubit'])
             ax.set_xlabel('Amplitude (V)')
             ax.set_ylabel('Leak probability')
