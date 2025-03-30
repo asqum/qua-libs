@@ -25,8 +25,8 @@ config = machine.generate_config()
 qubits = machine.active_qubits
 num_qubits = len(qubits)
 
-qc_index = 3#1  # i.e., qc = q1
-qt_index = 4#2  # i.e., qt = q2
+qc_index = 1#1  # i.e., qc = q1
+qt_index = 2#2  # i.e., qt = q2
 qc = machine.qubits[f"q{qc_index}"]
 qt = machine.qubits[f"q{qt_index}"]
 

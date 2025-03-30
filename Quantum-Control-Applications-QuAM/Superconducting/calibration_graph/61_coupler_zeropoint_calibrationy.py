@@ -56,9 +56,10 @@ from quam_libs.components.gates.two_qubit_gates import CZGate
 from quam_libs.lib.pulses import FluxPulse
 
 # %% {Node_parameters}
+qubit_pair_indexes = [1]  # [1, 2]
 class Parameters(NodeParameters):
 
-    qubit_pairs: Optional[List[str]] = ["coupler_q3_q4"] # ["coupler_q1_q2"]
+    qubit_pairs: Optional[List[str]] = ["coupler_q%s_q%s"%(i,i+1) for i in qubit_pair_indexes] # ["coupler_q1_q2"]
     num_averages: int = 120
     flux_point_joint_or_independent_or_pairwise: Literal["joint", "independent", "pairwise"] = "joint"
     reset_type: Literal['active', 'thermal'] = "active"

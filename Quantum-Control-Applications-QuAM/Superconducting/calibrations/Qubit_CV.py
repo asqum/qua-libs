@@ -30,18 +30,23 @@ for q in qubits:
     print("\n%s: " %(q.name))
     print("qb.f01: %s" %(q.xy.RF_frequency))
     print("ro.length: %s" %(q.resonator.operations["readout"].length))
+    print("ro.frequency: %s" %(5950000000 + q.resonator.intermediate_frequency))
 
 x_data = [q.name for q in qubits]
 y_data = [q.xy.RF_frequency for q in qubits]
+y1_data = [5950000000 + q.resonator.intermediate_frequency for q in qubits]
 
 QPU_Map = plt.figure()
 plt.suptitle("qubit frequencies")
 plt.xlabel("qubit.name")
 plt.ylabel("qubit.xy.frequency (GHz)")
 plt.plot(x_data, y_data, marker='o', color='red')
+plt.plot(x_data, y1_data, marker='o', color='blue')
+plt.legend(["qubit.xy.frequency", "qubit.resonator.frequency"])
 
 for i, (x, y) in enumerate(zip(x_data, y_data)):
     plt.annotate(f"{y*1e-9:.4f}GHz", (x, y), textcoords="offset points", xytext=(21, 12), ha="center") 
+    plt.annotate(f"{y1_data[i]*1e-9:.4f}GHz", (x, y1_data[i]), textcoords="offset points", xytext=(21, 12), ha="center")
 
 plt.show()
 
