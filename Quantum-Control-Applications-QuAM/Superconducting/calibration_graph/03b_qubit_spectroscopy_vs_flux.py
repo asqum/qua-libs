@@ -39,15 +39,16 @@ import numpy as np
 # %% {Node_parameters}
 class Parameters(NodeParameters):
 
-    qubits: Optional[List[str]] = None
+    qubits: Optional[List[str]] = ["q1"]
     num_averages: int = 200
     operation: str = "saturation"
-    operation_amplitude_factor: Optional[float] = 0.004
+    operation_amplitude_factor: Optional[float] = 0.4 #0.004
     operation_len_in_ns: Optional[int] = None
-    frequency_span_in_mhz: float = 12
-    frequency_step_in_mhz: float = 0.1
-    min_flux_offset_in_v: float = -0.012
-    max_flux_offset_in_v: float = 0.012
+    frequency_span_in_mhz: float = 300 #12
+    frequency_step_in_mhz: float = 1 #0.1
+    frequency_shift_in_mhz: float = 700 #0  
+    min_flux_offset_in_v: float = -0.3 #-0.012
+    max_flux_offset_in_v: float = 0.3 #0.012
     num_flux_points: int = 51
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
     simulate: bool = False
@@ -78,6 +79,9 @@ else:
     qubits = [machine.qubits[q] for q in node.parameters.qubits]
 num_qubits = len(qubits)
 
+# selected coupler to drive flux from: 
+qp = machine.qubit_pairs["coupler_q1_q2"]
+
 
 # %% {QUA_program}
 n_avg = node.parameters.num_averages  # The number of averages
@@ -92,6 +96,7 @@ else:
 # Qubit detuning sweep with respect to their resonance frequencies
 span = node.parameters.frequency_span_in_mhz * u.MHz
 step = node.parameters.frequency_step_in_mhz * u.MHz
+shift = int(node.parameters.frequency_shift_in_mhz * u.MHz)
 dfs = np.arange(-span // 2, span // 2, step, dtype=np.int32)
 # Flux bias sweep
 dcs = np.linspace(
@@ -124,12 +129,13 @@ with program() as multi_qubit_spec_vs_flux:
 
             with for_(*from_array(df, dfs)):
                 # Update the qubit frequency
-                fixed_qubit.xy.update_frequency(df + qubit.xy.intermediate_frequency)
+                fixed_qubit.xy.update_frequency(df + qubit.xy.intermediate_frequency + shift)
                 with for_(*from_array(dc, dcs)):
                     # Flux sweeping for a qubit
                     duration = operation_len * u.ns if operation_len is not None else qubit.xy.operations[operation].length * u.ns
                     # Bring the qubit to the desired point during the saturation pulse
-                    qubit.z.play("const", amplitude_scale=dc / qubit.z.operations["const"].amplitude, duration=duration)
+                    # qubit.z.play("const", amplitude_scale=dc / qubit.z.operations["const"].amplitude, duration=duration)
+                    qp.coupler.play("const", amplitude_scale=dc / qubit.z.operations["const"].amplitude, duration=duration)
                     # Apply saturation pulse to all qubits
                     fixed_qubit.xy.play(
                         operation,
@@ -200,7 +206,7 @@ if not node.parameters.simulate:
             {
                 "freq_full": (
                     ["qubit", "freq"],
-                    np.array([dfs + q.xy.RF_frequency for q in qubits]),
+                    np.array([shift + dfs + q.xy.RF_frequency for q in qubits]),
                 )
             }
         )

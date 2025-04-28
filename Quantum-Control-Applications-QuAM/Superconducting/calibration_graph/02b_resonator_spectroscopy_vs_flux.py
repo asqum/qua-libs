@@ -42,7 +42,7 @@ import warnings
 # %% {Node_parameters}
 class Parameters(NodeParameters):
 
-    qubits: Optional[List[str]] = None
+    qubits: Optional[List[str]] = ["q1"]
     num_averages: int = 10
     min_flux_offset_in_v: float = -0.5
     max_flux_offset_in_v: float = 0.5
@@ -85,6 +85,8 @@ config = machine.generate_config()
 if node.parameters.load_data_id is None:
     qmm = machine.connect()
 
+# selected coupler to drive flux from: 
+qp = machine.qubit_pairs["coupler_q1_q2"]
 
 
 # %% {QUA_program}
@@ -124,6 +126,7 @@ with program() as multi_res_spec_vs_flux:
                 # Flux sweeping by tuning the OPX dc offset associated with the flux_line element
                 qubit.z.set_dc_offset(dc)
                 qubit.z.settle()
+                # qp.coupler.set_dc_offset(dc)
                 qubit.align()
                 with for_(*from_array(df, dfs)):
                     # Update the resonator frequencies for resonator

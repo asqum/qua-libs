@@ -46,15 +46,15 @@ class Parameters(NodeParameters):
 
     qubits: Optional[List[str]] = None
     num_averages: int = 100
-    frequency_span_in_mhz: float = 15
+    frequency_span_in_mhz: float = 25 #15
     frequency_step_in_mhz: float = 0.1
     simulate: bool = False
     simulation_duration_ns: int = 2500
     timeout: int = 100
-    max_power_dbm: int = -30
+    max_power_dbm: int = -10 #-30
     min_power_dbm: int = -50
     num_power_points: int = 100
-    max_amp: float = 0.1
+    max_amp: float = 0.9 #0.1
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
     ro_line_attenuation_dB: float = 0
     derivative_crossing_threshold_in_hz_per_dbm: int = int(-50e3)
