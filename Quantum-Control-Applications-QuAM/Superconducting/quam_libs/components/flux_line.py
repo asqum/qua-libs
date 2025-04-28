@@ -23,6 +23,7 @@ class FluxLine(SingleChannel):
     min_offset: float = 0.0
     arbitrary_offset: float = 0.0
     settle_time: float = 24
+    reset_offset: float = 0.0  # reset by bringing the qubit in resonance with the resonator
 
     def settle(self):
         """Wait for the flux bias to settle"""
@@ -44,3 +45,7 @@ class FluxLine(SingleChannel):
     def to_zero(self):
         """Set the flux bias to 0.0 V"""
         self.set_dc_offset(0.0)
+
+    def to_reset(self):
+        """Set the flux bias to the reset offset"""
+        self.set_dc_offset(self.reset_offset)
