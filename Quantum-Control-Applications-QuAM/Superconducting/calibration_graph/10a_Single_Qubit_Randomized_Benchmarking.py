@@ -46,7 +46,7 @@ class Parameters(NodeParameters):
     use_strict_timing: bool = False
     num_random_sequences: int = 100  # Number of random sequences
     num_averages: int = 20
-    max_circuit_depth: int = 1000  # Maximum circuit depth
+    max_circuit_depth: int = 900  # Maximum circuit depth
     delta_clifford: int = 20
     seed: int = 345324
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
@@ -55,7 +55,7 @@ class Parameters(NodeParameters):
     simulation_duration_ns: int = 2500
     timeout: int = 100
     load_data_id: Optional[int] = None
-    multiplexed: bool = True
+    multiplexed: bool = False
 
 node = QualibrationNode(name="10a_Single_Qubit_Randomized_Benchmarking", parameters=Parameters())
 

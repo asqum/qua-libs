@@ -151,7 +151,9 @@ class XEB:
         if self.xeb_config.gate_set.run_through_amp_matrix_modulation and amp_matrix is not None:
             # Play all gates through real-time amplitude matrix modulation
             qubit.xy.play(self.xeb_config.baseline_gate_name, amplitude_scale=amp(*amp_matrix))
+            # qubit.xy.play('x180') # NOTE: for debugging purposes
             # qubit.xy.play('x90') # NOTE: for debugging purposes
+            # pass # NOTE: for debugging purposes
         else:
             # Play all gates through switch case over the gate index
             with switch_(gate_idx, unsafe=True):
@@ -272,12 +274,18 @@ class XEB:
                                             with case_(i):
                                                 for pair in combination:
                                                     ctrl_idx, tgt_idx = pair
-                                                    qubit_ctrl = self.qubit_dict[ctrl_idx]
-                                                    qubit_tgt = self.qubit_dict[tgt_idx]
-                                                    align_transmon_pair(qubit_ctrl @ qubit_tgt)
+                                                    # qubit_ctrl = self.qubit_dict[ctrl_idx]
+                                                    # qubit_tgt = self.qubit_dict[tgt_idx]
+                                                    if tgt_idx < ctrl_idx:
+                                                        ctrl_idx, tgt_idx = tgt_idx, ctrl_idx
+                                                    qubit_pair = self.machine.qubit_pairs["coupler_q{}_q{}".format(ctrl_idx+1, tgt_idx+1)]
+                                                    # align_transmon_pair(qubit_ctrl @ qubit_tgt)
+                                                    align_transmon_pair(qubit_pair)
                                                     # Two qubit gate macro
-                                                    self.xeb_config.two_qb_gate.gate_macro(qubit_ctrl @ qubit_tgt)
-                                                    align_transmon_pair(qubit_ctrl @ qubit_tgt)
+                                                    # self.xeb_config.two_qb_gate.gate_macro(qubit_ctrl @ qubit_tgt)
+                                                    self.xeb_config.two_qb_gate.gate_macro(qubit_pair)
+                                                    # align_transmon_pair(qubit_ctrl @ qubit_tgt)
+                                                    align_transmon_pair(qubit_pair)
 
                                     with if_(two_qubit_gate_pattern == len(self.available_combinations) - 1):
                                         assign(two_qubit_gate_pattern, 0)
@@ -285,9 +293,9 @@ class XEB:
                                         assign(two_qubit_gate_pattern, two_qubit_gate_pattern + 1)
                                 else:  # Two-qubit XEB case (no need for switch case)
                                     qubit_pair = self.qubit_pairs[0]
-                                    align_transmon_pair(qubit_pair)
+                                    # align_transmon_pair(qubit_pair)
                                     self.xeb_config.two_qb_gate.gate_macro(qubit_pair)
-                                    align_transmon_pair(qubit_pair)
+                                    # align_transmon_pair(qubit_pair)
 
                         # Measure the state
                         wait(150 * u.ns)
@@ -949,6 +957,7 @@ class XEBResult:
                         xx,
                         exponential_decay(xx, a_log, layer_fid_log),
                         label=f"Fit (Log XEB{qubit_label}), layer_fidelity={layer_fid_log * 100:.1f}%",
+                        linewidth=5.7, color="red",
                     )
             except Exception:
                 warnings.warn("Fit for Log XEB data failed")
@@ -963,7 +972,8 @@ class XEBResult:
 
             if fit_log_entropy and not np.isnan(Fxeb).all():
                 mask_log = (Fxeb > 0) & (Fxeb < 1)
-                plt.scatter(depths[mask_log], Fxeb[mask_log], label=f"Log XEB Data {qubit_label}")
+                plt.scatter(depths[mask_log], Fxeb[mask_log], label=f"Log XEB Data {qubit_label}", 
+                            s=13.5, c="blue")
             else:
                 warnings.warn(f"Log XEB data for {qubit_label} is a singularity.")
 

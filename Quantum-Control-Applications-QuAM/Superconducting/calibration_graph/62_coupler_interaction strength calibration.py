@@ -59,9 +59,10 @@ import xarray as xr
 from quam_libs.components.gates.two_qubit_gates import SWAP_Coupler_Gate
 
 # %% {Node_parameters}
+qubit_pair_indexes = [1] 
 class Parameters(NodeParameters):
 
-    qubit_pairs: Optional[List[str]] =  ["coupler_q1_q2"]
+    qubit_pairs: Optional[List[str]] =  ["coupler_q%s_q%s"%(i,i+1) for i in qubit_pair_indexes]
     num_averages: int = 880
     flux_point_joint_or_independent_or_pairwise: Literal["joint", "independent", "pairwise"] = "joint"
     reset_type: Literal['active', 'thermal'] = "active"
@@ -70,21 +71,21 @@ class Parameters(NodeParameters):
     load_data_id: Optional[int] = None
 
     # coupler_q1_q2:
-    coupler_flux_min : float = 0.195
-    coupler_flux_max : float = 0.280
+    coupler_flux_min : float = 0.120
+    coupler_flux_max : float = 0.180
     # coupler_q2_q3:
-    # coupler_flux_min : float = 0.200 
-    # coupler_flux_max : float = 0.250
+    # coupler_flux_min : float = 0.120 
+    # coupler_flux_max : float = 0.220
     # q3_q4:
-    # coupler_flux_min : float = 0.200 
-    # coupler_flux_max : float = 0.250  
+    # coupler_flux_min : float = 0.100 
+    # coupler_flux_max : float = 0.170  
     # coupler_q4_q5:
     # coupler_flux_min : float = 0.269
     # coupler_flux_max : float = 0.450
 
-    coupler_flux_step : float = 0.0002
+    coupler_flux_step : float = 0.0005
     idle_time_min : int = 16
-    idle_time_max : int = 500
+    idle_time_max : int = 600
     idle_time_step : int = 4
     use_state_discrimination: bool = True
     
@@ -310,6 +311,7 @@ if not node.parameters.simulate:
     for ax, qp in grid_iter(grid):
         (1e3*ds.dominant_frequency.sel(qubit=qp['qubit'])).plot(ax = ax, marker = '.', ls = 'None', x = 'flux_coupler')
         qubit_pair = machine.qubit_pairs[qp['qubit']]
+        ax.axvline(x = qubit_pair.coupler.decouple_offset, color = 'black')
         ax.axvline(x = coupler_flux_pulse.sel(qubit=qp['qubit']), color = 'red', lw = 0.5, ls = '--')
         ax.axvline(x = coupler_flux_min.sel(qubit=qp['qubit']) - qubit_pair.coupler.decouple_offset, color = 'green', lw = 0.5, ls = '--')
         ax.set_title(f"{qp['qubit']}, coupler set point: {qubit_pair.coupler.decouple_offset}", fontsize = 10)

@@ -18,25 +18,26 @@ from qualang_tools.plot import interrupt_on_close
 from qualang_tools.units import unit
 from qualibrate import NodeParameters, QualibrationNode
 from quam_libs.components import QuAM
-from quam_libs.macros import active_reset, readout_state
+from quam_libs.macros import active_reset, readout_state, active_reset_simple
 
 # matplotlib.use("TKAgg")
 
 
 # %% {Node_parameters}
 class Parameters(NodeParameters):
-    qubits: Optional[List[str]] = ["q1","q2","q3","q4","q5"]
-    control_qubit_post_cz_phase_corrections: List[float] = [0.709, 0.484, 0.384, -0.278] #None
-    target_qubit_post_cz_phase_corrections: List[float] = [-0.414, 0.374, 0.449, -0.830] #None
+    qubits: Optional[List[str]] = ["q1","q2","q3"] #["q1","q2","q3","q4","q5"]
+    qubit_pairs: Optional[List[str]] = ["coupler_q1_q2", "coupler_q2_q3"] #None 
+    # control_qubit_post_cz_phase_corrections: List[float] = [0.709, 0.484, 0.384, -0.278] #None
+    # target_qubit_post_cz_phase_corrections: List[float] = [-0.414, 0.374, 0.449, -0.830] #None
     num_averages: int = 1000
     # flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
-    reset_type: Literal['active', 'thermal'] = "thermal"
+    reset_type: Literal['active', 'thermal'] = "active"
     simulate: bool = False
     timeout: int = 100
     shots: int = 2048
 
 node = QualibrationNode(
-    name="GHZ_Circuit", parameters=Parameters()
+    name="25b_GHZ_Circuit", parameters=Parameters()
 )
 
 ###################################################
@@ -60,17 +61,22 @@ def get_qubit_index_from_name(qubit_name: str) -> int:
 
 num_qubits_full = len(qubits)
 
-qubit_pairs = []
-for i in range(len(qubits) - 1):
-    try:
-        qubit_pair = (qubits[i] @ qubits[i+1])
-    except:
-        try:
-            qubit_pair = (qubits[i+1] @ qubits[i])
-        except:
-            raise ValueError(f"No pair found between qubits {qubits[i].name} and {qubits[i+1].name}")
+# qubit_pairs = []
+# for i in range(len(qubits) - 1):
+#     try:
+#         qubit_pair = (qubits[i] @ qubits[i+1])
+#     except:
+#         try:
+#             qubit_pair = (qubits[i+1] @ qubits[i])
+#         except:
+#             raise ValueError(f"No pair found between qubits {qubits[i].name} and {qubits[i+1].name}")
 
-    qubit_pairs.append(qubit_pair)
+#     qubit_pairs.append(qubit_pair)
+
+if node.parameters.qubit_pairs is None or node.parameters.qubit_pairs == "":
+    qubit_pairs = machine.active_qubit_pairs
+else:
+    qubit_pairs = [machine.qubit_pairs[qp] for qp in node.parameters.qubit_pairs]
 
 readout_qubits = [qubit for qubit in machine.qubits.values() if qubit not in qubits]
 
@@ -90,7 +96,7 @@ with program() as ghz_circuit:
 
         if node.parameters.reset_type == "active":
             for qubit in qubits:
-                active_reset(qubit)
+                active_reset_simple(qubit)
         else:
             if not node.parameters.simulate:
                 wait(machine.thermalization_time * u.ns)
@@ -114,14 +120,13 @@ with program() as ghz_circuit:
             qp.align()
 
             # assumes a CZ gate exists with name e.g. `cz1_2`, when q1 is the control and q2 is the target.
-            qc.z.play(f"cz{get_qubit_index_from_name(qc.name)}_{get_qubit_index_from_name(qt.name)}")
-            qp.coupler.play("cz")
-            wait(150 * u.ns)
-
-            qp.align()
-
-            qc.xy.frame_rotation_2pi(node.parameters.control_qubit_post_cz_phase_corrections[i])
-            qt.xy.frame_rotation_2pi(node.parameters.target_qubit_post_cz_phase_corrections[i])
+            # qc.z.play(f"cz{get_qubit_index_from_name(qc.name)}_{get_qubit_index_from_name(qt.name)}")
+            # qp.coupler.play("cz")
+            # wait(150 * u.ns)
+            # qp.align()
+            # qc.xy.frame_rotation_2pi(node.parameters.control_qubit_post_cz_phase_corrections[i])
+            # qt.xy.frame_rotation_2pi(node.parameters.target_qubit_post_cz_phase_corrections[i])
+            qp.gates['Cz'].execute()
 
             q_higher_index.xy.play("y90")
 

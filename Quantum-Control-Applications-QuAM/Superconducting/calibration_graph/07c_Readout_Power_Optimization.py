@@ -23,7 +23,7 @@ Next steps before going to the next node:
 # %% {Imports}
 from qualibrate import QualibrationNode, NodeParameters
 from quam_libs.components import QuAM
-from quam_libs.macros import qua_declaration, active_reset
+from quam_libs.macros import qua_declaration, active_reset, active_reset_simple
 from quam_libs.lib.plot_utils import QubitGrid, grid_iter
 from quam_libs.lib.save_utils import fetch_results_as_xarray, load_dataset
 from qualang_tools.analysis import two_state_discriminator
@@ -44,19 +44,19 @@ from sklearn.mixture import GaussianMixture
 class Parameters(NodeParameters):
 
     qubits: Optional[List[str]] = None
-    num_runs: int = 2000
+    num_runs: int = 6000
     reset_type_thermal_or_active: Literal["thermal", "active"] = "thermal"
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
-    start_amp: float = 0.5
+    start_amp: float = 0.02
     end_amp: float = 1.99
-    num_amps: int = 10
+    num_amps: int = 40
     outliers_threshold: float = 0.98
     plot_raw: bool = False
     simulate: bool = False
     simulation_duration_ns: int = 2500
     timeout: int = 100
     load_data_id: Optional[int] = None
-    multiplexed: bool = False
+    multiplexed: bool = True
 
 
 node = QualibrationNode(name="07c_Readout_Power_Optimization", parameters=Parameters())
@@ -105,7 +105,7 @@ with program() as iq_blobs:
             save(n, n_st)
             with for_(*from_array(a, amps)):
                 if reset_type == "active":
-                    active_reset(qubit, "readout")
+                    active_reset_simple(qubit, "readout")
                 elif reset_type == "thermal":
                     qubit.wait(qubit.thermalization_time * u.ns)
                 else:
@@ -119,7 +119,7 @@ with program() as iq_blobs:
                 save(Q_g[i], Q_g_st[i])
 
                 if reset_type == "active":
-                    active_reset(qubit, "readout")
+                    active_reset_simple(qubit, "readout")
                 elif reset_type == "thermal":
                     qubit.wait(qubit.thermalization_time * u.ns)
                 else:

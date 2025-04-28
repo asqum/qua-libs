@@ -51,16 +51,17 @@ from quam_libs.components.gates.two_qubit_gates import CZGate
 from quam_libs.lib.pulses import FluxPulse
 
 # %% {Node_parameters}
+qubit_pair_indexes = [1]  # The indexes of the qubit pair in the QuAM
 class Parameters(NodeParameters):
 
-    qubit_pairs: Optional[List[str]] = ["coupler_q2_q3"]
-    num_averages: int = 300
-    max_time_in_ns: int = 200 #200
+    qubit_pairs: Optional[List[str]] = ["coupler_q%s_q%s"%(i,i+1) for i in qubit_pair_indexes]
+    num_averages: int = 900
+    max_time_in_ns: int = 1200 #200
     flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
     reset_type: Literal['active', 'thermal'] = "active"
     simulate: bool = False
     timeout: int = 100
-    amp_range : float = 0.3 #0.1
+    amp_range : float = 0.2 #0.1
     amp_step : float = 0.002
     load_data_id: Optional[int] = None  
 
@@ -386,8 +387,8 @@ if not node.parameters.simulate:
     if node.parameters.load_data_id is None:
         with node.record_state_updates():
             for qp in qubit_pairs:
-                qp.gates['Cz_unipolar'] = CZGate(flux_pulse_control = FluxPulse(length=lengths[qp.name], amplitude=amplitudes[qp.name], zero_padding=zero_paddings[qp.name], id = 'flux_pulse_control_' + qp.qubit_target.name),
-                                                 coupler_flux_pulse = FluxPulse(length=lengths[qp.name], amplitude=qp.extras["CZ_coupler_flux"], zero_padding=zero_paddings[qp.name], id = 'coupler_flux_pulse_' + qp.qubit_target.name))
+                qp.gates['Cz_unipolar'] = CZGate(flux_pulse_control = FluxPulse(length=lengths[qp.name], amplitude=amplitudes[qp.name], zero_padding=zero_paddings[qp.name], id = 'flux_pulse_control_' + qp.qubit_target.name + '_' + qp.qubit_control.name),
+                                                 coupler_flux_pulse = FluxPulse(length=lengths[qp.name], amplitude=qp.extras["CZ_coupler_flux"], zero_padding=zero_paddings[qp.name], id = 'coupler_flux_pulse_' + qp.qubit_target.name + '_' + qp.qubit_control.name))
                 qp.gates['Cz'] = f"#./Cz_unipolar"
                 
                 qp.J2 = Js[qp.name]
