@@ -26,7 +26,7 @@ from quam_libs.experiments.res_spec_vs_qubit_flux.plotting import plot_resonator
 from quam_libs.macros import qua_declaration
 from quam_libs.lib.qua_datasets import convert_IQ_to_V
 from quam_libs.lib.plot_utils import QubitGrid, grid_iter
-from quam_libs.lib.save_utils import fetch_results_as_xarray, load_dataset, get_node_id
+from quam_libs.lib.save_utils import fetch_results_as_xarray, load_dataset
 from quam_libs.lib.fit import fit_oscillation
 from qualang_tools.results import progress_counter, fetching_tool
 from qualang_tools.loops import from_array
@@ -61,7 +61,6 @@ class Parameters(NodeParameters):
     load_data_id: Optional[int] = 144
 
 node = QualibrationNode(name="02b_Resonator_Spectroscopy_vs_Flux", parameters=Parameters())
-node_id = get_node_id()
 
 # %% {Initialize_QuAM_and_QOP}
 # Class containing tools to help handling units and conversions.
