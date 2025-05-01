@@ -47,13 +47,13 @@ import numpy as np
 # %% {Node_parameters}
 class Parameters(NodeParameters):
 
-    qubits: Optional[List[str]] = None
+    qubits: Optional[List[str]] = ["q1"]
     num_averages: int = 500
     operation: str = "saturation"
-    operation_amplitude_factor: Optional[float] = 0.004
+    operation_amplitude_factor: Optional[float] = 0.9 #0.004
     operation_len_in_ns: Optional[int] = None
-    frequency_span_in_mhz: float = 200
-    frequency_step_in_mhz: float = 0.25
+    frequency_span_in_mhz: float = 400 #200
+    frequency_step_in_mhz: float = 0.5 #0.25
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
     target_peak_width: Optional[float] = 1e6
     arbitrary_flux_bias: Optional[float] = None
@@ -140,7 +140,8 @@ with program() as qubit_spec:
             save(n, n_st)
             with for_(*from_array(df, dfs)):
                 # Update the qubit frequency
-                qubit.xy.update_frequency(df + qubit.xy.intermediate_frequency + detunings[qubit.name])
+                # qubit.xy.update_frequency(df + qubit.xy.intermediate_frequency + detunings[qubit.name])
+                qubit.xy.update_frequency(df + qubit.xy.intermediate_frequency + detunings[qubit.name] + 700e6)
                 qubit.align()
                 duration = operation_len * u.ns if operation_len is not None else (qubit.xy.operations[operation].length + qubit.z.settle_time) * u.ns
                 # Bring the qubit to the desired point during the saturation pulse
