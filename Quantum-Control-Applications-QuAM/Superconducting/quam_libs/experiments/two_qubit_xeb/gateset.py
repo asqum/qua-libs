@@ -56,7 +56,7 @@ class QUAGateSet(dict):
     def __init__(
         self,
         gate_set: Union[Literal["sw", "t"], Dict[int, QUAGate]],
-        baseline_gate_name: str,
+        baseline_gate_name: Optional[str] = None,
     ):
         if isinstance(gate_set, dict):
             for key, value in gate_set.items():
@@ -72,6 +72,8 @@ class QUAGateSet(dict):
                     raise ValueError(f"Invalid gate set: missing gate with index {key}.")
             super().__init__(gate_set)
         else:
+            if baseline_gate_name is None:
+                raise ValueError("Baseline gate name must be provided for predefined gate sets.")
             super().__init__(generate_gate_set(gate_set, baseline_gate_name))
         self.name = gate_set
 

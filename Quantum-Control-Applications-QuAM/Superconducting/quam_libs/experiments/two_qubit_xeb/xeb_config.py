@@ -87,6 +87,7 @@ class XEBConfig:
             "qubit_pairs": [pair.name if isinstance(pair, TransmonPair) else pair for pair in self.qubit_pairs],
             "coupling_map": list(self.coupling_map.get_edges()) if self.coupling_map else None,
             "available_combinations": self.available_combinations,
+            "seed": self.seed,
         }
         return config_dict
 
