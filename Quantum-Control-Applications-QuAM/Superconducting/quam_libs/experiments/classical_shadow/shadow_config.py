@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 from typing import Literal, List, Union, Optional, Dict, Callable, Any
 from ...components import Transmon, TransmonPair, QuAM
 from ..two_qubit_xeb import QUAGate, QUAGateSet
+from qiskit.circuit import QuantumCircuit
 @dataclass
 class ShadowConfig:
     """
@@ -12,6 +13,7 @@ class ShadowConfig:
     """
     shadow_size: int
     input_state_prep_macro: Callable[[Any], None]
+    input_state_circuit: Callable[[Any], QuantumCircuit]
     measurement_basis: Union[str, Dict[int, QUAGate]]
     qubits: List[Transmon]
     input_state_prep_macro_kwargs: Optional[Dict[str, Any]] = None
