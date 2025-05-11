@@ -3,6 +3,7 @@ from typing import Optional
 
 import numpy as np
 from qiskit import QuantumCircuit
+from qiskit.quantum_info import Statevector
 from qualang_tools.results import DataHandler
 
 from quam_libs.components import QuAM, Transmon
@@ -68,6 +69,8 @@ class ClassicalShadow:
                     qubit.xy.update_frequency(0)
                     
             with for_(i, 0, i < self.config.shadow_size, i + 1):
+                # Possible wait time before the experiment
+                # wait(...)
                 
                 # Sample random basis (assumed to be local measurements)
                 with for_(j, 0, j < n_qubits, j + 1):
@@ -167,13 +170,14 @@ class ClassicalShadowJob:
         """
         shadow_size = self.config.shadow_size
         gates = self._result_handles["random_basis"].fetch_all()['value']
-        
+        input_state_circuit = self.config.input_state_circuit(**self.config.input_state_prep_macro_kwargs)
         for i in range(shadow_size):
             for j in range(self.config.n_qubits):
                 self._gate_indices[i, j] = gates[i][j]
                 
         circuits = [QuantumCircuit(self.config.n_qubits) for _ in range(shadow_size)]
         for i in range(shadow_size):
+            circuits[i].compose(input_state_circuit, inplace=True)
             for j in range(self.config.n_qubits):
                 circuits[i].append(self.config.measurement_basis[self._gate_indices[i, j]].gate,
                                    [j])
@@ -187,8 +191,21 @@ class ClassicalShadowJob:
         bitstrings = [binary(state_int_, self.config.n_qubits) for state_int_ in state_int]
         return [(bitstring, self._gate_indices[i]) for i, bitstring in enumerate(bitstrings)]
     
-        
-        
+    
+    def ideal_result(self):
+        """
+        Get the ideal results of the job.
+        """
+        circuits = self._get_circuits()
+        results = []
+        for i, circuit in enumerate(circuits):
+            state = Statevector(circuit)
+            probs = state.probabilities_dict()
+            results.append((probs, self._gate_indices[i]))
+            
+        return results
+            
+            
             
             
      
