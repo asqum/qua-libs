@@ -101,7 +101,7 @@ class ClassicalShadow:
                                             qua_vars=(I[q], Q[q]))
                     # State Estimation: returned as integer
                     assign(state[q], I[q] > ge_thresholds[q])
-                    assign(state_int, state_int + (state[q] << q))
+                    assign(state_int, state_int + Cast.to_int(state[q]) << q)
                     
                     reset_qubit(self.config.reset_method,
                                 qubit,
