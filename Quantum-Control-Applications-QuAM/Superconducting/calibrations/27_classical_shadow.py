@@ -58,7 +58,7 @@ shadow_exp = ClassicalShadow(shadow_config, machine)
 
 job = shadow_exp.run()
 
-results = job.result() # [("010", [0, 1]), ("110", [2, 3]), ...]            
+results = job.result() # [("010", [0, 1, 2]), ("110", [2, 0, 1]), ...]            
 ideal_results = job.ideal_result()
 
 gate_dict = {i: qua_gate.gate for i, qua_gate in measurement_basis.items()}
