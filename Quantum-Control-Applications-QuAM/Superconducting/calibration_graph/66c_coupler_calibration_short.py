@@ -1,10 +1,10 @@
 # %%
 """
-COUPLER_CALIBRATION_LONG    
+COUPLER_CALIBRATION_SHORT    
 Reference paper: https://arxiv.org/pdf/2410.15041
 
 This protocol corrects flux pulse distortions in tunable couplers using a long-time correction approach:
-Long-time correction (20-40 μs): Use second-order reversed convolution to deconvolve exponential relaxation (τ ∼25 μs)
+Long-time correction (32ns-10 μs): Use second-order reversed convolution to deconvolve exponential relaxation (τ ∼25 μs)
 from measured step responses.
 
 The method exploits qubit-coupler coupling to map distortions via qubit population shifts, bypassing dedicated coupler readout. 
@@ -13,6 +13,7 @@ We inject square flux pulses, measure distorted qubit responses, then generate p
 
 Prerequisites:
     - 66a calibrate deress pi pulse
+    - 66b coupler calibration long
 Before proceeding to the next node:
     - 
 """
@@ -66,11 +67,11 @@ class Parameters(NodeParameters):
     V_offset_max: float = 0.02
     V_offset_min: float = -0.02
     V_offset_step: float = 0.005
-    min_wait_time: int = 4
-    max_wait_time: int = 40000//4
-    step_wait_time: int = 1000//4
+    min_wait_time: int = 32//4
+    max_wait_time: int = 10000//4
+    total_time_step: int = 50
 
-node = QualibrationNode(name="66b_coupler_calibration_long", parameters=Parameters())
+node = QualibrationNode(name="66b_coupler_calibration_short", parameters=Parameters())
 assert not (
     node.parameters.simulate and node.parameters.load_data_id is not None
 ), "If simulate is True, load_data_id must be None, and vice versa."
@@ -102,22 +103,27 @@ if node.parameters.load_data_id is None:
 n_avg = node.parameters.num_averages  # The number of averages
 
 flux_point = node.parameters.flux_point_joint_or_independent_or_pairwise  # 'independent' or 'joint' or 'pairwise'
+
 reset_coupler_bias = False
 time_offset = (qubit_pairs[0].qubit_control.resonator.operations['readout'].length+
                qubit_pairs[0].qubit_control.xy.operations['dressed_x180'].length)
 coupler_const_amp = qubit_pairs[0].coupler.operations['const'].amplitude
 coupler_idle_amp = qubit_pairs[0].coupler.decouple_offset
-V_stable_time = node.parameters.V_offset_stable_time
+V_stable_time = node.parameters.V_offset_stable_time+2
 strong_coupling_amp = node.parameters.strong_coupling_amp
 dcs = np.arange(
     node.parameters.V_offset_min,
     node.parameters.V_offset_max,
     node.parameters.V_offset_step)
-ts = np.arange(
+
+ts = np.round(np.geomspace(
     node.parameters.min_wait_time,
     node.parameters.max_wait_time,
-    node.parameters.step_wait_time)
-
+    node.parameters.total_time_step)).astype(int)
+AT_constnt_list=[]
+for qp in qubit_pairs:
+    AT_constnt = qp.qubit_control.xy.operations['dressed_x180'].amplitude* qp.qubit_control.xy.operations['dressed_x180'].length
+    AT_constnt_list.append(AT_constnt)
 with program() as coupler_distortion:
     n = declare(int)
     dc = declare(fixed)
@@ -126,6 +132,8 @@ with program() as coupler_distortion:
     flux_qubit = declare(float)
     comp_flux_qubit = declare(float)
     n_st = declare_stream()
+    new_amp=declare(fixed)
+    tt = declare(fixed)
     if node.parameters.use_state_discrimination:
         state_control = [declare(int) for _ in range(num_qubit_pairs)]
         state_target = [declare(int) for _ in range(num_qubit_pairs)]
@@ -154,22 +162,38 @@ with program() as coupler_distortion:
         wait(100)
         with for_(n, 0, n < n_avg, n + 1):
             save(n, n_st)  
-            with for_(*from_array(t,ts)):
-                with for_(*from_array(dc,dcs)):
-                    qp.coupler.play('const', amplitude_scale=dc/coupler_const_amp,duration=V_stable_time)
-                    align(qp.coupler.name,qp.qubit_control.xy.name)
-                    qp.coupler.play("const", amplitude_scale = (strong_coupling_amp-coupler_idle_amp)/coupler_const_amp, duration = t + time_offset//4 )
-                    wait(t,)
-                    qp.qubit_control.xy.play("dressed_x180")
-                    align(qp.qubit_control.xy.name,qp.qubit_control.resonator.name)
-                    
-                    if node.parameters.use_state_discrimination:
-                        readout_state(qp.qubit_control, state_control[i])
-                        save(state_control[i], state_st_control[i])
-                    else:
-                        qp.qubit_control.resonator.measure("readout", qua_vars=(I_control[i], Q_control[i]))
-                        save(I_control[i], I_st_control[i])
-                        save(Q_control[i], Q_st_control[i])
+            with for_each_(t,ts):
+                with if_(t > 50):
+                    with for_(*from_array(dc,dcs)):
+                        qp.coupler.play('const', amplitude_scale=dc/coupler_const_amp,duration=V_stable_time)
+                        align(qp.coupler.name,qp.qubit_control.xy.name)
+                        qp.coupler.play("const", amplitude_scale = (strong_coupling_amp-coupler_idle_amp)/coupler_const_amp, duration = t + time_offset//4 )
+                        wait(t,qp.qubit_control.xy.name)
+                        qp.qubit_control.xy.play("dressed_x180")
+                        align(qp.qubit_control.xy.name,qp.qubit_control.resonator.name)
+                        if node.parameters.use_state_discrimination:
+                            readout_state(qp.qubit_control, state_control[i])
+                            save(state_control[i], state_st_control[i])
+                        else:
+                            qp.qubit_control.resonator.measure("readout", qua_vars=(I_control[i], Q_control[i]))
+                            save(I_control[i], I_st_control[i])
+                            save(Q_control[i], Q_st_control[i])
+                with else_():
+                    with for_(*from_array(dc,dcs)):
+                        align(qp.coupler.name,qp.qubit_control.xy.name)
+                        qp.coupler.play('const', amplitude_scale=dc/coupler_const_amp,duration=V_stable_time)
+                        qp.coupler.play("const", amplitude_scale = (strong_coupling_amp-coupler_idle_amp)/coupler_const_amp, duration = t + time_offset//4 )
+                        wait(V_stable_time-11,qp.qubit_control.xy.name) # 
+                        
+                        qp.qubit_control.xy.play("dressed_x180",amplitude_scale=AT_constnt_list[i]/Cast.to_fixed(t),duration=t)
+                        align(qp.qubit_control.xy.name,qp.qubit_control.resonator.name)
+                        if node.parameters.use_state_discrimination:
+                            readout_state(qp.qubit_control, state_control[i])
+                            save(state_control[i], state_st_control[i])
+                        else:
+                            qp.qubit_control.resonator.measure("readout", qua_vars=(I_control[i], Q_control[i]))
+                            save(I_control[i], I_st_control[i])
+                            save(Q_control[i], Q_st_control[i])
 
     with stream_processing():
         n_st.save("n")
@@ -179,9 +203,10 @@ with program() as coupler_distortion:
             else:
                 I_st_control[i].buffer(len(dcs)).buffer(len(ts)).average().save(f"I_control{i + 1}")
                 Q_st_control[i].buffer(len(dcs)).buffer(len(ts)).average().save(f"Q_control{i + 1}")
+
 # %% {Simulate_or_execute}
 if node.parameters.simulate:
-    simulation_config = SimulationConfig(duration=10000)
+    simulation_config = SimulationConfig(duration=30000)
     job = qmm.simulate(config,coupler_distortion,simulation_config)
     samples = job.get_simulated_samples()
     waveform_report = job.get_simulated_waveform_report()
@@ -199,7 +224,6 @@ else:
 #%% {Data_fetching_and_dataset_creation}
 if not node.parameters.simulate:
     if node.parameters.load_data_id is None:
-        # Fetch the data from the OPX and convert it into a xarray with corresponding axes (from most inner to outer loop)
         ds = fetch_results_as_xarray(job.result_handles, qubit_pairs, {  "V_offset": dcs, "t_delay": ts})
     else:
         ds, machine = load_dataset(node.parameters.load_data_id)
@@ -212,8 +236,10 @@ if not node.parameters.simulate:
     for ax, qubit_pair in grid_iter(grid):
         if node.parameters.use_state_discrimination:
             ds.sel(qubit=qubit_pair['qubit']).state_control.plot(ax=ax)
+            ax.set_yscale('log')
         else:
             ds.sel(qubit=qubit_pair['qubit']).I_control.plot(ax=ax)
+            ax.set_yscale('log')
     plt.tight_layout()
     plt.show()
     node.results["figure_distortion"] = grid.fig
