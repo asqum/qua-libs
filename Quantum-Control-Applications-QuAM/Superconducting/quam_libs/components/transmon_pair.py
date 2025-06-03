@@ -6,13 +6,14 @@ from .transmon import Transmon
 from .tunable_coupler import TunableCoupler
 from .gates.two_qubit_gates import TwoQubitGate
 from qm.qua import align
+from quam.components import QubitPair
 
 
 __all__ = ["TransmonPair"]
 
 
 @quam_dataclass
-class TransmonPair(QuamComponent):
+class TransmonPair(QubitPair):
     id: Union[int, str]
     qubit_control: Transmon = None
     qubit_target: Transmon = None
