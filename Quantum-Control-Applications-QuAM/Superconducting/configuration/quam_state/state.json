@@ -2,6 +2,31 @@
     "qubits": {
         "q1": {
             "id": "q1",
+            "macros": {
+                "x": {
+                    "pulse": "x180",
+                    "__class__": "quam.components.macro.qubit_macros.PulseMacro"
+                },
+                "rz": {
+                    "__class__": "quam_libs.components.macros.virtual_z_macro.VirtualZMacro"
+                },
+                "sx": {
+                    "pulse": "x90",
+                    "__class__": "quam.components.macro.qubit_macros.PulseMacro"
+                },
+                "measure": {
+                    "__class__": "quam_libs.components.macros.measure_macro.MeasureMacro"
+                },
+                "reset": {
+                    "__class__": "quam_libs.components.macros.reset_macro.ResetMacro"
+                },
+                "delay": {
+                    "__class__": "quam_libs.components.macros.delay_macro.DelayMacro"
+                },
+                "id": {
+                    "__class__": "quam_libs.components.macros.id_macro.IdMacro"
+                }
+            },
             "xy": {
                 "operations": {
                     "x180_DragCosine": {
@@ -281,6 +306,31 @@
         },
         "q2": {
             "id": "q2",
+            "macros": {
+                "x": {
+                    "pulse": "x180",
+                    "__class__": "quam.components.macro.qubit_macros.PulseMacro"
+                },
+                "rz": {
+                    "__class__": "quam_libs.components.macros.virtual_z_macro.VirtualZMacro"
+                },
+                "sx": {
+                    "pulse": "x90",
+                    "__class__": "quam.components.macro.qubit_macros.PulseMacro"
+                },
+                "measure": {
+                    "__class__": "quam_libs.components.macros.measure_macro.MeasureMacro"
+                },
+                "reset": {
+                    "__class__": "quam_libs.components.macros.reset_macro.ResetMacro"
+                },
+                "delay": {
+                    "__class__": "quam_libs.components.macros.delay_macro.DelayMacro"
+                },
+                "id": {
+                    "__class__": "quam_libs.components.macros.id_macro.IdMacro"
+                }
+            },
             "xy": {
                 "operations": {
                     "x180_DragCosine": {
@@ -524,6 +574,31 @@
         },
         "q3": {
             "id": "q3",
+            "macros": {
+                "x": {
+                    "pulse": "x180",
+                    "__class__": "quam.components.macro.qubit_macros.PulseMacro"
+                },
+                "rz": {
+                    "__class__": "quam_libs.components.macros.virtual_z_macro.VirtualZMacro"
+                },
+                "sx": {
+                    "pulse": "x90",
+                    "__class__": "quam.components.macro.qubit_macros.PulseMacro"
+                },
+                "measure": {
+                    "__class__": "quam_libs.components.macros.measure_macro.MeasureMacro"
+                },
+                "reset": {
+                    "__class__": "quam_libs.components.macros.reset_macro.ResetMacro"
+                },
+                "delay": {
+                    "__class__": "quam_libs.components.macros.delay_macro.DelayMacro"
+                },
+                "id": {
+                    "__class__": "quam_libs.components.macros.id_macro.IdMacro"
+                }
+            },
             "xy": {
                 "operations": {
                     "x180_DragCosine": {
@@ -808,6 +883,31 @@
         },
         "q4": {
             "id": "q4",
+            "macros": {
+                "x": {
+                    "pulse": "x180",
+                    "__class__": "quam.components.macro.qubit_macros.PulseMacro"
+                },
+                "rz": {
+                    "__class__": "quam_libs.components.macros.virtual_z_macro.VirtualZMacro"
+                },
+                "sx": {
+                    "pulse": "x90",
+                    "__class__": "quam.components.macro.qubit_macros.PulseMacro"
+                },
+                "measure": {
+                    "__class__": "quam_libs.components.macros.measure_macro.MeasureMacro"
+                },
+                "reset": {
+                    "__class__": "quam_libs.components.macros.reset_macro.ResetMacro"
+                },
+                "delay": {
+                    "__class__": "quam_libs.components.macros.delay_macro.DelayMacro"
+                },
+                "id": {
+                    "__class__": "quam_libs.components.macros.id_macro.IdMacro"
+                }
+            },
             "xy": {
                 "operations": {
                     "x180_DragCosine": {
@@ -1051,6 +1151,31 @@
         },
         "q5": {
             "id": "q5",
+            "macros": {
+                "x": {
+                    "pulse": "x180",
+                    "__class__": "quam.components.macro.qubit_macros.PulseMacro"
+                },
+                "rz": {
+                    "__class__": "quam_libs.components.macros.virtual_z_macro.VirtualZMacro"
+                },
+                "sx": {
+                    "pulse": "x90",
+                    "__class__": "quam.components.macro.qubit_macros.PulseMacro"
+                },
+                "measure": {
+                    "__class__": "quam_libs.components.macros.measure_macro.MeasureMacro"
+                },
+                "reset": {
+                    "__class__": "quam_libs.components.macros.reset_macro.ResetMacro"
+                },
+                "delay": {
+                    "__class__": "quam_libs.components.macros.delay_macro.DelayMacro"
+                },
+                "id": {
+                    "__class__": "quam_libs.components.macros.id_macro.IdMacro"
+                }
+            },
             "xy": {
                 "operations": {
                     "x180_DragCosine": {
@@ -1335,7 +1460,11 @@
             "macros": {
                 "Cz": {
                     "cz_gate": "#../../gates/Cz",
-                    "__class__": "quam_libs.components.macros.cz_macro.CzMacro"
+                    "__class__": "quam_libs.components.macros.cz_macro.CZMacro"
+                },
+                "cz": {
+                    "cz_gate": "#../../gates/Cz",
+                    "__class__": "quam_libs.components.macros.cz_macro.CZMacro"
                 }
             },
             "qubit_control": "#/wiring/qubit_pairs/q1-2/c/control_qubit",
@@ -1684,6 +1813,12 @@
         },
         "coupler_q2_q3": {
             "id": "coupler_q2_q3",
+            "macros": {
+                "cz": {
+                    "cz_gate": "#../../gates/Cz",
+                    "__class__": "quam_libs.components.macros.cz_macro.CZMacro"
+                }
+            },
             "qubit_control": "#/wiring/qubit_pairs/q2-3/c/control_qubit",
             "qubit_target": "#/wiring/qubit_pairs/q2-3/c/target_qubit",
             "coupler": {
@@ -2190,6 +2325,12 @@
         },
         "coupler_q3_q4": {
             "id": "coupler_q3_q4",
+            "macros": {
+                "cz": {
+                    "cz_gate": "#../../gates/Cz",
+                    "__class__": "quam_libs.components.macros.cz_macro.CZMacro"
+                }
+            },
             "qubit_control": "#/wiring/qubit_pairs/q3-4/c/control_qubit",
             "qubit_target": "#/wiring/qubit_pairs/q3-4/c/target_qubit",
             "coupler": {
@@ -2576,6 +2717,12 @@
         },
         "coupler_q4_q5": {
             "id": "coupler_q4_q5",
+            "macros": {
+                "cz": {
+                    "cz_gate": "#../../gates/Cz",
+                    "__class__": "quam_libs.components.macros.cz_macro.CZMacro"
+                }
+            },
             "qubit_control": "#/wiring/qubit_pairs/q4-5/c/control_qubit",
             "qubit_target": "#/wiring/qubit_pairs/q4-5/c/target_qubit",
             "coupler": {

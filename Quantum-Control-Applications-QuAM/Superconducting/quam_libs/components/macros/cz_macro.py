@@ -4,10 +4,10 @@ from quam.components.macro import QubitPairMacro
 from quam_libs.components.gates import CZGate
 
 
-__all__ = ["CzMacro"]
+__all__ = ["CZMacro"]
 
 @quam_dataclass
-class CzMacro(QubitPairMacro):
+class CZMacro(QubitPairMacro):
     cz_gate: CZGate
 
     def apply(self, **kwargs):
