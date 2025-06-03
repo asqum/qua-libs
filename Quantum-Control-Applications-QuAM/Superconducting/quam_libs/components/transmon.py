@@ -1,4 +1,5 @@
 from quam.core import quam_dataclass
+from quam.components import Qubit
 from quam.components.channels import IQChannel, Pulse
 from quam import QuamComponent
 from .flux_line import FluxLine
@@ -14,7 +15,7 @@ __all__ = ["Transmon"]
 
 
 @quam_dataclass
-class Transmon(QuamComponent):
+class Transmon(Qubit):
     """
     Example QuAM component for a transmon qubit.
 

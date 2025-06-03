@@ -2,6 +2,31 @@
     "qubits": {
         "q1": {
             "id": "q1",
+            "macros": {
+                "x": {
+                    "pulse": "x180",
+                    "__class__": "quam.components.macro.qubit_macros.PulseMacro"
+                },
+                "rz": {
+                    "__class__": "quam_libs.components.macros.virtual_z_macro.VirtualZMacro"
+                },
+                "sx": {
+                    "pulse": "x90",
+                    "__class__": "quam.components.macro.qubit_macros.PulseMacro"
+                },
+                "measure": {
+                    "__class__": "quam_libs.components.macros.measure_macro.MeasureMacro"
+                },
+                "reset": {
+                    "__class__": "quam_libs.components.macros.reset_macro.ResetMacro"
+                },
+                "delay": {
+                    "__class__": "quam_libs.components.macros.delay_macro.DelayMacro"
+                },
+                "id": {
+                    "__class__": "quam_libs.components.macros.id_macro.IdMacro"
+                }
+            },
             "xy": {
                 "operations": {
                     "x180_DragCosine": {
@@ -198,7 +223,8 @@
                 ],
                 "independent_offset": 0.12188185683987682,
                 "joint_offset": "#./independent_offset",
-                "min_offset": "#./independent_offset"
+                "min_offset": "#./independent_offset",
+                "__class__": "quam_libs.components.flux_line.FluxLine"
             },
             "resonator": {
                 "depletion_time": 1000,
@@ -275,10 +301,36 @@
             "phi0_voltage": 0.6340301709826263,
             "GEF_frequency_shift": -4800000,
             "chi": -3100000.0,
-            "grid_location": "0,0"
+            "grid_location": "0,0",
+            "__class__": "quam_libs.components.transmon.Transmon"
         },
         "q2": {
             "id": "q2",
+            "macros": {
+                "x": {
+                    "pulse": "x180",
+                    "__class__": "quam.components.macro.qubit_macros.PulseMacro"
+                },
+                "rz": {
+                    "__class__": "quam_libs.components.macros.virtual_z_macro.VirtualZMacro"
+                },
+                "sx": {
+                    "pulse": "x90",
+                    "__class__": "quam.components.macro.qubit_macros.PulseMacro"
+                },
+                "measure": {
+                    "__class__": "quam_libs.components.macros.measure_macro.MeasureMacro"
+                },
+                "reset": {
+                    "__class__": "quam_libs.components.macros.reset_macro.ResetMacro"
+                },
+                "delay": {
+                    "__class__": "quam_libs.components.macros.delay_macro.DelayMacro"
+                },
+                "id": {
+                    "__class__": "quam_libs.components.macros.id_macro.IdMacro"
+                }
+            },
             "xy": {
                 "operations": {
                     "x180_DragCosine": {
@@ -439,7 +491,8 @@
                 "opx_output": "#/wiring/qubits/q2/z/opx_output",
                 "independent_offset": 0.12505899308843357,
                 "joint_offset": "#./independent_offset",
-                "min_offset": "#./independent_offset"
+                "min_offset": "#./independent_offset",
+                "__class__": "quam_libs.components.flux_line.FluxLine"
             },
             "resonator": {
                 "depletion_time": 1000,
@@ -516,10 +569,36 @@
             "phi0_voltage": 0.5488651392674275,
             "GEF_frequency_shift": -2250000,
             "chi": -1600000.0,
-            "grid_location": "1,0"
+            "grid_location": "1,0",
+            "__class__": "quam_libs.components.transmon.Transmon"
         },
         "q3": {
             "id": "q3",
+            "macros": {
+                "x": {
+                    "pulse": "x180",
+                    "__class__": "quam.components.macro.qubit_macros.PulseMacro"
+                },
+                "rz": {
+                    "__class__": "quam_libs.components.macros.virtual_z_macro.VirtualZMacro"
+                },
+                "sx": {
+                    "pulse": "x90",
+                    "__class__": "quam.components.macro.qubit_macros.PulseMacro"
+                },
+                "measure": {
+                    "__class__": "quam_libs.components.macros.measure_macro.MeasureMacro"
+                },
+                "reset": {
+                    "__class__": "quam_libs.components.macros.reset_macro.ResetMacro"
+                },
+                "delay": {
+                    "__class__": "quam_libs.components.macros.delay_macro.DelayMacro"
+                },
+                "id": {
+                    "__class__": "quam_libs.components.macros.id_macro.IdMacro"
+                }
+            },
             "xy": {
                 "operations": {
                     "x180_DragCosine": {
@@ -721,7 +800,8 @@
                 ],
                 "independent_offset": 0.09251480237587392,
                 "joint_offset": "#./independent_offset",
-                "min_offset": "#./independent_offset"
+                "min_offset": "#./independent_offset",
+                "__class__": "quam_libs.components.flux_line.FluxLine"
             },
             "resonator": {
                 "depletion_time": 1000,
@@ -798,10 +878,36 @@
             "phi0_voltage": 0.5819598025297658,
             "GEF_frequency_shift": -250000,
             "chi": -3150000.0,
-            "grid_location": "2,0"
+            "grid_location": "2,0",
+            "__class__": "quam_libs.components.transmon.Transmon"
         },
         "q4": {
             "id": "q4",
+            "macros": {
+                "x": {
+                    "pulse": "x180",
+                    "__class__": "quam.components.macro.qubit_macros.PulseMacro"
+                },
+                "rz": {
+                    "__class__": "quam_libs.components.macros.virtual_z_macro.VirtualZMacro"
+                },
+                "sx": {
+                    "pulse": "x90",
+                    "__class__": "quam.components.macro.qubit_macros.PulseMacro"
+                },
+                "measure": {
+                    "__class__": "quam_libs.components.macros.measure_macro.MeasureMacro"
+                },
+                "reset": {
+                    "__class__": "quam_libs.components.macros.reset_macro.ResetMacro"
+                },
+                "delay": {
+                    "__class__": "quam_libs.components.macros.delay_macro.DelayMacro"
+                },
+                "id": {
+                    "__class__": "quam_libs.components.macros.id_macro.IdMacro"
+                }
+            },
             "xy": {
                 "operations": {
                     "x180_DragCosine": {
@@ -962,7 +1068,8 @@
                 "opx_output": "#/wiring/qubits/q4/z/opx_output",
                 "independent_offset": 0.1135297239791084,
                 "joint_offset": "#./independent_offset",
-                "min_offset": "#./independent_offset"
+                "min_offset": "#./independent_offset",
+                "__class__": "quam_libs.components.flux_line.FluxLine"
             },
             "resonator": {
                 "depletion_time": 1000,
@@ -1039,10 +1146,36 @@
             "phi0_voltage": 0.6166954062407823,
             "GEF_frequency_shift": -1000000,
             "chi": -1400000.0,
-            "grid_location": "3,0"
+            "grid_location": "3,0",
+            "__class__": "quam_libs.components.transmon.Transmon"
         },
         "q5": {
             "id": "q5",
+            "macros": {
+                "x": {
+                    "pulse": "x180",
+                    "__class__": "quam.components.macro.qubit_macros.PulseMacro"
+                },
+                "rz": {
+                    "__class__": "quam_libs.components.macros.virtual_z_macro.VirtualZMacro"
+                },
+                "sx": {
+                    "pulse": "x90",
+                    "__class__": "quam.components.macro.qubit_macros.PulseMacro"
+                },
+                "measure": {
+                    "__class__": "quam_libs.components.macros.measure_macro.MeasureMacro"
+                },
+                "reset": {
+                    "__class__": "quam_libs.components.macros.reset_macro.ResetMacro"
+                },
+                "delay": {
+                    "__class__": "quam_libs.components.macros.delay_macro.DelayMacro"
+                },
+                "id": {
+                    "__class__": "quam_libs.components.macros.id_macro.IdMacro"
+                }
+            },
             "xy": {
                 "operations": {
                     "x180_DragCosine": {
@@ -1239,7 +1372,8 @@
                 ],
                 "independent_offset": 0.11280221415397873,
                 "joint_offset": "#./independent_offset",
-                "min_offset": "#./independent_offset"
+                "min_offset": "#./independent_offset",
+                "__class__": "quam_libs.components.flux_line.FluxLine"
             },
             "resonator": {
                 "depletion_time": 1000,
@@ -1316,12 +1450,23 @@
             "phi0_voltage": 0.5938308692794337,
             "GEF_frequency_shift": -1450000,
             "chi": -1800000.0,
-            "grid_location": "4,0"
+            "grid_location": "4,0",
+            "__class__": "quam_libs.components.transmon.Transmon"
         }
     },
     "qubit_pairs": {
         "coupler_q1_q2": {
             "id": "coupler_q1_q2",
+            "macros": {
+                "Cz": {
+                    "cz_gate": "#../../gates/Cz",
+                    "__class__": "quam_libs.components.macros.cz_macro.CZMacro"
+                },
+                "cz": {
+                    "cz_gate": "#../../gates/Cz",
+                    "__class__": "quam_libs.components.macros.cz_macro.CZMacro"
+                }
+            },
             "qubit_control": "#/wiring/qubit_pairs/q1-2/c/control_qubit",
             "qubit_target": "#/wiring/qubit_pairs/q1-2/c/target_qubit",
             "coupler": {
@@ -1344,7 +1489,8 @@
                 },
                 "id": "coupler_q1_q2",
                 "opx_output": "#/wiring/qubit_pairs/q1-2/c/opx_output",
-                "decouple_offset": 0.128
+                "decouple_offset": 0.128,
+                "__class__": "quam_libs.components.tunable_coupler.TunableCoupler"
             },
             "gates": {
                 "SWAP_Coupler": {
@@ -1662,10 +1808,17 @@
                 "CZ_coupler_flux": 0.1641,
                 "CZ_qubit_flux": 0.071,
                 "CZ_time": 90
-            }
+            },
+            "__class__": "quam_libs.components.transmon_pair.TransmonPair"
         },
         "coupler_q2_q3": {
             "id": "coupler_q2_q3",
+            "macros": {
+                "cz": {
+                    "cz_gate": "#../../gates/Cz",
+                    "__class__": "quam_libs.components.macros.cz_macro.CZMacro"
+                }
+            },
             "qubit_control": "#/wiring/qubit_pairs/q2-3/c/control_qubit",
             "qubit_target": "#/wiring/qubit_pairs/q2-3/c/target_qubit",
             "coupler": {
@@ -1688,7 +1841,8 @@
                 },
                 "id": "coupler_q2_q3",
                 "opx_output": "#/wiring/qubit_pairs/q2-3/c/opx_output",
-                "decouple_offset": 0.14887
+                "decouple_offset": 0.14887,
+                "__class__": "quam_libs.components.tunable_coupler.TunableCoupler"
             },
             "gates": {
                 "SWAP_Coupler": {
@@ -2166,10 +2320,17 @@
                 "CZ_coupler_flux": 0.1795,
                 "CZ_qubit_flux": 0.0785,
                 "CZ_time": 90
-            }
+            },
+            "__class__": "quam_libs.components.transmon_pair.TransmonPair"
         },
         "coupler_q3_q4": {
             "id": "coupler_q3_q4",
+            "macros": {
+                "cz": {
+                    "cz_gate": "#../../gates/Cz",
+                    "__class__": "quam_libs.components.macros.cz_macro.CZMacro"
+                }
+            },
             "qubit_control": "#/wiring/qubit_pairs/q3-4/c/control_qubit",
             "qubit_target": "#/wiring/qubit_pairs/q3-4/c/target_qubit",
             "coupler": {
@@ -2192,7 +2353,8 @@
                 },
                 "id": "coupler_q3_q4",
                 "opx_output": "#/wiring/qubit_pairs/q3-4/c/opx_output",
-                "decouple_offset": 0.1266
+                "decouple_offset": 0.1266,
+                "__class__": "quam_libs.components.tunable_coupler.TunableCoupler"
             },
             "gates": {
                 "SWAP_Coupler": {
@@ -2550,10 +2712,17 @@
                 "CZ_coupler_flux": 0.158,
                 "CZ_qubit_flux": 0.1277,
                 "CZ_time": 90
-            }
+            },
+            "__class__": "quam_libs.components.transmon_pair.TransmonPair"
         },
         "coupler_q4_q5": {
             "id": "coupler_q4_q5",
+            "macros": {
+                "cz": {
+                    "cz_gate": "#../../gates/Cz",
+                    "__class__": "quam_libs.components.macros.cz_macro.CZMacro"
+                }
+            },
             "qubit_control": "#/wiring/qubit_pairs/q4-5/c/control_qubit",
             "qubit_target": "#/wiring/qubit_pairs/q4-5/c/target_qubit",
             "coupler": {
@@ -2576,7 +2745,8 @@
                 },
                 "id": "coupler_q4_q5",
                 "opx_output": "#/wiring/qubit_pairs/q4-5/c/opx_output",
-                "decouple_offset": 0.1276
+                "decouple_offset": 0.1276,
+                "__class__": "quam_libs.components.tunable_coupler.TunableCoupler"
             },
             "detuning": 0.11638333412216151,
             "extras": {
@@ -3312,7 +3482,8 @@
                 "CZ_coupler_flux": 0.1679,
                 "CZ_qubit_flux": 0.0685,
                 "CZ_time": 60
-            }
+            },
+            "__class__": "quam_libs.components.transmon_pair.TransmonPair"
         }
     },
     "active_qubit_names": [
@@ -3496,7 +3667,8 @@
                     }
                 }
             }
-        }
+        },
+        "__class__": "quam.components.ports.ports_containers.FEMPortsContainer"
     },
     "__class__": "quam_libs.components.quam_root.FEMQuAM"
 }
