@@ -6,7 +6,7 @@ from quam.components.macro import QubitMacro
 from quam.components.pulses import ReadoutPulse, Pulse
 from quam_libs.components import ReadoutResonatorIQ
 from quam_libs.components.macros.get_pulse_name import get_pulse_name
-
+from quam.utils.qua_types import QuaVariableBool
 __all__ = ["MeasureMacro"]
 
 
@@ -14,8 +14,8 @@ __all__ = ["MeasureMacro"]
 class MeasureMacro(QubitMacro):
     pulse: Union[ReadoutPulse, str] = "readout"
 
-    def apply(self, **kwargs) -> QuaVariableType:
-        state: QuaVariableType = kwargs.get("state", declare(bool))
+    def apply(self, **kwargs) -> QuaVariableBool:
+        state: QuaVariableBool = kwargs.get("state", declare(bool))
         qua_vars = kwargs.get("qua_vars", (declare(fixed), declare(fixed)))
         pulse: ReadoutPulse = (
             self.pulse if isinstance(self.pulse, Pulse) else self.qubit.get_pulse(self.pulse)
