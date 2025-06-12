@@ -68,8 +68,8 @@ class Parameters(NodeParameters):
     load_data_id: Optional[int] = None
     
     # General:
-    coupler_flux_min : float = 0.100 #relative to the coupler set point
-    coupler_flux_max : float = 0.190 #relative to the coupler set point
+    coupler_flux_min : float = -0.200 #0.100, relative to the coupler set point
+    coupler_flux_max : float = 0.190 #0.190, relative to the coupler set point
 
     # q1_q2:
     # q2_q3:
