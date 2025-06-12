@@ -68,8 +68,8 @@ class Parameters(NodeParameters):
     load_data_id: Optional[int] = None
 
     # q1_q2: 
-    coupler_flux_min : float = 0.145 # relative to the coupler set point 
-    coupler_flux_max : float = 0.175 # relative to the coupler set point
+    coupler_flux_min : float = 0 #0.145, relative to the coupler set point 
+    coupler_flux_max : float = 0.175 #0.175, relative to the coupler set point
     # q2_q3:
     # coupler_flux_min : float = 0.150 #relative to the coupler set point
     # coupler_flux_max : float = 0.200 #relative to the coupler set point
@@ -77,11 +77,11 @@ class Parameters(NodeParameters):
     # coupler_flux_min : float = 0.135 #relative to the coupler set point
     # coupler_flux_max : float = 0.170 #relative to the coupler set point
 
-    coupler_flux_step : float = 0.0002
+    coupler_flux_step : float = 0.0004 #0.0002
 
     # q1_q2:
-    qubit_flux_min : float = -0.090 # relative to the qubit pair detuning
-    qubit_flux_max : float = -0.055 # relative to the qubit pair detuning
+    qubit_flux_min : float = -0.080 #-0.090 relative to the qubit pair detuning
+    qubit_flux_max : float = -0.065 #-0.055 relative to the qubit pair detuning
     # q2_q3:
     # qubit_flux_min : float = -0.070 # relative to the qubit pair detuning
     # qubit_flux_max : float = -0.045 # relative to the qubit pair detuning
@@ -89,9 +89,9 @@ class Parameters(NodeParameters):
     # qubit_flux_min : float = -0.055 # relative to the qubit pair detuning
     # qubit_flux_max : float = -0.045 # relative to the qubit pair detuning
     
-    qubit_flux_step : float = 0.0002 
+    qubit_flux_step : float = 0.0004 #0.0002
     use_state_discrimination: bool = True
-    pulse_duration_ns: int = 90
+    pulse_duration_ns: int = 210 #90, 150, 250, 190, 210
     num_frames : int = 10#20
     
     
@@ -299,7 +299,8 @@ if not node.parameters.simulate:
 
     # %%
     ## HARD CODED FROM EXPERIMENT
-    node.results["results"]["coupler_q1_q2"] = {"flux_coupler_Cz": 0.1641, "flux_qubit_Cz": 0.0710}
+    node.results["results"]["coupler_q1_q2"] = {"flux_coupler_Cz": 0.1630, "flux_qubit_Cz": 0.0719} #zone-1
+    node.results["results"]["coupler_q1_q2"] = {"flux_coupler_Cz": 0.1630, "flux_qubit_Cz": 0.0719} #zone-2
     node.results["results"]["coupler_q2_q3"] = {"flux_coupler_Cz": 0.1795, "flux_qubit_Cz": 0.0785}
     node.results["results"]["coupler_q3_q4"] = {"flux_coupler_Cz": 0.1580, "flux_qubit_Cz": 0.1277}
     node.results["results"]["coupler_q4_q5"] = {"flux_coupler_Cz": 0.235, "flux_qubit_Cz": 0.055}

@@ -55,13 +55,13 @@ qubit_pair_indexes = [1]  # The indexes of the qubit pair in the QuAM
 class Parameters(NodeParameters):
 
     qubit_pairs: Optional[List[str]] = ["coupler_q%s_q%s"%(i,i+1) for i in qubit_pair_indexes]
-    num_averages: int = 900
-    max_time_in_ns: int = 1200 #200
+    num_averages: int = 900 #900
+    max_time_in_ns: int = 300 #200, 1200
     flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
     reset_type: Literal['active', 'thermal'] = "active"
     simulate: bool = False
     timeout: int = 100
-    amp_range : float = 0.2 #0.1
+    amp_range : float = 0.12 #0.1, 0.2
     amp_step : float = 0.002
     load_data_id: Optional[int] = None  
 
