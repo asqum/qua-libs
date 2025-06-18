@@ -1,6 +1,6 @@
 {
     "network": {
-        "host": "qum.phys.sinica.edu.tw",
+        "host": "10.21.19.201",
         "port": 9501,
         "cluster_name": "QPX1000_1",
         "octave_ips": [],
