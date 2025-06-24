@@ -31,9 +31,9 @@ with program() as prog:
 
         # qubits[2].xy.play('saturation')
         # qubits[0].z.play('const')
-        qubits[3].resonator.play('readout')
-        wait(200)
-        align()
+        qubits[2].resonator.play('readout')
+        # wait(200)
+        # align()
 
 qm = qmm.open_qm(config)
 job = qm.execute(prog)
