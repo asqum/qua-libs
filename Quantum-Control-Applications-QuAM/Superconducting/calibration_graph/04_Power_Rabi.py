@@ -41,13 +41,13 @@ import numpy as np
 # %% {Node_parameters}
 class Parameters(NodeParameters):
 
-    qubits: Optional[List[str]] = None
-    num_averages: int = 15
+    qubits: Optional[List[str]] = ["q5"] #None
+    num_averages: int = 30
     operation_x180_or_any_90: Literal["x180", "x90", "-x90", "y90", "-y90"] = "x180"
-    min_amp_factor: float = 0.001
-    max_amp_factor: float = 2.0
-    amp_factor_step: float = 0.005#005
-    max_number_rabi_pulses_per_sweep: int = 40 #1
+    min_amp_factor: float = 0.4 #0.001
+    max_amp_factor: float = 1.6 #2.0
+    amp_factor_step: float = 0.004 #005
+    max_number_rabi_pulses_per_sweep: int = 40 #1, 40
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
     reset_type_thermal_or_active: Literal["thermal", "active"] = "thermal"
     state_discrimination: bool = False

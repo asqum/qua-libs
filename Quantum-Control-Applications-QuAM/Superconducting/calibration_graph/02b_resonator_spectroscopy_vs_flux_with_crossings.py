@@ -60,7 +60,7 @@ class Parameters(NodeParameters):
     timeout: int = 100
     load_data_id: Optional[int] = 144
 
-node = QualibrationNode(name="02b_Resonator_Spectroscopy_vs_Flux", parameters=Parameters())
+node = QualibrationNode(name="02b_Resonator_Spectroscopy_vs_Flux_with_crossings", parameters=Parameters())
 
 # %% {Initialize_QuAM_and_QOP}
 # Class containing tools to help handling units and conversions.
