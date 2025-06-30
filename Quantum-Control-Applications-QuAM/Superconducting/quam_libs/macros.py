@@ -6,6 +6,7 @@ import warnings
 from qm.qua import *
 from quam_libs.components import QuAM
 from quam_libs.components import Transmon
+from quam.utils.qua_types import QuaVariable
 
 __all__ = [
     "qua_declaration",
@@ -103,7 +104,7 @@ def readout_state(qubit, state, pulse_name: str = "readout", threshold: float = 
 
 
 def readout_state_gef(
-    qubit: Transmon, state: QuaVariableType, pulse_name: str = "readout", save_qua_var: StreamType = None
+    qubit: Transmon, state: QuaVariable, pulse_name: str = "readout", save_qua_var: StreamType = None
 ):
     I = declare(fixed)
     Q = declare(fixed)

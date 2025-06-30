@@ -48,14 +48,14 @@ import numpy as np
 class Parameters(NodeParameters):
 
     qubits: Optional[List[str]] = ["q1"]
-    num_averages: int = 500
+    num_averages: int = 300
     operation: str = "saturation"
-    operation_amplitude_factor: Optional[float] = 0.9 #0.004
+    operation_amplitude_factor: Optional[float] = 0.4 #0.004
     operation_len_in_ns: Optional[int] = None
-    frequency_span_in_mhz: float = 400 #200
-    frequency_step_in_mhz: float = 0.5 #0.25
+    frequency_span_in_mhz: float = 300 #200
+    frequency_step_in_mhz: float = 0.25 #0.25
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
-    target_peak_width: Optional[float] = 1e6
+    target_peak_width: Optional[float] = 1e6 #1e6
     arbitrary_flux_bias: Optional[float] = None
     arbitrary_qubit_frequency_in_ghz: Optional[float] = None
     simulate: bool = False
