@@ -12,6 +12,7 @@ class ShadowConfig:
         
     """
     shadow_size: int
+    shots_per_snapshot: int
     input_state_prep_macro: Callable[[Any], None]
     input_state_circuit: Callable[[Any], QuantumCircuit]
     measurement_basis: Union[str, Dict[int, QUAGate]]
