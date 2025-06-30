@@ -60,6 +60,7 @@ class ClassicalShadow:
             r = Random(seed=self.config.seed)
             i = declare(int)
             j = declare(int)
+            shot = declare(int)
             
             self.machine.apply_all_flux_to_min()
             self.machine.apply_all_couplers_to_min()
@@ -71,48 +72,48 @@ class ClassicalShadow:
             with for_(i, 0, i < self.config.shadow_size, i + 1):
                 # Possible wait time before the experiment
                 # wait(...)
-                
                 # Sample random basis (assumed to be local measurements)
                 with for_(j, 0, j < n_qubits, j + 1):
                     assign(random_basis[j], r.rand_int(random_gates))
                     save(random_basis[j], random_basis_stream)
-                    
-                # Prepare state
-                if self.config.input_state_prep_macro_kwargs is not None:
-                    self.config.input_state_prep_macro(**self.config.input_state_prep_macro_kwargs)
-                else:
-                    self.config.input_state_prep_macro()
-                
-                # Readout
-                for q, qubit, in enumerate(self.config.qubits):
-                    with switch_(random_basis[q], unsafe=True):
-                        # Apply the random basis rotation
-                        for k in range(random_gates):
-                            with case_(k):
-                                self.config.measurement_basis[k].gate_macro(qubit)
-                    qubit.align()
-                    
 
-                    # Play the readout on the other resonator to measure in the same condition as when optimizing readout
-                    for other_qubit in self.config.readout_qubits:
-                        if other_qubit.resonator != qubit.resonator:
-                            other_qubit.resonator.play("readout")
-                    qubit.resonator.measure(self.config.readout_pulse_name,
-                                            qua_vars=(I[q], Q[q]))
-                    # State Estimation: returned as integer
-                    assign(state[q], I[q] > ge_thresholds[q])
-                    assign(state_int, state_int + Cast.to_int(state[q]) << q)
-                    
-                    reset_qubit(self.config.reset_method,
-                                qubit,
-                                threshold=ge_thresholds[q],
-                                **self.config.reset_kwargs)
-                save(state_int, state_int_stream)
-                assign(state_int, 0)
+                with for_(shot, 0, shot < self.config.shots_per_snapshot, shot + 1):
+                    # Prepare state
+                    if self.config.input_state_prep_macro_kwargs is not None:
+                        self.config.input_state_prep_macro(**self.config.input_state_prep_macro_kwargs)
+                    else:
+                        self.config.input_state_prep_macro()
+
+                    # Readout
+                    for q, qubit, in enumerate(self.config.qubits):
+                        with switch_(random_basis[q], unsafe=True):
+                            # Apply the random basis rotation
+                            for k in range(random_gates):
+                                with case_(k):
+                                    self.config.measurement_basis[k].gate_macro(qubit)
+                        qubit.align()
+
+
+                        # Play the readout on the other resonator to measure in the same condition as when optimizing readout
+                        for other_qubit in self.config.readout_qubits:
+                            if other_qubit.resonator != qubit.resonator:
+                                other_qubit.resonator.play("readout")
+                        qubit.resonator.measure(self.config.readout_pulse_name,
+                                                qua_vars=(I[q], Q[q]))
+                        # State Estimation: returned as integer
+                        assign(state[q], I[q] > ge_thresholds[q])
+                        assign(state_int, state_int + Cast.to_int(state[q]) << q)
+
+                        reset_qubit(self.config.reset_method,
+                                    qubit,
+                                    threshold=ge_thresholds[q],
+                                    **self.config.reset_kwargs)
+                    save(state_int, state_int_stream)
+                    assign(state_int, 0)
                 
             with stream_processing():
                 random_basis_stream.buffer(n_qubits).save_all("random_basis")
-                state_int_stream.save_all("state_int")
+                state_int_stream.buffer(self.config.shots_per_snapshot).save_all("state_int")
         
         return cs_prog
     
@@ -187,8 +188,16 @@ class ClassicalShadowJob:
         """
         Get the result of the job.
         """
-        state_int = self._result_handles["state_int"].fetch_all()['value']
-        bitstrings = [binary(state_int_, self.config.n_qubits) for state_int_ in state_int]
+        state_ints = self._result_handles["state_int"].fetch_all()['value']
+        bitstrings = []
+        for i, state_int in enumerate(state_ints):
+            # Count all occurences of each bitstring and build a dictionary of counted bitstrings
+            counts = {binary(i, self.config.n_qubits): 0 for i in range(self.config.dim)}
+            for shot in state_int:
+                bitstring = binary(state_int[shot], self.config.n_qubits)
+                counts[bitstring] += 1
+            bitstrings.append(counts)
+
         return [(bitstring, self._gate_indices[i]) for i, bitstring in enumerate(bitstrings)]
     
     
