@@ -193,8 +193,8 @@ class ClassicalShadowJob:
         for i, state_int in enumerate(state_ints):
             # Count all occurences of each bitstring and build a dictionary of counted bitstrings
             counts = {binary(i, self.config.n_qubits): 0 for i in range(self.config.dim)}
-            for shot in state_int:
-                bitstring = binary(state_int[shot], self.config.n_qubits)
+            for j in range(len(state_int)):
+                bitstring = binary(state_int[j], self.config.n_qubits)
                 counts[bitstring] += 1
             bitstrings.append(counts)
 
