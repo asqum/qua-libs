@@ -3,6 +3,7 @@ from quam_libs.experiments.classical_shadow import ClassicalShadow, ShadowConfig
 from quam_libs.experiments.two_qubit_xeb.qua_gate import QUAGate
 from qualang_tools.units import unit
 from qiskit.circuit import QuantumCircuit
+from qm import generate_qua_script
 
 u = unit(coerce_to_integer=True)
 machine = QuAM.load()
@@ -23,8 +24,9 @@ def z_macro(qubit: Transmon):
     
 def input_state_macro(*, wait_duration: int):
     q0 = target_qubits[0]
-    q0.xy.play("x180")
-    q0.wait(u.to_clock_cycles(wait_duration))
+    # q0.xy.play("x180")
+    # q0.apply("x")
+    q0.wait((wait_duration//4))
    
 def input_state_circuit(*, wait_duration: int) -> QuantumCircuit:
     qc = QuantumCircuit(1)
@@ -37,31 +39,38 @@ measurement_basis = {0: QUAGate("sx", sx_macro),
                      1: QUAGate(SYdgGate(), sy_macro),
                      2: QUAGate("z", z_macro)}
 
-shadow_size = 1000 # Number of shots/snapshots to construct the shadow
-wait_duration = 0.1*u.ms
+shadow_size = 10 # Number of shots/snapshots to construct the shadow
+wait_duration = 0.1*u.us
 input_macro_kwargs = {"wait_duration": wait_duration}
 shadow_config = ShadowConfig(shadow_size=shadow_size,
-                             shots_per_snapshot=1,
+                             shots_per_snapshot=10,
                             input_state_prep_macro=input_state_macro,
                             input_state_circuit=input_state_circuit,
                             measurement_basis=measurement_basis,
                             qubits=target_qubits,
                             readout_qubits=readout_qubits,
                             readout_pulse_name="readout",
-                            reset_method="active",
-                            reset_kwargs={"cooldown_time": 20*u.us,
-                                          "max_tries": 10,
+                            reset_method="cooldown", #"active",
+                            reset_kwargs={"cooldown_time": 80*u.us,
+                                          "max_tries": 5,
                                           "pi_pulse": "x180"},
                             input_state_prep_macro_kwargs=input_macro_kwargs,
                              )
 
 shadow_exp = ClassicalShadow(shadow_config, machine)
 
+# print("Generating QUA script...")
+# print(generate_qua_script(shadow_exp.cs_prog(simulate=False)))
 job = shadow_exp.run()
 # Each element in the results corresponds to a snapshot of the shadow (with a different random basis, and the counts
 # for each bitstring sampled per snapshot).
 results = job.result() # [({"010": 2, "110": 3, ...}, [0, 1, 2]), ({"101": 5, "100": 4, ...}, [2, 0, 1]), ...]
 ideal_results = job.ideal_result()
+
+print("Results:")
+print(results)
+print("Ideal results:")
+print(ideal_results)
 
 gate_dict = {i: qua_gate.gate for i, qua_gate in measurement_basis.items()}
 

@@ -79,18 +79,18 @@ class ClassicalShadow:
 
                 with for_(shot, 0, shot < self.config.shots_per_snapshot, shot + 1):
                     # Prepare state
-                    if self.config.input_state_prep_macro_kwargs is not None:
+                    if self.config.input_state_prep_macro_kwargs: #is not None:
                         self.config.input_state_prep_macro(**self.config.input_state_prep_macro_kwargs)
                     else:
                         self.config.input_state_prep_macro()
                     align()
-                    for q, qubit, in enumerate(self.config.qubits):
-                        with switch_(random_basis[q], unsafe=True):
-                            # Apply the random basis rotation
-                            for k in range(random_gates):
-                                with case_(k):
-                                    self.config.measurement_basis[k].gate_macro(qubit)
-                    align()
+                    # for q, qubit, in enumerate(self.config.qubits):
+                    #     with switch_(random_basis[q], unsafe=False):
+                    #         # Apply the random basis rotation
+                    #         for k in range(random_gates):
+                    #             with case_(k):
+                    #                 self.config.measurement_basis[k].gate_macro(qubit)
+                    # align()
                     # Readout
                     # Play the readout on the other resonator to measure in the same condition as when optimizing readout
                     for other_qubit in self.config.readout_qubits:
