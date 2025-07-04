@@ -129,7 +129,7 @@ with program() as multi_qubit_spec_vs_flux:
 
             with for_(*from_array(df, dfs)):
                 # Update the qubit frequency
-                fixed_qubit.xy.update_frequency(df + qubit.xy.intermediate_frequency + shift)
+                fixed_qubit.xy.update_frequency(df + qubit.xy.intermediate_frequency + shift, keep_phase=True)
                 with for_(*from_array(dc, dcs)):
                     # Flux sweeping for a qubit
                     duration = operation_len * u.ns if operation_len is not None else qubit.xy.operations[operation].length * u.ns
