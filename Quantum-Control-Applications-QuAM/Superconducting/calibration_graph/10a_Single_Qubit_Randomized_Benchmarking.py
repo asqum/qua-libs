@@ -248,10 +248,12 @@ with program() as randomized_benchmarking:
                         if node.parameters.multiplexed:
                             qubit.align()
                         else:
-                            align()
+                            align(*([q.xy.name for q in machine.qubits.values()] +
+                                    [q.resonator.name for q in machine.qubits.values()] +
+                                    [q.z.name for q in machine.qubits.values()]))
                         # Initialize the qubits
                         if reset_type == "active":
-                            active_reset_simple(qubit, "readout")
+                            active_reset(qubit)
                         else:
                             qubit.resonator.wait(qubit.thermalization_time * u.ns)
                         # Align the two elements to play the sequence after qubit initialization
