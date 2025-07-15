@@ -24,7 +24,7 @@ def z_macro(qubit: Transmon):
     
 def input_state_macro(*, wait_duration: int):
     q0 = target_qubits[0]
-    # q0.xy.play("x180")
+    q0.xy.play("x180")
     # q0.apply("x")
     q0.wait((wait_duration//4))
    
@@ -43,7 +43,7 @@ shadow_size = 10 # Number of shots/snapshots to construct the shadow
 wait_duration = 0.1*u.us
 input_macro_kwargs = {"wait_duration": wait_duration}
 shadow_config = ShadowConfig(shadow_size=shadow_size,
-                             shots_per_snapshot=10,
+                             shots_per_snapshot=128,
                             input_state_prep_macro=input_state_macro,
                             input_state_circuit=input_state_circuit,
                             measurement_basis=measurement_basis,
