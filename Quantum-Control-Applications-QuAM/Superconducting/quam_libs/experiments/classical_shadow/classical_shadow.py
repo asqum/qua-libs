@@ -92,6 +92,12 @@ class ClassicalShadow:
                     #                 self.config.measurement_basis[k].gate_macro(qubit)
                     # align()
                     # Readout
+                    for q, qubit, in enumerate(self.config.qubits):
+                        # Replace switch case with conditional plays of the measurement basis rotations
+                        qubit.xy.play("x90", condition=random_basis[q] == 0)
+                        qubit.xy.play("-y90", condition=random_basis[q] == 1)
+                        
+                        
                     # Play the readout on the other resonator to measure in the same condition as when optimizing readout
                     for other_qubit in self.config.readout_qubits:
                         if other_qubit.resonator not in [qubit.resonator for qubit in self.config.qubits]:
