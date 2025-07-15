@@ -12,8 +12,8 @@ library = QualibrationLibrary.get_active_library()
 
 nodes = [
     "close_qms",
+    "res_spec_vs_amp",
     "res_spec",
-    "res_spec_vs_flux_with_min",
     "res_spec_vs_flux",
     "qubit_spec_vs_flux",
     "power_rabi_1",
@@ -50,17 +50,11 @@ graph = QualibrationGraph(
     nodes={  # Specify nodes used in the graph
         "close_qms": library.nodes["00_Close_other_QMs"],
         "res_spec": library.nodes["02a_Resonator_Spectroscopy"],
-        "res_spec_vs_flux_with_min": library.nodes["02b_Resonator_Spectroscopy_vs_Flux"].copy(
-            frequency_span_in_mhz=20,
-            update_flux_min=False
-        ),
+        "res_spec_vs_amp": library.nodes["02c_Resonator_Spectroscopy_vs_Amplitude"].copy(),
         "res_spec_vs_flux": library.nodes["02b_Resonator_Spectroscopy_vs_Flux"].copy(
             frequency_span_in_mhz=20,
             update_flux_min=False
         ),
-        # "qubit_spec": library.nodes["03a_Qubit_Spectroscopy"].copy(
-        #     operation_amplitude_factor=0.1
-        # ),
         "qubit_spec_vs_flux": library.nodes["03b_Qubit_Spectroscopy_vs_Flux"].copy(),
         "power_rabi_1": library.nodes["04_Power_Rabi"],
         "ramsey_1": library.nodes["06_Ramsey"].copy(

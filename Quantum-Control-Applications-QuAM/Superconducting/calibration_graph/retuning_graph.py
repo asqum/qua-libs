@@ -13,7 +13,7 @@ class Parameters(GraphParameters):
 
 qubits = ["q1", "q2", "q3", "q4", "q5"]
 multiplexed = True
-reset_type_thermal_or_active = "thermal"
+reset_type_thermal_or_active = "active"
 
 
 g = QualibrationGraph(
@@ -27,7 +27,7 @@ g = QualibrationGraph(
             flux_point_joint_or_independent="joint",
             multiplexed=multiplexed,
             name="IQ_blobs",
-            reset_type_thermal_or_active="thermal",
+            reset_type_thermal_or_active="active",
         ),
         "ramsey_flux_calibration": library.nodes["08_Ramsey_vs_Flux_Calibration"].copy(
             flux_point_joint_or_independent="independent", multiplexed=multiplexed, name="Ramsey_Flux_Calibration"
@@ -62,6 +62,7 @@ g = QualibrationGraph(
             multiplexed=False, 
             delta_clifford=100,
             num_random_sequences=1000,
+            reset_type_thermal_or_active=reset_type_thermal_or_active,
             name="Single_Qubit_Randomized_Benchmarking"
         ),
     },

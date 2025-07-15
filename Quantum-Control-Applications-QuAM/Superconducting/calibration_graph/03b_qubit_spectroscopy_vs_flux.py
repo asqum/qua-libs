@@ -44,7 +44,7 @@ class Parameters(NodeParameters):
     operation: str = "saturation"
     operation_amplitude_factor: Optional[float] = 0.004 #0.004, 0.02
     operation_len_in_ns: Optional[int] = None
-    frequency_span_in_mhz: float = 12 #12, 120
+    frequency_span_in_mhz: float = 30 #12, 120
     frequency_step_in_mhz: float = 0.1 #0.1, 1
     frequency_shift_in_mhz: float = 0 #0  
     min_flux_offset_in_v: float = -0.012 #-0.012, -0.042

@@ -113,13 +113,16 @@ with program() as power_rabi:
 
         align()
 
+        update_frequency(
+            qubit.resonator.name,
+            qubit.resonator.intermediate_frequency + qubit.GEF_frequency_shift,
+        )
+
         with for_(n, 0, n < n_avg, n + 1):
             save(n, n_st)
+
             with for_(*from_array(a, amps)):
-                update_frequency(
-                    qubit.resonator.name,
-                    qubit.resonator.intermediate_frequency + qubit.GEF_frequency_shift,
-                )
+                wait(qubit.thermalization_time * u.ns)
 
                 # Reset the qubit frequency
                 update_frequency(qubit.xy.name, qubit.xy.intermediate_frequency)
@@ -134,7 +137,6 @@ with program() as power_rabi:
                 qubit.resonator.measure("readout", qua_vars=(I[i], Q[i]))
                 save(I[i], I_st[i])
                 save(Q[i], Q_st[i])
-                qubit.resonator.wait(qubit.thermalization_time * u.ns)
 
         align()
 

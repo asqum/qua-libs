@@ -61,7 +61,7 @@ class Parameters(NodeParameters):
     timeout: int = 100
 
 
-node = QualibrationNode(name="08a_Qubit_Spectroscopy_E_to_F", parameters=Parameters())
+node = QualibrationNode(name="08a_Qubit_Spectroscopy_E_to_F_with_E_to_G", parameters=Parameters())
 
 
 # %% {Initialize_QuAM_and_QOP}
@@ -139,6 +139,10 @@ with program() as qubit_spec:
                     amplitude_scale=operation_amp,
                     duration=operation_len,
                 )
+
+                update_frequency(qubit.xy.name, qubit.xy.intermediate_frequency)
+                qubit.xy.play("x180")
+
                 align(qubit.xy.name, qubit.resonator.name)
                 # readout the resonator
                 qubit.resonator.measure("readout", qua_vars=(I[i], Q[i]))

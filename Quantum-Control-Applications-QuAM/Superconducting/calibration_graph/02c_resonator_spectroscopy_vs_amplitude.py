@@ -45,14 +45,14 @@ import numpy as np
 class Parameters(NodeParameters):
 
     qubits: Optional[List[str]] = None
-    num_averages: int = 100
-    frequency_span_in_mhz: float = 25 #15
+    num_averages: int = 200
+    frequency_span_in_mhz: float = 20 #15
     frequency_step_in_mhz: float = 0.1
     simulate: bool = False
     simulation_duration_ns: int = 2500
     timeout: int = 100
     max_power_dbm: int = -10 #-30
-    min_power_dbm: int = -50
+    min_power_dbm: int = -40
     num_power_points: int = 100
     max_amp: float = 0.9 #0.1
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
