@@ -124,14 +124,18 @@ with program() as power_rabi:
             with for_(*from_array(a, amps)):
                 wait(qubit.thermalization_time * u.ns)
 
+                wait(4)
                 # Reset the qubit frequency
                 update_frequency(qubit.xy.name, qubit.xy.intermediate_frequency)
                 # Drive the qubit to the excited state
+                wait(4)
                 qubit.xy.play(operation)
                 # Update the qubit frequency to scan around the expected f_12
+                wait(4)
                 update_frequency(
                     qubit.xy.name, qubit.xy.intermediate_frequency - qubit.anharmonicity
                 )
+                wait(4)
                 qubit.xy.play(operation, amplitude_scale=a)
                 align()
                 qubit.resonator.measure("readout", qua_vars=(I[i], Q[i]))

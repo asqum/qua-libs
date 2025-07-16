@@ -157,10 +157,15 @@ with program() as ro_freq_opt:
                     qubit.xy.play("x180")
                     qubit.align()
                     update_frequency(qubit.xy.name, detuning + qubit.xy.intermediate_frequency - qubit.anharmonicity)
+                    wait(4)
                     qubit.align()
+                    wait(4)
                     qubit.xy.play(operation)
+                    wait(4)
                     qubit.align()
+                    wait(4)
                     update_frequency(qubit.xy.name, qubit.xy.intermediate_frequency)
+                    wait(4)
                     # Align the elements to measure after playing the qubit pulses.
                     qubit.align()
                     # Measure the state of the resonators
@@ -344,5 +349,5 @@ if not node.parameters.simulate:
     node.outcomes = {q.name: "successful" for q in qubits}
     node.results["initial_parameters"] = node.parameters.model_dump()
     node.machine = machine
-    save_node(node)
+    node.save()
 # %%
