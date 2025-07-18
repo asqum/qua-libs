@@ -1,4 +1,4 @@
-t t# %%
+# %%
 """
 Two-Qubit Readout Confusion Matrix Measurement
 
