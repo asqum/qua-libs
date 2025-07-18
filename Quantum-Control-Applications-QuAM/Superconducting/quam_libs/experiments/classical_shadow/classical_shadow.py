@@ -103,7 +103,7 @@ class ClassicalShadow:
                         if other_qubit.resonator not in [qubit.resonator for qubit in self.config.qubits]:
                             other_qubit.resonator.play("readout")
                     for q, qubit, in enumerate(self.config.qubits):
-                        qubit.align()
+                        # qubit.align()
                         qubit.resonator.measure(self.config.readout_pulse_name,
                                                 qua_vars=(I[q], Q[q]))
                         # State Estimation: returned as integer
