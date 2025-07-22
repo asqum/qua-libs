@@ -140,6 +140,7 @@ with program() as qubit_spec:
                     duration=operation_len,
                 )
 
+                # Help E-F readout 
                 update_frequency(qubit.xy.name, qubit.xy.intermediate_frequency)
                 qubit.xy.play("x180")
 
