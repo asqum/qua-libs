@@ -55,10 +55,14 @@ from scipy.optimize import curve_fit
 from quam_libs.components.gates.two_qubit_gates import CZGate
 from quam_libs.lib.pulses import FluxPulse
 
+import matplotlib
+matplotlib.use('Agg')  # Use non-GUI backend
+
+
 # %% {Node_parameters}
 class Parameters(NodeParameters):
 
-    qubit_pairs: Optional[List[str]] = ["coupler_q3_q4"]
+    qubit_pairs: Optional[List[str]] = ["coupler_q1_q2"]
     num_averages: int = 200
     flux_point_joint_or_independent_or_pairwise: Literal["joint", "independent", "pairwise"] = "joint"
     reset_type: Literal['active', 'thermal'] = "active"
@@ -73,16 +77,16 @@ class Parameters(NodeParameters):
     # coupler_flux_min : float = 0.150 #relative to the coupler set point
     # coupler_flux_max : float = 0.200 #relative to the coupler set point
     # q3_q4:
-    coupler_flux_min : float = 0.135 #relative to the coupler set point
-    coupler_flux_max : float = 0.170 #relative to the coupler set point
+    coupler_flux_min : float = 0.21 #relative to the coupler set point
+    coupler_flux_max : float = 0.26 #relative to the coupler set point
 
-    coupler_flux_step : float = 0.0002
+    coupler_flux_step : float = 0.001
     
     # wide scan: 
-    qubit_flux_min : float = -0.055 #-0.2 # relative to the qubit pair detuning
-    qubit_flux_max : float = -0.045 #0.2 # relative to the qubit pair detuning
+    qubit_flux_min : float = -0.09 #-0.2 # relative to the qubit pair detuning
+    qubit_flux_max : float = -0.04 #0.2 # relative to the qubit pair detuning
     
-    qubit_flux_step : float = 0.0005   
+    qubit_flux_step : float = 0.001
     use_state_discrimination: bool = True
     pulse_duration_ns: int = 80
     
@@ -167,6 +171,8 @@ with program() as CPhase_Oscillations:
             qp.coupler.set_dc_offset(0.0)
         wait(1000)
 
+        update_frequency(qp.qubit_control.resonator.name, qp.qubit_control.resonator.intermediate_frequency + qp.qubit_control.resonator.GEF_frequency_shift)
+        wait(4)
         with for_(n, 0, n < n_avg, n + 1):
             save(n, n_st)         
             with for_(*from_array(flux_coupler, fluxes_coupler)):
@@ -201,6 +207,7 @@ with program() as CPhase_Oscillations:
                         qp.align()
                         wait(4)
                         readout_state(qp.qubit_target, state_target[i])
+                        align()
                         save(state_control[i], state_st_control[i])
                         save(state_target[i], state_st_target[i])
                     else:

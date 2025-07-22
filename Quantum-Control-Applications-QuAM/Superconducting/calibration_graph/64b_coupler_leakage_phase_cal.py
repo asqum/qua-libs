@@ -68,8 +68,8 @@ class Parameters(NodeParameters):
     load_data_id: Optional[int] = None
 
     # q1_q2: 
-    coupler_flux_min : float = 0.145 # relative to the coupler set point 
-    coupler_flux_max : float = 0.175 # relative to the coupler set point
+    coupler_flux_min : float = 0.235 # relative to the coupler set point
+    coupler_flux_max : float = 0.245 # relative to the coupler set point
     # q2_q3:
     # coupler_flux_min : float = 0.150 #relative to the coupler set point
     # coupler_flux_max : float = 0.200 #relative to the coupler set point
@@ -80,8 +80,8 @@ class Parameters(NodeParameters):
     coupler_flux_step : float = 0.0002
 
     # q1_q2:
-    qubit_flux_min : float = -0.090 # relative to the qubit pair detuning
-    qubit_flux_max : float = -0.055 # relative to the qubit pair detuning
+    qubit_flux_min : float = -0.0675 # relative to the qubit pair detuning
+    qubit_flux_max : float = -0.0625 # relative to the qubit pair detuning
     # q2_q3:
     # qubit_flux_min : float = -0.070 # relative to the qubit pair detuning
     # qubit_flux_max : float = -0.045 # relative to the qubit pair detuning
@@ -190,12 +190,13 @@ with program() as CPhase_Oscillations:
                                 assign(leakage_control[i], 0)
                             
                             if node.parameters.reset_type == "active":
-                                active_reset_simple(qp.qubit_control)
-                                active_reset_simple(qp.qubit_target)
+                                active_reset(qp.qubit_control)
+                                active_reset(qp.qubit_target)
                             else:
                                 wait(qp.qubit_control.thermalization_time * u.ns)
                                 wait(qp.qubit_target.thermalization_time * u.ns)
-                            align()
+
+                            qp.align()
                             
                             if "coupler_qubit_crosstalk" in qp.extras:
                                 assign(comp_flux_qubit, flux_qubit  +  qp.extras["coupler_qubit_crosstalk"] * flux_coupler )
@@ -205,7 +206,7 @@ with program() as CPhase_Oscillations:
                             with if_(control_initial == 1, unsafe = True):
                                 qp.qubit_control.xy.play("x180")
                             qp.qubit_target.xy.play("x90")
-                            align()
+                            qp.align()
                             qp.qubit_control.z.play("const", amplitude_scale = comp_flux_qubit / qp.qubit_control.z.operations["const"].amplitude, duration = qua_pulse_duration)                
                             qp.coupler.play("const", amplitude_scale = flux_coupler / qp.coupler.operations["const"].amplitude, duration = qua_pulse_duration)
                             qp.align()
@@ -228,7 +229,7 @@ with program() as CPhase_Oscillations:
                                 save(Q_control[i], Q_st_control[i])
                                 save(I_target[i], I_st_target[i])
                                 save(Q_target[i], Q_st_target[i])
-        align()
+        # align()
         
     with stream_processing():
         n_st.save("n")
@@ -298,11 +299,11 @@ if not node.parameters.simulate:
     node.results["results"] = {}
 
     # %%
-    ## HARD CODED FROM EXPERIMENT
-    node.results["results"]["coupler_q1_q2"] = {"flux_coupler_Cz": 0.1641, "flux_qubit_Cz": 0.0710}
-    node.results["results"]["coupler_q2_q3"] = {"flux_coupler_Cz": 0.1795, "flux_qubit_Cz": 0.0785}
-    node.results["results"]["coupler_q3_q4"] = {"flux_coupler_Cz": 0.1580, "flux_qubit_Cz": 0.1277}
-    node.results["results"]["coupler_q4_q5"] = {"flux_coupler_Cz": 0.235, "flux_qubit_Cz": 0.055}
+    # ## HARD CODED FROM EXPERIMENT
+    # node.results["results"]["coupler_q1_q2"] = {"flux_coupler_Cz": 0.1641, "flux_qubit_Cz": 0.0710}
+    # node.results["results"]["coupler_q2_q3"] = {"flux_coupler_Cz": 0.1795, "flux_qubit_Cz": 0.0785}
+    # node.results["results"]["coupler_q3_q4"] = {"flux_coupler_Cz": 0.1580, "flux_qubit_Cz": 0.1277}
+    # node.results["results"]["coupler_q4_q5"] = {"flux_coupler_Cz": 0.235, "flux_qubit_Cz": 0.055}
     
 # %% {Plotting}
 if not node.parameters.simulate:
