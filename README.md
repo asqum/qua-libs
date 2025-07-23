@@ -1,9 +1,7 @@
 # Academia Sinica - QPU Calibration Library
 
----
 ![Banner](GITHUB-BANNER.jpg)
 
----
 ## Overview
 This repository provides a comprehensive library for calibrating superconducting transmon qubits using the Quantum Orchestration Platform (QOP), QUAM, and QUAlibrate. This includes both flux-tunable and fixed-frequency Transmons. It includes configurable experiment nodes, analysis routines, and tools for managing the quantum system state (QUAM).
 
