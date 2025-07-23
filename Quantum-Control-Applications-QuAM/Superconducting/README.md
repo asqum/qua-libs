@@ -97,11 +97,11 @@ This directory contains scripts (`make_quam.py`, `modify_quam.py`, `make_wiring_
 
 ## Calibration Nodes and Graphs
 
-The scripts within the `calibrations` directory are the building blocks for automated calibration routines.
+The scripts within the `calibration_graph` directory are the building blocks for automated calibration routines.
 Each script typically performs a specific measurement (e.g., Resonator Spectroscopy, Rabi Oscillations, T1 measurement).
 They are designed to be run via the QUAlibrate framework, either individually or as part of a larger calibration sequence (graph), but can also be executed as a standalone script from your favorite Python IDE (e.g. PyCharm, VScode...).
 
-Refer to the [calibrations/README.md](calibrations/README.md) for detailed information on the structure and conventions used for these nodes.
+Refer to the [calibration_graph/README.md](calibration_graph/README.md) for detailed information on the structure and conventions used for these nodes.
 
 ## Project Structure
 
