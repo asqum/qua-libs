@@ -12,6 +12,7 @@ This folder contains an installable module called `quam_libs`, which provides a 
      conda create -n qualibrate_env python=3.10
      conda activate qualibrate_env
      ```
+   
  - [Git](https://git-scm.com/book/en/v2/Getting-Started-Installing-Git): (Optional but Recommended) For version control, easier updates (pulling changes), and collaboration (forking and contributing). Install Git.
  - Access to Quantum Orchestration Platform (QOP) hardware
    - Required for running experiments on hardware.
@@ -137,10 +138,10 @@ Superconducting/
 │       ├── state.json      # Contains the QUAM state except the wiring and network
 │       └── wiring.json     # Contains the static part of the QUAM state (wiring and network)
 │
-├── quam_libs               # 
-│   ├───components
-│   ├───lib
-│   └───quam_builder
+├── quam_libs               # QUAM utilties library for superconducting qubits
+│   ├───components          # QUAM component definitions
+│   ├───lib                 # Helper functions for running expeirments
+│   └───quam_builder        # Tool for building the QUAM state.
 │       ├───transmons
 │       └───wiring
 │
