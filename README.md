@@ -1,4 +1,4 @@
-# Academia Sinica - QPU Calibration Library SOP
+# Academia Sinica - QPU Calibration Library
 
 ---
 ![Banner](GITHUB-BANNER.jpg)
