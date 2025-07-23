@@ -1,7 +1,5 @@
 # Academia Sinica - QPU Calibration Library
 
----
-
 ## Installation
 This folder contains an installable module called `quam_libs`, which provides a collection of tailored components for controlling and calibrating Acadmia Sinica's QPU architecture. These components extend the functionality of [QuAM](https://qua-platform.github.io/quam/), making it easier to design and execute calibration nodes.
 
@@ -13,7 +11,11 @@ This folder contains an installable module called `quam_libs`, which provides a 
      conda activate qualibrate_env
      ```
    
- - [Git](https://git-scm.com/book/en/v2/Getting-Started-Installing-Git): (Optional but Recommended) For version control, easier updates (pulling changes), and collaboration (forking and contributing). Install Git.
+ - [Git](https://git-scm.com/book/en/v2/Getting-Started-Installing-Git): (Optional but Recommended) For version control, easier updates (pulling changes), and collaboration (forking and contributing). Clone this repo using:
+    ```bash
+    git clone -b as_quam_qualibrate --single-branch git@github.com:asqum/qua-libs.git
+    ```
+
  - Access to Quantum Orchestration Platform (QOP) hardware
    - Required for running experiments on hardware.
    - We recommend upgrading to [QOP3.4.1](https://docs.quantum-machines.co/latest/docs/Releases/qop3_releases/) or later for the OPX1000, and [QOP2.4.4](https://docs.quantum-machines.co/latest/docs/Releases/qop2_releases/) or later of the OPX+
