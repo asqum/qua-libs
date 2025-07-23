@@ -1,8 +1,10 @@
 from dataclasses import dataclass, field
-from typing import Literal, List, Union, Optional, Dict, Callable, Any
+from typing import Literal, List, Union, Optional, Dict, Callable, Any, TYPE_CHECKING
 from ...components import Transmon, TransmonPair, QuAM
 from ..two_qubit_xeb import QUAGate, QUAGateSet
 from qiskit.circuit import QuantumCircuit
+import numpy as np
+
 @dataclass
 class ShadowConfig:
     """
@@ -28,6 +30,7 @@ class ShadowConfig:
             "pi_pulse": None,
         }
     )
+    gate_indices: List[List[int]]| np.ndarray | None = None
     save_dir: str = ""
     should_save_data: bool = True
     data_folder_name: Optional[str] = None
@@ -38,6 +41,20 @@ class ShadowConfig:
         self.n_qubits = len(self.qubits)
         self.dim = 2**self.n_qubits
         self.measurement_basis = QUAGateSet(self.measurement_basis)
+        if self.gate_indices is not None:
+            if isinstance(self.gate_indices, list):
+                self.gate_indices = np.array(self.gate_indices)
+            self.gate_indices = self.gate_indices.astype(int)
+            if self.gate_indices.ndim != 2:
+                raise ValueError("gate_indices must be a 2D array")
+            if self.gate_indices.shape[1] != self.n_qubits:
+                raise ValueError("gate_indices must have the same number of columns as the number of qubits")
+            if self.gate_indices.shape[0] != self.shadow_size:
+                raise ValueError("gate_indices must have the same number of rows as the shadow size")
+            # Check if there is no index that is negative or higher than length of dictionary of macros
+            if any(index < 0 or index >= len(self.measurement_basis) for index in self.gate_indices.flatten()):
+                raise ValueError("gate_indices must contain only indices that are within the range of the measurement basis")
+
         
     def as_dict(self):
         """

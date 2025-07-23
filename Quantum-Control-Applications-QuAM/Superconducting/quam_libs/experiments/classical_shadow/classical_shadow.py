@@ -61,6 +61,9 @@ class ClassicalShadow:
             i = declare(int)
             j = declare(int)
             shot = declare(int)
+            if self.config.gate_indices is not None:
+                gate_indices = [declare(int,
+                                         value=self.config.gate_indices[:, n].tolist()) for n in range(n_qubits)]
             
             self.machine.apply_all_flux_to_min()
             self.machine.apply_all_couplers_to_min()
@@ -72,10 +75,15 @@ class ClassicalShadow:
             with for_(i, 0, i < self.config.shadow_size, i + 1):
                 # Possible wait time before the experiment
                 # wait(...)
-                # Sample random basis (assumed to be local measurements)
-                with for_(j, 0, j < n_qubits, j + 1):
-                    assign(random_basis[j], r.rand_int(random_gates))
-                    save(random_basis[j], random_basis_stream)
+                if self.config.gate_indices is not None:
+                    for n in range(n_qubits):
+                        assign(random_basis[n], gate_indices[n][i])
+                        save(random_basis[n], random_basis_stream)
+                else:
+                    # Sample random basis (assumed to be local measurements)
+                    with for_(j, 0, j < n_qubits, j + 1):
+                        assign(random_basis[j], r.rand_int(random_gates))
+                        save(random_basis[j], random_basis_stream)
 
                 with for_(shot, 0, shot < self.config.shots_per_snapshot, shot + 1):
                     # Prepare state

@@ -4,6 +4,7 @@ from quam_libs.experiments.two_qubit_xeb.qua_gate import QUAGate
 from qualang_tools.units import unit
 from qiskit.circuit import QuantumCircuit
 from qm import generate_qua_script
+import numpy as np
 
 u = unit(coerce_to_integer=True)
 machine = QuAM.load()
@@ -12,6 +13,7 @@ readout_qubit_indices = [0, 1, 2, 3, 4]
 readout_qubits = [qubits[i] for i in readout_qubit_indices]
 target_qubit_indices = [0]
 target_qubits = [qubits[i] for i in target_qubit_indices]
+
 
 def sx_macro(qubit: Transmon):
     qubit.xy.play("x90")
@@ -40,7 +42,12 @@ measurement_basis = {0: QUAGate("sx", sx_macro),
                      2: QUAGate("z", z_macro)}
 
 shadow_size = 10 # Number of shots/snapshots to construct the shadow
+seed = 1234
+np.random.seed(seed)
+# Define custom snapshots here if needed (otherwise, sampling is done in real time)
+gate_indices = np.random.randint(0, 3, (shadow_size, len(target_qubits)))
 wait_duration = 0.1*u.us
+
 input_macro_kwargs = {"wait_duration": wait_duration}
 shadow_config = ShadowConfig(shadow_size=shadow_size,
                              shots_per_snapshot=128,
@@ -55,6 +62,8 @@ shadow_config = ShadowConfig(shadow_size=shadow_size,
                                           "max_tries": 5,
                                           "pi_pulse": "x180"},
                             input_state_prep_macro_kwargs=input_macro_kwargs,
+                            # gate_indices=gate_indices,
+                            seed=seed,
                              )
 
 shadow_exp = ClassicalShadow(shadow_config, machine)
