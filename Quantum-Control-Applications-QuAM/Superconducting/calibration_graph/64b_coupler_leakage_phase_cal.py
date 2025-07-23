@@ -299,7 +299,7 @@ if not node.parameters.simulate:
     node.results["results"] = {}
 
     # %%
-    # ## HARD CODED FROM EXPERIMENT
+    ## HARD CODED FROM EXPERIMENT
     # node.results["results"]["coupler_q1_q2"] = {"flux_coupler_Cz": 0.1641, "flux_qubit_Cz": 0.0710}
     # node.results["results"]["coupler_q2_q3"] = {"flux_coupler_Cz": 0.1795, "flux_qubit_Cz": 0.0785}
     # node.results["results"]["coupler_q3_q4"] = {"flux_coupler_Cz": 0.1580, "flux_qubit_Cz": 0.1277}
