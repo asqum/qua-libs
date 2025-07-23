@@ -1,7 +1,6 @@
 # Academia Sinica - QPU Calibration Library
 
 ## Installation
-This folder contains an installable module called `quam_libs`, which provides a collection of tailored components for controlling and calibrating Acadmia Sinica's QPU architecture. These components extend the functionality of [QuAM](https://qua-platform.github.io/quam/), making it easier to design and execute calibration nodes.
 
 ### Prerequisites
  - **Python**: Version 3.9 to 3.12 is supported.
