@@ -19,7 +19,8 @@ class ShadowConfig:
     input_state_circuit: Callable[[Any], QuantumCircuit]
     measurement_basis: Union[str, Dict[int, QUAGate]]
     qubits: List[Transmon]
-    input_state_prep_macro_kwargs: Optional[Dict[str, Any]] = None
+    input_state_prep_macro_kwargs: Dict[str, Any] = field(default_factory=dict)
+    num_angles: int = 100
     readout_qubits: Optional[List[Transmon]] = None
     readout_pulse_name: str = "readout"
     reset_method: Literal["active", "cooldown"] = "cooldown"

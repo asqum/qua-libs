@@ -24,16 +24,17 @@ def sy_macro(qubit: Transmon):
 def z_macro(qubit: Transmon):
     qubit.wait(4)
     
-def input_state_macro(*, wait_duration: int):
+def input_state_macro(*, angle):
+    # RY(angle)
     q0 = target_qubits[0]
-    q0.xy.play("x180")
-    # q0.apply("x")
-    q0.wait((wait_duration//4))
+    q0.xy.play("x90")
+    q0.xy.frame_rotation(angle + np.pi)
+    q0.xy.play("x90")
+    q0.xy.frame_rotation2pi(0.5)
    
-def input_state_circuit(*, wait_duration: int) -> QuantumCircuit:
+def input_state_circuit(*, angle: float) -> QuantumCircuit:
     qc = QuantumCircuit(1)
-    qc.x(0)
-    # qc.delay(wait_duration, 0, unit='ns')
+    qc.ry(angle, 0)
     
     return qc
 
@@ -48,7 +49,7 @@ np.random.seed(seed)
 gate_indices = np.random.randint(0, 3, (shadow_size, len(target_qubits)))
 wait_duration = 0.1*u.us
 
-input_macro_kwargs = {"wait_duration": wait_duration}
+input_macro_kwargs = {}
 shadow_config = ShadowConfig(shadow_size=shadow_size,
                              shots_per_snapshot=128,
                             input_state_prep_macro=input_state_macro,
@@ -63,16 +64,17 @@ shadow_config = ShadowConfig(shadow_size=shadow_size,
                                           "pi_pulse": "x180"},
                             input_state_prep_macro_kwargs=input_macro_kwargs,
                             # gate_indices=gate_indices,
+                            # num_angles=100,  # Specify number of angles to sample (creates: np.linspace(0, np.pi, num_angles))
                             seed=seed,
-                             )
+                            )
 
 shadow_exp = ClassicalShadow(shadow_config, machine)
 
 # print("Generating QUA script...")
 # print(generate_qua_script(shadow_exp.cs_prog(simulate=False)))
 job = shadow_exp.run()
-# Each element in the results corresponds to a snapshot of the shadow (with a different random basis, and the counts
-# for each bitstring sampled per snapshot).
+# New axis: angle
+# Each element in the results corresponds to a collection of snapshots for a given angle defining the input state.
 results = job.result() # [({"010": 2, "110": 3, ...}, [0, 1, 2]), ({"101": 5, "100": 4, ...}, [2, 0, 1]), ...]
 ideal_results = job.ideal_result()
 

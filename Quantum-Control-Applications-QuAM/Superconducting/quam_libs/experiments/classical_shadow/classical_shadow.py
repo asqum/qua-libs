@@ -14,7 +14,7 @@ from qm.jobs.simulated_job import SimulatedJob
 from .shadow_config import ShadowConfig
 
 from qualang_tools.units import unit
-
+from qualang_tools.loops import qua_linspace
 from ..two_qubit_xeb.macros import qua_declaration, reset_qubit, binary
 
 u = unit(coerce_to_integer=True)
@@ -61,73 +61,74 @@ class ClassicalShadow:
             i = declare(int)
             j = declare(int)
             shot = declare(int)
+            angle = declare(fixed)
             if self.config.gate_indices is not None:
                 gate_indices = [declare(int,
                                          value=self.config.gate_indices[:, n].tolist()) for n in range(n_qubits)]
-            
+            self.config.input_state_prep_macro_kwargs["angle"] = angle
             self.machine.apply_all_flux_to_min()
             self.machine.apply_all_couplers_to_min()
             
             if simulate:
                 for qubit in self.config.qubits:
                     qubit.xy.update_frequency(0)
-                    
-            with for_(i, 0, i < self.config.shadow_size, i + 1):
-                # Possible wait time before the experiment
-                # wait(...)
-                if self.config.gate_indices is not None:
-                    for n in range(n_qubits):
-                        assign(random_basis[n], gate_indices[n][i])
-                        save(random_basis[n], random_basis_stream)
-                else:
-                    # Sample random basis (assumed to be local measurements)
-                    with for_(j, 0, j < n_qubits, j + 1):
-                        assign(random_basis[j], r.rand_int(random_gates))
-                        save(random_basis[j], random_basis_stream)
-
-                with for_(shot, 0, shot < self.config.shots_per_snapshot, shot + 1):
-                    # Prepare state
-                    if self.config.input_state_prep_macro_kwargs: #is not None:
-                        self.config.input_state_prep_macro(**self.config.input_state_prep_macro_kwargs)
+            with for_(*qua_linspace(angle, 0., np.pi, self.config.num_angles)):
+                with for_(i, 0, i < self.config.shadow_size, i + 1):
+                    # Possible wait time before the experiment
+                    # wait(...)
+                    if self.config.gate_indices is not None:
+                        for n in range(n_qubits):
+                            assign(random_basis[n], gate_indices[n][i])
+                            save(random_basis[n], random_basis_stream)
                     else:
-                        self.config.input_state_prep_macro()
-                    align()
-                    # for q, qubit, in enumerate(self.config.qubits):
-                    #     with switch_(random_basis[q], unsafe=False):
-                    #         # Apply the random basis rotation
-                    #         for k in range(random_gates):
-                    #             with case_(k):
-                    #                 self.config.measurement_basis[k].gate_macro(qubit)
-                    # align()
-                    # Readout
-                    for q, qubit, in enumerate(self.config.qubits):
-                        # Replace switch case with conditional plays of the measurement basis rotations
-                        qubit.xy.play("x90", condition=random_basis[q] == 0)
-                        qubit.xy.play("-y90", condition=random_basis[q] == 1)
-                        
-                        
-                    # Play the readout on the other resonator to measure in the same condition as when optimizing readout
-                    for other_qubit in self.config.readout_qubits:
-                        if other_qubit.resonator not in [qubit.resonator for qubit in self.config.qubits]:
-                            other_qubit.resonator.play("readout")
-                    for q, qubit, in enumerate(self.config.qubits):
-                        # qubit.align()
-                        qubit.resonator.measure(self.config.readout_pulse_name,
-                                                qua_vars=(I[q], Q[q]))
-                        # State Estimation: returned as integer
-                        assign(state[q], I[q] > ge_thresholds[q])
-                        assign(state_int, state_int + (1<<q) * Cast.to_int(state[q]))
+                        # Sample random basis (assumed to be local measurements)
+                        with for_(j, 0, j < n_qubits, j + 1):
+                            assign(random_basis[j], r.rand_int(random_gates))
+                            save(random_basis[j], random_basis_stream)
 
-                        reset_qubit(self.config.reset_method,
-                                    qubit,
-                                    threshold=ge_thresholds[q],
-                                    **self.config.reset_kwargs)
-                    save(state_int, state_int_stream)
-                    assign(state_int, 0)
+                    with for_(shot, 0, shot < self.config.shots_per_snapshot, shot + 1):
+                        # Prepare state
+                        if self.config.input_state_prep_macro_kwargs: #is not None:
+                            self.config.input_state_prep_macro(**self.config.input_state_prep_macro_kwargs)
+                        else:
+                            self.config.input_state_prep_macro()
+                        align()
+                        # for q, qubit, in enumerate(self.config.qubits):
+                        #     with switch_(random_basis[q], unsafe=False):
+                        #         # Apply the random basis rotation
+                        #         for k in range(random_gates):
+                        #             with case_(k):
+                        #                 self.config.measurement_basis[k].gate_macro(qubit)
+                        # align()
+                        # Readout
+                        for q, qubit, in enumerate(self.config.qubits):
+                            # Replace switch case with conditional plays of the measurement basis rotations
+                            qubit.xy.play("x90", condition=random_basis[q] == 0)
+                            qubit.xy.play("-y90", condition=random_basis[q] == 1)
+                            
+                            
+                        # Play the readout on the other resonator to measure in the same condition as when optimizing readout
+                        for other_qubit in self.config.readout_qubits:
+                            if other_qubit.resonator not in [qubit.resonator for qubit in self.config.qubits]:
+                                other_qubit.resonator.play("readout")
+                        for q, qubit, in enumerate(self.config.qubits):
+                            # qubit.align()
+                            qubit.resonator.measure(self.config.readout_pulse_name,
+                                                    qua_vars=(I[q], Q[q]))
+                            # State Estimation: returned as integer
+                            assign(state[q], I[q] > ge_thresholds[q])
+                            assign(state_int, state_int + (1<<q) * Cast.to_int(state[q]))
+
+                            reset_qubit(self.config.reset_method,
+                                        qubit,
+                                        threshold=ge_thresholds[q],
+                                        **self.config.reset_kwargs)
+                        save(state_int, state_int_stream)
+                        assign(state_int, 0)
                 
             with stream_processing():
-                random_basis_stream.buffer(n_qubits).save_all("random_basis")
-                state_int_stream.buffer(self.config.shots_per_snapshot).save_all("state_int")
+                random_basis_stream.buffer(self.config.shadow_size, n_qubits).save_all("random_basis")
+                state_int_stream.buffer(self.config.shadow_size, self.config.shots_per_snapshot).save_all("state_int")
         
         return cs_prog
     
