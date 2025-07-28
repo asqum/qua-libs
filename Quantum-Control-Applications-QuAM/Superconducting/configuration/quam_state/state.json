@@ -230,12 +230,12 @@
                 "depletion_time": 1000,
                 "confusion_matrix": [
                     [
-                        0.9073333333333333,
-                        0.09266666666666666
+                        0.9,
+                        0.1
                     ],
                     [
-                        0.12633333333333333,
-                        0.8736666666666667
+                        0.11966666666666667,
+                        0.8803333333333333
                     ]
                 ],
                 "GEF_frequency_shift": -1950000,
@@ -273,10 +273,10 @@
                 "operations": {
                     "readout": {
                         "length": 1040,
-                        "amplitude": 0.12116339470267562,
-                        "threshold": -3.880749538953363e-05,
-                        "rus_exit_threshold": -6.0344107608812354e-05,
-                        "integration_weights_angle": -109.94170070043388,
+                        "amplitude": 0.1159952860074445,
+                        "threshold": -4.421163240236736e-05,
+                        "rus_exit_threshold": -6.468572078956732e-05,
+                        "integration_weights_angle": -115.61098610579914,
                         "__class__": "quam.components.pulses.SquareReadoutPulse"
                     },
                     "const": {
@@ -498,12 +498,12 @@
                 "depletion_time": 1000,
                 "confusion_matrix": [
                     [
-                        0.8971666666666667,
-                        0.10283333333333333
+                        0.9046666666666666,
+                        0.09533333333333334
                     ],
                     [
-                        0.103,
-                        0.897
+                        0.108,
+                        0.892
                     ]
                 ],
                 "GEF_frequency_shift": -2350000,
@@ -541,10 +541,10 @@
                 "operations": {
                     "readout": {
                         "length": 1040,
-                        "amplitude": 0.12961008224605367,
-                        "threshold": 6.149913695134087e-06,
-                        "rus_exit_threshold": -1.7835307651429974e-05,
-                        "integration_weights_angle": -111.50824813274784,
+                        "amplitude": 0.10007780720675301,
+                        "threshold": 5.0836204170898005e-06,
+                        "rus_exit_threshold": -1.9226811462780984e-05,
+                        "integration_weights_angle": -123.89478414450289,
                         "__class__": "quam.components.pulses.SquareReadoutPulse"
                     },
                     "const": {
@@ -807,12 +807,12 @@
                 "depletion_time": 1000,
                 "confusion_matrix": [
                     [
-                        0.9538333333333333,
-                        0.04616666666666667
+                        0.9366666666666666,
+                        0.06333333333333334
                     ],
                     [
-                        0.14083333333333334,
-                        0.8591666666666666
+                        0.14983333333333335,
+                        0.8501666666666666
                     ]
                 ],
                 "GEF_frequency_shift": -2050000,
@@ -850,10 +850,10 @@
                 "operations": {
                     "readout": {
                         "length": 1040,
-                        "amplitude": 0.10126891598077042,
-                        "threshold": -1.0261488204981647e-05,
-                        "rus_exit_threshold": -2.7048827232400726e-05,
-                        "integration_weights_angle": -128.73054777954283,
+                        "amplitude": 0.10723129818290848,
+                        "threshold": -6.102273026632329e-06,
+                        "rus_exit_threshold": -2.0096112823139e-05,
+                        "integration_weights_angle": -134.31637693182418,
                         "__class__": "quam.components.pulses.SquareReadoutPulse"
                     },
                     "const": {
@@ -1075,12 +1075,12 @@
                 "depletion_time": 1000,
                 "confusion_matrix": [
                     [
-                        0.8756666666666667,
-                        0.12433333333333334
+                        0.8815,
+                        0.1185
                     ],
                     [
-                        0.23383333333333334,
-                        0.7661666666666667
+                        0.215,
+                        0.785
                     ]
                 ],
                 "GEF_frequency_shift": -550000,
@@ -1118,10 +1118,10 @@
                 "operations": {
                     "readout": {
                         "length": 1040,
-                        "amplitude": 0.18034031536136438,
-                        "threshold": 3.524753086589213e-05,
-                        "rus_exit_threshold": 1.1054011083812582e-05,
-                        "integration_weights_angle": -117.93400313124576,
+                        "amplitude": 0.13878876845948443,
+                        "threshold": 2.5735343180766225e-05,
+                        "rus_exit_threshold": 5.550605531042825e-06,
+                        "integration_weights_angle": -129.6000401444637,
                         "__class__": "quam.components.pulses.SquareReadoutPulse"
                     },
                     "const": {
@@ -1379,12 +1379,12 @@
                 "depletion_time": 1000,
                 "confusion_matrix": [
                     [
-                        0.8446666666666667,
-                        0.15533333333333332
+                        0.8658333333333333,
+                        0.13416666666666666
                     ],
                     [
-                        0.153,
-                        0.847
+                        0.1395,
+                        0.8605
                     ]
                 ],
                 "GEF_frequency_shift": -3000000,
@@ -1422,10 +1422,10 @@
                 "operations": {
                     "readout": {
                         "length": 800,
-                        "amplitude": 0.14438394343740177,
-                        "threshold": 1.4032773633528891e-05,
-                        "rus_exit_threshold": -1.0865336862316042e-05,
-                        "integration_weights_angle": -109.39887084419146,
+                        "amplitude": 0.10507667261911388,
+                        "threshold": 2.5440745153431897e-06,
+                        "rus_exit_threshold": -1.355005538380266e-05,
+                        "integration_weights_angle": -121.65733368191621,
                         "__class__": "quam.components.pulses.SquareReadoutPulse"
                     },
                     "const": {
