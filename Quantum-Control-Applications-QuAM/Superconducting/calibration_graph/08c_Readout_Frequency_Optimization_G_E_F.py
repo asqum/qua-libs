@@ -150,11 +150,15 @@ with program() as ro_freq_opt:
 
                 # Play the x180 gate and EFx180 gate to put the qubits in the f state
                 qubit.xy.play("x180")
+                wait(4)
                 update_frequency(
                     qubit.xy.name, qubit.xy.intermediate_frequency - qubit.anharmonicity
                 )
+                wait(4)
                 qubit.align()
+                wait(4)
                 qubit.xy.play(operation)
+                wait(4)
                 qubit.align()
                 update_frequency(qubit.xy.name, qubit.xy.intermediate_frequency)
                 # Align the elements to measure after playing the qubit pulses.

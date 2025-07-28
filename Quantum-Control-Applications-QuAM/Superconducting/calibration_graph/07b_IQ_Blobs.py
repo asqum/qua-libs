@@ -119,7 +119,7 @@ with program() as iq_blobs:
             align()
             for i, qubit in multiplexed_qubits.items():
                 qubit.xy.play("x180")
-                qubit.resonator.wait(qubit.xy.operations["x180"].length) # qubit.align()
+                qubit.resonator.wait(qubit.xy.operations["x180"].length * u.ns) # qubit.align()
                 qubit.resonator.measure(operation_name, qua_vars=(I_e[i], Q_e[i]))
                 qubit.resonator.wait(qubit.resonator.depletion_time * u.ns)
                 save(I_e[i], I_e_st[i])

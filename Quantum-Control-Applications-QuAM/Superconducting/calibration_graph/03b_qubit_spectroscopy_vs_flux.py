@@ -42,13 +42,13 @@ class Parameters(NodeParameters):
     qubits: Optional[List[str]] = None #["q1"]
     num_averages: int = 200
     operation: str = "saturation"
-    operation_amplitude_factor: Optional[float] = 0.004 #0.004, 0.02
+    operation_amplitude_factor: Optional[float] = 0.01 #0.004, 0.02
     operation_len_in_ns: Optional[int] = None
-    frequency_span_in_mhz: float = 12 #12, 120
-    frequency_step_in_mhz: float = 0.1 #0.1, 1
+    frequency_span_in_mhz: float = 120 #12, 120
+    frequency_step_in_mhz: float = 0.6 #0.1, 1
     frequency_shift_in_mhz: float = 0 #0  
-    min_flux_offset_in_v: float = -0.012 #-0.012, -0.042
-    max_flux_offset_in_v: float = 0.012 #0.012, 0.042
+    min_flux_offset_in_v: float = -0.042 #-0.012, -0.042
+    max_flux_offset_in_v: float = 0.042 #0.012, 0.042
     num_flux_points: int = 51
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
     simulate: bool = False
@@ -129,7 +129,7 @@ with program() as multi_qubit_spec_vs_flux:
 
             with for_(*from_array(df, dfs)):
                 # Update the qubit frequency
-                fixed_qubit.xy.update_frequency(df + qubit.xy.intermediate_frequency + shift)
+                fixed_qubit.xy.update_frequency(df + qubit.xy.intermediate_frequency + shift, keep_phase=True)
                 with for_(*from_array(dc, dcs)):
                     # Flux sweeping for a qubit
                     duration = operation_len * u.ns if operation_len is not None else qubit.xy.operations[operation].length * u.ns

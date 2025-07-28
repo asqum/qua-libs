@@ -41,7 +41,7 @@ import numpy as np
 class Parameters(NodeParameters):
 
     qubits: Optional[List[str]] = None
-    num_averages: int = 700
+    num_averages: int = 60 #10
     operation_x180_or_any_90: Literal["x180", "x90", "-x90", "y90", "-y90"] = "x180"
     min_amp_factor: float = 0.8
     max_amp_factor: float = 1.2
@@ -128,7 +128,7 @@ with program() as power_rabi:
                 with for_(*from_array(a, amps)):
                     # Initialize the qubits
                     if reset_type == "active":
-                        active_reset_simple(qubit, "readout")
+                        active_reset(qubit)
                     else:
                         qubit.wait(qubit.thermalization_time * u.ns)
 

@@ -111,15 +111,19 @@ def readout_state_gef(
     diff = declare(fixed, size=3)
 
     qubit.resonator.update_frequency(qubit.resonator.intermediate_frequency + qubit.resonator.GEF_frequency_shift)
+    wait(4)
     qubit.resonator.measure(pulse_name, qua_vars=(I, Q))
+    wait(4)
     qubit.resonator.update_frequency(qubit.resonator.intermediate_frequency)
+    wait(4)
 
     gef_centers = [qubit.resonator.gef_centers[0], qubit.resonator.gef_centers[1], qubit.resonator.gef_centers[2]]
     for p in range(3):
         assign(
             diff[p],
-            (I - gef_centers[p][0]) * (I - gef_centers[p][0]) + (Q - gef_centers[p][1]) * (Q - gef_centers[p][1]),
+            Math.abs(I - gef_centers[p][0]) + Math.abs(Q - gef_centers[p][1]),
         )
+    wait(4)
     assign(state, Math.argmin(diff))
     wait(qubit.resonator.depletion_time // 4, qubit.resonator.name)
 

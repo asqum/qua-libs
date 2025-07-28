@@ -3,6 +3,7 @@ import warnings
 from pathlib import Path
 
 from quam.components import FrequencyConverter
+from quam.serialisation import JSONSerialiser
 from quam.core import QuamRoot, quam_dataclass
 from quam.components.octave import Octave
 from quam.components.ports import (
@@ -84,6 +85,16 @@ class QuAM(QuamRoot):
                 args = (quam_state_path,)
 
         return super().load(*args, **kwargs)
+
+    @classmethod
+    def get_serialiser(cls) -> JSONSerialiser:
+        """Get the serialiser for the QuamRoot class, which is the JSONSerialiser.
+
+        This method can be overridden by subclasses to provide a custom serialiser.
+        """
+        return JSONSerialiser(
+            content_mapping={"wiring": "wiring.json", "network": "wiring.json"}
+        )
 
     def save(
         self,

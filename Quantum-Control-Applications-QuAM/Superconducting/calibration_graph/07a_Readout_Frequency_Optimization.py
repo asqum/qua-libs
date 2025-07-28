@@ -39,7 +39,7 @@ class Parameters(NodeParameters):
 
     qubits: Optional[List[str]] = None
     num_averages: int = 350 #150
-    frequency_span_in_mhz: float = 15
+    frequency_span_in_mhz: float = 25
     frequency_step_in_mhz: float = 0.1
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
     simulate: bool = False

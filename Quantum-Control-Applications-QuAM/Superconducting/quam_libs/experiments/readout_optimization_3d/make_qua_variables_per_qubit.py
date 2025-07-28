@@ -1,13 +1,13 @@
 from typing import Sequence, Union, Tuple, List
 
-from qm.qua import declare, fixed, QuaVariableType
+from qm.qua import declare, fixed
 
 from quam_libs.components import Transmon
 from quam_libs.experiments.readout_optimization_3d.parameters import ReadoutOptimization3dParameters
 
 
 def make_qua_variables_per_qubit(measurement_batch: Sequence[Transmon],
-                                 node_parameters: ReadoutOptimization3dParameters) -> Tuple[List[Union[QuaVariableType, None]]]:
+                                 node_parameters: ReadoutOptimization3dParameters) -> Tuple[List[Union['QuaVariable', None]]]:
     """
     Create lists of QUA readout variables for accumulated demodulation for each
     qubit only if the qubit is in the measurement batch, otherwise, no variable

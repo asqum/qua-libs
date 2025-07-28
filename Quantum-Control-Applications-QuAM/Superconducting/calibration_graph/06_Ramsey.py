@@ -47,7 +47,7 @@ node = QualibrationNode(
         log_or_linear_sweep="log",
         use_state_discrimination=False,
         flux_point_joint_or_independent="joint",
-        multiplexed=False,
+        multiplexed=False
     )
 )
 

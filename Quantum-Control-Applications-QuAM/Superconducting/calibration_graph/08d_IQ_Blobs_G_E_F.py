@@ -42,11 +42,11 @@ from scipy.optimize import curve_fit
 # %% {Node_parameters}
 class Parameters(NodeParameters):
 
-    qubits: Optional[List[str]] = None #["q1","q3","q5"] #None
+    qubits: Optional[List[str]] = ["q1"]
     num_runs: int = 6000
     reset_type_thermal_or_active: Literal["thermal", "active"] = "thermal"
     flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
-    multiplexed: bool = True
+    multiplexed: bool = False
     simulate: bool = False
     timeout: int = 100
 
@@ -117,26 +117,33 @@ with program() as iq_blobs:
 
         # Bring the active qubits to the minimum frequency point
         machine.set_all_fluxes(flux_point, qubit)
-
+        wait(4)
         qubit.resonator.update_frequency(
-            qubit.resonator.intermediate_frequency + qubit.resonator.GEF_frequency_shift
+            qubit.resonator.intermediate_frequency + qubit.GEF_frequency_shift
         )
+        wait(4)
 
         with for_(n, 0, n < n_runs, n + 1):
             # ground iq blobs for all qubits
             save(n, n_st)
+            wait(4)
+            update_frequency(qubit.xy.name, qubit.xy.intermediate_frequency)
+            wait(4)
             if reset_type == "active":
                 active_reset_gef(qubit)
                 qubit.resonator.update_frequency(
                     qubit.resonator.intermediate_frequency + qubit.resonator.GEF_frequency_shift
-                )                
+                )
+                wait(4)
             elif reset_type == "thermal":
                 wait(4 * qubit.thermalization_time * u.ns)
             else:
                 raise ValueError(f"Unrecognized reset type {reset_type}.")
 
             qubit.align()
+            wait(4)
             qubit.resonator.measure("readout", qua_vars=(I_g[i], Q_g[i]))
+            wait(4)
             qubit.align()
             # save data
             save(I_g[i], I_g_st[i])
@@ -146,15 +153,21 @@ with program() as iq_blobs:
                 active_reset_gef(qubit)
                 qubit.resonator.update_frequency(
                     qubit.resonator.intermediate_frequency + qubit.resonator.GEF_frequency_shift
-                )   
+                )
+                wait(4)
             elif reset_type == "thermal":
                 wait(4*qubit.thermalization_time * u.ns)
             else:
                 raise ValueError(f"Unrecognized reset type {reset_type}.")
+            wait(4)
             qubit.align()
+            wait(4)
             qubit.xy.play("x180")
+            wait(4)
             qubit.align()
+            wait(4)
             qubit.resonator.measure("readout", qua_vars=(I_e[i], Q_e[i]))
+            wait(4)
             qubit.align()
             save(I_e[i], I_e_st[i])
             save(Q_e[i], Q_e_st[i])
@@ -163,24 +176,30 @@ with program() as iq_blobs:
                 active_reset_gef(qubit)
                 qubit.resonator.update_frequency(
                     qubit.resonator.intermediate_frequency + qubit.resonator.GEF_frequency_shift
-                )   
+                )
+                wait(4)
             elif reset_type == "thermal":
                 wait(4*qubit.thermalization_time * u.ns)
             else:
                 raise ValueError(f"Unrecognized reset type {reset_type}.")
+            wait(4)
             qubit.align()
+            wait(4)
             qubit.xy.play("x180")
+            wait(4)
             update_frequency(
                 qubit.xy.name, qubit.xy.intermediate_frequency - qubit.anharmonicity
             )
+            wait(4)
             qubit.xy.play(GEF_operation)
-            update_frequency(qubit.xy.name, qubit.xy.intermediate_frequency)
+            wait(4)
             qubit.align()
             qubit.resonator.measure("readout", qua_vars=(I_f[i], Q_f[i]))
             qubit.align()
             save(I_f[i], I_f_st[i])
             save(Q_f[i], Q_f_st[i])
-        if node.parameters.multiplexed:
+
+        if not node.parameters.multiplexed:
             align()
 
     with stream_processing():
