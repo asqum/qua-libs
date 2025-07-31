@@ -50,7 +50,7 @@ node = QualibrationNode(
         qubits=None,
         multiplexed=True,
         flux_point_joint_or_independent="joint",
-        num_runs=4000,
+        num_runs=6000,
         load_data_id=None,
         simulate=False,
         simulation_duration_ns=1000,
@@ -98,7 +98,7 @@ with program() as iq_blobs:
                     else:
                         raise ValueError(f"Unrecognized reset type {reset_type}.")
 
-            align()
+            align() # True multiplexed
             for i, qubit in multiplexed_qubits.items():
                 qubit.resonator.measure(operation_name, qua_vars=(I_g[i], Q_g[i]))
                 qubit.resonator.wait(qubit.resonator.depletion_time * u.ns)
@@ -107,7 +107,7 @@ with program() as iq_blobs:
 
             if not node.parameters.simulate:
                 # measure excited-state IQ blob for all qubits
-                align()
+                align() # True multiplexed
                 for i, qubit in multiplexed_qubits.items():
                     if reset_type == "active":
                         active_reset(qubit, "readout")
@@ -116,7 +116,7 @@ with program() as iq_blobs:
                     else:
                         raise ValueError(f"Unrecognized reset type {reset_type}.")
 
-            align()
+            align() # True multiplexed
             for i, qubit in multiplexed_qubits.items():
                 qubit.xy.play("x180")
                 qubit.resonator.wait(qubit.xy.operations["x180"].length * u.ns) # qubit.align()

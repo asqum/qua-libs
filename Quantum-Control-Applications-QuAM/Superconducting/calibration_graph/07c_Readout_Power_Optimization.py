@@ -44,12 +44,12 @@ from sklearn.mixture import GaussianMixture
 class Parameters(NodeParameters):
 
     qubits: Optional[List[str]] = None
-    num_runs: int = 6000
+    num_runs: int = 600
     reset_type_thermal_or_active: Literal["thermal", "active"] = "thermal"
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
     start_amp: float = 0.02
     end_amp: float = 1.99
-    num_amps: int = 40
+    num_amps: int = 100
     outliers_threshold: float = 0.98
     plot_raw: bool = False
     simulate: bool = False
@@ -98,7 +98,8 @@ with program() as iq_blobs:
         # Bring the active qubits to the desired frequency point
         machine.set_all_fluxes(flux_point=flux_point, target=qubit)
         qubit.z.settle()
-        qubit.align()       
+        qubit.align()
+        # align() # True multiplexed       
 
         with for_(n, 0, n < n_runs, n + 1):
             # ground iq blobs for all qubits
@@ -112,8 +113,10 @@ with program() as iq_blobs:
                     raise ValueError(f"Unrecognized reset type {reset_type}.")
 
                 qubit.align()
+                # align() # True multiplexed
                 qubit.resonator.measure("readout", qua_vars=(I_g[i], Q_g[i]), amplitude_scale=a)
                 qubit.align()
+                # align() # True multiplexed
                 # save data
                 save(I_g[i], I_g_st[i])
                 save(Q_g[i], Q_g_st[i])
@@ -125,8 +128,10 @@ with program() as iq_blobs:
                 else:
                     raise ValueError(f"Unrecognized reset type {reset_type}.")
                 qubit.align()
+                # align() # True multiplexed
                 qubit.xy.play("x180")
                 qubit.align()
+                # align() # True multiplexed
                 qubit.resonator.measure("readout", qua_vars=(I_e[i], Q_e[i]), amplitude_scale=a)
                 save(I_e[i], I_e_st[i])
                 save(Q_e[i], Q_e_st[i])

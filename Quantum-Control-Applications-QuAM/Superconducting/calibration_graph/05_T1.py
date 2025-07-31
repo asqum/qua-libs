@@ -35,7 +35,7 @@ import numpy as np
 # %% {Node_parameters}
 class Parameters(NodeParameters):
     qubits: Optional[List[str]] = None
-    num_averages: int = 200
+    num_averages: int = 300
     min_wait_time_in_ns: int = 16
     max_wait_time_in_ns: int = 90000
     wait_time_step_in_ns: int = 300
