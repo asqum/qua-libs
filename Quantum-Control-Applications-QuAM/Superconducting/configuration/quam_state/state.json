@@ -33,7 +33,7 @@
                         "length": 16,
                         "digital_marker": "ON",
                         "axis_angle": 0,
-                        "amplitude": 0.3230851503536589,
+                        "amplitude": 0.22752000000000003,
                         "alpha": -0.7283239659210101,
                         "anharmonicity": "#/qubits/q1/anharmonicity",
                         "__class__": "quam.components.pulses.DragCosinePulse"
@@ -42,7 +42,7 @@
                         "length": "#../x180_DragCosine/length",
                         "digital_marker": "ON",
                         "axis_angle": 0,
-                        "amplitude": 0.16154257517682946,
+                        "amplitude": 0.11307980262378063,
                         "alpha": -0.49813422065660784,
                         "anharmonicity": "#../x180_DragCosine/anharmonicity",
                         "__class__": "quam.components.pulses.DragCosinePulse"
@@ -337,7 +337,7 @@
                         "length": 16,
                         "digital_marker": "ON",
                         "axis_angle": 0,
-                        "amplitude": 0.32237521775212175,
+                        "amplitude": 0.22680000000000008,
                         "alpha": -1.210048869890111,
                         "anharmonicity": "#/qubits/q2/anharmonicity",
                         "__class__": "quam.components.pulses.DragCosinePulse"
@@ -346,7 +346,7 @@
                         "length": "#../x180_DragCosine/length",
                         "digital_marker": "ON",
                         "axis_angle": 0,
-                        "amplitude": 0.16118760887606087,
+                        "amplitude": 0.11283132621324263,
                         "alpha": -0.5590476487900011,
                         "anharmonicity": "#../x180_DragCosine/anharmonicity",
                         "__class__": "quam.components.pulses.DragCosinePulse"
@@ -605,7 +605,7 @@
                         "length": 16,
                         "digital_marker": "ON",
                         "axis_angle": 0,
-                        "amplitude": 0.38380441311786456,
+                        "amplitude": 0.27960000000000007,
                         "alpha": -0.9412043738343211,
                         "anharmonicity": "#/qubits/q3/anharmonicity",
                         "__class__": "quam.components.pulses.DragCosinePulse"
@@ -614,7 +614,7 @@
                         "length": "#../x180_DragCosine/length",
                         "digital_marker": "ON",
                         "axis_angle": 0,
-                        "amplitude": 0.19190220655893228,
+                        "amplitude": 0.13893719754866699,
                         "alpha": -1.117343118342322,
                         "anharmonicity": "#../x180_DragCosine/anharmonicity",
                         "__class__": "quam.components.pulses.DragCosinePulse"
@@ -914,7 +914,7 @@
                         "length": 16,
                         "digital_marker": "ON",
                         "axis_angle": 0,
-                        "amplitude": 0.33685496557353206,
+                        "amplitude": 0.23585520000000007,
                         "alpha": -0.6442668016926699,
                         "anharmonicity": "#/qubits/q4/anharmonicity",
                         "__class__": "quam.components.pulses.DragCosinePulse"
@@ -923,7 +923,7 @@
                         "length": "#../x180_DragCosine/length",
                         "digital_marker": "ON",
                         "axis_angle": 0,
-                        "amplitude": 0.16842748278676603,
+                        "amplitude": 0.1165518180884421,
                         "alpha": -0.06266663778375456,
                         "anharmonicity": "#../x180_DragCosine/anharmonicity",
                         "__class__": "quam.components.pulses.DragCosinePulse"
@@ -1182,7 +1182,7 @@
                         "length": 16,
                         "digital_marker": "ON",
                         "axis_angle": 0,
-                        "amplitude": 0.3514423598575265,
+                        "amplitude": 0.25056466560000007,
                         "alpha": -0.9437357305624199,
                         "anharmonicity": "#/qubits/q5/anharmonicity",
                         "__class__": "quam.components.pulses.DragCosinePulse"
@@ -1191,7 +1191,7 @@
                         "length": "#../x180_DragCosine/length",
                         "digital_marker": "ON",
                         "axis_angle": 0,
-                        "amplitude": 0.17572117992876324,
+                        "amplitude": 0.12441059538956438,
                         "alpha": -0.4016262492725281,
                         "anharmonicity": "#../x180_DragCosine/anharmonicity",
                         "__class__": "quam.components.pulses.DragCosinePulse"
@@ -3508,7 +3508,7 @@
                         "band": 1,
                         "upconverter_frequency": 4900000000.0,
                         "delay": 20,
-                        "full_scale_power_dbm": 4,
+                        "full_scale_power_dbm": 7,
                         "__class__": "quam.components.ports.analog_outputs.MWFEMAnalogOutputPort"
                     },
                     "3": {
@@ -3518,7 +3518,7 @@
                         "band": 1,
                         "upconverter_frequency": 4900000000.0,
                         "delay": 20,
-                        "full_scale_power_dbm": 4,
+                        "full_scale_power_dbm": 7,
                         "__class__": "quam.components.ports.analog_outputs.MWFEMAnalogOutputPort"
                     },
                     "4": {
@@ -3528,7 +3528,7 @@
                         "band": 1,
                         "upconverter_frequency": 5000000000.0,
                         "delay": 20,
-                        "full_scale_power_dbm": 4,
+                        "full_scale_power_dbm": 7,
                         "__class__": "quam.components.ports.analog_outputs.MWFEMAnalogOutputPort"
                     },
                     "5": {
@@ -3538,7 +3538,7 @@
                         "band": 1,
                         "upconverter_frequency": 5000000000.0,
                         "delay": 20,
-                        "full_scale_power_dbm": 4,
+                        "full_scale_power_dbm": 7,
                         "__class__": "quam.components.ports.analog_outputs.MWFEMAnalogOutputPort"
                     },
                     "6": {
@@ -3548,7 +3548,7 @@
                         "band": 1,
                         "upconverter_frequency": 4900000000.0,
                         "delay": 20,
-                        "full_scale_power_dbm": 4,
+                        "full_scale_power_dbm": 7,
                         "__class__": "quam.components.ports.analog_outputs.MWFEMAnalogOutputPort"
                     }
                 }
