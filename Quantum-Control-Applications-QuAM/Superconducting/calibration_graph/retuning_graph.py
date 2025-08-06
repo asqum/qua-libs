@@ -38,7 +38,7 @@ g = QualibrationGraph(
             name="IQ_blobs",
             reset_type_thermal_or_active="active",
         ),
-        "ramsey_flux_calibration": library.nodes["08_Ramsey_vs_Flux_Calibration"].copy(
+        "ramsey_flux_calibration": library.nodes["06a_Ramsey_vs_Flux_Calibration"].copy(
             flux_point_joint_or_independent="independent", multiplexed=multiplexed, name="Ramsey_Flux_Calibration"
         ),
         "IQ_blobs_gef": library.nodes["11e_IQ_Blobs_G_E_F"].copy(
