@@ -120,7 +120,9 @@ with program() as power_rabi:
         for qb in qubits:
             wait(1000, qb.z.name)
 
-        align()
+        align(*[q.xy.name for q in qubits] +
+               [q.resonator.name for q in qubits] +
+               [q.z.name for q in qubits])
 
         with for_(n, 0, n < n_avg, n + 1):
             save(n, n_st)
@@ -136,12 +138,16 @@ with program() as power_rabi:
                     # Loop for error amplification (perform many qubit pulses)
                     with for_(count, 0, count < npi, count + 1):
                         qubit.xy.play(operation, amplitude_scale=a)
-                    align()
+                    align(*[q.xy.name for q in qubits] +
+                           [q.resonator.name for q in qubits] +
+                           [q.z.name for q in qubits])
                     qubit.resonator.measure("readout", qua_vars=(I[i], Q[i]))
                     assign(state[i], I[i] > qubit.resonator.operations["readout"].threshold)
                     save(state[i], state_stream[i])
 
-        align()
+        align(*[q.xy.name for q in qubits] +
+               [q.resonator.name for q in qubits] +
+               [q.z.name for q in qubits])
 
     with stream_processing():
         n_st.save("n")
