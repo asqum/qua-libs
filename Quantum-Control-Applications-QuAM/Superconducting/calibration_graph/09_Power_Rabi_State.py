@@ -144,9 +144,9 @@ with program() as power_rabi:
                     assign(state[i], I[i] > qubit.resonator.operations["readout"].threshold)
                     save(state[i], state_stream[i])
 
-        # align(*[q.xy.name for q in qubits] +
-        #        [q.resonator.name for q in qubits] +
-        #        [q.z.name for q in qubits])
+        align(*[q.xy.name for q in qubits] +
+               [q.resonator.name for q in qubits] +
+               [q.z.name for q in qubits])
 
     with stream_processing():
         n_st.save("n")
