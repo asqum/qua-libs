@@ -92,7 +92,7 @@ with program() as iq_blobs:
                 # measure ground-state IQ blob for all qubits
                 for i, qubit in multiplexed_qubits.items():
                     if reset_type == "active":
-                        active_reset(qubit, "readout")
+                        active_reset(qubit)
                     elif reset_type == "thermal":
                         qubit.wait(4 * qubit.thermalization_time * u.ns)
                     else:
@@ -116,7 +116,7 @@ with program() as iq_blobs:
 
                 for i, qubit in multiplexed_qubits.items():
                         if reset_type == "active":
-                            active_reset(qubit, "readout")
+                            active_reset(qubit)
                         elif reset_type == "thermal":
                             qubit.wait(qubit.thermalization_time * u.ns)
                         else:
@@ -125,6 +125,7 @@ with program() as iq_blobs:
             align(*[q.xy.name for q in multiplexed_qubits.values()] +
                    [q.resonator.name for q in multiplexed_qubits.values()] +
                    [q.z.name for q in multiplexed_qubits.values()])
+
             for i, qubit in multiplexed_qubits.items():
                 qubit.xy.play("x180")
                 qubit.resonator.wait(qubit.xy.operations["x180"].length * u.ns) # qubit.align()

@@ -74,7 +74,7 @@ graph = QualibrationGraph(
         "readout_freq_opt": library.nodes["07a_Readout_Frequency_Optimization"],
         "readout_power_opt": library.nodes["07c_Readout_Power_Optimization"],
         "iq_blobs_1": library.nodes["07b_IQ_Blobs"].copy(multiplexed=False),
-        "ramsey_vs_flux": library.nodes["08_Ramsey_vs_Flux_Calibration"].copy(),
+        "ramsey_vs_flux": library.nodes["06a_Ramsey_vs_Flux_Calibration"].copy(),
         "power_rabi_state_x180_1": library.nodes["09_Power_Rabi_State"].copy(
             operation_x180_or_any_90="x180",
             reset_type_thermal_or_active="active"
@@ -138,7 +138,7 @@ graph = QualibrationGraph(
         #     frequency_span_in_mhz=2,
         #     frequency_step_in_mhz=0.002
         # ),
-        "ramsey_vs_flux_2": library.nodes["08_Ramsey_vs_Flux_Calibration"].copy(),
+        "ramsey_vs_flux_2": library.nodes["06a_Ramsey_vs_Flux_Calibration"].copy(),
         "drag_calibration_x180_1": library.nodes["09c_DRAG_Calibration_180_90"].copy(
             operation="x180",
             reset_type_thermal_or_active="active",

@@ -1,42 +1,10 @@
-# %%
 """
-Two-Qubit Readout Confusion Matrix Measurement
-
-This sequence measures the readout error when simultaneously measuring the state of two qubits. The process involves:
-
-1. Preparing the two qubits in all possible combinations of computational basis states (|00⟩, |01⟩, |10⟩, |11⟩)
-2. Performing simultaneous readout on both qubits
-3. Calculating the confusion matrix based on the measurement results
-
-For each prepared state, we measure:
-1. The readout result of the first qubit
-2. The readout result of the second qubit
-
-The measurement process involves:
-1. Initializing both qubits to the ground state
-2. Applying single-qubit gates to prepare the desired input state
-3. Performing simultaneous readout on both qubits
-4. Repeating the process multiple times to gather statistics
-
-The outcome of this measurement will be used to:
-1. Quantify the readout fidelity for two-qubit states
-2. Identify and characterize crosstalk effects in the readout process
-3. Provide data for readout error mitigation in two-qubit experiments
-
-Prerequisites:
-- Calibrated single-qubit gates for both qubits in the pair
-- Calibrated readout for both qubits
-
-Outcomes:
-- 4x4 confusion matrix representing the probabilities of measuring each two-qubit state given a prepared input state
-- Readout fidelity metrics for simultaneous two-qubit measurement
 """
 
 # %% {Imports}
 from qualibrate import QualibrationNode, NodeParameters
 from quam_libs.components import QuAM
 from quam_libs.macros import active_reset, readout_state, readout_state_gef, active_reset_gef, active_reset_simple
-from quam_libs.lib.plot_utils import QubitPairGrid, grid_iter, grid_pair_names
 from quam_libs.lib.save_utils import fetch_results_as_xarray, load_dataset
 from qualang_tools.results import progress_counter, fetching_tool
 from qualang_tools.loops import from_array
@@ -47,13 +15,11 @@ from qm.qua import *
 from typing import Literal, Optional, List
 import matplotlib.pyplot as plt
 import numpy as np
-import warnings
-from qualang_tools.bakery import baking
 from quam_libs.lib.fit import fit_oscillation, oscillation, fix_oscillation_phi_2pi
 from quam_libs.lib.plot_utils import QubitPairGrid, grid_iter, grid_pair_names
-from scipy.optimize import curve_fit
-from quam_libs.components.gates.two_qubit_gates import CZGate
-from quam_libs.lib.pulses import FluxPulse
+
+import matplotlib
+matplotlib.use('Agg')
 
 # %% {Node_parameters}
 qubit_pair_indexes = [1]  # [1, 2]
@@ -67,14 +33,8 @@ class Parameters(NodeParameters):
     timeout: int = 100
     load_data_id: Optional[int] = None
     
-    # General:
-    coupler_flux_min : float = 0.100 #relative to the coupler set point
-    coupler_flux_max : float = 0.190 #relative to the coupler set point
-
-    # q1_q2:
-    # q2_q3:
-    # q3_q4:
-    # q4_q5:
+    coupler_flux_min : float = -0.04 #relative to the coupler set point
+    coupler_flux_max : float = 0.04 #relative to the coupler set point
 
     coupler_flux_step : float = 0.0002
     qubit_flux_span : float = 0.016 # relative to the known/calculated detuning between the qubits
@@ -167,6 +127,8 @@ with program() as CPhase_Oscillations:
         machine.set_all_fluxes(flux_point, qp)
         if reset_coupler_bias:
             qp.coupler.set_dc_offset(0.0)
+        else:
+            qp.coupler.to_decouple_idle()
         wait(1000)
 
         with for_(n, 0, n < n_avg, n + 1):
@@ -260,10 +222,7 @@ if not node.parameters.simulate:
 # %%
 detuning_mode = "quadratic" # "cosine" or "quadratic"
 if not node.parameters.simulate:
-    if reset_coupler_bias:
-        flux_coupler_full = np.array([fluxes_coupler + qp.coupler.decouple_offset for qp in qubit_pairs])
-    else:
-        flux_coupler_full = np.array([fluxes_coupler for qp in qubit_pairs])
+    flux_coupler_full = np.array([fluxes_coupler + qp.coupler.decouple_offset for qp in qubit_pairs])
     if detuning_mode == "quadratic":
         detuning = np.array([-fluxes_qp[qp.name] ** 2 * qp.qubit_control.freq_vs_flux_01_quad_term  for qp in qubit_pairs])
     elif detuning_mode == "cosine":
@@ -360,7 +319,7 @@ if not node.parameters.simulate:
 if not node.parameters.simulate:
     with node.record_state_updates():
         for qp in qubit_pairs:
-            # qp.coupler.decouple_offset = 0.14887 #node.results["results"][qp.name]["flux_coupler_min"]
+            qp.coupler.decouple_offset += node.results["results"][qp.name]["flux_coupler_min"] - qp.coupler.decouple_offset
             qp.detuning = node.results["results"][qp.name]["flux_qubit_max"]
 
 # %% {Save_results}
@@ -369,8 +328,3 @@ if not node.parameters.simulate:
     node.results['initial_parameters'] = node.parameters.model_dump()
     node.machine = machine
     node.save()
-# %%
-fluxes_qubit
-# %%
-est_flux_shift
-# %%
