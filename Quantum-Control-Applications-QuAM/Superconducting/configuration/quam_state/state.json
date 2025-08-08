@@ -8,7 +8,7 @@
                         "length": 16,
                         "digital_marker": "ON",
                         "axis_angle": 0,
-                        "amplitude": 0.6,
+                        "amplitude": 0.2382651583055145,
                         "alpha": 0.0,
                         "anharmonicity": "#/qubits/q0/anharmonicity",
                         "__class__": "quam.components.pulses.DragCosinePulse"
@@ -118,7 +118,7 @@
                         "__class__": "quam.components.pulses.SquarePulse"
                     }
                 },
-                "intermediate_frequency": 275897039.16531736,
+                "intermediate_frequency": 277344753.2047248,
                 "opx_output": "#/wiring/qubits/q0/xy/opx_output",
                 "__class__": "quam.components.channels.MWChannel"
             },
@@ -131,7 +131,7 @@
                     }
                 },
                 "opx_output": "#/wiring/qubits/q0/z/opx_output",
-                "independent_offset": -0.07197540219444609,
+                "independent_offset": -0.06686390954238638,
                 "__class__": "quam_libs.components.flux_line.FluxLine"
             },
             "resonator": {
@@ -141,7 +141,7 @@
                         "length": 2000,
                         "amplitude": 0.010211532151708516,
                         "threshold": 0.0,
-                        "integration_weights_angle": 4.694145383184473,
+                        "integration_weights_angle": 4.9041530304040135,
                         "__class__": "quam.components.pulses.SquareReadoutPulse"
                     },
                     "const": {
@@ -156,7 +156,7 @@
                 "opx_output": "#/wiring/qubits/q0/rr/opx_output",
                 "__class__": "quam_libs.components.readout_resonator.ReadoutResonatorMW"
             },
-            "freq_vs_flux_01_quad_term": 20419996648.159054,
+            "freq_vs_flux_01_quad_term": -14784282244.635656,
             "phi0_current": 31.825653082556045,
             "phi0_voltage": 0.6365130616511209,
             "grid_location": "0,0",
@@ -170,7 +170,7 @@
                         "length": 16,
                         "digital_marker": "ON",
                         "axis_angle": 0,
-                        "amplitude": 0.6,
+                        "amplitude": 0.36374455849941545,
                         "alpha": 0.0,
                         "anharmonicity": "#/qubits/q1/anharmonicity",
                         "__class__": "quam.components.pulses.DragCosinePulse"
@@ -280,7 +280,7 @@
                         "__class__": "quam.components.pulses.SquarePulse"
                     }
                 },
-                "intermediate_frequency": 262933392.2570541,
+                "intermediate_frequency": 262963378.5675217,
                 "opx_output": "#/wiring/qubits/q1/xy/opx_output",
                 "__class__": "quam.components.channels.MWChannel"
             },
@@ -293,7 +293,7 @@
                     }
                 },
                 "opx_output": "#/wiring/qubits/q1/z/opx_output",
-                "independent_offset": 0.34239680627831154,
+                "independent_offset": 0.34288230581463913,
                 "__class__": "quam_libs.components.flux_line.FluxLine"
             },
             "resonator": {
@@ -303,7 +303,7 @@
                         "length": 2000,
                         "amplitude": 0.010211532151708516,
                         "threshold": 0.0,
-                        "integration_weights_angle": 0.5372311107106912,
+                        "integration_weights_angle": 0.5174705604856767,
                         "__class__": "quam.components.pulses.SquareReadoutPulse"
                     },
                     "const": {
@@ -318,7 +318,7 @@
                 "opx_output": "#/wiring/qubits/q1/rr/opx_output",
                 "__class__": "quam_libs.components.readout_resonator.ReadoutResonatorMW"
             },
-            "freq_vs_flux_01_quad_term": -11471849679.488625,
+            "freq_vs_flux_01_quad_term": -14637456534.70061,
             "phi0_current": 37.73415170907876,
             "phi0_voltage": 0.7546830341815751,
             "grid_location": "1,0",
