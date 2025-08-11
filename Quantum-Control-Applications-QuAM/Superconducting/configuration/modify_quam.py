@@ -115,30 +115,30 @@ u = unit(coerce_to_integer=True)
 # %%
 q1 = machine.qubits["q1"]
 q2 = machine.qubits["q2"]
-q3 = machine.qubits["q3"]
-q4 = machine.qubits["q4"]
-q5 = machine.qubits["q5"]
+# q3 = machine.qubits["q3"]
+# q4 = machine.qubits["q4"]
+# q5 = machine.qubits["q5"]
 print("q1's z.independent_offset: %s" %(q1.z.independent_offset))
 print("q2's z.independent_offset: %s" %(q2.z.independent_offset))
-print("q3's z.independent_offset: %s" %(q3.z.independent_offset))
-print("q4's z.independent_offset: %s" %(q4.z.independent_offset))
-print("q5's z.independent_offset: %s" %(q5.z.independent_offset))
+# print("q3's z.independent_offset: %s" %(q3.z.independent_offset))
+# print("q4's z.independent_offset: %s" %(q4.z.independent_offset))
+# print("q5's z.independent_offset: %s" %(q5.z.independent_offset))
 
 coupler_q1_q2 = machine.qubit_pairs["coupler_q1_q2"]
-coupler_q2_q3 = machine.qubit_pairs["coupler_q2_q3"]
-coupler_q3_q4 = machine.qubit_pairs["coupler_q3_q4"]
-coupler_q4_q5 = machine.qubit_pairs["coupler_q4_q5"]
+# coupler_q2_q3 = machine.qubit_pairs["coupler_q2_q3"]
+# coupler_q3_q4 = machine.qubit_pairs["coupler_q3_q4"]
+# coupler_q4_q5 = machine.qubit_pairs["coupler_q4_q5"]
 print("coupler_q1_q2's decouple_offset: %s" %(coupler_q1_q2.coupler.decouple_offset))
-print("coupler_q2_q3's decouple_offset: %s" %(coupler_q2_q3.coupler.decouple_offset))
-print("coupler_q3_q4's decouple_offset: %s" %(coupler_q3_q4.coupler.decouple_offset))
-print("coupler_q4_q5's decouple_offset: %s" %(coupler_q4_q5.coupler.decouple_offset))
+# print("coupler_q2_q3's decouple_offset: %s" %(coupler_q2_q3.coupler.decouple_offset))
+# print("coupler_q3_q4's decouple_offset: %s" %(coupler_q3_q4.coupler.decouple_offset))
+# print("coupler_q4_q5's decouple_offset: %s" %(coupler_q4_q5.coupler.decouple_offset))
 
 # RESET ALL Z:  
-q1.z.independent_offset = 0
-q2.z.independent_offset = 0
-q3.z.independent_offset = 0
-q4.z.independent_offset = 0
-q5.z.independent_offset = 0
+# q1.z.independent_offset = 0
+# q2.z.independent_offset = 0
+# q3.z.independent_offset = 0
+# q4.z.independent_offset = 0
+# q5.z.independent_offset = 0
 print("\nqubits' offset updated.........\n")
 
 # OFF-points: (or close-by)  
@@ -152,10 +152,10 @@ print("\nqubits' offset updated.........\n")
 # (q2 @ q3).coupler.decouple_offset = 0.109
 # (q1 @ q2).coupler.decouple_offset = 0.130 
 # INITIAL guess for couplers' offset:
-coupler_q1_q2.coupler.decouple_offset = 0.
-coupler_q2_q3.coupler.decouple_offset = 0.
-coupler_q3_q4.coupler.decouple_offset = 0.
-coupler_q4_q5.coupler.decouple_offset = 0.
+coupler_q1_q2.coupler.decouple_offset = -0.1
+# coupler_q2_q3.coupler.decouple_offset = 0.
+# coupler_q3_q4.coupler.decouple_offset = 0.
+# coupler_q4_q5.coupler.decouple_offset = 0.
 print("\ncouplers' offset updated.........\n")
 
 # %%
@@ -173,17 +173,17 @@ print("\ncouplers' offset updated.........\n")
 
 # %%
 # reset filters:
-for qubit in machine.qubits:
-    machine.qubits[qubit].z.filter_fir_taps = None
-    machine.qubits[qubit].z.filter_iir_taps = None
-print("filters resetted.........\n")
+# for qubit in machine.qubits:
+#     machine.qubits[qubit].z.filter_fir_taps = None
+#     machine.qubits[qubit].z.filter_iir_taps = None
+# print("filters resetted.........\n")
     
 # %%
 # reset crosstalk-matrix: 
-for fem_dict in machine.ports.analog_outputs['con1'].values():
-    for output_port in fem_dict.values():
-        output_port.crosstalk = None
-print("crosstalk-matrix resetted.........\n")
+# for fem_dict in machine.ports.analog_outputs['con1'].values():
+#     for output_port in fem_dict.values():
+#         output_port.crosstalk = None
+# print("crosstalk-matrix resetted.........\n")
         
 # %%
 # save into state.json
