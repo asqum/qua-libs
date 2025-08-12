@@ -99,6 +99,7 @@ with program() as t1:
 
         # Bring the active qubits to the desired frequency point
         machine.set_all_fluxes(flux_point=flux_point, target=qubit)
+        if "c" in qubit.id: qubit.z.set_dc_offset(qubit.z.joint_offset) # for coupler-test case
         qubit.z.settle()
         qubit.align()
 

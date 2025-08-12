@@ -25,7 +25,7 @@
                     "opx_output": "#/ports/analog_outputs/con1/1/2"
                 }
             },
-            "q3": {
+            "c1": {
                 "rr": {
                     "opx_input": "#/ports/mw_inputs/con1/6/1",
                     "opx_output": "#/ports/mw_outputs/con1/6/1"
