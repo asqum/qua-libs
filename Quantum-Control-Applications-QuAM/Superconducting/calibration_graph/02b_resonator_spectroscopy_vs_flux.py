@@ -42,7 +42,7 @@ import warnings
 # %% {Node_parameters}
 class Parameters(NodeParameters):
 
-    qubits: Optional[List[str]] = ["q3"] #["q1"]
+    qubits: Optional[List[str]] = None #["q3"] #["q1"]
     num_averages: int = 50
     min_flux_offset_in_v: float = -0.5
     max_flux_offset_in_v: float = 0.5
@@ -301,11 +301,27 @@ if not node.parameters.simulate:
     # %% {Update_state}
     if not node.parameters.load_data_id:
         with node.record_state_updates():
-            for q in qubits:
+            for q in qubits[:2]:
                 if not (np.isnan(float(idle_offset.sel(qubit=q.name).data))):
                     if flux_point == "independent":
                         q.z.independent_offset = float(idle_offset.sel(qubit=q.name).data)
                         # q.z.independent_offset =  float(flux_min.sel(qubit=q.name).data)
+                    else:
+                        q.z.joint_offset = float(idle_offset.sel(qubit=q.name).data)
+
+                    if update_flux_min:
+                        q.z.min_offset = float(flux_min.sel(qubit=q.name).data)
+                q.resonator.intermediate_frequency += float(rel_freq_shift.sel(qubit=q.name).data)
+                q.phi0_voltage = fit_results[q.name]["dv_phi0"]
+                q.phi0_current = (
+                    fit_results[q.name]["dv_phi0"] * node.parameters.input_line_impedance_in_ohm * attenuation_factor
+                )
+
+            for q in qubits[2:]:
+                if not (np.isnan(float(idle_offset.sel(qubit=q.name).data))):
+                    if flux_point == "independent":
+                        # q.z.independent_offset = float(idle_offset.sel(qubit=q.name).data)
+                        q.z.independent_offset =  float(flux_min.sel(qubit=q.name).data)
                     else:
                         q.z.joint_offset = float(idle_offset.sel(qubit=q.name).data)
 
