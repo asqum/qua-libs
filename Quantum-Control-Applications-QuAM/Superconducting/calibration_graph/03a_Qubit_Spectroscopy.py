@@ -47,12 +47,12 @@ import numpy as np
 # %% {Node_parameters}
 class Parameters(NodeParameters):
 
-    qubits: Optional[List[str]] = None #["q1","q2","q3","q4"] #None
+    qubits: Optional[List[str]] = ["q3"] #None #["q1","q2","q3","q4"] #None
     num_averages: int = 300
     operation: str = "saturation"
-    operation_amplitude_factor: Optional[float] = 0.01 #0.004, 0.0004
+    operation_amplitude_factor: Optional[float] = 0.04 #0.004, 0.0004
     operation_len_in_ns: Optional[int] = None
-    frequency_span_in_mhz: float = 600 #200, 4
+    frequency_span_in_mhz: float = 800 #200, 4, 800
     frequency_step_in_mhz: float = 1 #0.25, 0.01
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
     target_peak_width: Optional[float] = 1e6 #1e6
@@ -134,6 +134,7 @@ with program() as qubit_spec:
     for i, qubit in enumerate(qubits):
         # Bring the active qubits to the desired frequency point
         machine.set_all_fluxes(flux_point=flux_point, target=qubit)
+        qubit.z.set_dc_offset(-0.384) # for coupler special case
         qubit.align()
 
         with for_(n, 0, n < n_avg, n + 1):

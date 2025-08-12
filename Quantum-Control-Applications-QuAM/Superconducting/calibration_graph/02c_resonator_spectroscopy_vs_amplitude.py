@@ -44,7 +44,7 @@ import numpy as np
 # %% {Node_parameters}
 class Parameters(NodeParameters):
 
-    qubits: Optional[List[str]] = None
+    qubits: Optional[List[str]] = ["q3"] #None
     num_averages: int = 200
     frequency_span_in_mhz: float = 10 #15
     frequency_step_in_mhz: float = 0.1
@@ -128,6 +128,7 @@ with program() as multi_res_spec_vs_amp:
 
         # Bring the active qubits to the desired frequency point
         machine.set_all_fluxes(flux_point=flux_point, target=qubit)
+        qubit.z.set_dc_offset(-0.384) # for coupler special case
         qubit.align()
         
         # resonator of this qubit

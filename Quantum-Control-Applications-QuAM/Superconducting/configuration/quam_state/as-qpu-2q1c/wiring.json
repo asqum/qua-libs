@@ -25,13 +25,13 @@
                     "opx_output": "#/ports/analog_outputs/con1/1/2"
                 }
             },
-            "q12": {
+            "q3": {
                 "rr": {
                     "opx_input": "#/ports/mw_inputs/con1/6/1",
                     "opx_output": "#/ports/mw_outputs/con1/6/1"
                 },
                 "xy": {
-                    "opx_output": "#/ports/mw_outputs/con1/6/3"
+                    "opx_output": "#/ports/mw_outputs/con1/6/2"
                 },
                 "z": {
                     "opx_output": "#/ports/analog_outputs/con1/1/3"

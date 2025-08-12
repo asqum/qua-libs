@@ -42,12 +42,12 @@ import warnings
 # %% {Node_parameters}
 class Parameters(NodeParameters):
 
-    qubits: Optional[List[str]] = None #["q1"]
+    qubits: Optional[List[str]] = ["q3"] #["q1"]
     num_averages: int = 50
     min_flux_offset_in_v: float = -0.5
     max_flux_offset_in_v: float = 0.5
     num_flux_points: int = 201
-    frequency_span_in_mhz: float = 15 #15
+    frequency_span_in_mhz: float = 10 #15
     frequency_step_in_mhz: float = 0.1 #0.1
     flux_point_joint_or_independent: Literal["joint", "independent", ""] = "independent"
     input_line_impedance_in_ohm: float = 50
@@ -239,7 +239,8 @@ if not node.parameters.simulate:
                 * attenuation_factor
             )
         )
-        print(f"DC offset for {q.name} is {fit_results[q.name]['offset'] * 1e3:.0f} mV")
+        print(f"Max offset for {q.name} is {fit_results[q.name]['offset'] * 1e3:.0f} mV")
+        print(f"Min offset for {q.name} is {fit_results[q.name]['min_offset'] * 1e3:.4f} mV")
         print(f"Resonator frequency for {q.name} is {fit_results[q.name]['resonator_frequency'] / 1e9:.3f} GHz")
         print(f"(shift of {rel_freq_shift.sel(qubit = q.name).values / 1e6:.0f} MHz)")
 
@@ -304,6 +305,7 @@ if not node.parameters.simulate:
                 if not (np.isnan(float(idle_offset.sel(qubit=q.name).data))):
                     if flux_point == "independent":
                         q.z.independent_offset = float(idle_offset.sel(qubit=q.name).data)
+                        # q.z.independent_offset =  float(flux_min.sel(qubit=q.name).data)
                     else:
                         q.z.joint_offset = float(idle_offset.sel(qubit=q.name).data)
 
