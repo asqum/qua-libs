@@ -288,6 +288,9 @@ if not node.parameters.simulate:
                 if not np.isnan(flux_shift.sel(qubit=q.name).values):
                     if flux_point == "independent":
                         q.z.independent_offset += fit_results[q.name]["flux_shift"]
+                        if "c" in q.id: # for coupler-test case
+                            q.z.joint_offset += fit_results[q.name]["flux_shift"]
+                            q.z.independent_offset = q.z.joint_offset - q.phi0_voltage / 2 
                     elif flux_point == "joint":
                         q.z.joint_offset += fit_results[q.name]["flux_shift"]
                     q.xy.intermediate_frequency += fit_results[q.name]["drive_freq"]

@@ -282,6 +282,9 @@ if not node.parameters.simulate:
                 qubit.xy.intermediate_frequency -= freq_offset[qubit.name]
                 if flux_point == "independent":
                     qubit.z.independent_offset += flux_offset[qubit.name]
+                    if "c" in qubit.id: # for coupler-test case
+                        qubit.z.joint_offset += flux_offset[qubit.name]
+                        qubit.z.independent_offset = qubit.z.joint_offset - qubit.phi0_voltage / 2 
                 elif flux_point == "joint":
                     qubit.z.joint_offset += flux_offset[qubit.name]
                 else:
