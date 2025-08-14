@@ -40,7 +40,7 @@ import numpy as np
 # %% {Node_parameters}
 class Parameters(NodeParameters):
 
-    qubits: Optional[List[str]] = None
+    qubits: Optional[List[str]] =  ["q1","q2",]#None
     num_averages: int = 60 #10
     operation_x180_or_any_90: Literal["x180", "x90", "-x90", "y90", "-y90"] = "x180"
     min_amp_factor: float = 0.8
@@ -241,7 +241,7 @@ else:
         for q in qubits:
             new_pi_amp = ds.abs_amp.sel(qubit=q.name)[data_max_idx.sel(qubit=q.name)]
             fit_results[q.name] = {}
-            if new_pi_amp < 0.3:  # TODO: 1 for OPX1000 MW
+            if new_pi_amp < 1:  # TODO: 1 for OPX1000 MW
                 fit_results[q.name]["Pi_amplitude"] = float(new_pi_amp)
                 print(
                     f"amplitude for Pi pulse is modified by a factor of {I_n.idxmax(dim='amp').sel(qubit = q.name):.2f}"
@@ -250,8 +250,8 @@ else:
                     f"new amplitude is {1e3 * new_pi_amp:.2f} mV \n"
                 )  # TODO: 1 for OPX1000 MW
             else:
-                print(f"Fitted amplitude too high, new amplitude is 300 mV \n")
-                fit_results[q.name]["Pi_amplitude"] = 0.3  # TODO: 1 for OPX1000 MW
+                print(f"Fitted amplitude too high, new amplitude is 1000 mV \n")
+                fit_results[q.name]["Pi_amplitude"] = 1  # TODO: 1 for OPX1000 MW
         node.results["fit_results"] = fit_results
 
     # %% {Plotting}
