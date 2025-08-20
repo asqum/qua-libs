@@ -13,7 +13,7 @@ classifiers = [
 ]
 
 [tool.poetry.dependencies]
-python = ">=3.11"
+python = ">=3.10"
 quam = ">0.4.0"
 qualang-tools = ">=0.19.0"
 xarray = "*"
@@ -21,7 +21,7 @@ lmfit = "*"
 qiskit-experiments = "*"
 tqdm = "*"
 qualibrate = "*"
-qm-qua = ">=1.2.3"
+qm-qua = ">=1.2.2"
 tomli = { version = "^2.0.1", python = "<3.11" }
 colorama = "*"
 
