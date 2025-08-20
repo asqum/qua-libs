@@ -30,21 +30,24 @@
  - Access to Quantum Orchestration Platform (QOP) hardware
    - Required for running experiments on hardware.
    - We recommend upgrading to [QOP3.4.1](https://docs.quantum-machines.co/latest/docs/Releases/qop3_releases/) or later for the OPX1000, and [QOP2.4.4](https://docs.quantum-machines.co/latest/docs/Releases/qop2_releases/) or later of the OPX+
-      - The minimum corresponding QUA SDK (`qm-qua`) version will be shown on the pages linked above.
     
 ### Getting Started
-First, activate your conda environment using
+1. Activate your conda environment using
 ```bash
 conda activate qualibrate_env
 ```
 
-Then, install quam-libs
+2. Then, install quam-libs
 
 ```sh
 # Install `quam_libs` (locally, from this directory)
 pip install -e path/to/asqum/Quantum-Control-Applications-QuAM/Superconducting
 ```
 > **_NOTE:_**  The `-e` flag means you *don't* have to reinstall if you make a local change to `quam_libs`!
+
+3. You need to install the **minimum** required QUA SDK (`qm-qua`) version that is supported by your installed QOP.
+    - This can be found on the [releases](Quantum-Control-Applications-QuAM/Superconducting/pyproject.toml) page of the QM documentation website
+    - For example, if using QOP3.4.1, you install at least version 1.2.3, i..e, `pip install qm-qua==1.2.3`
 
 
 ## Initial Setup (QUAlibrate Configuration)
@@ -89,6 +92,11 @@ To ensure QUAlibrate is installed and configured correctly:
 
 You should see the QUAlibrate web UI, listing the calibration nodes found in your configured `calibrations` directory.
 
+> **_NOTE:_**  If any nodes weren't loaded properly due to an 'illegal character', you might have to modify the following file:
+>
+> In **C:\Users\<user_name>\anaconda3\envs\qualibrate_env\lib\site-packages\qualibrate\q_runnnable.py**
+> 
+> on line #31: `contents = file.read_text(encoding="utf-8", errors="ignore")`
 
 ## Creating the QUAM State
 
