@@ -47,9 +47,9 @@ from qm.qua import *
 node = QualibrationNode(
     name="07b_IQ_Blobs",
     parameters=Parameters(
-        qubits=None,
+        qubits=["q1","q2"],#None,
         multiplexed=True,
-        flux_point_joint_or_independent="joint",
+        flux_point_joint_or_independent="independent",
         num_runs=3000,
         load_data_id=None,
         simulate=False,

@@ -42,7 +42,7 @@ import warnings
 # %% {Node_parameters}
 class Parameters(NodeParameters):
 
-    qubits: Optional[List[str]] = None #["q3"] #["q1"]
+    qubits: Optional[List[str]] = ["q1","q2"] #None #["q3"] #["q1"]
     num_averages: int = 50
     min_flux_offset_in_v: float = -0.5
     max_flux_offset_in_v: float = 0.5

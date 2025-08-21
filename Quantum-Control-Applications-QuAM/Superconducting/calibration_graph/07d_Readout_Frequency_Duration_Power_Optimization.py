@@ -60,7 +60,7 @@ from qm.qua import *
 node = QualibrationNode(
     name="07d_Readout_Frequency_Duration_Power_Optimization",
     parameters=Parameters(
-        qubits=None,
+        qubits=["q1","q2"],
         multiplexed=True,
         flux_point_joint_or_independent="joint",
         num_runs=40,

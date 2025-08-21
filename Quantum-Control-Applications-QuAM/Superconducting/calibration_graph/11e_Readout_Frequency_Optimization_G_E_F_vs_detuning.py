@@ -38,7 +38,7 @@ from quam.components import pulses
 # %% {Node_parameters}
 class Parameters(NodeParameters):
 
-    qubits: Optional[List[str]] = ["q1","q2","q3"]
+    qubits: Optional[List[str]] = ["q1","q2"]
     num_averages: int = 50
     ro_frequency_span_in_mhz: float = 10
     ro_frequency_step_in_mhz: float = 0.25

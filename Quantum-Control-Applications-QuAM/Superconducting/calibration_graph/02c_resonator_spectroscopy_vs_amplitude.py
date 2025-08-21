@@ -44,15 +44,15 @@ import numpy as np
 # %% {Node_parameters}
 class Parameters(NodeParameters):
 
-    qubits: Optional[List[str]] = ["q3"] #None
-    num_averages: int = 200
+    qubits: Optional[List[str]] = ["q1","q2"] #None
+    num_averages: int = 400
     frequency_span_in_mhz: float = 10 #15
     frequency_step_in_mhz: float = 0.1
     simulate: bool = False
     simulation_duration_ns: int = 2500
     timeout: int = 100
     max_power_dbm: int = -20 #-30, -10
-    min_power_dbm: int = -60 # -40
+    min_power_dbm: int = -70 # -40
     num_power_points: int = 100
     max_amp: float = 0.9 #0.1
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
@@ -128,7 +128,7 @@ with program() as multi_res_spec_vs_amp:
 
         # Bring the active qubits to the desired frequency point
         machine.set_all_fluxes(flux_point=flux_point, target=qubit)
-        qubit.z.set_dc_offset(-0.384) # for coupler special case
+        # qubit.z.set_dc_offset(-0.384) # for coupler special case
         qubit.align()
         
         # resonator of this qubit

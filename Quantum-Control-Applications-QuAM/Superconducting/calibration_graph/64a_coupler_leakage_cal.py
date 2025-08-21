@@ -77,14 +77,14 @@ class Parameters(NodeParameters):
     # coupler_flux_min : float = 0.150 #relative to the coupler set point
     # coupler_flux_max : float = 0.200 #relative to the coupler set point
     # q3_q4:
-    coupler_flux_min : float = 0.21 #relative to the coupler set point
+    coupler_flux_min : float = -0.05 #relative to the coupler set point
     coupler_flux_max : float = 0.26 #relative to the coupler set point
 
     coupler_flux_step : float = 0.001
     
     # wide scan: 
-    qubit_flux_min : float = -0.09 #-0.2 # relative to the qubit pair detuning
-    qubit_flux_max : float = -0.04 #0.2 # relative to the qubit pair detuning
+    qubit_flux_min : float = -0.1 #-0.2 # relative to the qubit pair detuning
+    qubit_flux_max : float = 0.1 #0.2 # relative to the qubit pair detuning
     
     qubit_flux_step : float = 0.001
     use_state_discrimination: bool = True

@@ -39,14 +39,14 @@ import numpy as np
 
 # %% {Node_parameters}
 class Parameters(NodeParameters):
-    qubits: Optional[List[str]] = None
-    num_averages: int = 200
-    frequency_detuning_in_mhz: float = 4.0
+    qubits: Optional[List[str]] =["q1","q2"] #None
+    num_averages: int = 500
+    frequency_detuning_in_mhz: float = 2.0
     min_wait_time_in_ns: int = 16
     max_wait_time_in_ns: int = 2000
-    wait_time_step_in_ns: int = 20
-    flux_span: float = 0.01
-    flux_step: float = 0.0002
+    wait_time_step_in_ns: int = 40
+    flux_span: float = 0.015
+    flux_step: float = 0.0004
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
     simulate: bool = False
     simulation_duration_ns: int = 2500
@@ -138,7 +138,7 @@ with program() as ramsey:
                     assign(state[i], init_state ^ state[i])
                     save(state[i], state_st[i])
 
-                    # Reset the frame of the qubits in order not to accumulate rotations
+                    # Reset the frame of the qubits in order not to accumulate rotation
                     reset_frame(qubit.xy.name)
                     qubit.align()
 

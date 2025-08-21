@@ -34,10 +34,10 @@ import numpy as np
 
 # %% {Node_parameters}
 class Parameters(NodeParameters):
-    qubits: Optional[List[str]] = ["q1","q2","q3","q4","q5"] #None
+    qubits: Optional[List[str]] = ["q1","q2"] #None
     num_averages: int = 300
     min_wait_time_in_ns: int = 16
-    max_wait_time_in_ns: int = 90000
+    max_wait_time_in_ns: int = 130000
     wait_time_step_in_ns: int = 300
     flux_point_joint_or_independent_or_arbitrary: Literal["joint", "independent", "arbitrary"] = "independent"
     reset_type: Literal["active", "thermal"] = "thermal"

@@ -42,7 +42,7 @@ import numpy as np
 
 # %% {Node_parameters}
 class Parameters(NodeParameters):
-    qubits: Optional[List[str]] = None
+    qubits: Optional[List[str]] = ["q1","q2",] # None
     num_averages: int = 20
     operation: str = "x180"
     frequency_span_in_mhz: float = 20

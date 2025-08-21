@@ -41,7 +41,7 @@ import numpy as np
 
 # %% {Node_parameters}
 class Parameters(NodeParameters):
-    qubits: Optional[List[str]] = None
+    qubits: Optional[List[str]] =  ["q1","q2",]#None
     use_state_discrimination: bool = True
     use_strict_timing: bool = True
     interleaved_gate_index: int = 2

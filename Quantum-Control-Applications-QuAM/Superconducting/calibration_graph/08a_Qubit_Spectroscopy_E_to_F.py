@@ -49,13 +49,13 @@ import numpy as np
 # %% {Node_parameters}
 class Parameters(NodeParameters):
 
-    qubits: Optional[List[str]] = None
+    qubits: Optional[List[str]] =["q1","q2"] # None
     num_averages: int = 200
     operation: str = "saturation"
-    operation_amplitude_factor: Optional[float] = 0.0075
+    operation_amplitude_factor: Optional[float] = 0.25
     operation_len_in_ns: Optional[int] = None
     frequency_span_in_mhz: float = 300
-    frequency_step_in_mhz: float = 0.15
+    frequency_step_in_mhz: float = 0.2
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
     simulate: bool = False
     timeout: int = 100

@@ -25,8 +25,8 @@ from quam_libs.macros import active_reset, readout_state, active_reset_simple
 
 # %% {Node_parameters}
 class Parameters(NodeParameters):
-    qubits: Optional[List[str]] = ["q1","q2","q3"] #["q1","q2","q3","q4","q5"]
-    qubit_pairs: Optional[List[str]] = ["coupler_q1_q2", "coupler_q2_q3"] #None 
+    qubits: Optional[List[str]] = ["q1","q2"] #["q1","q2","q3","q4","q5"]
+    qubit_pairs: Optional[List[str]] = ["coupler_q1_q2"] #None 
     # control_qubit_post_cz_phase_corrections: List[float] = [0.709, 0.484, 0.384, -0.278] #None
     # target_qubit_post_cz_phase_corrections: List[float] = [-0.414, 0.374, 0.449, -0.830] #None
     num_averages: int = 1000

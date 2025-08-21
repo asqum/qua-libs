@@ -40,7 +40,7 @@ from datetime import datetime, timezone, timedelta
 # %% {Node_parameters}
 class Parameters(NodeParameters):
 
-    qubits: Optional[List[str]] = ["q1"]
+    qubits: Optional[List[str]] = ["q1","q2",]
     num_averages: int = 100
     amp_min: float = 0.1
     amp_max: float = 1.5

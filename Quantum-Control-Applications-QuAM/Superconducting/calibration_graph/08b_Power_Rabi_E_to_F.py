@@ -41,11 +41,11 @@ import numpy as np
 # %% {Node_parameters}
 class Parameters(NodeParameters):
 
-    qubits: Optional[List[str]] = None
+    qubits: Optional[List[str]] = ["q1","q2"] #None
     num_averages: int = 200
     operation: str = "x180"
     min_amp_factor: float = 0.0
-    max_amp_factor: float = 1.5
+    max_amp_factor: float = 1.2
     amp_factor_step: float = 0.005
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
     simulate: bool = False
@@ -265,3 +265,5 @@ else:
     node.results["initial_parameters"] = node.parameters.model_dump()
     node.machine = machine
     node.save()
+
+# %%

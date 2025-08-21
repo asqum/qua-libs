@@ -42,7 +42,7 @@ class Parameters(NodeParameters):
 
     qubits: Optional[List[str]] =  ["q1","q2",]#None
     num_averages: int = 60 #10
-    operation_x180_or_any_90: Literal["x180", "x90", "-x90", "y90", "-y90"] = "x180"
+    operation_x180_or_any_90: Literal["x180", "x90", "-x90", "y90", "-y90"] = "x90"
     min_amp_factor: float = 0.8
     max_amp_factor: float = 1.2
     amp_factor_step: float = 0.004

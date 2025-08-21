@@ -30,7 +30,7 @@ import xarray as xr
 # %% {Node_parameters}
 
 class Parameters(NodeParameters):
-    qubits: Optional[List[str]] = None #["q1", "q4", "q5"]
+    qubits: Optional[List[str]] =  ["q1","q2",] # None #["q1", "q4", "q5"]
     duration_ns: int = 100
     timeout: int = 100
     target_qubit_frequency_in_ghz: float = 0.7

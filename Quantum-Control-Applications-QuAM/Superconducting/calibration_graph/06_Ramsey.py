@@ -38,11 +38,11 @@ import matplotlib.pyplot as plt
 node = QualibrationNode(
     name="06_Ramsey",
     parameters=Parameters(
-        qubits=None,
+        qubits=["q1","q2"],
         num_averages=100,
-        frequency_detuning_in_mhz=2.0,
+        frequency_detuning_in_mhz=4.0,
         min_wait_time_in_ns=16,
-        max_wait_time_in_ns=7000,
+        max_wait_time_in_ns=3000,
         num_time_points=200,
         log_or_linear_sweep="log",
         use_state_discrimination=False,

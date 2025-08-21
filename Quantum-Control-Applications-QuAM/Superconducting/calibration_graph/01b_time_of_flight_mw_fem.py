@@ -32,7 +32,7 @@ class Parameters(NodeParameters):
 
     qubits: Optional[List[str]] = None
     num_averages: int = 100
-    time_of_flight_in_ns: Optional[int] = 24
+    time_of_flight_in_ns: Optional[int] = 28
     intermediate_frequency_in_mhz: Optional[float] = 50
     readout_amplitude_in_dBm: Optional[float] = -3
     readout_length_in_ns: Optional[int] = None
@@ -125,8 +125,12 @@ else:
         # Creates a result handle to fetch data from the OPX
         res_handles = job.result_handles
         # Waits (blocks the Python console) until all results have been acquired
-        res_handles.wait_for_all_values()
+        # res_handles.wait_for_all_values()
 
+
+    import time
+    time.sleep(15)
+    
     # %% {Data_fetching_and_dataset_creation}
     # Fetch the data from the OPX and convert it into a xarray with corresponding axes (from most inner to outer loop)
     time_axis = np.linspace(0, resonators[0].operations["readout"].length, resonators[0].operations["readout"].length)
