@@ -44,7 +44,7 @@ from sklearn.mixture import GaussianMixture
 class Parameters(NodeParameters):
 
     qubits: Optional[List[str]] = None
-    num_runs: int = 3000
+    num_runs: int = 4000
     reset_type_thermal_or_active: Literal["thermal", "active"] = "thermal"
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
     start_amp: float = 0.02
