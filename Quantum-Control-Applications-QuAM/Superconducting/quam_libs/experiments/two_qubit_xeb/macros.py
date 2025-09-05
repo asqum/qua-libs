@@ -81,7 +81,7 @@ def reset_qubit(method: str, qubit: Transmon, **kwargs):
 
 
 # Macro for performing active reset until successful for a given number of tries.
-def active_reset(threshold: float, qubit: Transmon, max_tries=1, Ig=None, pi_pulse: str = "x180"):
+def active_reset(threshold: float, qubit: Transmon, max_tries=20, Ig=None, pi_pulse: str = "x180"):
     """Macro for performing active reset until successful for a given number of tries.
 
     :param threshold: threshold for the 'I' quadrature discriminating between ground and excited state.
@@ -93,8 +93,9 @@ def active_reset(threshold: float, qubit: Transmon, max_tries=1, Ig=None, pi_pul
     :param pi_pulse: The pulse to play to get back to the ground state. Default is 'x180'.
     :return: A QUA variable for the information in the `I` quadrature and the number of tries after success.
     """
-    if Ig is None:
-        Ig = declare(fixed)
+    # if Ig is None:
+    Ig = declare(fixed)
+    Qg = declare(fixed)
     if (max_tries < 1) or (not float(max_tries).is_integer()):
         raise Exception("max_count must be an integer >= 1.")
     # Initialize Ig to be > threshold
@@ -109,7 +110,8 @@ def active_reset(threshold: float, qubit: Transmon, max_tries=1, Ig=None, pi_pul
     # Use a while loop and counter for other protocols and tests
     with while_((Ig > threshold) & (counter < max_tries)):
         # Measure the resonator
-        qubit.resonator.measure("readout")
+        qubit.resonator.measure("readout", qua_vars=[Ig, Qg])
+        align(qubit.resonator.name, qubit.xy.name)
         # Play a pi pulse to get back to the ground state
         qubit.xy.play(pi_pulse, condition=(Ig > threshold))
         # Increment the number of tries

@@ -47,7 +47,7 @@ class QUAGate:
 
     def __init__(
         self,
-        gate: Union[str, Tuple[str, np.ndarray]],
+        gate: Union[str, Tuple[str, np.ndarray], Gate],
         gate_macro: Optional[Callable[[Union[Transmon, TransmonPair]], None]] = None,
         amp_matrix: Optional[List] = None,
     ):
@@ -71,6 +71,10 @@ class QUAGate:
             if not isinstance(gate[0], str):
                 raise ValueError("Invalid gate definition, the name should be a string.")
             self._gate = UnitaryGate(gate[1], label=gate[0])
+            
+        elif isinstance(gate, Gate):
+            self._gate = gate
+            
         else:
             raise ValueError(
                 "Invalid gate definition, please provide a valid gate name"
