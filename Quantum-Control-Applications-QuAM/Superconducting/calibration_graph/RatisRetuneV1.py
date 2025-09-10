@@ -79,12 +79,6 @@ g = QualibrationGraph(
         "DRAG_alpha": library.nodes["09c_DRAG_Calibration_180_90"].copy(
             flux_point_joint_or_independent="independent", multiplexed=multiplexed,reset_type_thermal_or_active=reset_type_thermal_or_active,
         ),
-        "IQ_blobs": library.nodes["07b_IQ_Blobs"].copy(
-            flux_point_joint_or_independent="independent",
-            multiplexed=multiplexed,
-            name="IQ_blobs",
-            reset_type_thermal_or_active="thermal",
-        ),
         "power_rabi_x180_after": library.nodes["09_Power_Rabi_State"].copy(
             num_averages=Rabi_state_avg,
             flux_point_joint_or_independent="independent",
