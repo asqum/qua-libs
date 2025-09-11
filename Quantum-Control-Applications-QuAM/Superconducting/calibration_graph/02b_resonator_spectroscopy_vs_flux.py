@@ -118,6 +118,8 @@ with program() as multi_res_spec_vs_flux:
         rr = resonators[i]
         # Bring the active qubits to the minimum frequency point
         machine.set_all_fluxes(flux_point=flux_point, target=qubit)
+        if "c" in qubit.id: qubit.z.set_dc_offset(qubit.z.joint_offset)
+        qubit.z.settle()
         qubit.align()
 
         with for_(n, 0, n < n_avg, n + 1):
