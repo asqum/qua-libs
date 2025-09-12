@@ -3,21 +3,21 @@ from qualibrate.orchestration.basic_orchestrator import BasicOrchestrator
 from qualibrate.parameters import GraphParameters
 from qualibrate.qualibration_graph import QualibrationGraph
 from qualibrate.qualibration_library import QualibrationLibrary
-from time import time
-start = time()
-library = QualibrationLibrary.get_active_library()
 
+library = QualibrationLibrary.get_active_library()
 
 class Parameters(GraphParameters):
     qubits: List[str] = None
 
 
+# calibration parameters
 qubits = ["q1", "q2", "q3", "q4", "q5"]
 multiplexed = True
 reset_type_thermal_or_active = "active"
 SQRB_max_gate_num = 900
 pts_fit_RB = 45
 Rabi_state_avg = 80
+
 
 nodes = [
     "close_other_qms",
@@ -134,6 +134,8 @@ g = QualibrationGraph(
     orchestrator=BasicOrchestrator(skip_failed=True),
 )
 
-g.run(qubits=qubits)
-end = time()
-print(f"\n Time consuming: {int(end-start)} sec")
+
+
+if __name__ == "__main__":  
+    g.run(qubits=qubits)
+
