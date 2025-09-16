@@ -48,7 +48,7 @@ class Parameters(NodeParameters):
     amp_factor_step: float = 0.004
     max_number_rabi_pulses_per_sweep: int = 88
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
-    reset_type_thermal_or_active: Literal["thermal", "active"] = "active"
+    reset_type_thermal_or_active: Literal["thermal", "active"] = "thermal"
     simulate: bool = False
     timeout: int = 100
 
@@ -107,14 +107,18 @@ with program() as power_rabi:
 
     for i, qubit in enumerate(qubits):
         # Bring the active qubits to the minimum frequency point
-        if flux_point == "independent":
-            machine.apply_all_flux_to_min()
-            machine.apply_all_couplers_to_min()
-            qubit.z.to_independent_idle()
-        elif flux_point == "joint":
-            machine.apply_all_flux_to_joint_idle()
-        else:
-            machine.apply_all_flux_to_zero()
+        # if flux_point == "independent":
+        #     machine.apply_all_flux_to_min()
+        #     machine.apply_all_couplers_to_min()
+        #     qubit.z.to_independent_idle()
+        # elif flux_point == "joint":
+        #     machine.apply_all_flux_to_joint_idle()
+        # else:
+        #     machine.apply_all_flux_to_zero()
+        machine.set_all_fluxes(flux_point=flux_point, target=qubit)
+        if "c" in qubit.id: qubit.z.set_dc_offset(qubit.z.joint_offset) # for coupler-test case
+        qubit.z.settle()
+        qubit.align() 
 
         # Wait for the flux bias to settle
         for qb in qubits:
@@ -287,3 +291,5 @@ else:
     node.results["initial_parameters"] = node.parameters.model_dump()
     node.machine = machine
     node.save()
+
+# %%

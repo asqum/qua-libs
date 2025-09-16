@@ -40,18 +40,18 @@ from scipy.signal import find_peaks
 # %% {Node_parameters}
 class Parameters(NodeParameters):
 
-    qubits: Optional[List[str]] = ['q3']
-    qubit_pair: str = "coupler_q2_q3"
+    qubits: Optional[List[str]] = ["q1","q2"]
+    qubit_pair: str = "coupler_q1_q2"
     num_averages: int = 25
     operation: str = "saturation"
     operation_amplitude_factor: Optional[float] = 0.1
     operation_len_in_ns: Optional[int] = None
     frequency_span_in_mhz: float = 125
-    frequency_step_in_mhz: float = 0.5
-    min_flux_offset_in_v: float = -0.2
-    max_flux_offset_in_v: float = 0.03
-    num_flux_points: int = 101
-    flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
+    frequency_step_in_mhz: float = 0.2
+    min_flux_offset_in_v: float = -0.5
+    max_flux_offset_in_v: float = 0.5
+    num_flux_points: int = 201
+    flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
     simulate: bool = False
     simulation_duration_ns: int = 2500
     timeout: int = 100

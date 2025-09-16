@@ -34,7 +34,7 @@ import numpy as np
 
 # %% {Node_parameters}
 class Parameters(NodeParameters):
-    qubits: Optional[List[str]] = ["q1","q2","q3","q4","q5"] #None
+    qubits: Optional[List[str]] = None
     num_averages: int = 300
     min_wait_time_in_ns: int = 16
     max_wait_time_in_ns: int = 90000
@@ -256,3 +256,5 @@ if not node.parameters.simulate:
         node.machine = machine
         node.save()
 
+
+# %%

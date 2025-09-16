@@ -48,7 +48,7 @@ class Parameters(NodeParameters):
     reset_type_thermal_or_active: Literal["thermal", "active"] = "thermal"
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
     start_amp: float = 0.02
-    end_amp: float = 1.99
+    end_amp: float = 1.2
     num_amps: int = 100
     outliers_threshold: float = 0.98
     plot_raw: bool = False
@@ -56,7 +56,7 @@ class Parameters(NodeParameters):
     simulation_duration_ns: int = 2500
     timeout: int = 100
     load_data_id: Optional[int] = None
-    multiplexed: bool = True
+    multiplexed: bool = False
 
 
 node = QualibrationNode(name="07c_Readout_Power_Optimization", parameters=Parameters())
@@ -413,3 +413,5 @@ if not node.parameters.simulate:
         node.results["initial_parameters"] = node.parameters.model_dump()
         node.machine = machine
         node.save()
+
+# %%

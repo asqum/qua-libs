@@ -42,11 +42,11 @@ node = QualibrationNode(
         num_averages=100,
         frequency_detuning_in_mhz=2.0,
         min_wait_time_in_ns=16,
-        max_wait_time_in_ns=3000,
+        max_wait_time_in_ns=2000,
         num_time_points=200,
         log_or_linear_sweep="log",
         use_state_discrimination=False,
-        flux_point_joint_or_independent="joint",
+        flux_point_joint_or_independent="independent",
         multiplexed=False
     )
 )
@@ -197,3 +197,5 @@ if not node.parameters.simulate:
         node.results["initial_parameters"] = node.parameters.model_dump()
         node.machine = machine
         node.save()
+
+# %%
