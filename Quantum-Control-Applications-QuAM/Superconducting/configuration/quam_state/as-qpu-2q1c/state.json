@@ -643,7 +643,8 @@
     },
     "active_qubit_names": [
         "q1",
-        "q2"
+        "q2",
+        "c1"
     ],
     "active_qubit_pair_names": [
         "coupler_q1_q2"
