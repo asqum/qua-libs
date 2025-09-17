@@ -40,13 +40,13 @@ import numpy as np
 # %% {Node_parameters}
 class Parameters(NodeParameters):
     qubits: Optional[List[str]] = None
-    num_averages: int = 230
+    num_averages: int = 500
     frequency_detuning_in_mhz: float = 4.0
     min_wait_time_in_ns: int = 16
-    max_wait_time_in_ns: int = 2000
-    wait_time_step_in_ns: int = 20
-    flux_span: float = 0.01
-    flux_step: float = 0.0002
+    max_wait_time_in_ns: int = 500
+    wait_time_step_in_ns: int = 10
+    flux_span: float = 0.08
+    flux_step: float = 0.001
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
     simulate: bool = False
     simulation_duration_ns: int = 2500
@@ -101,6 +101,7 @@ with program() as ramsey:
     t = declare(int)  # QUA variable for the idle time
     phi = declare(fixed)  # QUA variable for dephasing the second pi/2 pulse (virtual Z-rotation)
     flux = declare(fixed)  # QUA variable for the flux dc level
+    reset_global_phase()
 
     machine.apply_all_couplers_to_min()
     for i, qubit in enumerate(qubits):
@@ -296,3 +297,5 @@ if not node.parameters.simulate:
         node.results["initial_parameters"] = node.parameters.model_dump()
         node.machine = machine
         node.save()
+
+# %%

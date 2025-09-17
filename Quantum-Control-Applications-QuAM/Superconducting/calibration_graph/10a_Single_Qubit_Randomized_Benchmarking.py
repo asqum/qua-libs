@@ -44,10 +44,10 @@ class Parameters(NodeParameters):
     qubits: Optional[List[str]] = None
     use_state_discrimination: bool = True
     use_strict_timing: bool = False
-    num_random_sequences: int = 100  # Number of random sequences
-    num_averages: int = 20
-    max_circuit_depth: int = 900  # Maximum circuit depth
-    delta_clifford: int = 20
+    num_random_sequences: int = 200  # Number of random sequences
+    num_averages: int = 30
+    max_circuit_depth: int = 400  # Maximum circuit depth
+    delta_clifford: int = 10
     seed: int = 345324
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
     reset_type_thermal_or_active: Literal["thermal", "active"] = "thermal"
@@ -215,16 +215,16 @@ with program() as randomized_benchmarking:
     # state_st = declare_stream()
     state_st = [declare_stream() for _ in range(num_qubits)]
 
-    for i, qubit in enumerate(qubits):
-        # Bring the active qubits to the desired frequency point
-        if flux_point == "independent":
-            machine.apply_all_flux_to_min()
-            qubit.z.to_independent_idle()
-            machine.apply_all_couplers_to_min()
-        elif flux_point == "joint":
-            machine.apply_all_flux_to_joint_idle()
-        else:
-            raise ValueError(f"Unrecognized flux point {flux_point}")
+    # for i, qubit in enumerate(qubits):
+    #     # Bring the active qubits to the desired frequency point
+    #     if flux_point == "independent":
+    #         machine.apply_all_flux_to_min()
+    #         qubit.z.to_independent_idle()
+    #         machine.apply_all_couplers_to_min()
+    #     elif flux_point == "joint":
+    #         machine.apply_all_flux_to_joint_idle()
+    #     else:
+    #         raise ValueError(f"Unrecognized flux point {flux_point}")
 
     # QUA for_ loop over the random sequences
     with for_(m, 0, m < num_of_sequences, m + 1):
@@ -399,3 +399,5 @@ if not node.parameters.simulate:
         node.machine = machine
         node.save()
 
+
+# %%

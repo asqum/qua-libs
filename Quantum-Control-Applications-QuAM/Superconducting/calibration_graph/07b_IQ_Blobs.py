@@ -48,8 +48,8 @@ node = QualibrationNode(
     name="07b_IQ_Blobs",
     parameters=Parameters(
         qubits=None,
-        multiplexed=True,
-        flux_point_joint_or_independent="joint",
+        multiplexed=False,
+        flux_point_joint_or_independent="independent",
         num_runs=3000,
         load_data_id=None,
         simulate=False,
@@ -79,6 +79,7 @@ reset_type = node.parameters.reset_type_thermal_or_active
 operation_name = node.parameters.operation_name
 
 with program() as iq_blobs:
+    reset_global_phase()
     I_g, I_g_st, Q_g, Q_g_st, n, n_st = qua_declaration(num_qubits=num_qubits)
     I_e, I_e_st, Q_e, Q_e_st, _, _ = qua_declaration(num_qubits=num_qubits)
 
@@ -311,3 +312,5 @@ if not node.parameters.simulate:
         node.machine = machine
         node.save()
 
+
+# %%
