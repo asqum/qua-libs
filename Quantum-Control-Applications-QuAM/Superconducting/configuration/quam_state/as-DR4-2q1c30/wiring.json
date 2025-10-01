@@ -10,7 +10,7 @@
                     "opx_output": "#/ports/mw_outputs/con1/6/2"
                 },
                 "z": {
-                    "opx_output": "#/ports/analog_outputs/con1/1/1"
+                    "opx_output": "#/ports/analog_outputs/con1/1/2"
                 }
             },
             "q2": {
@@ -22,7 +22,7 @@
                     "opx_output": "#/ports/mw_outputs/con1/6/3"
                 },
                 "z": {
-                    "opx_output": "#/ports/analog_outputs/con1/1/2"
+                    "opx_output": "#/ports/analog_outputs/con1/1/1"
                 }
             },
             "c1": {
