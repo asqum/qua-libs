@@ -309,10 +309,10 @@ if not node.parameters.simulate:
                         power_in_dbm=rr_optimal_power_dbm[q.name].item(),
                         max_amplitude=0.1
                     )
+                    fit_results[q.name] = power_settings
                 if not np.isnan(rr_optimal_frequencies[q.name]):
                     q.resonator.intermediate_frequency += rr_optimal_frequencies[q.name]
-        fit_results[q.name] = power_settings
-        fit_results[q.name]["RO_frequency"] = q.resonator.RF_frequency
+                    fit_results[q.name]["RO_frequency"] = q.resonator.RF_frequency
     node.results["fit_results"] = fit_results
 
     # %% {Save_results}
