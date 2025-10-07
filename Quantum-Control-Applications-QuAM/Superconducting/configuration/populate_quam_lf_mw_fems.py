@@ -143,15 +143,15 @@ for i, q in enumerate(machine.qubits):
     machine.qubits[q].resonator.operations["readout"].amplitude = rr_amplitude
     # Qubit saturation
     machine.qubits[q].xy.operations["saturation"].length = 20 * u.us #change
-    machine.qubits[q].xy.operations["saturation"].amplitude = 0.1 * xy_amplitude
+    machine.qubits[q].xy.operations["saturation"].amplitude = 0.5
     # Single qubit gates - DragCosine
-    machine.qubits[q].xy.operations["x180_DragCosine"].length = 32 #change
-    machine.qubits[q].xy.operations["x180_DragCosine"].amplitude = xy_amplitude
+    machine.qubits[q].xy.operations["x180_DragCosine"].length = 16 #change #16
+    machine.qubits[q].xy.operations["x180_DragCosine"].amplitude = xy_amplitude 
     machine.qubits[q].xy.operations["x90_DragCosine"].amplitude = (
         machine.qubits[q].xy.operations["x180_DragCosine"].amplitude / 2
     )
     # Single qubit gates - Square
-    machine.qubits[q].xy.operations["x180_Square"].length = 32 #change
+    machine.qubits[q].xy.operations["x180_Square"].length = 16 #change
     machine.qubits[q].xy.operations["x180_Square"].amplitude = xy_amplitude
     machine.qubits[q].xy.operations["x90_Square"].amplitude = (
         machine.qubits[q].xy.operations["x180_Square"].amplitude / 2

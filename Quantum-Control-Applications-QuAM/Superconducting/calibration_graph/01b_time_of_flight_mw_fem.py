@@ -29,10 +29,9 @@ from scipy.signal import savgol_filter
 
 # %% {Node_parameters}
 class Parameters(NodeParameters):
-
     qubits: Optional[List[str]] = None
     num_averages: int = 100
-    time_of_flight_in_ns: Optional[int] = 24
+    time_of_flight_in_ns: Optional[int] = 28 
     intermediate_frequency_in_mhz: Optional[float] = 50
     readout_amplitude_in_dBm: Optional[float] = -3
     readout_length_in_ns: Optional[int] = None
