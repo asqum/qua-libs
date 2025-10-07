@@ -5,8 +5,28 @@ from quam_libs.components import QuAM
 from quam_libs.quam_builder.machine import save_machine
 import numpy as np
 
+path = "D:\\qm_code\\as\\qua-libs\\Quantum-Control-Applications-QuAM\\Superconducting\\configuration\\quam_state\\as_qpu_opx1000"
+machine = QuAM.load(path)
 
+# %%                                 QUAM loading and auxiliary functions
+########################################################################################################################
+# Class containing tools to help handling units and conversions.
+u = unit(coerce_to_integer=True)
 def get_band(freq):
+    """Determine the MW fem DAC band corresponding to a given frequency.
+
+    Args:
+        freq (float): The frequency in Hz.
+
+    Returns:
+        int: The Nyquist band number.
+            - 1 if 50 MHz <= freq < 5.5 GHz
+            - 2 if 4.5 GHz <= freq < 7.5 GHz
+            - 3 if 6.5 GHz <= freq <= 10.5 GHz
+
+    Raises:
+        ValueError: If the frequency is outside the MW fem bandwidth [50 MHz, 10.5 GHz].
+    """
     if 50e6 <= freq < 5.5e9:
         return 1
     elif 4.5e9 <= freq < 7.5e9:
@@ -14,36 +34,92 @@ def get_band(freq):
     elif 6.5e9 <= freq <= 10.5e9:
         return 3
     else:
-        raise ValueError(f"The specified frequency {freq} HZ is outside of the MW fem bandwidth [50 MHz, 10.5 GHz]")
+        raise ValueError(f"The specified frequency {freq} Hz is outside of the MW fem bandwidth [50 MHz, 10.5 GHz]")
 
 
-path = "D:\\qm_code\\as\\qua-libs\\Quantum-Control-Applications-QuAM\\Superconducting\\configuration\\quam_state\\as_qpu_opx1000"
-machine = QuAM.load(path)
-u = unit(coerce_to_integer=True)
+def closest_number(lst, target):
+    return min(lst, key=lambda x: abs(x - target))
 
+
+def get_full_scale_power_dBm_and_amplitude(desired_power: float, max_amplitude: float = 0.5) -> tuple[int, float]:
+    """Get the full_scale_power_dbm and waveform amplitude for the MW FEM to output the specified desired power.
+
+    The keyword `full_scale_power_dbm` is the maximum power of normalized pulse waveforms in [-1,1].
+    To convert to voltage:
+        power_mw = 10**(full_scale_power_dbm / 10)
+        max_voltage_amp = np.sqrt(2 * power_mw * 50 / 1000)
+        amp_in_volts = waveform * max_voltage_amp
+        ^ equivalent to OPX+ amp
+    Its range is -11dBm to +16dBm with 3dBm steps.
+
+    Args:
+        desired_power (float): Desired output power in dBm.
+        max_amplitude (float, optional): Maximum allowed waveform amplitude in V. Default is 0.5V.
+
+    Returns:
+        tuple[float, float]: The full_scale_power_dBm and waveform amplitude realizing the desired power.
+    """
+    allowed_powers = [-11, -8, -5, -2, 1, 4, 7, 10, 13, 16]
+    resulting_power = desired_power - 20 * np.log10(max_amplitude)
+    if resulting_power < 0:
+        full_scale_power_dBm = closest_number(allowed_powers, max(resulting_power + 3, -11))
+    else:
+        full_scale_power_dBm = closest_number(allowed_powers, min(resulting_power + 3, 16))
+    amplitude = 10 ** ((desired_power - full_scale_power_dBm) / 20)
+    if -11 <= full_scale_power_dBm <= 16 and -1 <= amplitude <= 1:
+        return full_scale_power_dBm, amplitude
+    else:
+        raise ValueError(
+            f"The desired power is outside the specifications ([-11; +16]dBm, [-1; +1]), got ({full_scale_power_dBm}; {amplitude})"
+        )
+
+########################################################################################################################
 # %%
 # Change active qubits
-machine.active_qubit_names = ["q1","q2","q3","q4","q5"]
+machine.active_qubit_names = ["q1","q2","q3","q4","q5"]  #change
 
 for i in range(len(machine.qubits.items())):
     machine.qubits[f"q{i+1}"].grid_location = f"{i},0"
 
 # Update frequencies
-rr_freq = np.array([5932987219.0, 6023928729.0, 5866936123.0, 6079048431.0, 5971697831.0]) #* u.GHz
-rr_LO = 5.95 * u.GHz
-rr_if = rr_freq - rr_LO
-rr_max_power_dBm = -2
+rr_freq = np.array([5932987219.0, 6023928729.0, 5866936123.0, 6079048431.0, 5971697831.0]) #* u.GHz #change
+rr_LO = 5.95 * u.GHz #change
+rr_if = rr_freq - rr_LO 
+assert np.all(np.abs(rr_if) < 400 * u.MHz), (
+    "The resonator intermediate frequency must be within [-400; 400] MHz. \n"
+    f"Readout frequencies: {rr_freq} \n"
+    f"Readout LO frequency: {rr_LO} \n"
+    f"Readout IF frequencies: {rr_if} \n"
+)
 
-xy_freq = np.array([5108604110.9, 4834229255.6, 5146263353.0, 4674709204.1, 4880175329.7]) #* u.GHz
-xy_LO = np.array([6.0, 6.5, 6.5, 7.0, 7.04]) * u.GHz
-xy_LO = np.array([4.9]*5) * u.GHz
+# Desired output power in dBm - Must be within [-80, 16] dBm
+readout_power = -40 #change
+# Get the full_scale_power_dBm and waveform amplitude corresponding to the desired powers
+rr_full_scale, rr_amplitude = get_full_scale_power_dBm_and_amplitude(
+    readout_power, max_amplitude= 0.5 / len(machine.qubits)
+)
+
+xy_freq = np.array([5108604110.9, 4834229255.6, 5146263353.0, 4674709204.1, 4880175329.7]) #* u.GHz #change
+xy_LO = np.array([4.9, 4.9, 4.9, 4.9, 4.9]) * u.GHz #change
+# xy_LO = np.array([4.9]*5) * u.GHz
 xy_if = xy_freq - xy_LO
-xy_max_power_dBm = -2
+assert np.all(np.abs(xy_if) < 400 * u.MHz), (
+    "The xy intermediate frequency must be within [-400; 400] MHz. \n"
+    f"Qubit drive frequencies: {xy_freq} \n"
+    f"Qubit drive LO frequencies: {xy_LO} \n"
+    f"Qubit drive IF frequencies: {xy_if} \n"
+)
+
+# Desired output power in dBm
+drive_power = -30 #change
+# Get the full_scale_power_dBm and waveform amplitude corresponding to the desired powers
+xy_full_scale, xy_amplitude = get_full_scale_power_dBm_and_amplitude(drive_power)
+
 
 # NOTE: be aware of coupled ports for bands
 for i, q in enumerate(machine.qubits):
     ## Update qubit rr freq and power
-    machine.qubits[q].resonator.opx_output.full_scale_power_dbm = rr_max_power_dBm
+    machine.qubits[q].resonator.opx_output.full_scale_power_dbm = rr_full_scale 
     machine.qubits[q].resonator.opx_output.upconverter_frequency = rr_LO
     machine.qubits[q].resonator.opx_input.downconverter_frequency = rr_LO
     machine.qubits[q].resonator.opx_input.band = get_band(rr_LO)
@@ -51,31 +127,32 @@ for i, q in enumerate(machine.qubits):
     machine.qubits[q].resonator.intermediate_frequency = rr_if[i]
 
     ## Update qubit xy freq and power
-    machine.qubits[q].xy.opx_output.full_scale_power_dbm = xy_max_power_dBm
+    machine.qubits[q].xy.opx_output.full_scale_power_dbm = xy_full_scale
     machine.qubits[q].xy.opx_output.upconverter_frequency = xy_LO[i]
     machine.qubits[q].xy.opx_output.band = get_band(xy_LO[i])
     machine.qubits[q].xy.intermediate_frequency = xy_if[i]
 
-    # Update flux channels
+    # Update flux channels 
     machine.qubits[q].z.opx_output.output_mode = "amplified"
     machine.qubits[q].z.opx_output.upsampling_mode = "pulse"
+    machine.qubits[q].z.operations["const"].amplitude = 1.25
 
     ## Update pulses
     # Readout
-    machine.qubits[q].resonator.operations["readout"].length = 1 * u.us
-    machine.qubits[q].resonator.operations["readout"].amplitude = 0.1
+    machine.qubits[q].resonator.operations["readout"].length = 1 * u.us #change
+    machine.qubits[q].resonator.operations["readout"].amplitude = rr_amplitude
     # Qubit saturation
-    machine.qubits[q].xy.operations["saturation"].length = 20 * u.us
-    machine.qubits[q].xy.operations["saturation"].amplitude = 0.5
+    machine.qubits[q].xy.operations["saturation"].length = 20 * u.us #change
+    machine.qubits[q].xy.operations["saturation"].amplitude = 0.1 * xy_amplitude
     # Single qubit gates - DragCosine
-    machine.qubits[q].xy.operations["x180_DragCosine"].length = 32
-    machine.qubits[q].xy.operations["x180_DragCosine"].amplitude = 0.8
+    machine.qubits[q].xy.operations["x180_DragCosine"].length = 32 #change
+    machine.qubits[q].xy.operations["x180_DragCosine"].amplitude = xy_amplitude
     machine.qubits[q].xy.operations["x90_DragCosine"].amplitude = (
         machine.qubits[q].xy.operations["x180_DragCosine"].amplitude / 2
     )
     # Single qubit gates - Square
-    machine.qubits[q].xy.operations["x180_Square"].length = 40
-    machine.qubits[q].xy.operations["x180_Square"].amplitude = 0.1
+    machine.qubits[q].xy.operations["x180_Square"].length = 32 #change
+    machine.qubits[q].xy.operations["x180_Square"].amplitude = xy_amplitude
     machine.qubits[q].xy.operations["x90_Square"].amplitude = (
         machine.qubits[q].xy.operations["x180_Square"].amplitude / 2
     )
@@ -84,24 +161,14 @@ for i, q in enumerate(machine.qubits):
     machine.qubits[q].z.joint_offset = f"#./independent_offset"
     machine.qubits[q].z.min_offset = f"#./independent_offset"
 
+# golden state
 # %%
 for qp in machine.qubit_pairs.values():
-    qp.coupler.opx_output.output_mode = "direct"
+    qp.coupler.opx_output.output_mode = "amplified"
     qp.coupler.opx_output.upsampling_mode = "pulse"
+    qp.coupler.operations["const"].amplitude = 1.25
 
 # %%
-# for Active Reset?
-# machine.qubits["q1"].xy.thread = "a"
-# machine.qubits["q2"].xy.thread = "b"
-# machine.qubits["q3"].xy.thread = "c"
-# machine.qubits["q4"].xy.thread = "d"
-# machine.qubits["q5"].xy.thread = "e"
-
-# machine.qubits["q1"].resonator.thread = "b"
-# machine.qubits["q2"].resonator.thread = "c"
-# machine.qubits["q3"].resonator.thread = "d"
-# machine.qubits["q4"].resonator.thread = "e"
-# machine.qubits["q5"].resonator.thread = "a"
 
 # Default: 
 machine.qubits["q1"].xy.thread = "a"
@@ -115,91 +182,10 @@ machine.qubits["q2"].resonator.thread = "b"
 machine.qubits["q3"].resonator.thread = "c"
 machine.qubits["q4"].resonator.thread = "d"
 machine.qubits["q5"].resonator.thread = "e"
-
-# %%
-# q1 = machine.qubits["q1"]
-# q2 = machine.qubits["q2"]
-# q3 = machine.qubits["q3"]
-# q4 = machine.qubits["q4"]
-# q5 = machine.qubits["q5"]
-# print("q1's z.independent_offset: %s" %(q1.z.independent_offset))
-# print("q2's z.independent_offset: %s" %(q2.z.independent_offset))
-# print("q3's z.independent_offset: %s" %(q3.z.independent_offset))
-# print("q4's z.independent_offset: %s" %(q4.z.independent_offset))
-# print("q5's z.independent_offset: %s" %(q5.z.independent_offset))
-
-# coupler_q1_q2 = machine.qubit_pairs["coupler_q1_q2"]
-# coupler_q2_q3 = machine.qubit_pairs["coupler_q2_q3"]
-# coupler_q3_q4 = machine.qubit_pairs["coupler_q3_q4"]
-# coupler_q4_q5 = machine.qubit_pairs["coupler_q4_q5"]
-# print("coupler_q1_q2's decouple_offset: %s" %(coupler_q1_q2.coupler.decouple_offset))
-# print("coupler_q2_q3's decouple_offset: %s" %(coupler_q2_q3.coupler.decouple_offset))
-# print("coupler_q3_q4's decouple_offset: %s" %(coupler_q3_q4.coupler.decouple_offset))
-# print("coupler_q4_q5's decouple_offset: %s" %(coupler_q4_q5.coupler.decouple_offset))
-
-# RESET ALL Z:  
-# q1.z.independent_offset = 0.1
-# q2.z.independent_offset = 0.1
-# q3.z.independent_offset = 0.1
-# q4.z.independent_offset = 0.1
-# q5.z.independent_offset = 0.1
-
-# q1.z.independent_offset = f"#./independent_offset"
-# print("\nqubits' offset updated.........\n")
-
-# OFF-points: (or close-by)  
-# (q4 @ q5).coupler.decouple_offset = 0.1 #-0.0515 
-# (q3 @ q4).coupler.decouple_offset = 0.1 #-0.0535
-# (q2 @ q3).coupler.decouple_offset = 0.1 #-0.0727
-# (q1 @ q2).coupler.decouple_offset = 0.1 #-0.0414 #to save q2's T2 #off:-0.0635 
-# SAFE-points: (Coupler-Sweet-Spot)  
-# (q4 @ q5).coupler.decouple_offset = 0.120 
-# (q3 @ q4).coupler.decouple_offset = 0.143
-# (q2 @ q3).coupler.decouple_offset = 0.109
-# (q1 @ q2).coupler.decouple_offset = 0.130 
-# INITIAL guess for couplers' offset:
-# coupler_q1_q2.coupler.decouple_offset = 0.
-# coupler_q2_q3.coupler.decouple_offset = 0.
-# coupler_q3_q4.coupler.decouple_offset = 0.
-# coupler_q4_q5.coupler.decouple_offset = 0.
-# print("\ncouplers' offset updated.........\n")
-
-# %%
-# Add qubit pulses
-# q1.z.operations["flux_pulse"] = pulses.SquarePulse(length=100, amplitude=0.1)
-# q2.z.operations["flux_pulse"] = pulses.SquarePulse(length=100, amplitude=0.1)
-
-# %%
-# Setting readout durations:
-# q1.resonator.operations["readout"].length = 1800
-# q2.resonator.operations["readout"].length = 1800
-# q3.resonator.operations["readout"].length = 1800
-# q4.resonator.operations["readout"].length = 1800
-# q5.resonator.operations["readout"].length = 1800
-
-# %%
-# reset filters:
-# for qubit in machine.qubits:
-#     machine.qubits[qubit].z.filter_fir_taps = None
-#     machine.qubits[qubit].z.filter_iir_taps = None
-# print("filters resetted.........\n")
-    
-# %%
-# reset crosstalk-matrix: 
-# for fem_dict in machine.ports.analog_outputs['con1'].values():
-#     for output_port in fem_dict.values():
-#         output_port.crosstalk = None
-# print("crosstalk-matrix resetted.........\n")
         
 # %%
 # save into state.json
 save_machine(machine, path)
 
-# %%
-# View the corresponding "raw-QUA" config
-# with open("./Quantum-Control-Applications-QuAM/Superconducting/configuration/qua_config.json", "w+") as f:
-#     json.dump(machine.generate_config(), f, indent=4)
-
-# %%
 
 
