@@ -222,8 +222,11 @@ if not node.parameters.simulate:
         q_name = q.name
         peaks_d_per_qubit = peaks_d.loc[{"qubit": q_name}]
         divs_loc_vals, _ = find_peaks(peaks_d_per_qubit.values, height=peaks_d_per_qubit.values.max() * 0.1, distance=peaks_d_per_qubit["flux"].shape[0]//2) 
-        divs_loc_vals = [min(divs_loc_vals), max(divs_loc_vals)] # if there are more than two the the fathest ones
-        avoided_crossing[q_name] = peaks_d_per_qubit["flux"].values[divs_loc_vals]
+        try:
+            divs_loc_vals = [min(divs_loc_vals), max(divs_loc_vals)] # if there are more than two the the fathest ones
+            avoided_crossing[q_name] = peaks_d_per_qubit["flux"].values[divs_loc_vals]
+        except Exception:
+            avoided_crossing[q_name] = [0]
         
     # Save fitting results
     if node.parameters.load_data_id is None:
