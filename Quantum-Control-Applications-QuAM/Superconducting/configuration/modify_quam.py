@@ -134,11 +134,11 @@ print("coupler_q3_q4's decouple_offset: %s" %(coupler_q3_q4.coupler.decouple_off
 print("coupler_q4_q5's decouple_offset: %s" %(coupler_q4_q5.coupler.decouple_offset))
 
 # RESET ALL Z:  
-q1.z.independent_offset = 0
-q2.z.independent_offset = 0
-q3.z.independent_offset = 0
-q4.z.independent_offset = 0
-q5.z.independent_offset = 0
+q1.z.independent_offset = 0.14680368846347974
+q2.z.independent_offset = 0.186121519336561
+q3.z.independent_offset = 0.14358641659578292
+q4.z.independent_offset = 0.06616501763503031
+q5.z.independent_offset = 0.14088017951374093
 print("\nqubits' offset updated.........\n")
 
 # OFF-points: (or close-by)  
@@ -152,10 +152,10 @@ print("\nqubits' offset updated.........\n")
 # (q2 @ q3).coupler.decouple_offset = 0.109
 # (q1 @ q2).coupler.decouple_offset = 0.130 
 # INITIAL guess for couplers' offset:
-coupler_q1_q2.coupler.decouple_offset = 0
-coupler_q2_q3.coupler.decouple_offset = 0.
-coupler_q3_q4.coupler.decouple_offset = 0.
-coupler_q4_q5.coupler.decouple_offset = 0.
+coupler_q1_q2.coupler.decouple_offset = -0.2
+coupler_q2_q3.coupler.decouple_offset = -0.2
+coupler_q3_q4.coupler.decouple_offset = -0.2
+coupler_q4_q5.coupler.decouple_offset = -0.2
 print("\ncouplers' offset updated.........\n")
 
 # %%

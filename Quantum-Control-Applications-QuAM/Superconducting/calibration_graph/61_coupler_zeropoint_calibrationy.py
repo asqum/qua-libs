@@ -19,14 +19,14 @@ from quam_libs.lib.fit import fit_oscillation, oscillation, fix_oscillation_phi_
 from quam_libs.lib.plot_utils import QubitPairGrid, grid_iter, grid_pair_names
 
 import matplotlib
-matplotlib.use('Agg')
+# matplotlib.use('TkAgg')
 
 # %% {Node_parameters}
-qubit_pair_indexes = [3]  # [1, 2]
+qubit_pair_indexes = [4]  # [1, 2]
 class Parameters(NodeParameters):
 
     qubit_pairs: Optional[List[str]] = ["coupler_q%s_q%s"%(i,i+1) for i in qubit_pair_indexes] # ["coupler_q1_q2"]
-    num_averages: int = 120
+    num_averages: int = 80
     flux_point_joint_or_independent_or_pairwise: Literal["joint", "independent", "pairwise"] = "joint"
     reset_type: Literal['active', 'thermal'] = "active"
     simulate: bool = False
@@ -34,19 +34,19 @@ class Parameters(NodeParameters):
     load_data_id: Optional[int] = None
     
     # General:
-    coupler_flux_min : float = 0.12 #0.100 #relative to the coupler set point
-    coupler_flux_max : float = 0.23 #0.190 #relative to the coupler set point
+    coupler_flux_min : float = 0.08 #0.100 #relative to the coupler set point
+    coupler_flux_max : float = 0.16 #0.190 #relative to the coupler set point
 
     # q1_q2:
     # q2_q3:
     # q3_q4:
     # q4_q5:
 
-    coupler_flux_step : float = 0.0004 #0.0002
-    qubit_flux_span : float = 0.026 #0.016 # relative to the known/calculated detuning between the qubits
+    coupler_flux_step : float = 0.0002 #0.0002
+    qubit_flux_span : float = 0.042 #0.016 # relative to the known/calculated detuning between the qubits
     qubit_flux_step : float = 0.0002 #0.0002  
     use_state_discrimination: bool = True
-    pulse_duration_ns: int = 230 #240
+    pulse_duration_ns: int = 240 #240
     
 
 node = QualibrationNode(
@@ -325,10 +325,10 @@ if not node.parameters.simulate:
 if not node.parameters.simulate:
     with node.record_state_updates():
         for qp in qubit_pairs:
-            qp.coupler.decouple_offset += node.results["results"][qp.name]["flux_coupler_min"] - qp.coupler.decouple_offset
-            qp.coupler.decouple_offset = 0.1573 #node.results["results"][qp.name]["flux_coupler_min"]
+            # qp.coupler.decouple_offset += node.results["results"][qp.name]["flux_coupler_min"] - qp.coupler.decouple_offset
+            qp.coupler.decouple_offset = -0.2 #node.results["results"][qp.name]["flux_coupler_min"]
             # qp.detuning = node.results["results"][qp.name]["flux_qubit_max"]
-            print(qp.detuning)
+            # print(qp.detuning)
             # qp.detuning = 0.1765
 
 # %% {Save_results}
@@ -337,3 +337,4 @@ if not node.parameters.simulate:
     node.results['initial_parameters'] = node.parameters.model_dump()
     node.machine = machine
     node.save()
+# %%
