@@ -110,6 +110,36 @@ class CZGate(TwoQubitGate):
         self.qubit_control.xy.play("x180", amplitude_scale=0.0, duration=4)
         self.qubit_target.xy.play("x180", amplitude_scale=0.0, duration=4)
         self.transmon_pair.align()
+        
+    def execute_dgx(self, amplitude_scale=None, phase_shift_control = None, phase_shift_target =None):        
+        if phase_shift_control is None:
+            phase_shift_control = self.phase_shift_control
+        if phase_shift_target is None:
+            phase_shift_target = self.phase_shift_target
+
+        self.transmon_pair.align()
+        
+        # self.qubit_control.xy.wait(self.pre_wait)
+        # self.qubit_target.xy.wait(self.pre_wait)
+        
+        self.qubit_control.z.play(
+            self.flux_pulse_control_label,
+            validate=False,
+            amplitude_scale=amplitude_scale,
+        )
+        
+        if self.coupler_flux_pulse is not None:
+            self.coupler.play(
+                self.coupler_flux_pulse_label,
+                validate=False
+            )
+        
+        self.transmon_pair.align()
+        frame_rotation_2pi(phase_shift_control, self.qubit_control.xy.name)
+        frame_rotation_2pi(phase_shift_target, self.qubit_target.xy.name)
+        self.qubit_control.xy.play("x180", amplitude_scale=0.0, duration=4)
+        self.qubit_target.xy.play("x180", amplitude_scale=0.0, duration=4)
+        self.transmon_pair.align()
 
     @property
     def config_settings(self):
