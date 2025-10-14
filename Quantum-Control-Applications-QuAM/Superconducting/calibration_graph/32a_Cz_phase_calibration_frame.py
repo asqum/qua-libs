@@ -128,9 +128,12 @@ with program() as CPhase_Oscillations:
     state_target = [declare(int) for _ in range(num_qubit_pairs)]
     state_st_control = [declare_stream() for _ in range(num_qubit_pairs)]
     state_st_target = [declare_stream() for _ in range(num_qubit_pairs)]
-    reset_global_phase()
+    
+
     
     for i, qp in enumerate(qubit_pairs):
+        qp.gates['Cz'].phase_shift_control = 0.0
+        qp.gates['Cz'].phase_shift_target = 0.0
         # Bring the active qubits to the minimum frequency point
         if flux_point == "independent":
             machine.apply_all_flux_to_min()
