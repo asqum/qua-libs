@@ -55,17 +55,17 @@ from quam_libs.components.gates.two_qubit_gates import CZGate
 from quam_libs.lib.pulses import FluxPulse
 
 # %% {Node_parameters}
-qubit_pair_indexes = [1]  # The indexes of the qubit pair to calibrate
+qubit_pair_indexes = [4]  # The indexes of the qubit pair to calibrate
 class Parameters(NodeParameters):
 
     qubit_pairs: Optional[List[str]] = ["coupler_q%s_q%s"%(i,i+1) for i in qubit_pair_indexes]
-    num_averages: int = 700
+    num_averages: int = 1000
     flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
     reset_type: Literal['active', 'thermal'] = "active"
     simulate: bool = False
     timeout: int = 100
     amp_range : float = 0.060
-    amp_step : float = 0.001
+    amp_step : float = 0.0005
     num_frames: int = 10
     load_data_id: Optional[int] = None # 92417 
     plot_raw : bool = False
@@ -128,6 +128,7 @@ with program() as CPhase_Oscillations:
     state_target = [declare(int) for _ in range(num_qubit_pairs)]
     state_st_control = [declare_stream() for _ in range(num_qubit_pairs)]
     state_st_target = [declare_stream() for _ in range(num_qubit_pairs)]
+    reset_global_phase()
     
     for i, qp in enumerate(qubit_pairs):
         # Bring the active qubits to the minimum frequency point
@@ -147,10 +148,10 @@ with program() as CPhase_Oscillations:
                     with for_(*from_array(control_initial, [0,1])):
                         # reset
                         if node.parameters.reset_type == "active":
-                            # active_reset_gef(qp.qubit_control)
-                            # active_reset(qp.qubit_target)
-                            active_reset_simple(qp.qubit_control)
-                            active_reset_simple(qp.qubit_target)
+                            active_reset_gef(qp.qubit_control)
+                            active_reset(qp.qubit_target)
+                            # active_reset_simple(qp.qubit_control)
+                            # active_reset_simple(qp.qubit_target)
                         else:
                             wait(qp.qubit_control.thermalization_time * u.ns)
                         qp.align()
