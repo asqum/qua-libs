@@ -65,14 +65,13 @@ class ClassicalShadow:
             if self.config.gate_indices is not None:
                 gate_indices = [declare(int,
                                          value=self.config.gate_indices[:, n].tolist()) for n in range(n_qubits)]
-            self.config.input_state_prep_macro_kwargs["angle"] = angle
             self.machine.apply_all_flux_to_min()
             self.machine.apply_all_couplers_to_min()
             
             if simulate:
                 for qubit in self.config.qubits:
                     qubit.xy.update_frequency(0)
-            with for_(*qua_linspace(angle, 0., np.pi, self.config.num_angles)):
+            with for_(*qua_linspace(angle, 0., 1., self.config.num_angles)):
                 with for_(i, 0, i < self.config.shadow_size, i + 1):
                     # Possible wait time before the experiment
                     # wait(...)
@@ -89,9 +88,9 @@ class ClassicalShadow:
                     with for_(shot, 0, shot < self.config.shots_per_snapshot, shot + 1):
                         # Prepare state
                         if self.config.input_state_prep_macro_kwargs: #is not None:
-                            self.config.input_state_prep_macro(**self.config.input_state_prep_macro_kwargs)
+                            self.config.input_state_prep_macro(np.pi * angle, **self.config.input_state_prep_macro_kwargs)
                         else:
-                            self.config.input_state_prep_macro()
+                            self.config.input_state_prep_macro(np.pi * angle)
                         align()
                         # for q, qubit, in enumerate(self.config.qubits):
                         #     with switch_(random_basis[q], unsafe=False):
@@ -125,6 +124,7 @@ class ClassicalShadow:
                                         **self.config.reset_kwargs)
                         save(state_int, state_int_stream)
                         assign(state_int, 0)
+                save(angle, "angle")
                 
             with stream_processing():
                 random_basis_stream.buffer(self.config.shadow_size, n_qubits).save_all("random_basis")
@@ -177,7 +177,15 @@ class ClassicalShadowJob:
         self._result_handles.wait_for_all_values()
         self.config = config
         self.data_handler = data_handler
-        self._gate_indices = np.zeros((self.config.shadow_size, self.config.n_qubits), dtype=int)
+        self._gate_indices = np.zeros((self.config.num_angles, self.config.shadow_size, self.config.n_qubits), dtype=int)
+        self._state_ints = None
+        self._angles = self._result_handles.get("angle").fetch_all()['value']
+        gates = self._result_handles.get('random_basis').fetch_all()['value']
+        shadow_size = self.config.shadow_size
+        for a in range(self.config.num_angles):
+            for i in range(shadow_size):
+                for j in range(self.config.n_qubits):
+                    self._gate_indices[a, i, j] = gates[a][i][j]
         
         
     def _get_circuits(self):
@@ -185,35 +193,37 @@ class ClassicalShadowJob:
         Get the circuits from the job.
         """
         shadow_size = self.config.shadow_size
-        gates = self._result_handles["random_basis"].fetch_all()['value']
-        input_state_circuit = self.config.input_state_circuit(**self.config.input_state_prep_macro_kwargs)
-        for i in range(shadow_size):
-            for j in range(self.config.n_qubits):
-                self._gate_indices[i, j] = gates[i][j]
-                
-        circuits = [QuantumCircuit(self.config.n_qubits) for _ in range(shadow_size)]
-        for i in range(shadow_size):
-            circuits[i].compose(input_state_circuit, inplace=True)
-            for j in range(self.config.n_qubits):
-                circuits[i].append(self.config.measurement_basis[self._gate_indices[i, j]].gate,
-                                   [j])
-        return circuits
+        angles = self._angles
+        input_state_circuit = self.config.input_state_circuit
+        all_circuits = []
+        for a, angle in enumerate(angles):
+            circuits = [QuantumCircuit(self.config.n_qubits) for _ in range(shadow_size)]
+            for i in range(shadow_size):
+                circuits[i].compose(input_state_circuit(angle), inplace=True)
+                for j in range(self.config.n_qubits):
+                    circuits[i].append(self.config.measurement_basis[self._gate_indices[a, i, j]].gate,
+                                    [j])
+            all_circuits.append(circuits)
+            return all_circuits
     
     def result(self):
         """
         Get the result of the job.
         """
-        state_ints = self._result_handles["state_int"].fetch_all()['value']
+        state_ints = self._result_handles.get("state_int").fetch_all()['value']
+        angles = self._angles
         bitstrings = []
-        for i, state_int in enumerate(state_ints):
-            # Count all occurences of each bitstring and build a dictionary of counted bitstrings
-            counts = {binary(i, self.config.n_qubits): 0 for i in range(self.config.dim)}
-            for j in range(len(state_int)):
-                bitstring = binary(state_int[j], self.config.n_qubits)
-                counts[bitstring] += 1
-            bitstrings.append(counts)
+        for a in range(len(angles)):
+            bitstrings.append([])
+            for i, state_int in enumerate(state_ints):
+                # Count all occurences of each bitstring and build a dictionary of counted bitstrings
+                counts = {binary(i, self.config.n_qubits): 0 for i in range(self.config.dim)}
+                for j in range(len(state_int)):
+                    bitstring = binary(state_int[j], self.config.n_qubits)
+                    counts[bitstring] += 1
+                bitstrings[a].append(counts)
 
-        return [(bitstring, self._gate_indices[i]) for i, bitstring in enumerate(bitstrings)]
+        return [(angle, [(bitstring, self._gate_indices[i]) for i, bitstring in enumerate(bitstrings_)]) for angle, bitstrings_ in zip(angles, bitstrings)]
     
     
     def ideal_result(self):
@@ -222,12 +232,43 @@ class ClassicalShadowJob:
         """
         circuits = self._get_circuits()
         results = []
-        for i, circuit in enumerate(circuits):
-            state = Statevector(circuit)
-            probs = state.probabilities_dict()
-            results.append((probs, self._gate_indices[i]))
+        for a, circuit_list in enumerate(circuits):
+            results.append([])
+            for i, circuit in enumerate(circuit_list):
+                state = Statevector(circuit)
+                probs = state.probabilities_dict(decimals=6)
+                results[a].append((probs, self._gate_indices[i]))
             
         return results
+
+    @property
+    def result_handles(self):
+        return self._result_handles
+
+    def save_data(self):
+        """
+        Save the data to the data handler.
+        """
+        if self.config.should_save_data:
+            self.data_handler.save_data(data=self.result(),
+                                        name=self.config.data_folder_name,
+                                        metadata=self.config.as_dict())
+
+    @property
+    def gate_indices(self):
+        return self._gate_indices
+
+    @property
+    def state_ints(self):
+        if self._state_ints is None:
+            self._state_ints = self._result_handles.get("state_int").fetch_all()['value']
+        return self._state_ints
+
+    @property
+    def angles(self):
+        return self._angles
+
+
             
             
             

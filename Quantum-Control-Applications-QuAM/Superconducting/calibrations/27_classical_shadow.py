@@ -23,18 +23,29 @@ def sy_macro(qubit: Transmon):
     
 def z_macro(qubit: Transmon):
     qubit.wait(4)
-    
-def input_state_macro(*, angle):
-    # RY(angle)
+
+def h_macro(qubit: Transmon):
+    qubit.apply("x")
+    qubit.xy.frame_rotation_2pi(0.5)
+
+def input_state_macro(angle, **kwargs):
     q0 = target_qubits[0]
-    q0.xy.play("x90")
-    q0.xy.frame_rotation(angle + np.pi)
-    q0.xy.play("x90")
-    q0.xy.frame_rotation2pi(0.5)
+    q1 = target_qubits[1]
+    qp = q0@q1
+    h_macro(q0)
+    qp.apply("cz")
+    h_macro(q1)
+    q1.apply("rz", angle)
+    h_macro(q1)
+    qp.apply("cz")
+    h_macro(q1)
    
-def input_state_circuit(*, angle: float) -> QuantumCircuit:
-    qc = QuantumCircuit(1)
-    qc.ry(angle, 0)
+def input_state_circuit(angle: float, **kwargs) -> QuantumCircuit:
+    qc = QuantumCircuit(2)
+    qc.h([0, 1])
+    qc.cx(0, 1)
+    qc.rz(angle, 1)
+    qc.cx(0, 1)
     
     return qc
 
