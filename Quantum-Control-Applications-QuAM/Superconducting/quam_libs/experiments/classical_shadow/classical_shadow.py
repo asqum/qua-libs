@@ -86,6 +86,12 @@ class ClassicalShadow:
                             save(random_basis[j], random_basis_stream)
 
                     with for_(shot, 0, shot < self.config.shots_per_snapshot, shot + 1):
+                        # Reset
+                        for q, qubit, in enumerate(self.config.qubits):
+                            reset_qubit(self.config.reset_method,
+                                        qubit,
+                                        threshold=ge_thresholds[q],
+                                        **self.config.reset_kwargs)
                         # Prepare state
                         if self.config.input_state_prep_macro_kwargs: #is not None:
                             self.config.input_state_prep_macro(np.pi * angle, **self.config.input_state_prep_macro_kwargs)
@@ -118,10 +124,6 @@ class ClassicalShadow:
                             assign(state[q], I[q] > ge_thresholds[q])
                             assign(state_int, state_int + (1<<q) * Cast.to_int(state[q]))
 
-                            reset_qubit(self.config.reset_method,
-                                        qubit,
-                                        threshold=ge_thresholds[q],
-                                        **self.config.reset_kwargs)
                         save(state_int, state_int_stream)
                         assign(state_int, 0)
                 save(angle, "angle")

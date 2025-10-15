@@ -25,13 +25,20 @@ def z_macro(qubit: Transmon):
     qubit.wait(4)
 
 def h_macro(qubit: Transmon):
-    qubit.apply("x")
-    qubit.xy.frame_rotation_2pi(0.5)
+    qubit.apply("rz", np.pi/2)
+    qubit.apply("sx")
+    qubit.apply("rz", np.pi/2)
+
+def ry_macro(qubit: Transmon, angle):
+    qubit.apply("sx")
+    qubit.apply("rz", np.pi+angle)
+    qubit.apply("sx")
+    qubit.apply("rz", 3*np.pi)
 
 def input_state_macro(angle, **kwargs):
     q0 = target_qubits[0]
     q1 = target_qubits[1]
-    qp = q0@q1
+    qp = q0@q1  # Qubit pair for two-qubit gates
     h_macro(q0)
     qp.apply("cz")
     h_macro(q1)
