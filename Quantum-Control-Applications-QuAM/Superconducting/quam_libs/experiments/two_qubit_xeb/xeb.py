@@ -150,7 +150,7 @@ class XEB:
         """
         if self.xeb_config.gate_set.run_through_amp_matrix_modulation and amp_matrix is not None:
             # Play all gates through real-time amplitude matrix modulation
-            qubit.xy.play(self.xeb_config.baseline_gate_name, amplitude_scale=amp(*amp_matrix))
+            qubit.xy.play(self.xeb_config.baseline_gate_name, amplitude_scale=amp_matrix)
             # qubit.xy.play('x180') # NOTE: for debugging purposes
             # qubit.xy.play('x90') # NOTE: for debugging purposes
             # pass # NOTE: for debugging purposes
