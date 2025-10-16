@@ -140,6 +140,41 @@ class CZGate(TwoQubitGate):
         self.qubit_control.xy.play("x180", amplitude_scale=0.0, duration=4)
         self.qubit_target.xy.play("x180", amplitude_scale=0.0, duration=4)
         self.transmon_pair.align()
+    
+    def execute_dgx_vRatis(self, qubit_flux_scale=None, phase_shift_control = None, phase_shift_target =None, coupler_flux_scale=None, cz_duration=None):        
+        if phase_shift_control is None:
+            phase_shift_control = self.phase_shift_control
+        if phase_shift_target is None:
+            phase_shift_target = self.phase_shift_target
+        if cz_duration is None:
+            cz_duration = self.flux_pulse_control.length
+
+        self.transmon_pair.align()
+        
+        # self.qubit_control.xy.wait(self.pre_wait)
+        # self.qubit_target.xy.wait(self.pre_wait)
+        
+        self.qubit_control.z.play(
+            self.flux_pulse_control_label,
+            duration = cz_duration,
+            validate=False,
+            amplitude_scale=qubit_flux_scale,
+        )
+        
+        if self.coupler_flux_pulse is not None:
+            self.coupler.play(
+                self.coupler_flux_pulse_label,
+                validate=False,
+                duration=cz_duration,
+                amplitude_scale=coupler_flux_scale,
+            )
+        
+        self.transmon_pair.align()
+        frame_rotation_2pi(phase_shift_control, self.qubit_control.xy.name)
+        frame_rotation_2pi(phase_shift_target, self.qubit_target.xy.name)
+        self.qubit_control.xy.play("x180", amplitude_scale=0.0, duration=4)
+        self.qubit_target.xy.play("x180", amplitude_scale=0.0, duration=4)
+        self.transmon_pair.align()
 
     @property
     def config_settings(self):
