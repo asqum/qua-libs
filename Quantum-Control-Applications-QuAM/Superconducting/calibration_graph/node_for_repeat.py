@@ -22,7 +22,7 @@ import numpy as np
 
 
 def run_once():
-
+    ### The start of the copy ### copy the node to here
     # %% {Node_parameters}
     class Parameters(NodeParameters):
         qubits: Optional[List[str]] = None #['q4','q5']
@@ -284,6 +284,8 @@ def run_once():
             node.machine = machine
             node.save()
 
+            ### The end of the copy ### 
+            #modify the parameters you want to save
             fluctactuation = []
             qubits_name = []
             for qubit in qubits:

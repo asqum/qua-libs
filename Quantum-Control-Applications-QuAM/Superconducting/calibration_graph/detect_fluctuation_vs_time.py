@@ -18,7 +18,7 @@ out_dir.mkdir(parents=True, exist_ok=True)
 
 # csv file name (contains the time to avoid overlap)
 session_ts = datetime.now().isoformat(timespec="seconds").replace(":", "-")
-wide_csv = out_dir / f"independent_offset_{session_ts}.csv" #Chnage name
+wide_csv = out_dir / f"independent_offset_{session_ts}.csv" 
 
 header_qubits = None  
 for i in range(1, num_runs + 1):
