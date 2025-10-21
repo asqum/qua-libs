@@ -2,7 +2,8 @@ import warnings
 from typing import Optional
 
 import numpy as np
-from qiskit import QuantumCircuit
+from qiskit import QuantumCircuit, transpile
+from qiskit.transpiler import CouplingMap
 from qiskit.quantum_info import Statevector
 from qualang_tools.results import DataHandler
 
@@ -19,6 +20,29 @@ from ..two_qubit_xeb.macros import qua_declaration, reset_qubit, binary
 
 u = unit(coerce_to_integer=True)
 
+def qiskit_to_qua_macro(circuit: QuantumCircuit, machine: QuAM):
+    qubit_pairs_mapping = {qubit_pair.name: (machine.active_qubits.index(qubit_pair.qubit_control), machine.active_qubits.index(qubit_pair.qubit_target)) for qubit_pair in machine.active_qubit_pairs}
+    
+    coupling_map = CouplingMap(list(qubit_pairs_mapping.values()))
+    qc = transpile(circuit, basis_gates=["sx", "x", "rz", "cz"], coupling_map=coupling_map)
+    qubit_indices = {qubit: qc.find_bit(qubit).index for i, qubit in enumerate(qc.qubits)}
+    for instruction in qc.data:
+        try:
+            qubits = instruction.qubits
+            if len(qubits) == 2:
+                qubit_control = machine.active_qubits[qubit_indices[qubits[0]]]
+                qubit_target = machine.active_qubits[qubit_indices[qubits[1]]]
+                qubit_pair = qubit_control @ qubit_target
+                qubit_pair.apply(instruction.operation.name, *instruction.operation.params)
+            elif len(qubits) == 1:
+                qubit = machine.active_qubits[qubit_indices[qubits[0]]]
+                qubit.apply(instruction.operation.name, *instruction.operation.params)
+            else:
+                raise ValueError(f"Unsupported number of qubits: {len(qubits)}")
+        except Exception as e:
+            print(f"Error processing instruction: {instruction}")
+            raise e
+   
 class ClassicalShadow:
     def __init__(
         self,
@@ -87,10 +111,10 @@ class ClassicalShadow:
 
                 with for_(shot, 0, shot < self.config.shots_per_snapshot, shot + 1):
                     # Prepare state
-                    if self.config.input_state_prep_macro_kwargs: #is not None:
-                        self.config.input_state_prep_macro(**self.config.input_state_prep_macro_kwargs)
+                    if self.config.input_state_circuit_kwargs: #is not None:
+                        qiskit_to_qua_macro(self.config.input_state_circuit(**self.config.input_state_circuit_kwargs), self.machine)
                     else:
-                        self.config.input_state_prep_macro()
+                        qiskit_to_qua_macro(self.config.input_state_circuit(), self.machine)
                     align()
                     # for q, qubit, in enumerate(self.config.qubits):
                     #     with switch_(random_basis[q], unsafe=False):

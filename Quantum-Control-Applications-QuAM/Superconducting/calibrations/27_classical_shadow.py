@@ -3,6 +3,7 @@ from quam_libs.experiments.classical_shadow import ClassicalShadow, ShadowConfig
 from quam_libs.experiments.two_qubit_xeb.qua_gate import QUAGate
 from qualang_tools.units import unit
 from qiskit.circuit import QuantumCircuit
+from qiskit.circuit.library import SXGate, ZGate
 from qm import generate_qua_script
 import numpy as np
 
@@ -15,45 +16,25 @@ target_qubit_indices = [0]
 target_qubits = [qubits[i] for i in target_qubit_indices]
 
 
-def sx_macro(qubit: Transmon):
-    qubit.xy.play("x90")
-    
-def sy_macro(qubit: Transmon):
-    qubit.xy.play("-y90")
-    
-def z_macro(qubit: Transmon):
-    qubit.wait(4)
-    
-def input_state_macro(*, wait_duration: int):
-    q0 = target_qubits[0]
-    q0.xy.play("x180")
-    # q0.apply("x")
-    q0.wait((wait_duration//4))
-   
 def input_state_circuit(*, wait_duration: int) -> QuantumCircuit:
-    qc = QuantumCircuit(1)
-    qc.x(0)
-    # qc.delay(wait_duration, 0, unit='ns')
-    
+    # TODO: Add input state Qiskit QuantumCircuit here
+    qc = QuantumCircuit(len(target_qubits))
+    for i in range(len(target_qubits)):
+        qc.x(i)
+    qc.delay(wait_duration, target_qubits, unit='ns')
     return qc
 
-measurement_basis = {0: QUAGate("sx", sx_macro),
-                     1: QUAGate(SYdgGate(), sy_macro),
-                     2: QUAGate("z", z_macro)}
-
-shadow_size = 10 # Number of shots/snapshots to construct the shadow
+shadow_size = 100 # Number of shots/snapshots to construct the shadow
 seed = 1234
 np.random.seed(seed)
 # Define custom snapshots here if needed (otherwise, sampling is done in real time)
 gate_indices = np.random.randint(0, 3, (shadow_size, len(target_qubits)))
 wait_duration = 0.1*u.us
 
-input_macro_kwargs = {"wait_duration": wait_duration}
+input_circuit_kwargs = {"wait_duration": wait_duration}
 shadow_config = ShadowConfig(shadow_size=shadow_size,
                              shots_per_snapshot=128,
-                            input_state_prep_macro=input_state_macro,
                             input_state_circuit=input_state_circuit,
-                            measurement_basis=measurement_basis,
                             qubits=target_qubits,
                             readout_qubits=readout_qubits,
                             readout_pulse_name="readout",
@@ -61,7 +42,7 @@ shadow_config = ShadowConfig(shadow_size=shadow_size,
                             reset_kwargs={"cooldown_time": 80*u.us,
                                           "max_tries": 5,
                                           "pi_pulse": "x180"},
-                            input_state_prep_macro_kwargs=input_macro_kwargs,
+                            input_state_circuit_kwargs=input_circuit_kwargs,
                             # gate_indices=gate_indices,
                             seed=seed,
                              )
@@ -81,7 +62,7 @@ print(results)
 print("Ideal results:")
 print(ideal_results)
 
-gate_dict = {i: qua_gate.gate for i, qua_gate in measurement_basis.items()}
+gate_dict = {0: SXGate(), 1: SYdgGate(), 2: ZGate()}
 
 # Result format: List of (bitstring, random_gate_indices) of size shadow_size
 
