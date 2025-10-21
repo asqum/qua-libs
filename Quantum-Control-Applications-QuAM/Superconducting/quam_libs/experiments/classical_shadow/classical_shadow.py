@@ -1,10 +1,11 @@
 import warnings
-from typing import Optional
+from typing import Optional, List
 
 import numpy as np
 from qiskit import QuantumCircuit, transpile
-from qiskit.transpiler import CouplingMap
+from qiskit.transpiler import CouplingMap, Target
 from qiskit.quantum_info import Statevector
+from qiskit.circuit.library import get_standard_gate_name_mapping
 from qualang_tools.results import DataHandler
 
 from quam_libs.components import QuAM, Transmon
@@ -20,11 +21,18 @@ from ..two_qubit_xeb.macros import qua_declaration, reset_qubit, binary
 
 u = unit(coerce_to_integer=True)
 
-def qiskit_to_qua_macro(circuit: QuantumCircuit, machine: QuAM):
+def qiskit_to_qua_macro(circuit: QuantumCircuit, machine: QuAM, target_qubits: List[Transmon] | None = None):
     qubit_pairs_mapping = {qubit_pair.name: (machine.active_qubits.index(qubit_pair.qubit_control), machine.active_qubits.index(qubit_pair.qubit_target)) for qubit_pair in machine.active_qubit_pairs}
-    
-    coupling_map = CouplingMap(list(qubit_pairs_mapping.values()))
-    qc = transpile(circuit, basis_gates=["sx", "x", "rz", "cz"], coupling_map=coupling_map)
+    initial_layout = [machine.active_qubits.index(qubit) for qubit in target_qubits] if target_qubits is not None else None
+    target = Target('quam', len(machine.active_qubits),
+    dt=1e-9, granularity=4, min_length=16)
+    gate_map = get_standard_gate_name_mapping()
+    single_qubit_prop = {i: None for i in range(len(machine.active_qubits))}
+    two_qubit_prop = {qubit_pairs_mapping[pair.name]: None for pair in machine.active_qubit_pairs}
+    for instr in ["sx", "x", "rz"]:
+        target.add_instruction(gate_map[instr], single_qubit_prop)
+    target.add_instruction(gate_map["cz"], two_qubit_prop)
+    qc = transpile(circuit, target=target, initial_layout=initial_layout)
     qubit_indices = {qubit: qc.find_bit(qubit).index for i, qubit in enumerate(qc.qubits)}
     for instruction in qc.data:
         try:
@@ -112,9 +120,9 @@ class ClassicalShadow:
                 with for_(shot, 0, shot < self.config.shots_per_snapshot, shot + 1):
                     # Prepare state
                     if self.config.input_state_circuit_kwargs: #is not None:
-                        qiskit_to_qua_macro(self.config.input_state_circuit(**self.config.input_state_circuit_kwargs), self.machine)
+                        qiskit_to_qua_macro(self.config.input_state_circuit(**self.config.input_state_circuit_kwargs), self.machine, self.config.target_qubits)
                     else:
-                        qiskit_to_qua_macro(self.config.input_state_circuit(), self.machine)
+                        qiskit_to_qua_macro(self.config.input_state_circuit(), self.machine, self.config.target_qubits)
                     align()
                     # for q, qubit, in enumerate(self.config.qubits):
                     #     with switch_(random_basis[q], unsafe=False):
