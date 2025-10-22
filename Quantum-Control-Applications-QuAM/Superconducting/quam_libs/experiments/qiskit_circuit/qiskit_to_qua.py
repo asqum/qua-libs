@@ -3,28 +3,39 @@ from qm.qua import *
 from qiskit import QuantumCircuit, transpile
 from qiskit.transpiler import Target
 from quam_libs.components import QuAM, Transmon
-from typing import List
+from typing import List, Optional
+import numpy as np
 
-
-def qiskit_to_qua_macro(circuit: QuantumCircuit, machine: QuAM, target_qubits: List[Transmon] | None = None, optimization_level: int = 1):
+def create_target(machine: QuAM):
     qubit_pairs_mapping = {qubit_pair.name: (machine.active_qubits.index(qubit_pair.qubit_control), machine.active_qubits.index(qubit_pair.qubit_target)) for qubit_pair in machine.active_qubit_pairs}
-    initial_layout = [machine.active_qubits.index(qubit) for qubit in target_qubits] if target_qubits is not None else None
+    
     target = Target('quam', len(machine.active_qubits),
     dt=1e-9, granularity=4, min_length=16)
     gate_map = get_standard_gate_name_mapping()
-    single_qubit_prop = {i: None for i in range(len(machine.active_qubits))}
+    single_qubit_prop = {(i,): None for i in range(len(machine.active_qubits))}
     two_qubit_prop = {qubit_pairs_mapping[pair.name]: None for pair in machine.active_qubit_pairs}
-    for instr in ["sx", "x", "rz"]:
+    for instr in ["sx", "x", "rz", "measure", "reset", "y"]:
         target.add_instruction(gate_map[instr], single_qubit_prop)
     target.add_instruction(gate_map["cz"], two_qubit_prop)
-    qc = transpile(circuit, target=target, initial_layout=initial_layout, optimization_level=optimization_level)
+    return target
+
+
+def qiskit_to_qua_macro(circuit: QuantumCircuit, machine: QuAM, target_qubits: List[Transmon] | None = None, optimization_level: Optional[int] = None):
+    initial_layout = [machine.active_qubits.index(qubit) for qubit in target_qubits] if target_qubits is not None else None
+    if optimization_level is not None:
+        target = create_target(machine)
+        qc = transpile(circuit, target=target, initial_layout=initial_layout, optimization_level=optimization_level)
+    else:
+        qc = circuit
     qubit_indices = {qubit: qc.find_bit(qubit).index for i, qubit in enumerate(qc.qubits)}
     
-    cregs = {creg.name: declare(int, size=creg.size) for creg in qc.cregs}
+    cregs = {creg.name: declare(bool, value= [False] * creg.size) for creg in qc.cregs}
     
     for instruction in qc.data:
         try:
             qubits = instruction.qubits
+            if instruction.operation.name == "barrier":
+               continue
             if len(qubits) == 2:
                 qubit_control = machine.active_qubits[qubit_indices[qubits[0]]]
                 qubit_target = machine.active_qubits[qubit_indices[qubits[1]]]
@@ -35,7 +46,10 @@ def qiskit_to_qua_macro(circuit: QuantumCircuit, machine: QuAM, target_qubits: L
                 result = qubit.apply(instruction.operation.name, *instruction.operation.params)
                 if instruction.clbits:
                     for clbit in instruction.clbits:
-                        creg, index = qc.find_bit(clbit)
+                        registers = qc.find_bit(clbit).registers
+                        if len(registers) > 1:
+                            raise ValueError(f"Multiple registers found for clbit: {clbit}")
+                        creg, index = registers[0]
                         assign(cregs[creg.name][index], result)    
                         
             else:
@@ -94,16 +108,16 @@ def run_qiskit_to_qua_program(circuit: QuantumCircuit, machine: QuAM, target_qub
                     qubit.apply('reset')
             cregs = qiskit_to_qua_macro(circuit, machine, target_qubits, optimization_level)
             
-            for creg in cregs:
+            for creg in circuit.cregs:
                 for index in range(creg.size):
                     save(cregs[creg.name][index], cregs_streams[creg.name])
         
         with stream_processing():
-            for creg, stream in zip(circuit.cregs, cregs_streams):
-                stream.buffer(creg.size).boolean_to_int().save_all(creg.name)
+            for creg, stream in zip(circuit.cregs, cregs_streams.values()):
+                stream.boolean_to_int().buffer(creg.size).save_all(creg.name)
     
     qmm = machine.connect()
-    qm = qmm.open_qm(machine.generate_config())
+    qm = qmm.open_qm(machine.generate_config(), close_other_machines=False)
     job = qm.execute(prog)
     
     result_handles = job.result_handles
