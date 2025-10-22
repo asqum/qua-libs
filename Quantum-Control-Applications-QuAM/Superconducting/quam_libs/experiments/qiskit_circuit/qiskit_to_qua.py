@@ -3,7 +3,6 @@ from qm.qua import *
 from qiskit import QuantumCircuit, transpile
 from qiskit.transpiler import Target
 from quam_libs.components import QuAM, Transmon
-from quam_libs.experiments.two_qubit_xeb.macros import binary
 from typing import List
 
 
@@ -47,6 +46,19 @@ def qiskit_to_qua_macro(circuit: QuantumCircuit, machine: QuAM, target_qubits: L
     
     return cregs
 
+def has_reset_at_boundary(circuit: QuantumCircuit) -> bool:
+    """Check if the QuantumCircuit has a reset at the start or end."""
+    instructions = circuit.data
+
+    if not instructions:
+        return False
+
+    # Check first instruction
+    first = instructions[0].operation.name == "reset"
+    # Check last instruction
+    last = instructions[-1].operation.name == "reset"
+
+    return first or last
 
 def run_qiskit_to_qua_program(circuit: QuantumCircuit, machine: QuAM, target_qubits: List[Transmon] | None = None, n_shots: int = 1024, optimization_level: int = 1):
     """
@@ -75,7 +87,11 @@ def run_qiskit_to_qua_program(circuit: QuantumCircuit, machine: QuAM, target_qub
 
         shot = declare(int)
         cregs_streams = {creg.name: declare_stream() for creg in circuit.cregs}
+
         with for_(shot, 0, shot < n_shots, shot + 1):
+            if not has_reset_at_boundary(circuit):
+                for qubit in target_qubits:
+                    qubit.apply('reset')
             cregs = qiskit_to_qua_macro(circuit, machine, target_qubits, optimization_level)
             
             for creg in cregs:

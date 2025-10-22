@@ -34,7 +34,7 @@ class ResetMacro(QubitMacro):
             else self.qubit.get_pulse(self.readout_pulse)
         )
         if self.reset_type == "active":
-            from ..macros import active_reset
+            from quam_libs.macros import active_reset
             active_reset(self.qubit, pi_pulse_name=get_pulse_name(pi_pulse),
                          readout_pulse_name=get_pulse_name(readout_pulse),
                          max_attempts=self.max_attempts)
