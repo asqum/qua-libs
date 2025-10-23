@@ -18,7 +18,7 @@ if manual_transpile:
     target = create_target(machine)
     # Transpile the circuit to the target (Optional: if not done here, will be done in the run_qiskit_to_qua_program function)
     qc = transpile(qc, target=target, initial_layout=target_qubit_indices, optimization_level=optimization_level)
-    results = run_qiskit_to_qua_program(qc, machine, target_qubits, n_shots)
+    results = run_qiskit_to_qua_program(qc, machine, n_shots=n_shots)
 
 else:
     optimization_level = 1 # Default optimization level is 1, has to be specified if manual_transpile is False

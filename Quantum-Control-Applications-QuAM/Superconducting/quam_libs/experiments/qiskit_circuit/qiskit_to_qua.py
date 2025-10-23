@@ -61,18 +61,34 @@ def qiskit_to_qua_macro(circuit: QuantumCircuit, machine: QuAM, target_qubits: L
     return cregs
 
 def has_reset_at_boundary(circuit: QuantumCircuit) -> bool:
-    """Check if the QuantumCircuit has a reset at the start or end."""
+    """Check if each qubit in the QuantumCircuit has a reset at the start or end."""
     instructions = circuit.data
+    qubits = circuit.qubits
 
     if not instructions:
-        return False
+        return True  # Empty circuit means all qubits are in reset state
 
-    # Check first instruction
-    first = instructions[0].operation.name == "reset"
-    # Check last instruction
-    last = instructions[-1].operation.name == "reset"
+    # Create per-qubit instruction lists
+    qubit_instructions = {q: [] for q in qubits}
+    for inst in instructions:
+        for q in inst.qubits:
+            qubit_instructions[q].append(inst)
 
-    return first or last
+    # Check each qubit's first and last operations
+    for qubit, qubit_insts in qubit_instructions.items():
+        if not qubit_insts:
+            continue  # No instructions means qubit remained in reset state
+            
+        # Check first operation on this qubit
+        has_start_reset = qubit_insts[0].operation.name == "reset"
+        
+        # Check last operation on this qubit
+        has_end_reset = qubit_insts[-1].operation.name == "reset"
+        
+        if not (has_start_reset or has_end_reset):
+            return False
+
+    return True
 
 def run_qiskit_to_qua_program(circuit: QuantumCircuit, machine: QuAM, target_qubits: List[Transmon] | None = None, n_shots: int = 1024, optimization_level: int = 1):
     """
@@ -96,7 +112,8 @@ def run_qiskit_to_qua_program(circuit: QuantumCircuit, machine: QuAM, target_qub
     if n_shots <= 0:
         raise ValueError("The number of shots must be greater than 0.")
         
-        
+    if target_qubits is not None:
+        target_qubits = [machine.active_qubits[i] for i in range(circuit.num_qubits)]
     with program() as prog:
 
         shot = declare(int)
@@ -117,7 +134,7 @@ def run_qiskit_to_qua_program(circuit: QuantumCircuit, machine: QuAM, target_qub
                 stream.boolean_to_int().buffer(creg.size).save_all(creg.name)
     
     qmm = machine.connect()
-    qm = qmm.open_qm(machine.generate_config(), close_other_machines=False)
+    qm = qmm.open_qm(machine.generate_config(), close_other_machines=True)
     job = qm.execute(prog)
     
     result_handles = job.result_handles
