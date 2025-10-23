@@ -1,4 +1,4 @@
-from qiskit.circuit.library import get_standard_gate_name_mapping
+from qiskit.circuit.library import get_standard_gate_name_mapping, Reset
 from qm.qua import *
 from qiskit import QuantumCircuit, transpile
 from qiskit.transpiler import Target
@@ -89,6 +89,43 @@ def has_reset_at_boundary(circuit: QuantumCircuit) -> bool:
             return False
 
     return True
+def ensure_resets_for_active_qubits(circuit: QuantumCircuit) -> QuantumCircuit:
+    """
+    Ensures that every active (non-idle) qubit in the circuit has a reset
+    either at the beginning or at the end of its usage. If not, a reset is
+    prepended at the beginning of its activity.
+
+    Args:
+        circuit (QuantumCircuit): The input circuit to modify in place.
+
+    Returns:
+        QuantumCircuit: The modified circuit.
+    """
+    used_qubits = {q: [] for q in circuit.qubits}
+
+    # Collect instruction indices where each qubit is used
+    for idx, (instr, qargs, _) in enumerate(circuit.data):
+        for q in qargs:
+            used_qubits[q].append(idx)
+
+    for qubit, use_indices in used_qubits.items():
+        # Skip idle qubits
+        if not use_indices:
+            continue
+
+        first_instr = circuit.data[use_indices[0]][0]
+        last_instr = circuit.data[use_indices[-1]][0]
+
+        has_reset_at_start_or_end = (
+            first_instr.name == "reset" or last_instr.name == "reset"
+        )
+
+        # If qubit is active and has no reset at start or end, prepend one
+        if not has_reset_at_start_or_end:
+            circuit.compose(Reset(), qubits=[qubit], inplace=True, front=True)
+
+    return circuit
+
 
 def run_qiskit_to_qua_program(circuit: QuantumCircuit, machine: QuAM, target_qubits: List[Transmon] | None = None, n_shots: int = 1024, optimization_level: int = 1):
     """
@@ -105,8 +142,8 @@ def run_qiskit_to_qua_program(circuit: QuantumCircuit, machine: QuAM, target_qub
     """
     if not circuit.cregs:
         raise ValueError("The circuit does not have any classical registers.")
-    if not target_qubits:
-        raise ValueError("The target qubits are not specified.")
+    if not target_qubits and circuit.num_qubits != len(machine.active_qubits):
+        raise ValueError("The target qubits are not specified and the circuit does not have the same number of qubits as the machine.")
     if optimization_level not in [0, 1, 2, 3]:
         raise ValueError("The optimization level must be 0, 1, 2, or 3.")
     if n_shots <= 0:
@@ -114,6 +151,7 @@ def run_qiskit_to_qua_program(circuit: QuantumCircuit, machine: QuAM, target_qub
         
     if target_qubits is not None:
         target_qubits = [machine.active_qubits[i] for i in range(circuit.num_qubits)]
+
     with program() as prog:
 
         shot = declare(int)
@@ -121,8 +159,7 @@ def run_qiskit_to_qua_program(circuit: QuantumCircuit, machine: QuAM, target_qub
 
         with for_(shot, 0, shot < n_shots, shot + 1):
             if not has_reset_at_boundary(circuit):
-                for qubit in target_qubits:
-                    qubit.apply('reset')
+                ensure_resets_for_active_qubits(circuit)
             cregs = qiskit_to_qua_macro(circuit, machine, target_qubits, optimization_level)
             
             for creg in circuit.cregs:
