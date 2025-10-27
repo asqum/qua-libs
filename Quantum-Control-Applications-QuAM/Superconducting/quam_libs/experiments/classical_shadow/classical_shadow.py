@@ -101,7 +101,7 @@ class ClassicalShadow:
         """
         n_qubits = self.config.n_qubits
         dim = self.config.dim
-        random_gates = len(self.config.measurement_basis)
+        random_gates = len(self.config.measurement_basis) if self.config.measurement_basis is not None else 3
         ge_thresholds = [qubit.resonator.operations[self.config.readout_pulse_name].threshold 
                          for qubit in self.config.qubits]
         
@@ -148,20 +148,21 @@ class ClassicalShadow:
                     else:
                         qiskit_to_qua_macro(self.config.input_state_circuit(), self.machine, self.config.target_qubits)
                     align()
-                    # for q, qubit, in enumerate(self.config.qubits):
-                    #     with switch_(random_basis[q], unsafe=False):
-                    #         # Apply the random basis rotation
-                    #         for k in range(random_gates):
-                    #             with case_(k):
-                    #                 self.config.measurement_basis[k].gate_macro(qubit)
-                    # align()
-                    # Readout
-                    for q, qubit, in enumerate(self.config.qubits):
+
+                    if self.config.measurement_basis is not None:
+                        for q, qubit, in enumerate(self.config.qubits):
+                            with switch_(random_basis[q], unsafe=False):
+                                # Apply the random basis rotation
+                                for k in range(random_gates):
+                                    with case_(k):
+                                        qiskit_to_qua_macro(self.config.measurement_basis[k], self.machine, [qubit])
+                    else:
+                        for q, qubit, in enumerate(self.config.qubits):
                         # Replace switch case with conditional plays of the measurement basis rotations
-                        qubit.xy.play("x90", condition=random_basis[q] == 0)
-                        qubit.xy.play("-y90", condition=random_basis[q] == 1)
-                        
-                        
+                            qubit.xy.play("x90", condition=random_basis[q] == 0)
+                            qubit.xy.play("-y90", condition=random_basis[q] == 1)
+        
+                    # Readout
                     # Play the readout on the other resonator to measure in the same condition as when optimizing readout
                     for other_qubit in self.config.readout_qubits:
                         if other_qubit.resonator not in [qubit.resonator for qubit in self.config.qubits]:

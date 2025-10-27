@@ -15,6 +15,15 @@ readout_qubits = [qubits[i] for i in readout_qubit_indices]
 target_qubit_indices = [0]
 target_qubits = [qubits[i] for i in target_qubit_indices]
 
+measurement_basis = {i: QuantumCircuit(1) for i in range(3)}
+# Create the measurement basis circuits
+# 0: U =  H
+# 1: U =  Sdg@H
+# 2: U =  I
+measurement_basis[0].h(0)
+measurement_basis[1].sdg(0)
+measurement_basis[1].h(0)
+
 
 def input_state_circuit(*, wait_duration: int) -> QuantumCircuit:
     # TODO: Add input state Qiskit QuantumCircuit here
@@ -35,6 +44,7 @@ input_circuit_kwargs = {"wait_duration": wait_duration}
 shadow_config = ShadowConfig(shadow_size=shadow_size,
                              shots_per_snapshot=128,
                             input_state_circuit=input_state_circuit,
+                            measurement_basis=measurement_basis,
                             qubits=target_qubits,
                             readout_qubits=readout_qubits,
                             readout_pulse_name="readout",
@@ -62,7 +72,10 @@ print(results)
 print("Ideal results:")
 print(ideal_results)
 
-gate_dict = {0: SXGate(), 1: SYdgGate(), 2: ZGate()}
+# Accessing the unitary operations associated to the measurement basis
+gate_dict = shadow_config.random_unitary_set
+print("Gate dictionary:")
+print(gate_dict)
 
 # Result format: List of (bitstring, random_gate_indices) of size shadow_size
 
