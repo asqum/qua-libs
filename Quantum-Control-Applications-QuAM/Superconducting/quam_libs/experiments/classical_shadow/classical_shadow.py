@@ -21,22 +21,36 @@ from ..two_qubit_xeb.macros import qua_declaration, reset_qubit, binary
 
 u = unit(coerce_to_integer=True)
 
-def qiskit_to_qua_macro(circuit: QuantumCircuit, machine: QuAM, target_qubits: List[Transmon] | None = None):
+def create_target(machine: QuAM):
     qubit_pairs_mapping = {qubit_pair.name: (machine.active_qubits.index(qubit_pair.qubit_control), machine.active_qubits.index(qubit_pair.qubit_target)) for qubit_pair in machine.active_qubit_pairs}
-    initial_layout = [machine.active_qubits.index(qubit) for qubit in target_qubits] if target_qubits is not None else None
+    
     target = Target('quam', len(machine.active_qubits),
     dt=1e-9, granularity=4, min_length=16)
     gate_map = get_standard_gate_name_mapping()
-    single_qubit_prop = {i: None for i in range(len(machine.active_qubits))}
+    single_qubit_prop = {(i,): None for i in range(len(machine.active_qubits))}
     two_qubit_prop = {qubit_pairs_mapping[pair.name]: None for pair in machine.active_qubit_pairs}
-    for instr in ["sx", "x", "rz"]:
+    for instr in ["sx", "x", "rz", "measure", "reset", "y"]:
         target.add_instruction(gate_map[instr], single_qubit_prop)
     target.add_instruction(gate_map["cz"], two_qubit_prop)
-    qc = transpile(circuit, target=target, initial_layout=initial_layout)
+    return target
+
+
+def qiskit_to_qua_macro(circuit: QuantumCircuit, machine: QuAM, target_qubits: List[Transmon] | None = None, optimization_level: Optional[int] = None):
+    initial_layout = [machine.active_qubits.index(qubit) for qubit in target_qubits] if target_qubits is not None else None
+    if optimization_level is not None:
+        target = create_target(machine)
+        qc = transpile(circuit, target=target, initial_layout=initial_layout, optimization_level=optimization_level)
+    else:
+        qc = circuit
     qubit_indices = {qubit: qc.find_bit(qubit).index for i, qubit in enumerate(qc.qubits)}
+    
+    cregs = {creg.name: declare(bool, value= [False] * creg.size) for creg in qc.cregs}
+    
     for instruction in qc.data:
         try:
             qubits = instruction.qubits
+            if instruction.operation.name == "barrier":
+               continue
             if len(qubits) == 2:
                 qubit_control = machine.active_qubits[qubit_indices[qubits[0]]]
                 qubit_target = machine.active_qubits[qubit_indices[qubits[1]]]
@@ -44,12 +58,22 @@ def qiskit_to_qua_macro(circuit: QuantumCircuit, machine: QuAM, target_qubits: L
                 qubit_pair.apply(instruction.operation.name, *instruction.operation.params)
             elif len(qubits) == 1:
                 qubit = machine.active_qubits[qubit_indices[qubits[0]]]
-                qubit.apply(instruction.operation.name, *instruction.operation.params)
+                result = qubit.apply(instruction.operation.name, *instruction.operation.params)
+                if instruction.clbits:
+                    for clbit in instruction.clbits:
+                        registers = qc.find_bit(clbit).registers
+                        if len(registers) > 1:
+                            raise ValueError(f"Multiple registers found for clbit: {clbit}")
+                        creg, index = registers[0]
+                        assign(cregs[creg.name][index], result)    
+                        
             else:
                 raise ValueError(f"Unsupported number of qubits: {len(qubits)}")
         except Exception as e:
             print(f"Error processing instruction: {instruction}")
             raise e
+    
+    return cregs
    
 class ClassicalShadow:
     def __init__(
@@ -77,7 +101,7 @@ class ClassicalShadow:
         """
         n_qubits = self.config.n_qubits
         dim = self.config.dim
-        random_gates = len(self.config.measurement_basis)
+        random_gates = len(self.config.measurement_basis) if self.config.measurement_basis is not None else 3
         ge_thresholds = [qubit.resonator.operations[self.config.readout_pulse_name].threshold 
                          for qubit in self.config.qubits]
         
@@ -124,20 +148,21 @@ class ClassicalShadow:
                     else:
                         qiskit_to_qua_macro(self.config.input_state_circuit(), self.machine, self.config.target_qubits)
                     align()
-                    # for q, qubit, in enumerate(self.config.qubits):
-                    #     with switch_(random_basis[q], unsafe=False):
-                    #         # Apply the random basis rotation
-                    #         for k in range(random_gates):
-                    #             with case_(k):
-                    #                 self.config.measurement_basis[k].gate_macro(qubit)
-                    # align()
-                    # Readout
-                    for q, qubit, in enumerate(self.config.qubits):
+
+                    if self.config.measurement_basis is not None:
+                        for q, qubit, in enumerate(self.config.qubits):
+                            with switch_(random_basis[q], unsafe=False):
+                                # Apply the random basis rotation
+                                for k in range(random_gates):
+                                    with case_(k):
+                                        qiskit_to_qua_macro(self.config.measurement_basis[k], self.machine, [qubit])
+                    else:
+                        for q, qubit, in enumerate(self.config.qubits):
                         # Replace switch case with conditional plays of the measurement basis rotations
-                        qubit.xy.play("x90", condition=random_basis[q] == 0)
-                        qubit.xy.play("-y90", condition=random_basis[q] == 1)
-                        
-                        
+                            qubit.xy.play("x90", condition=random_basis[q] == 0)
+                            qubit.xy.play("-y90", condition=random_basis[q] == 1)
+        
+                    # Readout
                     # Play the readout on the other resonator to measure in the same condition as when optimizing readout
                     for other_qubit in self.config.readout_qubits:
                         if other_qubit.resonator not in [qubit.resonator for qubit in self.config.qubits]:
