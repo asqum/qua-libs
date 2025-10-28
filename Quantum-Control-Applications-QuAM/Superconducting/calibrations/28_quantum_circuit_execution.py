@@ -4,14 +4,20 @@ from quam_libs.experiments.qiskit_circuit import run_qiskit_to_qua_program, crea
 machine = QuAM.load()
 n_shots = 1024
 manual_transpile = True
-target_qubit_indices = [0, 1]
+target_qubit_indices = [0,1,2,3,4]
 target_qubits = [machine.active_qubits[i] for i in target_qubit_indices]
 
-qc = QuantumCircuit(2, 2)
+for qubit in target_qubits:
+    qubit.macros['reset'].reset_type='thermalize'
+    qubit.macros['reset'].thermalize_time = qubit.thermalization_time
+
+qc = QuantumCircuit(5, 5)
+# qc.x(0)
 qc.h(0)
-qc.cx(0, 1)
+# qc.cx(0, 1)
 qc.measure(0, 0)
-qc.measure(1, 1)
+# qc.measure(1, 1)
+# qc.measure_all()
 
 if manual_transpile:
     optimization_level = 1

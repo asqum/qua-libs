@@ -5,6 +5,7 @@ from qiskit.transpiler import Target
 from quam_libs.components import QuAM, Transmon
 from typing import List, Optional
 import numpy as np
+from qm import generate_qua_script
 
 def create_target(machine: QuAM):
     qubit_pairs_mapping = {qubit_pair.name: (machine.active_qubits.index(qubit_pair.qubit_control), machine.active_qubits.index(qubit_pair.qubit_target)) for qubit_pair in machine.active_qubit_pairs}
@@ -179,6 +180,9 @@ def run_qiskit_to_qua_program(circuit: QuantumCircuit, machine: QuAM, target_qub
             for creg, stream in zip(circuit.cregs, cregs_streams.values()):
                 stream.boolean_to_int().buffer(creg.size).save_all(creg.name)
     
+    # print("Generated QUA program:")
+    # print(generate_qua_script(prog))
+
     qmm = machine.connect()
     qm = qmm.open_qm(machine.generate_config(), close_other_machines=True)
     job = qm.execute(prog)
