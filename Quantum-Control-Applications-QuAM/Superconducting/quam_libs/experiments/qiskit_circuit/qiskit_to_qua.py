@@ -40,10 +40,14 @@ def qiskit_to_qua_macro(circuit: QuantumCircuit, machine: QuAM, target_qubits: L
                 qubit_control = machine.active_qubits[qubit_indices[qubits[0]]]
                 qubit_target = machine.active_qubits[qubit_indices[qubits[1]]]
                 qubit_pair = qubit_control @ qubit_target
+                qubit_pair.align()
                 qubit_pair.apply(instruction.operation.name, *instruction.operation.params)
+                qubit_pair.align()
             elif len(qubits) == 1:
                 qubit = machine.active_qubits[qubit_indices[qubits[0]]]
+                qubit.align()
                 result = qubit.apply(instruction.operation.name, *instruction.operation.params)
+                qubit.align()
                 if instruction.clbits:
                     for clbit in instruction.clbits:
                         registers = qc.find_bit(clbit).registers
@@ -101,6 +105,7 @@ def ensure_resets_for_active_qubits(circuit: QuantumCircuit) -> QuantumCircuit:
     Returns:
         QuantumCircuit: The modified circuit.
     """
+    qc = circuit.copy()
     used_qubits = {q: [] for q in circuit.qubits}
 
     # Collect instruction indices where each qubit is used
@@ -122,9 +127,9 @@ def ensure_resets_for_active_qubits(circuit: QuantumCircuit) -> QuantumCircuit:
 
         # If qubit is active and has no reset at start or end, prepend one
         if not has_reset_at_start_or_end:
-            circuit.compose(Reset(), qubits=[qubit], inplace=True, front=True)
+            qc.compose(Reset(), qubits=[qubit], inplace=True, front=True)
 
-    return circuit
+    return qc
 
 
 def run_qiskit_to_qua_program(circuit: QuantumCircuit, machine: QuAM, target_qubits: List[Transmon] | None = None, n_shots: int = 1024, optimization_level: int = 1):
@@ -159,8 +164,9 @@ def run_qiskit_to_qua_program(circuit: QuantumCircuit, machine: QuAM, target_qub
 
         with for_(shot, 0, shot < n_shots, shot + 1):
             if not has_reset_at_boundary(circuit):
-                ensure_resets_for_active_qubits(circuit)
+                circuit = ensure_resets_for_active_qubits(circuit)
             cregs = qiskit_to_qua_macro(circuit, machine, target_qubits, optimization_level)
+
             
             for creg in circuit.cregs:
                 for index in range(creg.size):
