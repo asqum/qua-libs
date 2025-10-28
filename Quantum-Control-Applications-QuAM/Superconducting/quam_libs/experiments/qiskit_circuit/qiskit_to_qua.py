@@ -162,6 +162,9 @@ def run_qiskit_to_qua_program(circuit: QuantumCircuit, machine: QuAM, target_qub
         shot = declare(int)
         cregs_streams = {creg.name: declare_stream() for creg in circuit.cregs}
 
+        machine.apply_all_flux_to_min()
+        machine.apply_all_couplers_to_min()
+        
         with for_(shot, 0, shot < n_shots, shot + 1):
             if not has_reset_at_boundary(circuit):
                 circuit = ensure_resets_for_active_qubits(circuit)
