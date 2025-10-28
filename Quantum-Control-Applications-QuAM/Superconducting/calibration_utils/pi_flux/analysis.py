@@ -30,7 +30,7 @@ def process_raw_dataset(ds: xr.Dataset, node) -> xr.Dataset:
     """Convert IQ to V, add amplitude/phase, add freq_full if detuning present."""
     if "I" in ds or "Q" in ds:
         ds = convert_IQ_to_V(ds, node.namespace["qubits"])  # type: ignore
-        ds = ds.assign({"IQ_abs": np.sqrt(ds["I"] ** 2 + ds["Q"] ** 2)})
+        # ds = ds.assign({"IQ_abs": np.sqrt(ds["I"] ** 2 + ds["Q"] ** 2)})
     if "detuning" in ds.coords:
         full_freq = np.array([(ds.detuning + q.xy.intermediate_frequency + q.xy.LO_frequency) for q in node.namespace["qubits"]])
         ds = ds.assign_coords(full_freq=(["qubit", "detuning"], full_freq))

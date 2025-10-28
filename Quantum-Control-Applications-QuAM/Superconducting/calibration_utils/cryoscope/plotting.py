@@ -62,12 +62,12 @@ def plot_fit(ds: xr.Dataset, qubits: List[Any], fits: xr.Dataset):
             # If we can't determine DC term, approximate from tail of data
             a_dc = float(y_data[-5:].mean()) if len(y_data) >= 5 else float(y_data.mean())
 
-        fig, _ = plot_individual_fit(t_data, y_data, components=components, a_dc=a_dc)
+        fig, _ = plot_individual_fit(t_data, y_data, components=components, a_dc=a_dc, qubit_name = q.name)
 
     return fig
 
 
-def plot_individual_fit(t_data: np.ndarray, y_data: np.ndarray, components: List[Tuple[float, float]], a_dc: float):
+def plot_individual_fit(t_data: np.ndarray, y_data: np.ndarray, components: List[Tuple[float, float]], a_dc: float, qubit_name):
     """Plot exponential fit results with both linear and log scales.
 
     Args:
@@ -89,6 +89,8 @@ def plot_individual_fit(t_data: np.ndarray, y_data: np.ndarray, components: List
         fit_text += f"a{i + 1} = {amp / a_dc:.3f}, τ{i + 1} = {tau:.0f}ns\n"
 
     fig, axs = plt.subplots(1, 2, figsize=(12, 5))
+    fig.suptitle(f"Short time Cryoscope: {qubit_name}")
+
 
     # First subplot - linear scale
     axs[0].plot(t_data, y_data, ".--", label="Data")
