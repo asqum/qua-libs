@@ -1,9 +1,10 @@
 from quam_libs.components import QuAM, Transmon
-from quam_libs.experiments.classical_shadow import ClassicalShadow, ShadowConfig, SYdgGate
+from quam_libs.experiments.classical_shadow import ClassicalShadow, ShadowConfig, SYdgGate, create_target
 from quam_libs.experiments.two_qubit_xeb.qua_gate import QUAGate
 from qualang_tools.units import unit
 from qiskit.circuit import QuantumCircuit
 from qiskit.circuit.library import SXGate, ZGate
+from qiskit import transpile
 from qm import generate_qua_script
 import numpy as np
 
@@ -41,6 +42,11 @@ gate_indices = np.random.randint(0, 3, (shadow_size, len(target_qubits)))
 wait_duration = 0.1*u.us
 
 input_circuit_kwargs = {"wait_duration": wait_duration}
+
+# Visualize the input state circuit transpiled to the backend
+qc = input_state_circuit(**input_circuit_kwargs)
+qc = transpile(qc, target=create_target(machine), initial_layout=target_qubit_indices, optimization_level=0)
+print(qc)
 shadow_config = ShadowConfig(shadow_size=shadow_size,
                              shots_per_snapshot=128,
                             input_state_circuit=input_state_circuit,
