@@ -14,7 +14,7 @@ from qm import SimulationConfig, QuantumMachinesManager, generate_qua_script, Pr
 from qm.jobs.running_qm_job import RunningQmJob
 from qm.jobs.simulated_job import SimulatedJob
 from .shadow_config import ShadowConfig
-
+from .additional_gates import SYdgGate
 from qualang_tools.units import unit
 
 from ..two_qubit_xeb.macros import qua_declaration, reset_qubit, binary
@@ -251,8 +251,14 @@ class ClassicalShadowJob:
         for i in range(shadow_size):
             circuits[i].compose(input_state_circuit, inplace=True)
             for j in range(self.config.n_qubits):
-                circuits[i].append(self.config.measurement_basis[self._gate_indices[i, j]].gate,
-                                   [j])
+                meas_circuit = self.config.measurement_basis[self._gate_indices[i, j]] if self.config.measurement_basis is not None else None
+                if meas_circuit is None:
+                    meas_circuits = {0: QuantumCircuit(1), 1: QuantumCircuit(1), 2: QuantumCircuit(1)}
+                    meas_circuits[0].sx(0)
+                    meas_circuits[1].append(SYdgGate(), [0])
+                    meas_circuit = meas_circuits[self._gate_indices[i, j]]
+                circuits[i].compose(self.config.measurement_basis[self._gate_indices[i, j]],
+                                   inplace=True, qubits=[j])
         return circuits
     
     def result(self):
