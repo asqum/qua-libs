@@ -144,9 +144,9 @@ class ClassicalShadow:
                 with for_(shot, 0, shot < self.config.shots_per_snapshot, shot + 1):
                     # Prepare state
                     if self.config.input_state_circuit_kwargs: #is not None:
-                        qiskit_to_qua_macro(self.config.input_state_circuit(**self.config.input_state_circuit_kwargs), self.machine, self.config.target_qubits)
+                        qiskit_to_qua_macro(self.config.input_state_circuit(**self.config.input_state_circuit_kwargs), self.machine, self.config.qubits, optimization_level=0)
                     else:
-                        qiskit_to_qua_macro(self.config.input_state_circuit(), self.machine, self.config.target_qubits)
+                        qiskit_to_qua_macro(self.config.input_state_circuit(), self.machine, self.config.qubits, optimization_level=0)
                     align()
 
                     if self.config.measurement_basis is not None:
@@ -155,7 +155,7 @@ class ClassicalShadow:
                                 # Apply the random basis rotation
                                 for k in range(random_gates):
                                     with case_(k):
-                                        qiskit_to_qua_macro(self.config.measurement_basis[k], self.machine, [qubit])
+                                        qiskit_to_qua_macro(self.config.measurement_basis[k], self.machine, target_qubits=[qubit], optimization_level=0)
                     else:
                         for q, qubit, in enumerate(self.config.qubits):
                         # Replace switch case with conditional plays of the measurement basis rotations
