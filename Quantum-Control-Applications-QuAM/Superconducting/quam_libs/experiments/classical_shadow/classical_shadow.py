@@ -242,7 +242,7 @@ class ClassicalShadowJob:
         """
         shadow_size = self.config.shadow_size
         gates = self._result_handles["random_basis"].fetch_all()['value']
-        input_state_circuit = self.config.input_state_circuit(**self.config.input_state_prep_macro_kwargs)
+        input_state_circuit = self.config.input_state_circuit(**self.config.input_state_circuit_kwargs)
         for i in range(shadow_size):
             for j in range(self.config.n_qubits):
                 self._gate_indices[i, j] = gates[i][j]
