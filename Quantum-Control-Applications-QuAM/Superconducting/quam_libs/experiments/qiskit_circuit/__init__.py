@@ -1,1 +1,1 @@
-from .qiskit_to_qua import run_qiskit_to_qua_program, qiskit_to_qua_macro, create_target
+from .qiskit_to_qua import design_qua_program_from_qiskit, run_qua_program_and_return_results, create_target
