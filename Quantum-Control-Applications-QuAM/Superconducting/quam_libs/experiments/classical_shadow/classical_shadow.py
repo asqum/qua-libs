@@ -21,6 +21,9 @@ from ..two_qubit_xeb.macros import qua_declaration, reset_qubit, binary
 
 u = unit(coerce_to_integer=True)
 
+BASIS_GATES_SINGLE_QUBIT = ["sx", "x", "rz", "measure", "reset", "y"]
+BASIS_GATES_TWO_QUBIT = ["cz"]
+
 
 def create_target(machine: QuAM):
     qubit_pairs_mapping = {
@@ -39,7 +42,7 @@ def create_target(machine: QuAM):
     two_qubit_prop = {
         qubit_pairs_mapping[pair.name]: None for pair in machine.active_qubit_pairs
     }
-    for instr in ["sx", "x", "rz", "measure", "reset", "y"]:
+    for instr in BASIS_GATES_SINGLE_QUBIT:
         target.add_instruction(gate_map[instr], single_qubit_prop)
     target.add_instruction(gate_map["cz"], two_qubit_prop)
     return target
@@ -57,8 +60,11 @@ def qiskit_to_qua_macro(
         else None
     )
     target = create_target(machine)
+    qc_raw_transpiled = transpile(
+        circuit, basis_gates=BASIS_GATES_SINGLE_QUBIT + BASIS_GATES_TWO_QUBIT
+    )
     qc = transpile(
-        circuit,
+        qc_raw_transpiled,
         target=target,
         initial_layout=initial_layout,
         optimization_level=optimization_level,
@@ -321,7 +327,7 @@ class ClassicalShadowJob:
         shadow_size = self.config.shadow_size
         gates = self._result_handles["random_basis"].fetch_all()["value"]
         input_state_circuit = self.config.input_state_circuit(
-            **self.config.input_state_prep_macro_kwargs
+            **self.config.input_state_circuit_kwargs
         )
         for i in range(shadow_size):
             for j in range(self.config.n_qubits):
@@ -332,7 +338,8 @@ class ClassicalShadowJob:
             circuits[i].compose(input_state_circuit, inplace=True)
             for j in range(self.config.n_qubits):
                 circuits[i].append(
-                    self.config.measurement_basis[self._gate_indices[i, j]].gate, [j]
+                    self.config.measurement_basis[self._gate_indices[i, j]].to_gate(),
+                    [j],
                 )
         return circuits
 
