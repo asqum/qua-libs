@@ -77,9 +77,13 @@ class Transmon(Qubit):
         """The 0-2 (e-f) transition frequency in Hz, derived from f_01 and anharmonicity"""
         name = getattr(self, "name", self.__class__.__name__)
         if not isinstance(self.f_01, (float, int)):
-            raise AttributeError(f"Error inferring f_12 for channel {name}: {self.f_01=} is not a number")
+            raise AttributeError(
+                f"Error inferring f_12 for channel {name}: {self.f_01=} is not a number"
+            )
         if not isinstance(self.anharmonicity, (float, int)):
-            raise AttributeError(f"Error inferring f_12 for channel {name}: {self.anharmonicity=} is not a number")
+            raise AttributeError(
+                f"Error inferring f_12 for channel {name}: {self.anharmonicity=} is not a number"
+            )
         return self.f_01 + self.anharmonicity
 
     @property
@@ -87,9 +91,13 @@ class Transmon(Qubit):
         """The transmon anharmonicity in Hz, derived from f_01 and f_12."""
         name = getattr(self, "name", self.__class__.__name__)
         if not isinstance(self.f_01, (float, int)):
-            raise AttributeError(f"Error inferring anharmonicity for channel {name}: {self.f_01=} is not a number")
+            raise AttributeError(
+                f"Error inferring anharmonicity for channel {name}: {self.f_01=} is not a number"
+            )
         if not isinstance(self.f_12, (float, int)):
-            raise AttributeError(f"Error inferring anharmonicity for channel {name}: {self.f_12=} is not a number")
+            raise AttributeError(
+                f"Error inferring anharmonicity for channel {name}: {self.f_12=} is not a number"
+            )
         return self.f_12 - self.f_01
 
     # @property
@@ -102,7 +110,10 @@ class Transmon(Qubit):
         return int(self.thermalization_time_factor * self.T1 * 1e9 / 4) * 4
 
     def calibrate_octave(
-        self, QM: QuantumMachine, calibrate_drive: bool = True, calibrate_resonator: bool = True
+        self,
+        QM: QuantumMachine,
+        calibrate_drive: bool = True,
+        calibrate_resonator: bool = True,
     ) -> None:
         """Calibrate the Octave channels (xy and resonator) linked to this transmon for the LO frequency, intermediate
         frequency and Octave gain as defined in the state.
@@ -143,19 +154,25 @@ class Transmon(Qubit):
     def __matmul__(self, other):
         if not isinstance(other, Transmon):
             raise ValueError(
-                "Cannot create a qubit pair (q1 @ q2) with a non-qubit object, " f"where q1={self} and q2={other}"
+                "Cannot create a qubit pair (q1 @ q2) with a non-qubit object, "
+                f"where q1={self} and q2={other}"
             )
 
         if self is other:
-            raise ValueError("Cannot create a qubit pair with same qubit (q1 @ q1), where q1={self}")
+            raise ValueError(
+                "Cannot create a qubit pair with same qubit (q1 @ q1), where q1={self}"
+            )
 
-        for qubit_pair in self._root.qubit_pairs.values():
+        for qubit_pair in self.get_root().qubit_pairs.values():
             if qubit_pair.qubit_control is self and qubit_pair.qubit_target is other:
                 return qubit_pair
         else:
-            raise ValueError("Qubit pair not found: qubit_control={self.name}, " "qubit_target={other.name}")
+            raise ValueError(
+                "Qubit pair not found: qubit_control={self.name}, "
+                "qubit_target={other.name}"
+            )
 
-    def align(self, other = None):
+    def align(self, other=None):
         channels = [self.xy.name, self.resonator.name, self.z.name]
 
         if other is not None:
