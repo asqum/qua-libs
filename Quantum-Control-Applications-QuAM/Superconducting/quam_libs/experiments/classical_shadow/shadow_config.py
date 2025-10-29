@@ -36,7 +36,6 @@ class ShadowConfig:
     measurement_basis: Optional[Dict[int, QuantumCircuit]] = None
     input_state_circuit_kwargs: Optional[Dict[str, Any]] = None
     readout_qubits: Optional[List[Transmon]] = None
-    target_qubits: Optional[List[Transmon]] = None
     readout_pulse_name: str = "readout"
     reset_method: Literal["active", "cooldown"] = "cooldown"
     reset_kwargs: Optional[Dict[str, Union[float, str, int]]] = field(
