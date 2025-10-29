@@ -133,9 +133,16 @@ def ensure_resets_for_active_qubits(circuit: QuantumCircuit) -> QuantumCircuit:
     return qc
 
 
-def run_qiskit_to_qua_program(circuit: QuantumCircuit, machine: QuAM, target_qubits: List[Transmon] | None = None, n_shots: int = 1024, optimization_level: int = 1):
+def design_qua_program_from_qiskit(
+    circuit: QuantumCircuit,
+    machine: "QuAM",
+    target_qubits: list["Transmon"] | None = None,
+    n_shots: int = 1024,
+    optimization_level: int = 1,
+):
     """
-    Run a Qiskit QuantumCircuit on a QuAM machine and return the results.
+    Constructs a QUA program for a given Qiskit QuantumCircuit.
+
     Args:
         circuit (QuantumCircuit): The Qiskit QuantumCircuit to run.
         machine (QuAM): The QuAM machine to run the circuit on.
@@ -144,7 +151,7 @@ def run_qiskit_to_qua_program(circuit: QuantumCircuit, machine: QuAM, target_qub
         optimization_level (int, optional): The optimization level to use for the circuit transpilation. Defaults to 1.
 
     Returns:
-        dict: A dictionary of the results.
+        program: The constructed QUA program.
     """
     if not circuit.cregs:
         raise ValueError("The circuit does not have any classical registers.")
@@ -154,39 +161,59 @@ def run_qiskit_to_qua_program(circuit: QuantumCircuit, machine: QuAM, target_qub
         raise ValueError("The optimization level must be 0, 1, 2, or 3.")
     if n_shots <= 0:
         raise ValueError("The number of shots must be greater than 0.")
-        
+
     if target_qubits is not None:
         target_qubits = [machine.active_qubits[i] for i in range(circuit.num_qubits)]
 
     with program() as prog:
-
         shot = declare(int)
         cregs_streams = {creg.name: declare_stream() for creg in circuit.cregs}
 
         machine.apply_all_flux_to_min()
         machine.apply_all_couplers_to_min()
-        
+
         with for_(shot, 0, shot < n_shots, shot + 1):
             if not has_reset_at_boundary(circuit):
                 circuit = ensure_resets_for_active_qubits(circuit)
             cregs = qiskit_to_qua_macro(circuit, machine, target_qubits, optimization_level)
-
-            
             for creg in circuit.cregs:
                 for index in range(creg.size):
                     save(cregs[creg.name][index], cregs_streams[creg.name])
-        
+
         with stream_processing():
             for creg, stream in zip(circuit.cregs, cregs_streams.values()):
                 stream.boolean_to_int().buffer(creg.size).save_all(creg.name)
     
     # print("Generated QUA program:")
     # print(generate_qua_script(prog))
+    return prog
 
-    qmm = machine.connect()
-    qm = qmm.open_qm(machine.generate_config(), close_other_machines=True)
+
+def run_qua_program_and_return_results(
+    prog,
+    machine: "QuAM",
+    circuit: QuantumCircuit,
+    n_shots: int,
+    qm=None,
+):
+    """
+    Executes a given QUA program on the hardware and returns processed results as a dictionary.
+
+    Args:
+        prog: The QUA program to execute.
+        machine (QuAM): The QuAM machine to run the program on.
+        circuit (QuantumCircuit): The original circuit corresponding to the program.
+        n_shots (int): Number of shots to expect.
+        qm (QuantumMachine, optional): If provided, use this QM to run instead of opening a new one.
+
+    Returns:
+        dict: Dictionary of the results per creg.
+    """
+    if qm is None:
+        qmm = machine.connect()
+        qm = qmm.open_qm(machine.generate_config(), close_other_machines=True)
     job = qm.execute(prog)
-    
+
     result_handles = job.result_handles
     result_handles.wait_for_all_values()
     results = {}
