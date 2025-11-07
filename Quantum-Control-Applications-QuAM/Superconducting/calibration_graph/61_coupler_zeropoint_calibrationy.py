@@ -77,11 +77,11 @@ class Parameters(NodeParameters):
     timeout: int = 100
     load_data_id: Optional[int] = None
 
-    coupler_flux_min : float = -0.1#relative to the coupler set point
+    coupler_flux_min : float = -0.08#relative to the coupler set point
     coupler_flux_max : float = -0.02 #relative to the coupler set point
 
     coupler_flux_step : float = 0.001
-    qubit_flux_span : float = 0.05# relative to the known/calculated detuning between the qubits
+    qubit_flux_span : float = 0.1# relative to the known/calculated detuning between the qubits
     qubit_flux_step : float = 0.0001
     use_state_discrimination: bool = True
     pulse_duration_ns: int = 128
@@ -139,11 +139,8 @@ for qp in qubit_pairs:
         est_flux_shift = np.sqrt(-(qp.qubit_control.xy.RF_frequency - qp.qubit_target.xy.RF_frequency) / qp.qubit_control.freq_vs_flux_01_quad_term) #TODO: figure out how to make this run properly after filters
     elif node.parameters.cz_or_iswap == "cz":
         est_flux_shift = np.sqrt(-(qp.qubit_control.xy.RF_frequency - qp.qubit_target.xy.RF_frequency - qp.qubit_target.anharmonicity) / qp.qubit_control.freq_vs_flux_01_quad_term) #TODO: figure out how to make this run properly after filters
-    est_flux_shift = 0.123 #TODO: remove after testing
+    est_flux_shift = 0.083 #TODO: remove after testing
     fluxes_qp[qp.name] = fluxes_qubit + est_flux_shift
-
-target_detuning_flux = float(np.sqrt(-100 * 1e6 / qubit_pairs[0].qubit_target.freq_vs_flux_01_quad_term))
-
 
 assert node.parameters.pulse_duration_ns % 4 == 0, \
     f"Expected pulse duration to be divisible by 4, got {node.parameters.pulse_duration_ns} ns"
@@ -279,6 +276,7 @@ if not node.parameters.simulate:
         ds, machine, _, qubit_pairs = load_dataset(node.parameters.load_data_id)
 
     node.results = {"ds": ds}
+    
 # %% Data processing
 detuning_mode = "quadratic" # "cosine" or "quadratic"
 if not node.parameters.simulate:
@@ -293,7 +291,7 @@ if not node.parameters.simulate:
 
 node.results["results"] = {}
 
-# %%
+# %% Data Analysis
 if not node.parameters.simulate:
     for i, qp in enumerate(qubit_pairs):
         # --- Select and compute contrast for this qubit ---
@@ -379,7 +377,7 @@ if not node.parameters.simulate:
             ax.plot(
                 flux_qubit_max_mV, flux_coupler_max_full_mV,
                 marker="+", color="black", markersize=10, mew=2.0,
-                label="CZ Optimum"
+                label="CZ starting point"
             )
 
             # --- Secondary x-axis for detuning ---
@@ -416,88 +414,71 @@ if not node.parameters.simulate:
 # %% {Update_state}
 if not node.parameters.simulate:
     for qp in qubit_pairs:
-            if hasattr(qp.gates, "Cz_unipolar"):
-                continue
-            else:
-                print(f"Creating CZ Unipolar gate macro for {qp.name}")
-                cz_qubit_pulse = SquarePulse(length=100, amplitude=0.5, id='flux_pulse_control_' + qp.qubit_target.name + '_' + qp.qubit_control.name)
-                cz_coupler_pulse = SquarePulse(length=100, amplitude=0.5, id='coupler_flux_pulse_' + qp.qubit_target.name + '_' + qp.qubit_control.name)
 
-                cz = CZGate(flux_pulse_control=cz_qubit_pulse, coupler_flux_pulse=cz_coupler_pulse)
-                qp.gates["Cz_unipolar"] = cz
-                pulse_length = (
-                   qp.gates["Cz_unipolar"].flux_pulse_control.get_reference() + "/length"
-                )
-                qubit_pulse_amp = (
-                    qp.gates["Cz_unipolar"].flux_pulse_control.get_reference()
-                    + "/amplitude"
-                )
-                
-                control_qb = qp.qubit_control
-                control_qb.z.operations["Cz_unipolar"] = SquarePulse(length=100, amplitude=0.25)
-                control_qb.z.operations["Cz_unipolar"].length = pulse_length
-                control_qb.z.operations["Cz_unipolar"].amplitude =  qubit_pulse_amp     
-                    
-            
-            if hasattr(qp.gates, "Cz_flattop"):
-                continue
-            else:
-                print(f"Creating CZ Flattop gate macro for {qp.name}")
-                cz_qubit_pulse = CosineFlatTopPulse(length=100, amplitude=0.5, flat_length=50, id='flux_pulse_control_' + qp.qubit_target.name + '_' + qp.qubit_control.name)
-                cz_coupler_pulse = SquarePulse(length=100, amplitude=0.5, id='coupler_flux_pulse_' + qp.qubit_target.name + '_' + qp.qubit_control.name)
+        # --- Unipolar ---
+        if not hasattr(qp.gates, "Cz_unipolar"):
+            print(f"Creating CZ Unipolar gate macro for {qp.name}")
+            cz_qubit_pulse = SquarePulse(length=100, amplitude=0.5,
+                                        id=f'flux_pulse_control_{qp.qubit_target.name}_{qp.qubit_control.name}')
+            cz_coupler_pulse = SquarePulse(length=100, amplitude=0.5,
+                                        id=f'coupler_flux_pulse_{qp.qubit_target.name}_{qp.qubit_control.name}')
+            cz = CZGate(flux_pulse_control=cz_qubit_pulse, coupler_flux_pulse=cz_coupler_pulse)
+            qp.gates["Cz_unipolar"] = cz
 
-                cz = CZGate(flux_pulse_control=cz_qubit_pulse, coupler_flux_pulse=cz_coupler_pulse)
-                qp.gates["Cz_flattop"] = cz
-                pulse_length = (
-                   qp.gates["Cz_flattop"].flux_pulse_control.get_reference() + "/length"
-                )
-                qubit_pulse_amp = (
-                   qp.gates["Cz_flattop"].flux_pulse_control.get_reference()
-                    + "/amplitude"
-                )
-           
-                control_qb = qp.qubit_control
-                control_qb.z.operations["Cz_flattop"] = CosineFlatTopPulse(length=100, amplitude=0.25, flat_length=50)
-                control_qb.z.operations["Cz_flattop"].length = pulse_length
-                control_qb.z.operations["Cz_flattop"].amplitude =  qubit_pulse_amp
-            
-            if hasattr(qp.gates, "Cz_biopolar"):
-                continue
-            else:
-                print(f"Creating CZ Bipolar gate macro for {qp.name}")
-                cz_qubit_pulse = CosineBipolarPulse(length=100, amplitude=0.5, flat_length=50, id='flux_pulse_control_' + qp.qubit_target.name + '_' + qp.qubit_control.name)
-                cz_coupler_pulse = SquarePulse(length=100, amplitude=0.5, id='coupler_flux_pulse_' + qp.qubit_target.name + '_' + qp.qubit_control.name)
+            pulse_length = cz.flux_pulse_control.get_reference() + "/length"
+            qubit_pulse_amp = cz.flux_pulse_control.get_reference() + "/amplitude"
 
-                cz = CZGate(flux_pulse_control=cz_qubit_pulse, coupler_flux_pulse=cz_coupler_pulse)
-                qp.gates["Cz_bipolar"] = cz
-                pulse_length = (
-                    qp.gates["Cz_bipolar"].flux_pulse_control.get_reference() + "/length"
-                )
-                qubit_pulse_amp = (
-                    qp.gates["Cz_bipolar"].flux_pulse_control.get_reference()
-                    + "/amplitude"
-                )
-           
-                control_qb = qp.qubit_control
-                control_qb.z.operations["Cz_bipolar"] = CosineBipolarPulse(length=100, amplitude=0.25, flat_length=50)
-                control_qb.z.operations["Cz_bipolar"].length = pulse_length
-                control_qb.z.operations["Cz_bipolar"].amplitude =  qubit_pulse_amp     
+            control_qb = qp.qubit_control
+            control_qb.z.operations["Cz_unipolar"] = SquarePulse(length=100, amplitude=0.25)
+            control_qb.z.operations["Cz_unipolar"].length = pulse_length
+            control_qb.z.operations["Cz_unipolar"].amplitude = qubit_pulse_amp
+
+        # --- Flattop ---
+        if not hasattr(qp.gates, "Cz_flattop"):
+            print(f"Creating CZ Flattop gate macro for {qp.name}")
+            cz_qubit_pulse = CosineFlatTopPulse(length=100, amplitude=0.5, flat_length=50,
+                                                id=f'flux_pulse_control_{qp.qubit_target.name}_{qp.qubit_control.name}')
+            cz_coupler_pulse = SquarePulse(length=100, amplitude=0.5,
+                                        id=f'coupler_flux_pulse_{qp.qubit_target.name}_{qp.qubit_control.name}')
+            cz = CZGate(flux_pulse_control=cz_qubit_pulse, coupler_flux_pulse=cz_coupler_pulse)
+            qp.gates["Cz_flattop"] = cz
+
+            pulse_length = cz.flux_pulse_control.get_reference() + "/length"
+            qubit_pulse_amp = cz.flux_pulse_control.get_reference() + "/amplitude"
+
+            control_qb = qp.qubit_control
+            control_qb.z.operations["Cz_flattop"] = CosineFlatTopPulse(length=100, amplitude=0.25, flat_length=50)
+            control_qb.z.operations["Cz_flattop"].length = pulse_length
+            control_qb.z.operations["Cz_flattop"].amplitude = qubit_pulse_amp
+
+        # --- Bipolar ---
+        if not hasattr(qp.gates, "Cz_bipolar"):
+            print(f"Creating CZ Bipolar gate macro for {qp.name}")
+            cz_qubit_pulse = CosineBipolarPulse(length=100, amplitude=0.5, flat_length=50,
+                                                id=f'flux_pulse_control_{qp.qubit_target.name}_{qp.qubit_control.name}')
+            cz_coupler_pulse = SquarePulse(length=100, amplitude=0.5,
+                                        id=f'coupler_flux_pulse_{qp.qubit_target.name}_{qp.qubit_control.name}')
+            cz = CZGate(flux_pulse_control=cz_qubit_pulse, coupler_flux_pulse=cz_coupler_pulse)
+            qp.gates["Cz_bipolar"] = cz
+
+            pulse_length = cz.flux_pulse_control.get_reference() + "/length"
+            qubit_pulse_amp = cz.flux_pulse_control.get_reference() + "/amplitude"
+
+            control_qb = qp.qubit_control
+            control_qb.z.operations["Cz_bipolar"] = CosineBipolarPulse(length=100, amplitude=0.25, flat_length=50)
+            control_qb.z.operations["Cz_bipolar"].length = pulse_length
+            control_qb.z.operations["Cz_bipolar"].amplitude = qubit_pulse_amp
 
     with node.record_state_updates():
         for qp in qubit_pairs:
-            # qp.coupler.decouple_offset = node.results["results"][qp.name]["flux_coupler_min"]
+            qp.coupler.decouple_offset = node.results["results"][qp.name]["flux_coupler_min"]
             qp.detuning = node.results["results"][qp.name]["flux_qubit_max"]
-            qp.extras["CZ_time"] = int(np.ceil(node.parameters.pulse_duration_ns / 4) * 4)
-            qp.extras["CZ_qubit_flux"] = node.results["results"][qp.name]["flux_qubit_max"]
-            qp.extras["CZ_coupler_flux"] = node.results["results"][qp.name]["flux_coupler_max"]
-
             
-            if node.parameters.cz_or_iswap == "cz":
-                qp.extras["CZ_coupler_flux"] = node.results["results"][qp.name]["flux_coupler_max"]
+            if node.parameters.cz_or_iswap == "cz": 
+                qp.extras["CZ_time"] = int(np.ceil(node.parameters.pulse_duration_ns / 4) * 4)
                 qp.extras["CZ_qubit_flux"] = node.results["results"][qp.name]["flux_qubit_max"]
-                qp.extras["CZ_time"] = node.parameters.pulse_duration_ns
-                qp.gates["Cz"].coupler_flux_pulse.amplitude = node.results["results"][qp.name]["flux_qubit_max"]
-            
+                qp.extras["CZ_coupler_flux"] = node.results["results"][qp.name]["flux_coupler_max"]           
+                
                 qp.gates["Cz_unipolar"].flux_pulse_control.amplitude = qp.extras["CZ_qubit_flux"]
                 qp.gates["Cz_unipolar"].coupler_flux_pulse.amplitude = qp.extras["CZ_coupler_flux"]
                 qp.gates["Cz_unipolar"].flux_pulse_control.length = qp.extras["CZ_time"]
