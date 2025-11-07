@@ -146,6 +146,10 @@ class CZGate(TwoQubitGate):
             phase_shift_control = self.phase_shift_control
         if phase_shift_target is None:
             phase_shift_target = self.phase_shift_target
+        if qubit_flux_scale is None:
+            qubit_flux_scale = 1.0
+        if coupler_flux_scale is None:
+            coupler_flux_scale = 1.0
         if cz_duration is None:
             cz_duration = self.flux_pulse_control.length
 
