@@ -57,7 +57,7 @@ qmm = machine.connect()
 if node.parameters.qubits is None or node.parameters.qubits == '':
     qubits = machine.active_qubits
 else:
-    qubits = [machine.qubits[q] for q in node.parameters.qubits.replace(' ', '').split(',')]
+    qubits = machine.get_qubits_used_in_node(node.parameters)
 num_qubits = len(qubits)
 
 
