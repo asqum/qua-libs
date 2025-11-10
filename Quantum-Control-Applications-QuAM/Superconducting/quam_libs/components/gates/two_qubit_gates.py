@@ -151,7 +151,7 @@ class CZGate(TwoQubitGate):
         if coupler_flux_scale is None:
             coupler_flux_scale = 1.0
         if cz_duration is None:
-            cz_duration = self.flux_pulse_control.length
+            cz_duration = self.flux_pulse_control.length//4
 
         self.transmon_pair.align()
         
