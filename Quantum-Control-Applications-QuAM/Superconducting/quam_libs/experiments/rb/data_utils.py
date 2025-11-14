@@ -59,14 +59,15 @@ class RBResult:
             self.num_repeats * self.num_averages
         )
         recovery_probability.rename("Recovery Probability").plot.line()
-
+    
+    
     def plot_with_fidelity(self):
         """
         Plots the RB fidelity as a function of circuit depth, including a fit to an exponential decay model.
         The fitted curve is overlaid with the raw data points, and error bars are included.
         """
         A, alpha, B = self.fit_exponential()
-        fidelity = self.get_fidelity(alpha)
+        self.fidelity = self.get_fidelity(alpha)
 
         # std of average
         error_bars = (self.data == 0).stack(combined=("average", "repeat")).std(dim="combined").state.data / np.sqrt(self.num_repeats * self.num_averages)
@@ -95,7 +96,7 @@ class RBResult:
         plt.text(
             0.5,
             0.95,
-            f"2Q Clifford Fidelity = {fidelity * 100:.2f}%",
+            f"2Q Clifford Fidelity = {self.fidelity * 100:.2f}%",
             horizontalalignment="center",
             verticalalignment="top",
             fontdict={"fontsize": "large", "fontweight": "bold"},
