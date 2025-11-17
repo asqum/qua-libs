@@ -27,6 +27,7 @@ qc.append(multiplexed_measurement, range(len(target_qubits)), range(len(target_q
 if manual_transpile:
     optimization_level = 1
     target = create_target(machine)
+    target.add_instruction(multiplexed_measurement, properties={tuple(target_qubit_indices):None})
     # Transpile the circuit to the target (Optional: if not done here, will be done in the run_qiskit_to_qua_program function)
     qc = transpile(qc, target=target, initial_layout=target_qubit_indices, optimization_level=optimization_level)
     prog = design_qua_program_from_qiskit(qc, machine, n_shots=n_shots)
