@@ -39,18 +39,26 @@ def qiskit_to_qua_macro(circuit: QuantumCircuit, machine: QuAM, target_qubits: L
                continue
             if instruction.operation.name == "multiplexed_measurement":
                 involved_qubits = [machine.active_qubits[qubit_indices[q]] for q in qubits]
-                involved_qubits[0].align(*involved_qubits[1:])
+                clbits_indices = [qc.find_bit(clbit).index for clbit in instruction.clbits]
+                all_qubits = machine.active_qubits
+                all_qubits[0].align(*all_qubits[1:])
                 results = {}
-                for q in range(len(involved_qubits)):
-                    qubit = involved_qubits[q]
-                    result_q = qubit.apply('measure')
-                    results[q] = result_q
+                
+                for q, qubit in enumerate(all_qubits):
+                    if qubit in involved_qubits:
+                        index = involved_qubits.index(qubit)
+                        result_q = qubit.apply('measure')
+                        results[index] = result_q
+
+                    else:
+                        qubit.resonator.play('readout')
+                all_qubits[0].align(*all_qubits[1:])
                 for clbit in instruction.clbits:
                     registers = qc.find_bit(clbit).registers
                     if len(registers) > 1:
                         raise ValueError(f"Multiple registers found for clbit: {clbit}")
                     creg, index = registers[0]
-                    assign(cregs[creg.name][index], results[index])
+                    assign(cregs[creg.name][clbits_indices[index]], results[index])
                 continue
 
             if len(qubits) == 2:
