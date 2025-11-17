@@ -37,6 +37,22 @@ def qiskit_to_qua_macro(circuit: QuantumCircuit, machine: QuAM, target_qubits: L
             qubits = instruction.qubits
             if instruction.operation.name == "barrier":
                continue
+            if instruction.operation.name == "multiplexed_measurement":
+                involved_qubits = [machine.active_qubits[qubit_indices[q]] for q in qubits]
+                involved_qubits[0].align(*involved_qubits[1:])
+                results = {}
+                for q in range(len(involved_qubits)):
+                    qubit = involved_qubits[q]
+                    result_q = qubit.apply('measure')
+                    results[q] = result_q
+                for clbit in instruction.clbits:
+                    registers = qc.find_bit(clbit).registers
+                    if len(registers) > 1:
+                        raise ValueError(f"Multiple registers found for clbit: {clbit}")
+                    creg, index = registers[0]
+                    assign(cregs[creg.name][index], results[index])
+                continue
+
             if len(qubits) == 2:
                 qubit_control = machine.active_qubits[qubit_indices[qubits[0]]]
                 qubit_target = machine.active_qubits[qubit_indices[qubits[1]]]
@@ -169,8 +185,7 @@ def design_qua_program_from_qiskit(
         shot = declare(int)
         cregs_streams = {creg.name: declare_stream() for creg in circuit.cregs}
 
-        machine.apply_all_flux_to_min()
-        machine.apply_all_couplers_to_min()
+        machine.apply_all_flux_to_joint_idle()
 
         with for_(shot, 0, shot < n_shots, shot + 1):
             if not has_reset_at_boundary(circuit):

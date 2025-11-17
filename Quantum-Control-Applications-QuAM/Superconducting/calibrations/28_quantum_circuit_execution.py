@@ -1,4 +1,5 @@
 from qiskit import QuantumCircuit, transpile
+from qiskit.circuit import Instruction
 from quam_libs.components import QuAM
 from quam_libs.experiments.qiskit_circuit import design_qua_program_from_qiskit, run_qua_program_and_return_results, create_target
 machine = QuAM.load()
@@ -13,11 +14,13 @@ for qubit in target_qubits:
     qubit.macros['reset'].reset_type='thermalize'
     qubit.macros['reset'].thermalize_time = qubit.thermalization_time
 
-qc = QuantumCircuit(5, 5)
+multiplexed_measurement = Instruction("multiplexed_measurement", num_qubits=len(target_qubits), num_clbits=len(target_qubits), params=[])
+qc = QuantumCircuit(len(target_qubits), len(target_qubits))
 # qc.x(0)
 qc.h(0)
 # qc.cx(0, 1)
-qc.measure(0, 0)
+# qc.measure(0, 0)
+qc.append(multiplexed_measurement, range(len(target_qubits)), range(len(target_qubits)))
 # qc.measure(1, 1)
 # qc.measure_all()
 
