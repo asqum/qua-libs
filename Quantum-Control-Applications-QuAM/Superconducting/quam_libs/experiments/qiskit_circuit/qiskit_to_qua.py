@@ -6,7 +6,7 @@ from quam_libs.components import QuAM, Transmon
 from typing import List, Optional
 import numpy as np
 from qm import generate_qua_script
-
+import warnings
 def create_target(machine: QuAM):
     qubit_pairs_mapping = {qubit_pair.name: (machine.active_qubits.index(qubit_pair.qubit_control), machine.active_qubits.index(qubit_pair.qubit_target)) for qubit_pair in machine.active_qubit_pairs}
     
@@ -37,7 +37,10 @@ def qiskit_to_qua_macro(circuit: QuantumCircuit, machine: QuAM, target_qubits: L
             qubits = instruction.qubits
             if instruction.operation.name == "barrier":
                continue
-            if instruction.operation.name == "multiplexed_measurement":
+            elif instruction.operation.name == "measure":
+                warnings.warn(f"Measure instruction is not supported on this platform (hardcoded manually at the end of the program)")
+                continue
+            elif instruction.operation.name == "multiplexed_measurement":
                 involved_qubits = [machine.active_qubits[qubit_indices[q]] for q in qubits]
                 clbits_indices = [qc.find_bit(clbit).index for clbit in instruction.clbits]
                 all_qubits = machine.active_qubits
@@ -186,26 +189,36 @@ def design_qua_program_from_qiskit(
     if n_shots <= 0:
         raise ValueError("The number of shots must be greater than 0.")
 
-    if target_qubits is not None:
+    if target_qubits is None:
         target_qubits = [machine.active_qubits[i] for i in range(circuit.num_qubits)]
 
     with program() as prog:
         shot = declare(int)
-        cregs_streams = {creg.name: declare_stream() for creg in circuit.cregs}
+        stream = declare_stream()
+        value = declare(bool, value= [False] * len(target_qubits))
 
         machine.apply_all_flux_to_joint_idle()
 
         with for_(shot, 0, shot < n_shots, shot + 1):
             if not has_reset_at_boundary(circuit):
                 circuit = ensure_resets_for_active_qubits(circuit)
-            cregs = qiskit_to_qua_macro(circuit, machine, target_qubits, optimization_level)
-            for creg in circuit.cregs:
-                for index in range(creg.size):
-                    save(cregs[creg.name][index], cregs_streams[creg.name])
+            _ = qiskit_to_qua_macro(circuit, machine, target_qubits, optimization_level)
+            
+            machine.active_qubits[0].align(*machine.active_qubits[1:])
+            for qubit in machine.active_qubits:
+                if qubit in target_qubits:
+                    index = target_qubits.index(qubit)
+                    result = qubit.apply('measure')
+                    assign(clbits_dict["value"][index], result)
+                else:
+                    qubit.resonator.play('readout')
+            machine.active_qubits[0].align(*machine.active_qubits[1:])
+                    
+            for i in range(len(target_qubits)):
+                save(value[i], stream)
 
         with stream_processing():
-            for creg, stream in zip(circuit.cregs, cregs_streams.values()):
-                stream.boolean_to_int().buffer(creg.size).save_all(creg.name)
+            stream.boolean_to_int().buffer(len(target_qubits)).save_all("meas")
     
     # print("Generated QUA program:")
     # print(generate_qua_script(prog))
