@@ -249,18 +249,15 @@ def run_qua_program_and_return_results(
         qmm = machine.connect()
         qm = qmm.open_qm(machine.generate_config(), close_other_machines=True)
     job = qm.execute(prog)
-
+    binary = lambda n, size: bin(n)[2:].zfill(size)
     result_handles = job.result_handles
     result_handles.wait_for_all_values()
-    results = {}
-    binary = lambda n, size: bin(n)[2:].zfill(size)
-    for creg in circuit.cregs:
-        results[creg.name] = {binary(int(i), creg.size): 0 for i in range(2**creg.size)}
-        c_reg_result = result_handles.get(creg.name).fetch_all()['value']
-
-        for shot in range(n_shots):
-            c_reg_result_shot = c_reg_result[shot].tolist()
-            state_int = sum(c_reg_result_shot[i] * (1 << i) for i in range(creg.size))
-            results[creg.name][binary(int(state_int), creg.size)] += 1
+    meas_result_handles = result_handles.get("meas").fetch_all()["value"]
+    num_qubits = meas_result_handles.shape[-1]
+    results = {binary(int(i), num_qubits): 0 for i in range(2**num_qubits)}
+    for shot in range(n_shots):
+        meas_result_shot = meas_result_handles[shot].tolist()
+        state_int = sum(meas_result_shot[i] * (1 << i) for i in range(num_qubits))
+        results[binary(int(state_int), num_qubits)] += 1
 
     return results
