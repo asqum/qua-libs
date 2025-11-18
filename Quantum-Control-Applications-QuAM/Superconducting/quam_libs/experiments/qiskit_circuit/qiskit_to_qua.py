@@ -181,8 +181,6 @@ def design_qua_program_from_qiskit(
         raise ValueError("The circuit does not have any classical registers.")
     if not target_qubits and circuit.num_qubits != len(machine.active_qubits):
         raise ValueError("The target qubits are not specified and the circuit does not have the same number of qubits as the machine.")
-    if optimization_level not in [0, 1, 2, 3]:
-        raise ValueError("The optimization level must be 0, 1, 2, or 3.")
     if n_shots <= 0:
         raise ValueError("The number of shots must be greater than 0.")
 
