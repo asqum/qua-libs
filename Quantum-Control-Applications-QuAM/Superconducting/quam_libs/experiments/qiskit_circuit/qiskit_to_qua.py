@@ -207,8 +207,8 @@ def design_qua_program_from_qiskit(
             for creg, stream in zip(circuit.cregs, cregs_streams.values()):
                 stream.boolean_to_int().buffer(creg.size).save_all(creg.name)
     
-    print("Generated QUA program:")
-    print(generate_qua_script(prog))
+    # print("Generated QUA program:")
+    # print(generate_qua_script(prog))
     return prog
 
 
