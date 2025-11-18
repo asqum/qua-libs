@@ -204,15 +204,16 @@ def design_qua_program_from_qiskit(
                 circuit = ensure_resets_for_active_qubits(circuit)
             _ = qiskit_to_qua_macro(circuit, machine, target_qubits, optimization_level)
             
-            machine.active_qubits[0].align(*machine.active_qubits[1:])
+            align()
+            
             for qubit in machine.active_qubits:
                 if qubit in target_qubits:
                     index = target_qubits.index(qubit)
                     result = qubit.apply('measure')
-                    assign(clbits_dict["value"][index], result)
+                    assign(value[index], result)
                 else:
                     qubit.resonator.play('readout')
-            machine.active_qubits[0].align(*machine.active_qubits[1:])
+            align()
                     
             for i in range(len(target_qubits)):
                 save(value[i], stream)
