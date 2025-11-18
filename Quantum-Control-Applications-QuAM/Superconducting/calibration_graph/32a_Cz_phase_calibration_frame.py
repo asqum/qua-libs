@@ -70,6 +70,8 @@ class Parameters(NodeParameters):
     load_data_id: Optional[int] = None # 92417 
     plot_raw : bool = False
     measure_leak : bool = True
+    operation: Literal["Cz_flattop", "Cz_unipolar", "Cz_bipolar"] = "Cz_unipolar"
+    """Type of CZ operation to perform. Options are 'cz_flattop', 'cz_unipolar', or 'cz_bipolar'. Default is 'cz_unipolar'."""
 
 
 node = QualibrationNode(
@@ -117,6 +119,7 @@ flux_point = node.parameters.flux_point_joint_or_independent  # 'independent' or
 # Loop parameters
 amplitudes = np.arange(1-node.parameters.amp_range, 1+node.parameters.amp_range, node.parameters.amp_step)
 frames = np.arange(0, 1, 1/node.parameters.num_frames)
+operation_name = node.parameters.operation
 
 with program() as CPhase_Oscillations:
     amp = declare(fixed)   
@@ -168,7 +171,7 @@ with program() as CPhase_Oscillations:
                         qp.align()
 
                         #play the CZ gate
-                        qp.gates['Cz'].execute(amplitude_scale = amp)
+                        qp.gates[operation_name].execute(amplitude_scale = amp)
                         
                         #rotate the frame
                         frame_rotation_2pi(frame, qp.qubit_target.xy.name)
@@ -192,8 +195,7 @@ with program() as CPhase_Oscillations:
             state_st_control[i].buffer(2).buffer(len(frames)).buffer(len(amplitudes)).buffer(n_avg).save(f"state_control{i + 1}")
             state_st_target[i].buffer(2).buffer(len(frames)).buffer(len(amplitudes)).buffer(n_avg).save(f"state_target{i + 1}")
 
-# %% {Simulate_or_execute}
-
+# %% {Simulate_or_execute
 if node.parameters.simulate:
     # Simulates the QUA program for the specified duration
     simulation_config = SimulationConfig(duration=10_000//4)  # In clock cycles = 4ns
@@ -208,14 +210,6 @@ if node.parameters.simulate:
     plt.tight_layout()
     wf_report = job.get_simulated_waveform_report()
     wf_report.create_plot(samples, plot=True, save_path=None)
-    # Store the figure, waveform report and simulated samples
-    # fig, ax = plt.subplots(nrows=len(samples.keys()), sharex=True)
-    # for i, con in enumerate(samples.keys()):
-    #     plt.subplot(len(samples.keys()),1,i+1)
-    #     samples[con].plot()
-    #     plt.title(con)
-    # plt.tight_layout()
-    # Save the figure
     node.results = {"figure": plt.gcf()}
     node.machine = machine
     node.save()
@@ -359,9 +353,7 @@ if not node.parameters.simulate:
     if node.parameters.load_data_id is None:
         with node.record_state_updates():
             for qp in qubit_pairs:
-                qp.gates['Cz'].flux_pulse_control.amplitude = optimal_amps[qp.name]
-
-                
+                qp.gates[operation_name].flux_pulse_control.amplitude = optimal_amps[qp.name]          
 # %% {Save_results}
 if not node.parameters.simulate:
     node.outcomes = {qp.name: "successful" for qp in qubit_pairs}
