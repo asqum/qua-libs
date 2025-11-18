@@ -86,7 +86,7 @@ class CZGate(TwoQubitGate):
 
         return f"{self.gate_label}{str_ref.DELIMITER}{pulse_label}"
 
-    def execute(self, amplitude_scale=None):        
+    def execute(self, amplitude_scale=None, coupler_amplitude_scale= None):        
         self.transmon_pair.align()
         
         # self.qubit_control.xy.wait(self.pre_wait)
@@ -101,7 +101,8 @@ class CZGate(TwoQubitGate):
         if self.coupler_flux_pulse is not None:
             self.coupler.play(
                 self.coupler_flux_pulse_label,
-                validate=False
+                validate=False,
+                amplitude_scale=coupler_amplitude_scale,
             )
         
         self.transmon_pair.align()
