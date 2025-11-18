@@ -2,9 +2,10 @@ from pathlib import Path
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
+from scipy.signal import savgol_filter
 # ======= Configuration =======
-csv_path = Path("/home/ratiswu//2qRB_tracking/CZ_Fidelity_Tracking_2025-11-14T18-00-14.csv")
-base_dir = Path("/home/ratiswu/Qualibrate_data/5Q4C_Qcage/2025-11-14")
+csv_path = Path("/home/ratiswu/Qualibrate_data/5Q4C_Qcage/2025-11-14/#9a9a_2QRB_Tracking/CZ_Fidelity_Tracking_2025-11-14T21-15-45/CZ_Fidelity_Tracking_2025-11-14T21-15-45.csv")
+base_dir = Path("/home/ratiswu/Qualibrate_data/5Q4C_Qcage/2025-11-14/#9a9a_2QRB_Tracking/CZ_Fidelity_Tracking_2025-11-14T21-15-45")
 x_axis = "timestamp"   # can be "run_index" or "timestamp"
 # =============================
 
@@ -41,16 +42,17 @@ for q in qubit_cols:
     
     mean, sd = round(np.mean(np.array(sub[q]*100)),1), round(np.std(np.array(sub[q]*100)),1)
     
-    plt.plot(sub[x_axis], sub[q]*100, marker="o",zorder=1)
+    plt.plot(sub[x_axis], sub[q]*100,zorder=1)
+    # plt.plot(sub[x_axis], savgol_filter(sub[q]*100,window_length=31,polyorder=5),zorder=2,label='filtered')
     plt.hlines(mean-sd, xmin=np.min(sub[x_axis]),xmax=np.max(sub[x_axis]),linestyles="--",colors='pink',label='Deviation')
     plt.hlines(mean+sd, xmin=np.min(sub[x_axis]),xmax=np.max(sub[x_axis]),linestyles="--",colors='pink')
     plt.hlines(mean, xmin=np.min(sub[x_axis]),xmax=np.max(sub[x_axis]),colors='red',label="mean")
-    plt.scatter(sub.loc[sub[q].idxmax(), x_axis],np.max(sub[q]*100),c='red',marker="*",s=100,label=f"best {round(np.max(sub[q]*100),1)} % at {sub.loc[sub[q].idxmax(), x_axis]}",zorder=2)
+    plt.scatter(sub.loc[sub[q].idxmax(), x_axis],np.max(sub[q]*100),c='red',marker="*",s=100,label=f"best {round(np.max(sub[q]*100),1)} % at {sub.loc[sub[q].idxmax(), x_axis]}",zorder=3)
     plt.title(f"{q} CZ fidelity = {mean} $\pm$ {sd} %")
     plt.xlabel(x_axis)
     plt.ylabel("CZ fidelity (%)")
     plt.grid(True, linestyle="--", alpha=0.4)
     plt.xticks(rotation=90)
-    plt.legend()
+    plt.legend(fontsize=6)
     fig.savefig(out_dir / f"{q}_line_{x_axis}.png", dpi=150, bbox_inches="tight")
     plt.close(fig)
