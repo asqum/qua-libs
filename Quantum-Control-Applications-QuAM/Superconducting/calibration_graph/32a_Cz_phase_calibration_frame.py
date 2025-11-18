@@ -55,17 +55,17 @@ from quam_libs.components.gates.two_qubit_gates import CZGate
 from quam_libs.lib.pulses import FluxPulse
 
 # %% {Node_parameters}
-qubit_pair_indexes = [4]  # The indexes of the qubit pair to calibrate
+qubit_pair_indexes = [2]  # The indexes of the qubit pair to calibrate
 class Parameters(NodeParameters):
 
     qubit_pairs: Optional[List[str]] = ["coupler_q%s_q%s"%(i,i+1) for i in qubit_pair_indexes]
-    num_averages: int = 1000
+    num_averages: int = 100
     flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
     reset_type: Literal['active', 'thermal'] = "active"
     simulate: bool = False
     timeout: int = 100
-    amp_range : float = 0.060
-    amp_step : float = 0.0005
+    amp_range : float = 0.2
+    amp_step : float = 0.002
     num_frames: int = 10
     load_data_id: Optional[int] = None # 92417 
     plot_raw : bool = False
@@ -193,11 +193,29 @@ with program() as CPhase_Oscillations:
             state_st_target[i].buffer(2).buffer(len(frames)).buffer(len(amplitudes)).buffer(n_avg).save(f"state_target{i + 1}")
 
 # %% {Simulate_or_execute}
+
 if node.parameters.simulate:
     # Simulates the QUA program for the specified duration
-    simulation_config = SimulationConfig(duration=10_000)  # In clock cycles = 4ns
+    simulation_config = SimulationConfig(duration=10_000//4)  # In clock cycles = 4ns
     job = qmm.simulate(config, CPhase_Oscillations, simulation_config)
-    job.get_simulated_samples().con1.plot()
+    samples = job.get_simulated_samples()
+    fig, ax = plt.subplots(nrows=len(samples.keys()), sharex=True)
+
+    for i, con in enumerate(samples.keys()):
+        plt.subplot(len(samples.keys()), 1, i + 1)
+        samples[con].plot()
+        plt.title(con)
+    plt.tight_layout()
+    wf_report = job.get_simulated_waveform_report()
+    wf_report.create_plot(samples, plot=True, save_path=None)
+    # Store the figure, waveform report and simulated samples
+    # fig, ax = plt.subplots(nrows=len(samples.keys()), sharex=True)
+    # for i, con in enumerate(samples.keys()):
+    #     plt.subplot(len(samples.keys()),1,i+1)
+    #     samples[con].plot()
+    #     plt.title(con)
+    # plt.tight_layout()
+    # Save the figure
     node.results = {"figure": plt.gcf()}
     node.machine = machine
     node.save()

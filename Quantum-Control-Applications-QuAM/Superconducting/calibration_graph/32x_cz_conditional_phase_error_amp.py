@@ -61,20 +61,20 @@ Prerequisites:
 State update:
 - The optimal CZ gate amplitude: qubit_pair.gates["Cz"].flux_pulse_control.amplitude
 """
-qubit_pair_indexes = [4]  # The indexes of the qubit pair to calibrate
+qubit_pair_indexes = [2]  # The indexes of the qubit pair to calibrate
 class Parameters(NodeParameters):
     qubit_pairs: Optional[List[str]] = ["coupler_q%s_q%s"%(i,i+1) for i in qubit_pair_indexes]
-    num_averages: int = 100
+    num_averages: int = 50
     """Number of averages to perform. Default is 100."""
-    amp_range: float = 0.1
+    amp_range: float = 0.05
     """Range of amplitude variation around the nominal value, will scan between center - range and center + range. Default is 0.010."""
-    amp_step: float = 0.0008
+    amp_step: float = 0.001
     """Step size for amplitude scanning. Default is 0.001."""
     num_frame_rotations: int = 17
     """Number of frame rotation points for phase measurement. Default is 10."""
     operation: Literal["Cz_flattop", "Cz_unipolar", "Cz_bipolar"] = "Cz_flattop"
     """Type of CZ operation to perform. Options are 'cz_flattop', 'cz_unipolar', or 'cz_bipolar'. Default is 'cz_unipolar'."""
-    number_of_operations: int = 15
+    number_of_operations: int = 20
     """Number of operations to perform for each amplitude. Default is 10."""
     flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
     load_data_id: Optional[int] = None # 92417
@@ -279,7 +279,6 @@ node.results["phase_figure"] = fig_phase
 
 
 # %% {Update_state}
-operation_name = node.parameters.operation
 if not node.parameters.simulate:
     if node.parameters.load_data_id is None:
         with node.record_state_updates():

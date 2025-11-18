@@ -55,7 +55,7 @@ from quam_libs.components.gates.two_qubit_gates import CZGate
 from quam_libs.lib.pulses import FluxPulse
 
 # %% {Node_parameters}
-qubit_pair_indexes = [1]
+qubit_pair_indexes = [2]
 class Parameters(NodeParameters):
 
     qubit_pairs: Optional[List[str]] = ["coupler_q%s_q%s"%(i,i+1) for i in qubit_pair_indexes]
@@ -68,7 +68,8 @@ class Parameters(NodeParameters):
     load_data_id: Optional[int] = None
     plot_raw : bool = False
     measure_leak : bool = False
-
+    operation: Literal["Cz_flattop", "Cz_unipolar", "Cz_bipolar"] = "Cz_unipolar"
+    """Type of CZ operation to perform. Options are 'cz_flattop', 'cz_unipolar', or 'cz_bipolar'. Default is 'cz_unipolar'."""
 
 node = QualibrationNode(
     name="33a_Cz_1Qphase_calibration_frame", parameters=Parameters()
@@ -111,6 +112,7 @@ flux_point = node.parameters.flux_point_joint_or_independent  # 'independent' or
 
 # Loop parameters
 frames = np.arange(0, 1, 1/node.parameters.num_frames+0.01)
+operation_name = node.parameters.operation
 
 with program() as CPhase_Oscillations:
     amp = declare(fixed)   
@@ -154,7 +156,7 @@ with program() as CPhase_Oscillations:
                     qp.align()
 
                     #play the CZ gate
-                    qp.gates['Cz'].execute()
+                    qp.gates[operation_name].execute()
                     
                     #rotate the frame
                     frame_rotation_2pi(frame, qubit.xy.name)
@@ -280,10 +282,10 @@ if not node.parameters.simulate:
     if node.parameters.load_data_id is None:
         with node.record_state_updates():
             for qp in qubit_pairs:
-                qp.gates['Cz'].phase_shift_control -= (phase_control[qp.name] / 1.0)
-                qp.gates['Cz'].phase_shift_control = qp.gates['Cz'].phase_shift_control  % (1.0)
-                qp.gates['Cz'].phase_shift_target -= (phase_target[qp.name]/ 1.0)
-                qp.gates['Cz'].phase_shift_target = qp.gates['Cz'].phase_shift_target  % (1.0)
+                qp.gates[operation_name].phase_shift_control -= (phase_control[qp.name] / 1.0)
+                qp.gates[operation_name].phase_shift_control = qp.gates['Cz'].phase_shift_control  % (1.0)
+                qp.gates[operation_name].phase_shift_target -= (phase_target[qp.name]/ 1.0)
+                qp.gates[operation_name].phase_shift_target = qp.gates['Cz'].phase_shift_target  % (1.0)
                 
 # %% {Save_results}
 if not node.parameters.simulate:
