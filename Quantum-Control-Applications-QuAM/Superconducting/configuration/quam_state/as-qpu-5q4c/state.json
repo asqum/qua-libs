@@ -1794,21 +1794,21 @@
                 },
                 "Cz_unipolar": {
                     "flux_pulse_control": {
-                        "length": 96,
+                        "length": 88,
                         "id": "flux_pulse_control_q2_q3",
-                        "amplitude": 0.09089705407354519,
+                        "amplitude": 0.0924727706449208,
                         "zero_padding": 15,
                         "__class__": "quam_libs.lib.pulses.FluxPulse"
                     },
                     "coupler_flux_pulse": {
-                        "length": 96,
+                        "length": 88,
                         "id": "coupler_flux_pulse_q2_q3",
-                        "amplitude": -0.085,
+                        "amplitude": -0.08859483003616334,
                         "zero_padding": 15,
                         "__class__": "quam_libs.lib.pulses.FluxPulse"
                     },
-                    "phase_shift_control": 0.7647528656899203,
-                    "phase_shift_target": 0.5589323367552883,
+                    "phase_shift_control": 0.3635033369064331,
+                    "phase_shift_target": 0.48918938636779785,
                     "__class__": "quam_libs.components.gates.two_qubit_gates.CZGate"
                 },
                 "Cz": "#./Cz_unipolar",
@@ -1849,28 +1849,28 @@
             "detuning": 0.08729999999999984,
             "confusion": [
                 [
-                    0.9765,
-                    0.051,
-                    0.0665,
-                    0.0045
+                    0.974,
+                    0.035,
+                    0.084,
+                    0.003
                 ],
                 [
-                    0.0065,
-                    0.922,
-                    0.0005,
-                    0.0665
+                    0.0095,
+                    0.942,
+                    0.001,
+                    0.07
                 ],
                 [
                     0.0165,
-                    0.003,
-                    0.9275,
-                    0.063
+                    0.0015,
+                    0.9045,
+                    0.034
                 ],
                 [
-                    0.0005,
-                    0.024,
-                    0.0055,
-                    0.866
+                    0.0,
+                    0.0215,
+                    0.0105,
+                    0.893
                 ]
             ],
             "extras": {

@@ -59,8 +59,8 @@ from quam_libs.lib.pulses import FluxPulse
 class Parameters(NodeParameters):
 
     qubit_pairs: Optional[List[str]] = ["coupler_q2_q3"]
-    circuit: str = "ANY" # "BELL1", "BELL2", "H", "CX"
-    num_shots: int = 64
+    circuit: str = "ANY" # "BELL1", "BELL2", "H", "CX", "ANY"
+    num_shots: int = 1024
     flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
     reset_type: Literal['active', 'thermal'] = "active"
     simulate: bool = False
@@ -177,13 +177,10 @@ with program() as CPhase_Oscillations:
 
             # ANY Circuit: 
             if node.parameters.circuit == "ANY":
-                qp.qubit_control.xy.play("x180") 
-                for x in range(1):
-                    qp.qubit_target.xy.play("y90")
-                    qp.qubit_target.xy.play("x180")
-                    qp.gates['Cz'].execute()
-                    qp.qubit_target.xy.play("y90")
-                    qp.qubit_target.xy.play("x180")
+                qp.qubit_control.xy.play("x180")
+                qp.qubit_control.xy.play("x180")
+                qp.qubit_control.xy.play("x180")
+                qp.qubit_target.xy.play("x180")
             
 
             qp.align()
