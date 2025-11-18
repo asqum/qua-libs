@@ -29,7 +29,7 @@ def qiskit_to_qua_macro(circuit: QuantumCircuit, machine: QuAM, target_qubits: L
     else:
         qc = circuit
     qubit_indices = {qubit: qc.find_bit(qubit).index for i, qubit in enumerate(qc.qubits)}
-    
+    print(qc)
     cregs = {creg.name: declare(bool, value= [False] * creg.size) for creg in qc.cregs}
     
     for instruction in qc.data:
@@ -207,8 +207,8 @@ def design_qua_program_from_qiskit(
             for creg, stream in zip(circuit.cregs, cregs_streams.values()):
                 stream.boolean_to_int().buffer(creg.size).save_all(creg.name)
     
-    # print("Generated QUA program:")
-    # print(generate_qua_script(prog))
+    print("Generated QUA program:")
+    print(generate_qua_script(prog))
     return prog
 
 
