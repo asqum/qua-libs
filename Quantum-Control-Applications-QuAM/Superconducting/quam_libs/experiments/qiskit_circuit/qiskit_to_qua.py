@@ -15,7 +15,7 @@ def create_target(machine: QuAM):
     gate_map = get_standard_gate_name_mapping()
     single_qubit_prop = {(i,): None for i in range(len(machine.active_qubits))}
     two_qubit_prop = {qubit_pairs_mapping[pair.name]: None for pair in machine.active_qubit_pairs}
-    for instr in ["sx", "x", "rz", "measure", "reset", "y"]:
+    for instr in ["sx", "x", "rz", "measure", "reset"]:
         target.add_instruction(gate_map[instr], single_qubit_prop)
     target.add_instruction(gate_map["cz"], two_qubit_prop)
     return target
