@@ -246,8 +246,8 @@
             },
             "q8-9": {
                 "c": {
-                    "control_qubit": "#/qubits/q8",
-                    "target_qubit": "#/qubits/q9",
+                    "control_qubit": "#/qubits/q9",
+                    "target_qubit": "#/qubits/q8",
                     "opx_output": "#/ports/analog_outputs/con1/4/8"
                 }
             },
