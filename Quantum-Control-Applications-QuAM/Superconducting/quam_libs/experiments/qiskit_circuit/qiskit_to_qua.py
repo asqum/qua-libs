@@ -162,7 +162,7 @@ def design_qua_program_from_qiskit(
     machine: "QuAM",
     target_qubits: list["Transmon"] | None = None,
     n_shots: int = 1024,
-    optimization_level: int = 1,
+    optimization_level: Optional[int] = None,
 ):
     """
     Constructs a QUA program for a given Qiskit QuantumCircuit.
