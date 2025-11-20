@@ -59,7 +59,7 @@ from quam_libs.lib.pulses import FluxPulse
 class Parameters(NodeParameters):
 
     qubit_pairs: Optional[List[str]] = ["coupler_q2_q3"]
-    circuit: str = "ANY" # "BELL1", "BELL2", "H", "CX", "ANY"
+    circuit: Literal["BELL1", "BELL2", "H", "X-CX" ,"CX", "ANY"] = "BELL1" 
     num_shots: int = 1024
     flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
     reset_type: Literal['active', 'thermal'] = "active"
@@ -164,10 +164,19 @@ with program() as CPhase_Oscillations:
                     qp.qubit_target.xy.play("x180")
                     qp.qubit_target.xy.play("y90")
                     qp.qubit_target.xy.play("x180")
+            
+            # X-CX test: 
+            if node.parameters.circuit == "X-CX":
+                qp.qubit_control.xy.play("x180") 
+                for x in range(1):
+                    qp.qubit_target.xy.play("y90")
+                    qp.qubit_target.xy.play("x180")
+                    qp.gates['Cz'].execute()
+                    qp.qubit_target.xy.play("y90")
+                    qp.qubit_target.xy.play("x180")
 
             # CX test: 
             if node.parameters.circuit == "CX":
-                qp.qubit_control.xy.play("x180") 
                 for x in range(1):
                     qp.qubit_target.xy.play("y90")
                     qp.qubit_target.xy.play("x180")
@@ -262,7 +271,7 @@ if not node.parameters.simulate:
             ax.text(i, v, f'{v:.2f}', ha='center', va='bottom')
         ax.set_ylabel('Probability')
         ax.set_xlabel('State')
-        ax.set_title(qubit_pair['qubit'])
+        ax.set_title(f"{qubit_pair['qubit']}-{node.parameters.circuit}")
     plt.show()
     node.results["figure"] = grid.fig
 # %%
