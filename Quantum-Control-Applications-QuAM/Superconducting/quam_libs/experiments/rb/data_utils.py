@@ -61,7 +61,7 @@ class RBResult:
         recovery_probability.rename("Recovery Probability").plot.line()
     
     
-    def plot_with_fidelity(self):
+    def plot_with_fidelity(self, pair_label:str=None):
         """
         Plots the RB fidelity as a function of circuit depth, including a fit to an exponential decay model.
         The fitted curve is overlaid with the raw data points, and error bars are included.
@@ -105,7 +105,7 @@ class RBResult:
 
         plt.xlabel("Circuit Depth")
         plt.ylabel(r"Probability to recover to $|00\rangle$")
-        plt.title("2Q Randomized Benchmarking")
+        plt.title(f"2Q Randomized Benchmarking {pair_label}")
         plt.legend(framealpha=0)
         plt.show()
 

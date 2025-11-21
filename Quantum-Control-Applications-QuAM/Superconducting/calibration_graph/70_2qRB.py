@@ -56,21 +56,21 @@ from quam_libs.components import QuAM
 from quam_libs.experiments.rb.cloud_utils import write_sync_hook
 from quam_libs.experiments.rb.rb_utils import InterleavedRB
 from quam_libs.experiments.rb.plot_utils import gate_mapping
-
+from numpy import arange
 
 
 
 # %% {Node_parameters}
 
 class Parameters(NodeParameters):
-    qubit_pairs: Optional[List[str]] = ["coupler_q4_q5"]
-    circuit_lengths: tuple[int] = (0,1,2,4,8,16) # in number of cliffords
+    qubit_pairs: Optional[List[str]] = ["coupler_q1_q2"]
+    circuit_lengths: tuple[int] = (0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,19,25,35,40)#tuple(arange(0,21,1).tolist()) # in number of cliffords
     num_circuits_per_length: int = 15
-    num_averages: int = 15
+    num_averages: int = 50
     target_gate: str = "cz" # "idle_2q" or "cz" supported 
     basis_gates: list[str] = ['rz', 'sx', 'x', 'cz'] 
     flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
-    reset_type_thermal_or_active: Literal["thermal", "active"] = "thermal"
+    reset_type_thermal_or_active: Literal["thermal", "active"] = "active"
     reduce_to_1q_cliffords: bool = True
     use_input_stream: bool = False
     simulate: bool = False
@@ -237,9 +237,10 @@ for qp in qubit_pairs:
         state=ds_transposed.sel(qubit=qp.name).state.data
     )
 
-    fig = rb_result.plot_with_fidelity()
+    fig = rb_result.plot_with_fidelity(pair_label=node.parameters.qubit_pairs[0])
     import matplotlib.pyplot as plt
     node.results = {"figure": fig}
+    print(rb_result.fidelity)
 
 # %% {Save_results}
 if not node.parameters.simulate:    
@@ -248,4 +249,4 @@ if not node.parameters.simulate:
     node.machine = machine
     node.save()
 
-# %%
+# %% {Run all}
