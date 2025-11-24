@@ -65,12 +65,9 @@ def qiskit_to_qua_macro(circuit: QuantumCircuit, machine: QuAM, target_qubits: L
                 qubit_control = machine.active_qubits[qubit_indices[qubits[0]]]
                 qubit_target = machine.active_qubits[qubit_indices[qubits[1]]]
                 qubit_pair = qubit_control @ qubit_target
-                qubit_pair.align()
                 qubit_pair.apply(instruction.operation.name, *instruction.operation.params)
-                qubit_pair.align()
             elif len(qubits) == 1:
                 qubit = machine.active_qubits[qubit_indices[qubits[0]]]
-                qubit.align()
                 result = qubit.apply(instruction.operation.name, *instruction.operation.params)
                 qubit.align()
                 if instruction.clbits:
@@ -152,7 +149,7 @@ def ensure_resets_for_active_qubits(circuit: QuantumCircuit) -> QuantumCircuit:
 
         # If qubit is active and has no reset at start or end, prepend one
         if not has_reset_at_start_or_end:
-            qc.compose(Reset(), qubits=[qubit], inplace=True, front=True)
+            qc.compose(Reset(), qubits=[qubit], inplace=True)
 
     return qc
 
