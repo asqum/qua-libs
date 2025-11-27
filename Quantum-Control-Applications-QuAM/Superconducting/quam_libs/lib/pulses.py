@@ -1,7 +1,6 @@
 from quam.core import quam_dataclass
 from quam.components.pulses import Pulse
 import numpy as np
-from dataclasses import field
 
 
 @quam_dataclass
@@ -92,348 +91,155 @@ class SNZPulse(Pulse):
         waveform += [0.0] * (self.length - len(waveform))
 
         return waveform
-
-@quam_dataclass
-class SquarePulse(Pulse):
-    amplitude: float
-    pre_padding: int = 0
-    post_padding: int = 0
-
-    def waveform_function(self):
-        L  = int(self.length)
-        PL = int(self.pre_padding)
-        PR = int(self.post_padding)
-
-        if PL < 0 or PR < 0:
-            raise ValueError("pre_padding and post_padding must be >= 0.")
-        if PL + PR > L:
-            raise ValueError(
-                f"Total zero padding ({PL + PR}) exceeds pulse length ({L})."
-            )
-
-        active_len = L - (PL + PR)
-        active = self.amplitude * np.ones(active_len)
-
-        w = np.concatenate([
-            np.zeros(PL),
-            active,
-            np.zeros(PR),
-        ])
-
-        return w
     
 @quam_dataclass
-class CosineFlatTopPulse(Pulse):
-    """
-    [pre_padding] + cosine rise + flat + cosine fall + [post_padding (+ any rounding zeros)]
-    """
-
-    amplitude: float
-    axis_angle: float = None
-    flat_length: int = 0
-    smoothing_time: int = 0          # rise + fall
-    pre_padding: int = 0
-    post_padding: int = 0
-    length: int = field(default="#./inferred_total_length", init=False)
-
-    @property
-    def inferred_total_length(self) -> int:
-        active = self.flat_length + self.smoothing_time
-        base_total = active + self.pre_padding + self.post_padding
-        # keep multiple-of-4 behaviour, extra zeros go at the end
-        return int(np.ceil(base_total / 4) * 4)
-
-    def waveform_function(self):
-        def halfcos(n: int):
-            if n <= 0:
-                return np.array([])
-            t = np.arange(n) / n
-            return 0.5 * (1 - np.cos(np.pi * t))
-
-        L  = int(self.length)
-        F  = int(self.flat_length)
-        S  = int(self.smoothing_time)
-        PL = int(self.pre_padding)
-        PR = int(self.post_padding)
-
-        if F < 0 or S < 0:
-            raise ValueError("flat_length and smoothing_time must be >= 0.")
-        if PL < 0 or PR < 0:
-            raise ValueError("pre_padding and post_padding must be >= 0.")
-
-        active = F + S
-        base_total = PL + active + PR
-        if base_total > L:
-            raise ValueError(
-                f"pre + active + post = {base_total} exceeds total length={L}."
-            )
-
-        # any extra samples from rounding go into the *effective* post padding
-        extra = L - base_total
-        PR_eff = PR + extra
-
-        # split rise/fall
-        if S == 0:
-            rise_len = fall_len = 0
-        else:
-            rise_len = S // 2
-            fall_len = S - rise_len
-
-        A = float(self.amplitude)
-        seg_rise = A * halfcos(rise_len)
-        seg_flat = A * np.ones(F)
-        seg_fall = A * halfcos(fall_len)[::-1]
-
-        pre_zeros  = np.zeros(PL)
-        post_zeros = np.zeros(PR_eff)
-
-        p = np.concatenate([pre_zeros, seg_rise, seg_flat, seg_fall, post_zeros])
-
-        if self.axis_angle is not None:
-            p = p * np.exp(1j * self.axis_angle)
-
-        return p.tolist()
-
-@quam_dataclass
-class SlepianFlatTopPulse(Pulse):
-    """
-    [pre_padding] + slepian ramp up + flat + slepian ramp down + [post_padding (+ rounding)]
-    """
-
-    amplitude: float
-    axis_angle: float = None
-    flat_length: int = 64
-    smoothing_time: int = 24       # rise + fall
-    pre_padding: int = 0
-    post_padding: int = 0
-    slepian_NW: float = 2.0
-    length: int = field(default="#./inferred_total_length", init=False)
-
-    @property
-    def inferred_total_length(self) -> int:
-        active = self.flat_length + self.smoothing_time
-        base_total = active + self.pre_padding + self.post_padding
-        return int(np.ceil(base_total / 4) * 4)
-
-    def waveform_function(self):
-        L  = int(self.length)
-        F  = int(self.flat_length)
-        S  = int(self.smoothing_time)
-        PL = int(self.pre_padding)
-        PR = int(self.post_padding)
-
-        if F < 0 or S < 0:
-            raise ValueError("flat_length and smoothing_time must be >= 0.")
-        if PL < 0 or PR < 0:
-            raise ValueError("pre_padding and post_padding must be >= 0.")
-
-        active = F + S
-        base_total = PL + active + PR
-        if base_total > L:
-            raise ValueError(
-                f"pre + active + post = {base_total} exceeds total length={L}."
-            )
-
-        extra = L - base_total
-        PR_eff = PR + extra
-
-        # split smoothing_time
-        if S == 0:
-            rise_len = fall_len = 0
-        else:
-            rise_len = S // 2
-            fall_len = S - rise_len
-
-        def slepian_edge(n: int):
-            if n <= 0:
-                return np.array([])
-            try:
-                from scipy.signal.windows import dpss
-                w = dpss(2 * n, self.slepian_NW)  # length 2n
-                w_half = w[:n]
-                return (w_half - w_half[0]) / (w_half.max() - w_half[0] + 1e-15)
-            except ImportError:
-                t = np.arange(n) / n
-                return 0.5 * (1 - np.cos(np.pi * t))
-
-        A = float(self.amplitude)
-        seg_rise = A * slepian_edge(rise_len)
-        seg_flat = A * np.ones(F)
-        seg_fall = A * slepian_edge(fall_len)[::-1]
-
-        pre_zeros  = np.zeros(PL)
-        post_zeros = np.zeros(PR_eff)
-
-        p = np.concatenate([pre_zeros, seg_rise, seg_flat, seg_fall, post_zeros])
-
-        if self.axis_angle is not None:
-            p = p * np.exp(1j * self.axis_angle)
-
-        return p.tolist()
-
-
-@quam_dataclass
-class SlepianPulse(Pulse):
-    """
-    Pure Slepian (DPSS) envelope with asymmetric padding:
-
-        waveform = [pre_padding zeros][smooth Slepian envelope][post_padding zeros]
-    """
-
-    amplitude: float
-    slepian_NW: float = 2.5
-    axis_angle: float = None
-    pre_padding: int = 0
-    post_padding: int = 0
-    length: int = 64
-
-    def waveform_function(self):
-        L  = int(self.length)
-        PL = int(self.pre_padding)
-        PR = int(self.post_padding)
-
-        if PL < 0 or PR < 0:
-            raise ValueError("pre_padding and post_padding must be >= 0.")
-        if PL + PR > L:
-            raise ValueError(
-                f"Total zero padding ({PL + PR}) exceeds pulse length ({L})."
-            )
-
-        L_active = L - (PL + PR)
-        if L_active <= 0:
-            raise ValueError(
-                f"Active Slepian portion {L_active} <= 0 "
-                f"(length={L}, pre_padding={PL}, post_padding={PR})"
-            )
-
-        try:
-            from scipy.signal.windows import dpss
-            w = dpss(L_active, NW=self.slepian_NW, Kmax=1, sym=True)[0]
-        except ImportError:
-            t = np.arange(L_active) / L_active
-            w = 0.5 * (1 - np.cos(2 * np.pi * t))
-
-        # shift endpoints to zero
-        offset = w[0]
-        w = w - offset
-        w[0] = 0.0
-        w[-1] = 0.0
-
-        max_val = np.max(np.abs(w))
-        if max_val > 0:
-            w = (w / max_val) * self.amplitude
-
-        pre_zeros  = np.zeros(PL)
-        post_zeros = np.zeros(PR)
-
-        w = np.concatenate([pre_zeros, w, post_zeros])
-
-        if self.axis_angle is not None:
-            w = w * np.exp(1j * self.axis_angle)
-
-        assert len(w) == L, f"Waveform length {len(w)} != expected {L}"
-
-        return w.tolist()
-
-@quam_dataclass
 class CosineBipolarPulse(Pulse):
-    """
-    CosineBipolarPulse QUAM component.
-
-    Generates a net-zero pulse with two symmetric cosine-shaped lobes.
-    Minimizes DC offset and long-timescale distortions. Waveform: smooth cosine
-    rise to positive flat section, cosine switch to negative flat, ends with
-    symmetric cosine rise. Positive and negative flat regions are equal length, so
-    the area is zero.
-
-    Net-zero property helps against slow baseline drifts and long-memory effects.
-    Smooth transitions reduce spectral leakage and high-frequency noise — suitable
-    for sensitive quantum control.
-
-    Increasing the total length with constant flat length makes longer, smoother
-    rises/falls and switching, further reducing high-frequency content.
+    """Slepian bipolar pulse QUAM component.
 
     Args:
-        amplitude (float): Peak amplitude (V).
-        axis_angle (float, optional): IQ axis angle in radians. If None, use for
-            a single channel or I of IQ; if not None, use for IQ (0 is X, pi/2 is Y).
-        flat_length (int): Flat region length (must be even and ≤ total length).
-            Split equally between positive and negative.
-        smoothing_time (int): Total length of rise, switch, and fall segments
-            (samples). Default 0 for abrupt transitions. Increasing this smooths
-            edges, reducing high-frequency content.
-        post_zero_padding_time (int): Additional zeros appended after the pulse
-            (samples). Default 0.
+        length (int): The total length of the pulse in samples.
+        amplitude (float): The amplitude of the pulse in volts.
+        axis_angle (float, optional): IQ axis angle of the output pulse in radians.
+            If None (default), the pulse is meant for a single channel or the I port
+                of an IQ channel
+            If not None, the pulse is meant for an IQ channel (0 is X, pi/2 is Y).
+        flat_length (int): The length of the pulse's flat top in samples.
+            The rise and fall lengths are calculated from the total length and the
+            flat length.
     """
 
     amplitude: float
     axis_angle: float = None
     flat_length: int
-    smoothing_time: int = 0
-    post_zero_padding_time: int = 0
-    length: int = field(default="#./inferred_total_length", init=False)
-
-    @property
-    def inferred_total_length(self) -> int:
-        return int(np.ceil((self.flat_length + self.smoothing_time + self.post_zero_padding_time) / 4) * 4)
 
     def waveform_function(self):
         # Helper segment generators (length 0 returns empty array)
-        def halfcos(n: int):
+        def halfcos_up(n: int):
             if n <= 0:
                 return np.array([])
             t = np.arange(n) / n
-            return 0.5 * (1 - np.cos(np.pi * t))
+            return 0.5 * (1 - np.cos(np.pi * t))  # 0 -> 1
 
-        def cos_switch(n: int):
-            """
-            Endpoint-exclusive cosine from +1 to -1 with zero discrete sum.
-            Uses midpoint sampling: theta_k = (k + 0.5)*pi/n, k=0..n-1.
-            """
+        def halfcos_down(n: int):
             if n <= 0:
                 return np.array([])
-            k = np.arange(n, dtype=float)
-            theta = (k + 0.5) * np.pi / n
-            return np.cos(theta)  # strictly between +1 and -1, antisymmetric -> net zero
+            t = np.arange(n) / n
+            return 0.5 * (1 + np.cos(np.pi * t))  # 1 -> 0
+
+        def cos_switch(n: int):
+            if n <= 0:
+                return np.array([])
+            t = np.arange(n) / n
+            return np.cos(np.pi * t)  # +1 -> -1
 
         L = int(self.length)
         F = int(self.flat_length)
-
         if F > L:
-            raise ValueError(f"CosineBipolarPulse.flat_length={F} cannot exceed total length={L}.")
-        if F % 2 != 0:
             raise ValueError(
-                f"CosineBipolarPulse.flat_length={F} must be an even number to split " "equally into + and - halves."
-            )
-        if L - (self.smoothing_time + F) < 0:
-            raise ValueError(
-                f"CosineBipolarPulse.smoothing_time + flat_length ="
-                f" {self.smoothing_time + F} exceeds total length={L}."
+                f"CosineBipolarPulse.flat_length ({F}) cannot exceed total length ({L})."
             )
 
-        if self.smoothing_time == 0:
+        remaining = L - F
+        if remaining <= 0:
             rise_len = switch_len = fall_len = 0
         else:
-            base = self.smoothing_time // 4
-            extra = self.smoothing_time % 4
-            rise_len = base + (1 if extra in (2, 3) else 0)
-            switch_len = 2 * base + (1 if extra in (1, 3) else 0)
-            fall_len = base + (1 if extra in (2, 3) else 0)
+            base = remaining // 3
+            extra = remaining % 3
+            rise_len = base + (1 if extra > 0 else 0)
+            switch_len = base
+            fall_len = base + (1 if extra > 1 else 0)
 
-        flat_pos_len = F // 2
+        flat_pos_len = F // 2 + (F % 2)  # positive half gets extra sample if odd
         flat_neg_len = F // 2
 
         A = float(self.amplitude)
 
-        seg_rise = A * halfcos(rise_len)
+        seg_rise = A * halfcos_up(rise_len)
         seg_flat_pos = A * np.ones(flat_pos_len)
         seg_switch = A * cos_switch(switch_len)
         seg_flat_neg = -A * np.ones(flat_neg_len)
-        seg_fall = -A * halfcos(fall_len)[::-1]
-        zero_padding = np.zeros(L - (self.smoothing_time + F))
+        seg_fall = -A * halfcos_down(fall_len)
 
-        p = np.concatenate([seg_rise, seg_flat_pos, seg_switch, seg_flat_neg, seg_fall, zero_padding])
+        p = np.concatenate(
+            [seg_rise, seg_flat_pos, seg_switch, seg_flat_neg, seg_fall]
+        )
 
+        current_len = len(p)
+        if current_len < L:
+            pad_total = L - current_len
+            pad_front = pad_total // 2
+            pad_back = pad_total - pad_front
+            p = np.concatenate([np.zeros(pad_front), p, np.zeros(pad_back)])
+        elif current_len > L:
+            trim_total = current_len - L
+            trim_front = trim_total // 2
+            trim_back = trim_total - trim_front
+            p = p[trim_front: current_len - trim_back]
+
+        if self.axis_angle is not None:
+            p = p * np.exp(1j * self.axis_angle)
+
+        return p.tolist()
+    
+@quam_dataclass
+class CosineFlatTopPulse(Pulse):
+    """
+    Cosine flat-top pulse (unipolar, smooth rise/fall).
+
+    Args:
+        length (int): Total pulse duration in samples.
+        amplitude (float): Peak amplitude of the pulse.
+        axis_angle (float, optional): IQ axis angle in radians.
+            If None (default), pulse is real and drives a single channel.
+            If set, pulse becomes complex-valued for IQ outputs.
+        flat_length (int): Number of samples at full amplitude (the flat-top region).
+    """
+
+    amplitude: float
+    axis_angle: float = None
+    flat_length: int = 0  # default no flat top
+
+    def waveform_function(self):
+        L = int(self.length)
+        F = int(self.flat_length)
+        if F > L:
+            raise ValueError(
+                f"CosineFlatTopPulse.flat_length ({F}) cannot exceed total length ({L})."
+            )
+
+        # Remaining samples divided into rise and fall
+        remaining = L - F
+        rise_len = remaining // 2
+        fall_len = remaining - rise_len
+
+        def halfcos_up(n: int):
+            if n <= 0:
+                return np.array([])
+            t = np.arange(n) / n
+            return 0.5 * (1 - np.cos(np.pi * t))  # 0 → 1
+
+        def halfcos_down(n: int):
+            if n <= 0:
+                return np.array([])
+            t = np.arange(n) / n
+            return 0.5 * (1 + np.cos(np.pi * t))  # 1 → 0
+
+        A = float(self.amplitude)
+        seg_rise = A * halfcos_up(rise_len)
+        seg_flat = A * np.ones(F)
+        seg_fall = A * halfcos_down(fall_len)
+
+        # Concatenate waveform
+        p = np.concatenate([seg_rise, seg_flat, seg_fall])
+
+        # Ensure exact total length (pad/trim if needed)
+        current_len = len(p)
+        if current_len < L:
+            p = np.pad(p, (0, L - current_len))
+        elif current_len > L:
+            p = p[:L]
+
+        # Apply axis angle for IQ output if provided
         if self.axis_angle is not None:
             p = p * np.exp(1j * self.axis_angle)
 
