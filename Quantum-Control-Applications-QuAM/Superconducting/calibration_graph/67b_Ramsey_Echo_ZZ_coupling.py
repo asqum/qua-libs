@@ -159,8 +159,9 @@ with program() as Ramsey_ZZ_coupling:
     
     
     for i, qp in enumerate(qubit_pairs):
-        q_control = qp.qubit_target
-        q_target = qp.qubit_control
+        q_control = qp.qubit_control
+        q_target = qp.qubit_target
+        XY_delay = q_target.xy.opx_output.delay + 4  # Delay to account delayed pulses in the XY channel
         # Bring the active qubits to the minimum frequency point
         machine.set_all_fluxes(flux_point, qp)
         if reset_coupler_bias:
@@ -183,20 +184,20 @@ with program() as Ramsey_ZZ_coupling:
                         q_control.xy.play("x180", condition=control_initial == 1)
                         align()
                         # Ramsey Echo sequence on target qubit 
-                        with strict_timing_():
-                            q_control.xy.wait(q_target.xy.operations["x90"].length // 4 + t_half + 1)
-                            q_target.xy.play("x90")
-                            q_target.xy.frame_rotation_2pi(phi)
-                            q_target.xy.wait(t_half + 1)
-                            qp.coupler.wait(duration=q_target.xy.operations["x90"].length // 4)
-                            qp.coupler.play("const", amplitude_scale = flux_coupler / qp.coupler.operations["const"].amplitude, duration = t_half)
-                            
-                            q_target.xy.play("x180")
-                            q_control.xy.play("x180")
-                            
-                            qp.coupler.wait(q_target.xy.operations["x180"].length // 4 + 1)
-                            qp.coupler.play("const", amplitude_scale = flux_coupler / qp.coupler.operations["const"].amplitude, duration = t_half)
-                            q_target.xy.play("x90")
+                        q_control.xy.wait(q_target.xy.operations["x90"].length // 4 + t_half + 1)
+                        q_target.xy.play("x90")
+                        q_target.xy.frame_rotation_2pi(phi)
+                        q_target.xy.wait(t_half + 1)
+                        qp.coupler.wait(duration=q_target.xy.operations["x90"].length // 4 + XY_delay // 4)
+                        qp.coupler.play("const", amplitude_scale = flux_coupler / qp.coupler.operations["const"].amplitude, duration = t_half)
+                        
+                        q_target.xy.play("x180")
+                        q_control.xy.play("x180")
+                        
+                        qp.coupler.wait(duration=q_target.xy.operations["x180"].length // 4)
+                        qp.coupler.play("const", amplitude_scale = flux_coupler / qp.coupler.operations["const"].amplitude, duration = t_half)
+                        q_target.xy.wait(t_half)
+                        q_target.xy.play("x90")
                         align()  
                         
                         # target qubit readout
@@ -223,7 +224,7 @@ with program() as Ramsey_ZZ_coupling:
 # %% {Simulate_or_execute}
 if node.parameters.simulate:
     # Simulates the QUA program for the specified duration
-    simulation_config = SimulationConfig(duration=20_000 //4)  # In clock cycles = 4ns
+    simulation_config = SimulationConfig(duration=10_000 //4)  # In clock cycles = 4ns
     job = qmm.simulate(config, Ramsey_ZZ_coupling, simulation_config)
     samples = job.get_simulated_samples()
     samples.con1.plot()
@@ -376,9 +377,6 @@ if not node.parameters.simulate:
             node.results[f"figure_raw_{qubit_name}_ctrl{ctrl}"] = fig
             plt.show()
 
-        # =====================================================
-        # --- If analysis was successful, plot χZZ results ----
-        # =====================================================
         if fit_status == "successful" and "chiZZ" in ds:
             print(f"Plotting χZZ analysis for {qubit_name}")
             ds_pair = ds.isel(qubit=i)
@@ -394,11 +392,20 @@ if not node.parameters.simulate:
             chi_min = res["chiZZ_min_value"]
 
             # --- χZZ vs flux plot ---
-            fig, ax = plt.subplots(figsize=(6, 4))
+            # --- χZZ vs flux: 2 subplots (linear + log-log) ---
+            fig, axes = plt.subplots(1, 2, figsize=(12, 6), sharex=False)
+
+            # Common data
+            chi_val = chi.squeeze()
+            chi_std_val = chi_std.squeeze()
+            chi_abs = np.abs(chi_val)
+
+            # ---------------- (1) Linear plot ----------------
+            ax = axes[0]
             ax.errorbar(
                 flux_mV,
-                chi.squeeze(),
-                yerr=chi_std.squeeze(),
+                chi_val,
+                yerr=chi_std_val,
                 fmt="-o",
                 color="tab:red",
                 lw=1.8,
@@ -411,14 +418,40 @@ if not node.parameters.simulate:
             ax.axvline(1e3 * flux_val_max, color="k", linestyle="--", lw=1.2, alpha=0.8, label="max |χZZ|")
             ax.axvline(1e3 * flux_val_min, color="gray", linestyle="--", lw=1.2, alpha=0.6, label="min |χZZ|")
             ax.axhline(0, color="k", lw=1, alpha=0.4)
+            ax.set_title("Linear scale")
             ax.set_xlabel("Coupler flux [mV]")
             ax.set_ylabel("χZZ [kHz]")
-            ax.set_title(f"{qubit_name}: χZZ vs Coupler flux", fontsize=11)
-            ax.legend(fontsize=8)
             ax.grid(True)
-            plt.tight_layout()
+            ax.legend(fontsize=8)
+
+            # ---------------- (2) Log-log plot ----------------
+            ax = axes[1]   # axes[1]
+            ax.errorbar(
+                flux_mV,     # must be positive for log
+                chi_abs,
+                yerr=chi_std_val,
+                fmt="-o",
+                color="tab:blue",
+                lw=1.8,
+                elinewidth=1,
+                capsize=3,
+                markersize=4,
+                alpha=0.9,
+                label="|χZZ| ± std",
+            )
+            ax.set_yscale("log")
+            ax.set_title("Log-log scale")
+            ax.set_xlabel("|Coupler flux| [mV]")
+            ax.set_ylabel("|χZZ| [kHz]")
+            ax.grid(True, which="both", ls="--", alpha=0.5)
+            ax.legend(fontsize=8)
+
+            fig.suptitle(f"{qubit_name}: χZZ vs Coupler Flux", fontsize=12)
+
+            plt.tight_layout(rect=[0, 0, 1, 0.95])
             node.results[f"figure_zz_curve_{qubit_name}"] = fig
             plt.show()
+
 
             # --- Time-domain fits at χZZ max and min ---
             for label, flux_val, chi_val in [
