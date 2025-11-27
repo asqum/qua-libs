@@ -30,18 +30,19 @@ from numpy import arange
 
 
 ## 2Q_RB
-def run_once():
+def run_once(pair_name:str, depth_squences:tuple[int]|None=None):
     ### The start of the copy ### copy the node to here
 
+    if depth_squences is None:
+        depth_squences = (0,1,2,3,4,5,6,7,8,11,14,19,25,35,40)
 
-
-# %% {Node_parameters}
+    # {Node_parameters}
 
     class Parameters(NodeParameters):
-        qubit_pairs: Optional[List[str]] = ["coupler_q2_q3"]
-        circuit_lengths: tuple[int] = (0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,18,21,23,25,30)#tuple(arange(0,21,1).tolist()) # in number of cliffords
+        qubit_pairs: Optional[List[str]] = [pair_name]
+        circuit_lengths: tuple[int] = depth_squences
         num_circuits_per_length: int = 15
-        num_averages: int = 50
+        num_averages: int = 500
         target_gate: str = "cz" # "idle_2q" or "cz" supported 
         basis_gates: list[str] = ['rz', 'sx', 'x', 'cz'] 
         flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
@@ -57,7 +58,7 @@ def run_once():
     node = QualibrationNode(name="2Q_interleaved_rb", parameters=Parameters())
     node_id = get_node_id()
 
-    # %% {Initialize_QuAM_and_QOP}
+    # {Initialize_QuAM_and_QOP}
 
     # Instantiate the QuAM class from the state file
     machine = QuAM.load()
@@ -80,7 +81,7 @@ def run_once():
     config = machine.generate_config()
 
 
-    # %% {Random circuit generation}
+    # {Random circuit generation}
 
     interleaved_RB = InterleavedRB(
         target_gate=node.parameters.target_gate,
@@ -103,7 +104,7 @@ def run_once():
             circuit_with_measurement = circuit + [66] # readout
             circuits_as_ints.append(circuit_with_measurement)
 
-    # %% {QUA_program}
+    # {QUA_program}
 
     num_pairs = len(qubit_pairs)
 
@@ -111,7 +112,7 @@ def run_once():
 
     rb = qua_program_handler.get_qua_program()
 
-    # %% {Simulate_or_execute}
+    # {Simulate_or_execute}
     if node.parameters.simulate:
         simulation_config = SimulationConfig(duration=node.parameters.simulation_duration_ns//4)  # in clock cycles
         job = qmm.simulate(config, rb, simulation_config)
@@ -148,12 +149,12 @@ def run_once():
                 # Progress bar
                 progress_counter(n, node.parameters.num_averages, start_time=results.start_time)
 
-    # %% {Plot_sequence}
+    # {Plot_sequence}
 
-    for num in flatten(circuits_as_ints):
-        print(gate_mapping[num])
+    # for num in flatten(circuits_as_ints):
+    #     print(gate_mapping[num])
         
-    # %% {Plot and save if simulation}
+    # {Plot and save if simulation}
     if node.parameters.simulate:
         qubit_names = [qubit_pair.qubit_control.name for qubit_pair in qubit_pairs] + [qubit_pair.qubit_target.name for qubit_pair in qubit_pairs]
         readout_lines = set([q[1] for q in qubit_names])
@@ -163,7 +164,7 @@ def run_once():
         # node.machine = machine
         # node.save()
 
-    # %% {Data_fetching_and_dataset_creation}
+    # {Data_fetching_and_dataset_creation}
     if node.parameters.load_data_id is None:
         ds = fetch_results_as_xarray(
         job.result_handles,
@@ -175,7 +176,7 @@ def run_once():
         ds = node.results["ds"]
     # Add the dataset to the node
     node.results = {"ds": ds}
-    # %% {Data_analysis and plotting}
+    # {Data_analysis and plotting}
 
     # Assume ds is your input dataset and ds['state'] is your DataArray
     state = ds['state']  # shape: (qubit, shots, sequence, depths)
@@ -202,7 +203,7 @@ def run_once():
     ds_transposed = ds.rename({"shots": "average", "sequence": "repeat", "depths": "circuit_depth"})
     ds_transposed = ds_transposed.transpose("qubit", "repeat", "circuit_depth", "average")
 
-    #%%
+    #
     fidelity = []
     pairs = []
     for qp in qubit_pairs:
@@ -214,13 +215,14 @@ def run_once():
             state=ds_transposed.sel(qubit=qp.name).state.data
         )
 
-        fig = rb_result.plot_with_fidelity()
+        fig = rb_result.plot_with_fidelity(pair_label=qp.name)
         import matplotlib.pyplot as plt
         node.results = {"figure": fig}
         fidelity.append(rb_result.fidelity)
         pairs.append(qp.name)
         plt.close()
-    # %% {Save_results}
+    
+    # {Save_results}
     if not node.parameters.simulate:    
         node.outcomes = {q.name: "successful" for q in qubit_pairs}
         node.results['initial_parameters'] = node.parameters.model_dump()
@@ -233,15 +235,16 @@ def run_once():
 
         
 
-    return fidelity, pairs
+    return fidelity[0], pairs[0] # temporarily, 2QRB node can only run single pair
 
 def to_float_clean(x):
     s = str(x).strip().lstrip("'")
     return float(s)
 
 if __name__ == "__main__":
-    num_runs = 'inf' # Change, 'inf' or an integer 
-    cooldown_sec = 10 #Chnage
+    num_runs = 1 # Change, 'inf' or an integer 
+    cooldown_sec = 3 #Chnage
+    pairs_to_run:list[str] = ["coupler_q1_q2", "coupler_q2_q3", "coupler_q3_q4", "coupler_q4_q5"]
 
     i = 0
     # folder path to save the file
@@ -262,8 +265,13 @@ if __name__ == "__main__":
         print(f"[{i:02d}/{num_runs}] {ts} Starting run…")
 
         try:
-            CZ_fidelity, pair_names = run_once()
-            print(pair_names)
+            CZ_fidelity, pair_names = [], []
+            # Because 2QRB node can not run multiple pairs
+            for pair in pairs_to_run:
+                fidelity, name = run_once(pair)
+                CZ_fidelity.append(fidelity)
+                pair_names.append(name)
+
             # create column names for qubits, determined by the first run
             if header_qubits is None:
                 header_qubits = list(pair_names)
