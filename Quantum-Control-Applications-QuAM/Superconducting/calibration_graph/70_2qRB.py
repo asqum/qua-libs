@@ -63,10 +63,10 @@ from numpy import arange
 # %% {Node_parameters}
 
 class Parameters(NodeParameters):
-    qubit_pairs: Optional[List[str]] = ["coupler_q1_q2"]
-    circuit_lengths: tuple[int] = (0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,19,25,35,40)#tuple(arange(0,21,1).tolist()) # in number of cliffords
+    qubit_pairs: Optional[List[str]] = ["coupler_q2_q3"]
+    circuit_lengths: tuple[int] = tuple(arange(1,60,6).tolist())#tuple(arange(0,21,1).tolist()) # in number of cliffords
     num_circuits_per_length: int = 15
-    num_averages: int = 50
+    num_averages: int = 100
     target_gate: str = "cz" # "idle_2q" or "cz" supported 
     basis_gates: list[str] = ['rz', 'sx', 'x', 'cz'] 
     flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
@@ -76,7 +76,7 @@ class Parameters(NodeParameters):
     simulate: bool = False
     simulation_duration_ns: int = 10000
     load_data_id: Optional[int] = None
-    timeout: int = 100
+    timeout: int = 600
     seed: int = 0
 
 node = QualibrationNode(name="2Q_interleaved_rb", parameters=Parameters())
@@ -165,8 +165,7 @@ elif node.parameters.load_data_id is None:
         
         else:
             job = qm.execute(rb)
-        
-        results = fetching_tool(job, ["iteration"], mode="live")
+            results = fetching_tool(job, ["iteration"], mode="live")
         while results.is_processing():
             # Fetch results
             n = results.fetch_all()[0]
@@ -200,6 +199,7 @@ else:
     ds = node.results["ds"]
 # Add the dataset to the node
 node.results = {"ds": ds}
+
 # %% {Data_analysis and plotting}
 
 # Assume ds is your input dataset and ds['state'] is your DataArray
@@ -239,7 +239,7 @@ for qp in qubit_pairs:
 
     fig = rb_result.plot_with_fidelity(pair_label=node.parameters.qubit_pairs[0])
     import matplotlib.pyplot as plt
-    node.results = {"figure": fig}
+    node.results["figure"] =  fig
     print(rb_result.fidelity)
 
 # %% {Save_results}
