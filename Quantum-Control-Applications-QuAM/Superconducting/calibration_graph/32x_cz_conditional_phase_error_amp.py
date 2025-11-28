@@ -22,7 +22,14 @@ from quam_libs.components import QuAM
 from quam_libs.components.gates.two_qubit_gates import CZGate
 from qualibrate import QualibrationNode, NodeParameters
 from typing import Literal, Optional, List
-from quam_libs.macros import active_reset, readout_state, readout_state_gef, active_reset_gef, active_reset_simple, qua_declaration
+from quam_libs.macros import (
+    active_reset,
+    readout_state,
+    readout_state_gef,
+    active_reset_gef,
+    active_reset_simple,
+    qua_declaration,
+)
 from qualang_tools.results import progress_counter, fetching_tool
 
 # %% {Initialisation}
@@ -62,33 +69,39 @@ State update:
 - The optimal CZ gate amplitude: qubit_pair.gates["Cz"].flux_pulse_control.amplitude
 """
 qubit_pair_indexes = [2]  # The indexes of the qubit pair to calibrate
+
+
 class Parameters(NodeParameters):
-    qubit_pairs: Optional[List[str]] = ["coupler_q%s_q%s"%(i,i+1) for i in qubit_pair_indexes]
+    qubit_pairs: Optional[List[str]] = ["coupler_q%s_q%s" % (i, i + 1) for i in qubit_pair_indexes]
     num_averages: int = 50
     """Number of averages to perform. Default is 100."""
-    amp_range: float = 0.05
+    amp_range: float = 0.02
     """Range of amplitude variation around the nominal value, will scan between center - range and center + range. Default is 0.010."""
     amp_step: float = 0.001
     """Step size for amplitude scanning. Default is 0.001."""
     num_frame_rotations: int = 17
     """Number of frame rotation points for phase measurement. Default is 10."""
-    operation: Literal["Cz_flattop", "Cz_unipolar", "Cz_bipolar"] = "Cz_flattop"
-    """Type of CZ operation to perform. Options are 'cz_flattop', 'cz_unipolar', or 'cz_bipolar'. Default is 'cz_unipolar'."""
-    number_of_operations: int = 20
+    operation: Literal["Cz_unipolar", "Cz_flattop", "Cz_bipolar", "Cz_slepian", "Cz_slepian_flattop"] = "Cz_flattop"
+    """Type of CZ operation to perform"""
+    number_of_operations: int = 50
     """Number of operations to perform for each amplitude. Default is 10."""
     flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
-    load_data_id: Optional[int] = None # 92417
+    load_data_id: Optional[int] = None  # 92417
+    """If provided, loads data from a previous calibration with this ID instead of executing the experiment."""
     reset_type: Literal["thermal", "active"] = "active"
+    """Type of reset to use between experiments. Options are 'thermal' or 'active'. Default is 'active'."""
     use_state_discrimination: bool = True
+    """Whether to use state discrimination for readout. Default is True."""
     simulate: bool = False
+    """If True, simulates the QUA program instead of executing it on hardware. Default is False."""
     simulation_duration_ns: int = 1500
+    """Duration of the simulation in nanoseconds. Default is 1500 ns."""
     timeout: int = 100
+    """Timeout for the QOP session in seconds. Default is 100 seconds."""
 
 
 # Be sure to include [Parameters, Quam] so the node has proper type hinting
-node = QualibrationNode(
-    name="32x_cz_conditional_phase_error_amp", parameters=Parameters()
-)
+node = QualibrationNode(name="32x_cz_conditional_phase_error_amp", parameters=Parameters())
 
 
 u = unit(coerce_to_integer=True)
@@ -133,8 +146,7 @@ node.namespace["sweep_axes"] = {
 flux_point = node.parameters.flux_point_joint_or_independent
 
 
-
-    # Extract the sweep parameters and axes from the node parameters
+# Extract the sweep parameters and axes from the node parameters
 with program() as CZ_phase_calibration_error_amp:
     amp = declare(fixed)  # amplitude scaling factor for the CZ gate
     frame = declare(fixed)  # frame rotation of the target qubit (even number of operations)
@@ -158,8 +170,8 @@ with program() as CZ_phase_calibration_error_amp:
         state_c_st = [declare_stream() for _ in range(num_qubit_pairs)]
         state_t_st = [declare_stream() for _ in range(num_qubit_pairs)]
     for i, qp in enumerate(qubit_pairs):
-        qp.gates['Cz'].phase_shift_control = 0.0
-        qp.gates['Cz'].phase_shift_target = 0.0
+        qp.gates[operation_name].phase_shift_control = 0.0
+        qp.gates[operation_name].phase_shift_target = 0.0
         machine.set_all_fluxes(flux_point, qp)
         with for_(n, 0, n < n_avg, n + 1):
             save(n, n_st)
@@ -167,61 +179,73 @@ with program() as CZ_phase_calibration_error_amp:
                 with for_(*from_array(amp, amplitudes)):
                     with for_(*from_array(frame, frames)):
                         with for_(*from_array(control_initial, [0, 1])):
-                                # Reset and align both qubits
-                                if node.parameters.reset_type == "active":
-                                    active_reset_gef(qp.qubit_control)
-                                    active_reset(qp.qubit_target)
-                                else:
-                                    wait(qp.qubit_control.thermalization_time * u.ns)
-                                qp.align()
-                                reset_frame(qp.qubit_target.xy.name)
-                                reset_frame(qp.qubit_control.xy.name)
-                                # setting both qubits to the initial state
-                                qp.qubit_control.xy.play("x180", condition=control_initial == 1)
-                                qp.qubit_target.xy.play("x90")
-                                qp.align()         
-                                # Loop over the number of CZ operations
-                                with for_(count, 0, count < n_op, count + 1):
-                                    # play the CZ gate
-                                    qp.gates[operation_name].execute(amplitude_scale=amp)
-                                    qp.align()  # wait for flux to settle
-                                # rotate the frame by 𝜋/2 for odd number of operations
-                                with if_(((n_op & 1) == 0) & (control_initial == 1)):
-                                    assign(frame_odd, frame - 0.5)
-                                    qp.qubit_target.xy.frame_rotation_2pi(frame_odd)
-                                with else_():
-                                    qp.qubit_target.xy.frame_rotation_2pi(frame)
-                                # return the target qubit before measurement
-                                qp.qubit_target.xy.play("x90")
-                                qp.align()
+                            # Reset and align both qubits
+                            if node.parameters.reset_type == "active":
+                                active_reset_gef(qp.qubit_control)
+                                active_reset(qp.qubit_target)
+                            else:
+                                wait(qp.qubit_control.thermalization_time * u.ns)
+                            qp.align()
+                            reset_frame(qp.qubit_target.xy.name)
+                            reset_frame(qp.qubit_control.xy.name)
+                            # setting both qubits to the initial state
+                            qp.qubit_control.xy.play("x180", condition=control_initial == 1)
+                            qp.qubit_target.xy.play("x90")
+                            qp.align()
+                            # Loop over the number of CZ operations
+                            with for_(count, 0, count < n_op, count + 1):
+                                # play the CZ gate
+                                qp.gates[operation_name].execute(amplitude_scale=amp)
+                                qp.align()  # wait for flux to settle
+                            # rotate the frame by 𝜋/2 for odd number of operations
+                            with if_(((n_op & 1) == 0) & (control_initial == 1)):
+                                assign(frame_odd, frame - 0.5)
+                                qp.qubit_target.xy.frame_rotation_2pi(frame_odd)
+                            with else_():
+                                qp.qubit_target.xy.frame_rotation_2pi(frame)
+                            # return the target qubit before measurement
+                            qp.qubit_target.xy.play("x90")
+                            qp.align()
 
-                                if node.parameters.use_state_discrimination:
-                                    # measure both qubits
-                                    readout_state_gef(qp.qubit_control, state_c[i])
-                                    readout_state_gef(qp.qubit_target, state_t[i])
-                                    # save each state outcome to its corresponding stream
-                                    save(state_c[i], state_c_st[i])
-                                    save(state_t[i], state_t_st[i])
-                                else:
-                                    qp.qubit_control.resonator.measure("readout", qua_vars=(I_c[i], Q_c[i]))
-                                    qp.qubit_target.resonator.measure("readout", qua_vars=(I_t[i], Q_t[i]))
-                                    save(I_c[i], I_c_st[i])
-                                    save(Q_c[i], Q_c_st[i])
-                                    save(I_t[i], I_t_st[i])
-                                    save(Q_t[i], Q_t_st[i])
+                            if node.parameters.use_state_discrimination:
+                                # measure both qubits
+                                readout_state_gef(qp.qubit_control, state_c[i])
+                                readout_state_gef(qp.qubit_target, state_t[i])
+                                # save each state outcome to its corresponding stream
+                                save(state_c[i], state_c_st[i])
+                                save(state_t[i], state_t_st[i])
+                            else:
+                                qp.qubit_control.resonator.measure("readout", qua_vars=(I_c[i], Q_c[i]))
+                                qp.qubit_target.resonator.measure("readout", qua_vars=(I_t[i], Q_t[i]))
+                                save(I_c[i], I_c_st[i])
+                                save(Q_c[i], Q_c_st[i])
+                                save(I_t[i], I_t_st[i])
+                                save(Q_t[i], Q_t_st[i])
         align()
 
     with stream_processing():
         n_st.save("n")
         for i in range(num_qubit_pairs):
             if node.parameters.use_state_discrimination:
-                state_c_st[i].buffer(2).buffer(len(frames)).buffer(len(amplitudes)).buffer(num_operations).average().save(f"state_control{i + 1}")
-                state_t_st[i].buffer(2).buffer(len(frames)).buffer(len(amplitudes)).buffer(num_operations).average().save(f"state_target{i + 1}")
+                state_c_st[i].buffer(2).buffer(len(frames)).buffer(len(amplitudes)).buffer(
+                    num_operations
+                ).average().save(f"state_control{i + 1}")
+                state_t_st[i].buffer(2).buffer(len(frames)).buffer(len(amplitudes)).buffer(
+                    num_operations
+                ).average().save(f"state_target{i + 1}")
             else:
-                I_c_st[i].buffer(2).buffer(len(frames)).buffer(len(amplitudes)).buffer(num_operations).average().save(f"I_control{i + 1}")
-                Q_c_st[i].buffer(2).buffer(len(frames)).buffer(len(amplitudes)).buffer(num_operations).average().save(f"Q_control{i + 1}")
-                I_t_st[i].buffer(2).buffer(len(frames)).buffer(len(amplitudes)).buffer(num_operations).average().save(f"I_target{i + 1}")
-                Q_t_st[i].buffer(2).buffer(len(frames)).buffer(len(amplitudes)).buffer(num_operations).average().save(f"Q_target{i + 1}")
+                I_c_st[i].buffer(2).buffer(len(frames)).buffer(len(amplitudes)).buffer(num_operations).average().save(
+                    f"I_control{i + 1}"
+                )
+                Q_c_st[i].buffer(2).buffer(len(frames)).buffer(len(amplitudes)).buffer(num_operations).average().save(
+                    f"Q_control{i + 1}"
+                )
+                I_t_st[i].buffer(2).buffer(len(frames)).buffer(len(amplitudes)).buffer(num_operations).average().save(
+                    f"I_target{i + 1}"
+                )
+                Q_t_st[i].buffer(2).buffer(len(frames)).buffer(len(amplitudes)).buffer(num_operations).average().save(
+                    f"Q_target{i + 1}"
+                )
 # %% {Simulate}
 if node.parameters.simulate:
     # Simulates the QUA program for the specified duration
@@ -232,7 +256,7 @@ if node.parameters.simulate:
     node.machine = machine
     node.save()
 elif node.parameters.load_data_id is None:
-    with qm_session(qmm, config, timeout=node.parameters.timeout ) as qm:
+    with qm_session(qmm, config, timeout=node.parameters.timeout) as qm:
         job = qm.execute(CZ_phase_calibration_error_amp)
 
         results = fetching_tool(job, ["n"], mode="live")
@@ -246,11 +270,20 @@ elif node.parameters.load_data_id is None:
 if not node.parameters.simulate:
     if node.parameters.load_data_id is None:
         # Fetch the data from the OPX and convert it into a xarray with corresponding axes (from most inner to outer loop)
-        ds = fetch_results_as_xarray(job.result_handles, qubit_pairs, {"control_axis": [0,1], "frame": frames, "amp": amplitudes, "number_of_operations": np.arange(1, num_operations + 1)})
+        ds = fetch_results_as_xarray(
+            job.result_handles,
+            qubit_pairs,
+            {
+                "control_axis": [0, 1],
+                "frame": frames,
+                "amp": amplitudes,
+                "number_of_operations": np.arange(1, num_operations + 1),
+            },
+        )
     else:
         ds, machine = load_dataset(node.parameters.load_data_id)
 
-    ds = ds.rename({'qubit': 'qubit_pair'})    
+    ds = ds.rename({"qubit": "qubit_pair"})
     node.results = {"ds_raw": ds}
 
 

@@ -59,18 +59,30 @@ qubit_pair_indexes = [2]  # The indexes of the qubit pair to calibrate
 class Parameters(NodeParameters):
 
     qubit_pairs: Optional[List[str]] = ["coupler_q%s_q%s"%(i,i+1) for i in qubit_pair_indexes]
+    """List of qubit pair names to calibrate. If None or empty, all active qubit pairs will be used."""
     num_averages: int = 100
+    """Number of averages to perform for each amplitude and frame setting."""
     flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
+    """Flux point setting for the qubit pair. Options are 'joint' or 'independent'. Default is 'joint'."""
     reset_type: Literal['active', 'thermal'] = "active"
+    """Type of reset to use between experiments. Options are 'active' or 'thermal'. Default is 'active'."""
     simulate: bool = False
+    """If True, simulates the QUA program instead of executing it on hardware. Default is False."""
     timeout: int = 100
+    """Timeout for the QOP session in seconds. Default is 100 seconds."""
     amp_range : float = 0.2
+    """Range of qubit flux amplitude sweep around the nominal CZ amplitude."""
     amp_step : float = 0.002
+    """Step size for the qubit flux amplitude sweep."""
     num_frames: int = 10
+    """Number of frames to sample the oscillation."""
     load_data_id: Optional[int] = None # 92417 
+    """If provided, loads data from a previous run with this ID instead of executing the program. Default is None."""
     plot_raw : bool = False
+    """If True, plots the raw data after fetching."""
     measure_leak : bool = True
-    operation: Literal["Cz_flattop", "Cz_unipolar", "Cz_bipolar"] = "Cz_unipolar"
+    """If True, measures leakage to the |f> state of the control qubit."""
+    operation: Literal["Cz_flattop", "Cz_unipolar", "Cz_bipolar"] = "Cz_flattop"
     """Type of CZ operation to perform. Options are 'cz_flattop', 'cz_unipolar', or 'cz_bipolar'. Default is 'cz_unipolar'."""
 
 
@@ -172,7 +184,7 @@ with program() as CPhase_Oscillations:
 
                         #play the CZ gate
                         qp.gates[operation_name].execute(amplitude_scale = amp)
-                        
+                        qp.align()  # wait for flux to settle
                         #rotate the frame
                         frame_rotation_2pi(frame, qp.qubit_target.xy.name)
                         
@@ -298,55 +310,93 @@ if not node.parameters.simulate:
 if not node.parameters.simulate:
     grid_names, qubit_pair_names = grid_pair_names(qubit_pairs)
     grid = QubitPairGrid(grid_names, qubit_pair_names)
+
     for ax, qubit_pair in grid_iter(grid):
-        phase_diffs[qubit_pair['qubit']].plot.line(ax=ax, x = "amp_full")
-        if qubit_pair['qubit'] in fitted:
-            ax.plot(phase_diffs[qubit_pair['qubit']].amp_full, fitted[qubit_pair['qubit']])
-        ax.plot([optimal_amps[qubit_pair['qubit']]], [0.5], marker = 'o', color = 'red')
-        ax.axhline(y=0.5, color='red', linestyle='--',lw=0.5)
-        ax.axvline(x=optimal_amps[qubit_pair['qubit']], color='red', linestyle='--',lw=0.5)
-        # Add secondary x-axis for detuning in MHz
-        def amp_to_detuning_MHz(amp):
-            return -(amp**2) * qp.qubit_control.freq_vs_flux_01_quad_term / 1e6  # Convert Hz to MHz
+        qname = qubit_pair["qubit"]
+
+        # Add mV coordinate for xarray plot
+        ds_q = phase_diffs[qname].assign_coords(
+            flux_qubit_mV = 1e3 * phase_diffs[qname].amp_full
+        )
+
+        # ---- Main plot (phase diff) ----
+        ds_q.plot.line(ax=ax, x="flux_qubit_mV")
+
+        if qname in fitted:
+            ax.plot(1e3 * phase_diffs[qname].amp_full, fitted[qname])
+
+        # Mark optimum in mV
+        ax.plot([1e3 * optimal_amps[qname]], [0.5], marker='o', color='red')
+        ax.axvline(x=1e3 * optimal_amps[qname], color='red', linestyle='--', lw=0.5)
+        ax.axhline(y=0.5, color='red', linestyle='--', lw=0.5)
+
+        # --- Secondary detuning axis ---
+        def amp_to_detuning_MHz(amp_mV):
+            amp = amp_mV / 1e3
+            return -(amp**2) * qp.qubit_control.freq_vs_flux_01_quad_term / 1e6
 
         def detuning_MHz_to_amp(detuning_MHz):
-            return np.sqrt(-detuning_MHz * 1e6 / qp.qubit_control.freq_vs_flux_01_quad_term)
+            amp = np.sqrt(
+                -detuning_MHz * 1e6 / qp.qubit_control.freq_vs_flux_01_quad_term
+            )
+            return amp * 1e3  # convert back to mV
 
         secax = ax.secondary_xaxis('top', functions=(amp_to_detuning_MHz, detuning_MHz_to_amp))
         secax.set_xlabel('Detuning (MHz)')
-        ax.set_title(qubit_pair['qubit'])
-        ax.set_xlabel('Amplitude (V)')
-        ax.set_ylabel('Phase difference')
-        
-    plt.suptitle('Cz phase calibration', y=0.95)
+
+        ax.set_title(qname)
+        ax.set_xlabel("Qubit flux shift (mV)")
+        ax.set_ylabel("Phase difference (2π units)")
+
+    plt.suptitle(f'Cz phase calibration \n {operation_name}', y=0.95)
     plt.tight_layout()
     plt.show()
     node.results["figure_phase"] = grid.fig
-    
+
+
+    # =====================================================================
+    #                LEAKAGE PLOT -- now also in mV
+    # =====================================================================
+
     if node.parameters.measure_leak:
         grid = QubitPairGrid(grid_names, qubit_pair_names)
+
         for ax, qubit_pair in grid_iter(grid):
-            leaks[qubit_pair['qubit']].plot(ax=ax, x = 'amp_full')
-            ax.axvline(optimal_amps[qubit_pair['qubit']],color = 'r', linestyle='--',lw=0.5)
-            ax.axvline((qubit_pairs[0].gates['Cz'].flux_pulse_control.amplitude), color='b', linestyle='--', lw = 0.57)
-            ax.set_title(qubit_pair['qubit'])
-            ax.set_xlabel('Amplitude (V)')
-            ax.set_ylabel('Leak probability')
-            
-            # Add secondary x-axis for detuning in MHz
-            def amp_to_detuning_MHz(amp):
-                return -(amp**2) * qp.qubit_control.freq_vs_flux_01_quad_term / 1e6  # Convert Hz to MHz
+            qname = qubit_pair["qubit"]
+
+            ds_leak = leaks[qname].assign_coords(
+                flux_qubit_mV = 1e3 * leaks[qname].amp_full
+            )
+
+            ds_leak.plot(ax=ax, x="flux_qubit_mV")
+
+            ax.axvline(1e3 * optimal_amps[qname], color='r', linestyle='--', lw=0.5)
+            ax.axvline(1e3 * qubit_pairs[0].gates['Cz'].flux_pulse_control.amplitude,
+                       color='b', linestyle='--', lw=0.57)
+
+            ax.set_title(qname)
+            ax.set_xlabel("Qubit flux shift (mV)")
+            ax.set_ylabel("Leak probability")
+
+            # --- Secondary detuning axis ---
+            def amp_to_detuning_MHz(amp_mV):
+                amp = amp_mV / 1e3
+                return -(amp**2) * qp.qubit_control.freq_vs_flux_01_quad_term / 1e6
 
             def detuning_MHz_to_amp(detuning_MHz):
-                return np.sqrt(-detuning_MHz * 1e6 / qp.qubit_control.freq_vs_flux_01_quad_term)
+                amp = np.sqrt(
+                    -detuning_MHz * 1e6 / qp.qubit_control.freq_vs_flux_01_quad_term
+                )
+                return amp * 1e3
 
             secax = ax.secondary_xaxis('top', functions=(amp_to_detuning_MHz, detuning_MHz_to_amp))
             secax.set_xlabel('Detuning (MHz)')
-                    
-        plt.suptitle('F state probability', y=0.95)
-        plt.tight_layout()    
+
+        plt.suptitle(f'F state probability \n {operation_name}', y=0.95)
+        plt.tight_layout()
         plt.show()
-        node.results['figure_leak'] = grid.fig    
+        node.results['figure_leak'] = grid.fig
+
 
 # %% {Update_state}
 if not node.parameters.simulate:

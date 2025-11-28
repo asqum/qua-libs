@@ -68,8 +68,8 @@ class Parameters(NodeParameters):
     load_data_id: Optional[int] = None
     plot_raw : bool = False
     measure_leak : bool = False
-    operation: Literal["Cz_flattop", "Cz_unipolar", "Cz_bipolar"] = "Cz_unipolar"
-    """Type of CZ operation to perform. Options are 'cz_flattop', 'cz_unipolar', or 'cz_bipolar'. Default is 'cz_unipolar'."""
+    operation: Literal["Cz_unipolar", "Cz_flattop", "Cz_bipolar", "Cz_slepian", "Cz_slepian_flattop"] = "Cz_flattop"
+    """Type of CZ operation to perform."""
 
 node = QualibrationNode(
     name="33a_Cz_1Qphase_calibration_frame", parameters=Parameters()
@@ -256,7 +256,7 @@ if not node.parameters.simulate:
         ax.axvline(x = 1-phases_target[qubit_pair['qubit']], color = 'C0', linestyle = '--')
         ax.axvline(x = 1-phases_control[qubit_pair['qubit']], color = 'C1', linestyle = '--')
         ax.legend()
-    plt.suptitle('Cz single qubit phase calibration')
+    plt.suptitle(f'Cz single qubit phase calibration \n {operation_name} pulse')
     plt.tight_layout()
     plt.show()
     node.results["figure_phase"] = grid.fig
@@ -283,9 +283,9 @@ if not node.parameters.simulate:
         with node.record_state_updates():
             for qp in qubit_pairs:
                 qp.gates[operation_name].phase_shift_control -= (phase_control[qp.name] / 1.0)
-                qp.gates[operation_name].phase_shift_control = qp.gates['Cz'].phase_shift_control  % (1.0)
+                qp.gates[operation_name].phase_shift_control = qp.gates[operation_name].phase_shift_control  % (1.0)
                 qp.gates[operation_name].phase_shift_target -= (phase_target[qp.name]/ 1.0)
-                qp.gates[operation_name].phase_shift_target = qp.gates['Cz'].phase_shift_target  % (1.0)
+                qp.gates[operation_name].phase_shift_target = qp.gates[operation_name].phase_shift_target  % (1.0)
                 
 # %% {Save_results}
 if not node.parameters.simulate:

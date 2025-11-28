@@ -57,19 +57,29 @@ qubit_pair_indexes = [2]  # The indexes of the qubit pairs to measure
 class Parameters(NodeParameters):
 
     qubit_pairs: Optional[List[str]] = ["coupler_q%s_q%s"%(i,i+1) for i in qubit_pair_indexes]
+    """List of qubit pair names to calibrate. If None or empty, all active qubit pairs will be used."""
     num_averages: int = 50
+    """Number of averages to perform for each amplitude. Default is 100."""
     flux_point_joint_or_independent_or_pairwise: Literal["joint", "independent", "pairwise"] = "joint"
+    """Flux point setting strategy: 'joint', 'independent', or 'pairwise'. Default is 'joint'."""
     reset_type: Literal['active', 'thermal'] = "active"
+    """Type of reset to use between experiments. Options are 'active' or 'thermal'. Default is 'active'."""
     simulate: bool = False
+    """If True, simulates the QUA program instead of executing it on hardware. Default is False."""
     timeout: int = 100
+    """Timeout for the QOP session in seconds. Default is 100 seconds."""
     load_data_id: Optional[int] = None
-    number_of_operations: int = 20
+    """If provided, loads data from a previous calibration with this ID instead of executing the experiment."""
+    number_of_operations: int = 50
     """Number of operations to perform for each amplitude. Default is 10."""
-    operation: Literal["Cz_flattop", "Cz_unipolar", "Cz_bipolar"] = "Cz_unipolar"
-    """Type of CZ operation to perform. Options are 'cz_flattop', 'cz_unipolar', or 'cz_bipolar'. Default is 'cz_unipolar'."""
-    coupler_amp_range : float = 0.05
-    coupler_amp_step : float = 0.0001
+    operation: Literal["Cz_unipolar", "Cz_flattop", "Cz_bipolar", "Cz_slepian", "Cz_slepian_flattop"] = "Cz_flattop"
+    """Type of CZ operation to perform."""
+    coupler_amp_range : float = 0.06
+    """ Range around 1 for coupler amplitude scaling."""
+    coupler_amp_step : float = 0.0005
+    """ Step for coupler amplitude scaling."""
     use_state_discrimination: bool = True
+    """Whether to use state discrimination for readout or raw IQ data."""
 
 
 node = QualibrationNode(
@@ -142,8 +152,8 @@ with program() as leakage_amplification:
     
     
     for i, qp in enumerate(qubit_pairs):
-        qp.gates['Cz'].phase_shift_control = 0.0
-        qp.gates['Cz'].phase_shift_target = 0.0
+        qp.gates[operation_name].phase_shift_control = 0.0
+        qp.gates[operation_name].phase_shift_target = 0.0
         # Bring the active qubits to the minimum frequency point
         machine.set_all_fluxes(flux_point, qp)
         if reset_coupler_bias:
@@ -202,10 +212,13 @@ with program() as leakage_amplification:
 # %% {Simulate_or_execute}
 if node.parameters.simulate:
     # Simulates the QUA program for the specified duration
-    simulation_config = SimulationConfig(duration=10_000)  # In clock cycles = 4ns
+    simulation_config = SimulationConfig(duration=20_000 // 4 )  # In clock cycles = 4ns
     job = qmm.simulate(config, leakage_amplification, simulation_config)
-    job.get_simulated_samples().con1.plot()
+    samples = job.get_simulated_samples()
+    samples.con1.plot()
     node.results = {"figure": plt.gcf()}
+    wf_report = job.get_simulated_waveform_report()
+    wf_report.create_plot(samples, plot=True, save_path=None)
     node.machine = machine
     node.save()
 elif node.parameters.load_data_id is None:
@@ -234,9 +247,9 @@ if not node.parameters.simulate:
 # %% data processing
 if not node.parameters.simulate:
     def coupler_flux_shift(qp, amp):
-        return amp * qp.gates['Cz'].coupler_flux_pulse.amplitude
+        return amp * qp.gates[operation_name].coupler_flux_pulse.amplitude
     def abs_coupler_amp(qp, amp):
-        return amp * qp.gates['Cz'].coupler_flux_pulse.amplitude + qp.coupler.decouple_offset
+        return amp * qp.gates[operation_name].coupler_flux_pulse.amplitude + qp.coupler.decouple_offset
     
     ds = ds.assign_coords(
         {"flux_coupler_full": (["qubit", "coupler_amp"], np.array([abs_coupler_amp(qp, ds.coupler_amp) for qp in qubit_pairs]))}
@@ -310,17 +323,18 @@ if not node.parameters.simulate:
                 print(f"[WARN] Annotations failed for {qubit_name}: {e}")
         
         
-        ax.set_xlabel("Number of operations")
+        ax.set_xlabel("# CZ operations")
         ax.set_ylabel("Coupler flux shift [mV]")
         ax.set_title(f"{qubit_name}, Decoupling offset = {qubit_pair.coupler.decouple_offset * 1e3 :.0f} mV ", fontsize=9)
         if legend_entries:
                 ax.legend(fontsize=7, loc="upper right", frameon=True)
         # overall title per qubit pair
-        grid.fig.suptitle(f'Amplification of leakage out of 11 state', y=0.97, fontsize=12)
+        grid.fig.suptitle(f'Amplification of leakage out of 11 state \n {operation_name} pulse', y=0.97, fontsize=12)
         plt.tight_layout()
         plt.show()
         # store figure
         node.results[f"figure_11_leakage_amplification"] = grid.fig
+        
 # %% {Update_state}
 if not node.parameters.simulate:
     if not node.parameters.simulate:
