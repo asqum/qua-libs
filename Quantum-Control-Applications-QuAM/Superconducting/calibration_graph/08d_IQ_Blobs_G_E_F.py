@@ -42,8 +42,8 @@ from scipy.optimize import curve_fit
 # %% {Node_parameters}
 class Parameters(NodeParameters):
 
-    qubits: Optional[List[str]] = ["q1"]
-    num_runs: int = 6000
+    qubits: Optional[List[str]] = ['q7', "q8"]
+    num_runs: int = 5000
     reset_type_thermal_or_active: Literal["thermal", "active"] = "thermal"
     flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
     multiplexed: bool = False
@@ -119,7 +119,7 @@ with program() as iq_blobs:
         machine.set_all_fluxes(flux_point, qubit)
         wait(4)
         qubit.resonator.update_frequency(
-            qubit.resonator.intermediate_frequency + qubit.GEF_frequency_shift
+            qubit.resonator.intermediate_frequency + qubit.resonator.GEF_frequency_shift
         )
         wait(4)
 
