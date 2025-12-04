@@ -33,7 +33,7 @@ Pi vs Flux :
 """
 
 class Parameters(NodeParameters):
-    qubits: Optional[List[str]] = ["q5"]
+    qubits: Optional[List[str]] = ["q1"]
     num_shots: int = 100
     operation: str = "x180"
     operation_amplitude_factor: float = 1.0
@@ -49,12 +49,12 @@ class Parameters(NodeParameters):
     timeout: int = 100
     multiplexed: bool = False
     reset_type_active_or_thermal: Literal["active", "thermal"] = "thermal"
-    thermal_reset_extra_time_in_us: int = 10_000
+    thermal_reset_extra_time_in_us: int = 20_000
     min_wait_time_in_ns: int = 32
     use_state_discrimination: bool = False
     load_data_id:str = None
     simulate:str = None 
-    detuning_in_mhz: int = 450.0
+    detuning_in_mhz: int = 200
 
 node = QualibrationNode(
     name="16a_pi_vs_flux_long_distortions",
@@ -99,6 +99,7 @@ for qubit in qubits:
 
 operation_amp_scale = node.parameters.operation_amplitude_factor or 1.0
 n_avg = node.parameters.num_shots
+thermal_reset_extra_time_in_us = node.parameters.thermal_reset_extra_time_in_us
 
 # Frequency sweep
 span = node.parameters.frequency_span_in_mhz * u.MHz
@@ -180,6 +181,7 @@ with program() as qua_prog:
             with for_(*from_array(df, dfs)):
                 # Time delay loop
                 with for_each_(t_delay, times):
+                    wait(thermal_reset_extra_time_in_us//4)
                     # Step the qubit spectroscopy tone frequency
                     qubit.xy.update_frequency(df + qubit.xy.intermediate_frequency - if_update[i])
                     qubit.align()
