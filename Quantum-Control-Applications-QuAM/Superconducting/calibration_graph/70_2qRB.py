@@ -63,8 +63,8 @@ from numpy import arange
 # %% {Node_parameters}
 
 class Parameters(NodeParameters):
-    qubit_pairs: Optional[List[str]] = ["coupler_q1_q2"]
-    circuit_lengths: tuple[int] = (0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,19,25,35,40)#tuple(arange(0,21,1).tolist()) # in number of cliffords
+    qubit_pairs: Optional[List[str]] = ["coupler_q2_q3"]
+    circuit_lengths: tuple[int] = (0,1,2,3,4,5,7,8,10,16,32)#tuple(arange(0,21,1).tolist()) # in number of cliffords
     num_circuits_per_length: int = 15
     num_averages: int = 50
     target_gate: str = "cz" # "idle_2q" or "cz" supported 
@@ -100,6 +100,7 @@ if len(qubit_pairs) == 0:
 
 # Open Communication with the QOP
 if node.parameters.load_data_id is None:
+    # qmm = machine.connect(timeout=node.parameters.timeout)
     qmm = machine.connect()
 
 config = machine.generate_config()
@@ -239,7 +240,7 @@ for qp in qubit_pairs:
 
     fig = rb_result.plot_with_fidelity(pair_label=node.parameters.qubit_pairs[0])
     import matplotlib.pyplot as plt
-    node.results = {"figure": fig}
+    node.results["figure"] = fig
     print(rb_result.fidelity)
 
 # %% {Save_results}
