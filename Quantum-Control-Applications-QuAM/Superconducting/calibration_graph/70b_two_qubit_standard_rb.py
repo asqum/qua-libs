@@ -70,10 +70,10 @@ average_gates_per_2q_layer = 1.51
 # %% {Node_parameters}
 
 class Parameters(NodeParameters):
-    qubit_pairs: Optional[List[str]] = ["coupler_q2_q3"]#None
-    circuit_lengths: tuple[int] = (0,1,2,4,8,10,16,25,32,50,64) # in number of cliffords
-    num_circuits_per_length: int = 20
-    num_averages: int = 50
+    qubit_pairs: Optional[List[str]] = ["coupler_q1_q2"]#None
+    circuit_lengths: tuple[int] = (0,1,5,10,25,30,50,80,120,150) # in number of cliffords
+    num_circuits_per_length: int = 15
+    num_averages: int = 150
     basis_gates: list[str] = ['rz', 'sx', 'x', 'cz'] 
     flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
     reset_type_thermal_or_active: Literal["thermal", "active"] = "active"
@@ -106,7 +106,7 @@ if len(qubit_pairs) == 0:
 
 # Open Communication with the QOP
 if node.parameters.load_data_id is None:
-    qmm = node.machine.connect(timeout=node.parameters.timeout)
+    qmm = node.machine.connect()
 
 config = node.machine.generate_config()
 

@@ -2,11 +2,9 @@ import time
 import csv
 from datetime import datetime
 from pathlib import Path
-
+from quam_libs.experiments.rb_standard.data_utils import InterleavedRBResult
 from datetime import datetime, timezone, timedelta
 from typing import List, Literal, Optional
-from more_itertools import flatten
-from quam_libs.experiments.rb.data_utils import RBResult
 import xarray as xr
 
 
@@ -20,30 +18,29 @@ from qualibrate import NodeParameters, QualibrationNode
 from quam_libs.experiments.rb.circuit_utils import layerize_quantum_circuit, process_circuit_to_integers
 from quam_libs.experiments.rb.qua_utils import QuaProgramHandler
 from quam_libs.lib.plot_utils import plot_samples
-from quam_libs.lib.save_utils import fetch_results_as_xarray, get_node_id
+from quam_libs.lib.save_utils import fetch_results_as_xarray
 
 from quam_libs.components import QuAM
 from quam_libs.experiments.rb.cloud_utils import write_sync_hook
-from quam_libs.experiments.rb.rb_utils import InterleavedRB
-from quam_libs.experiments.rb.plot_utils import gate_mapping
-from numpy import arange
+from quam_libs.experiments.rb_standard.rb_utils import InterleavedRB
+
 
 
 ## 2Q_RB
-def run_once(pair_name:str, depth_squences:tuple[int]|None=None):
+def run_once(pair_name:str, depth_squences:tuple[int]|None=None, target_operation:str='cz'):
     ### The start of the copy ### copy the node to here
 
     if depth_squences is None:
         depth_squences = (0,1,2,3,4,5,6,7,8,11,14,19,25,35,40)
 
-    # {Node_parameters}
+    # %% {Node_parameters}
 
     class Parameters(NodeParameters):
-        qubit_pairs: Optional[List[str]] = [pair_name]
-        circuit_lengths: tuple[int] = depth_squences
+        qubit_pairs: Optional[List[str]] = [pair_name] #None
+        circuit_lengths: tuple[int] = depth_squences # in number of cliffords
         num_circuits_per_length: int = 15
-        num_averages: int = 500
-        target_gate: str = "cz" # "idle_2q" or "cz" supported 
+        num_averages: int = 150
+        target_gate: str = target_operation # "idle_2q" or "cz" supported 
         basis_gates: list[str] = ['rz', 'sx', 'x', 'cz'] 
         flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
         reset_type_thermal_or_active: Literal["thermal", "active"] = "active"
@@ -54,20 +51,20 @@ def run_once(pair_name:str, depth_squences:tuple[int]|None=None):
         load_data_id: Optional[int] = None
         timeout: int = 100
         seed: int = 0
+        targets_name = "qubit_pairs"
 
-    node = QualibrationNode(name="2Q_interleaved_rb", parameters=Parameters())
-    node_id = get_node_id()
+    node = QualibrationNode(name="70c_two_qubit_interleaved_rb", parameters=Parameters())
 
-    # {Initialize_QuAM_and_QOP}
+    # %% {Initialize_QuAM_and_QOP}
 
     # Instantiate the QuAM class from the state file
-    machine = QuAM.load()
+    node.machine = QuAM.load()
 
     # Get the relevant QuAM components
     if node.parameters.qubit_pairs is None or node.parameters.qubit_pairs == "":
-        qubit_pairs = machine.active_qubit_pairs
+        qubit_pairs = node.machine.active_qubit_pairs
     else:
-        qubit_pairs = [machine.qubit_pairs[qp] for qp in node.parameters.qubit_pairs]
+        qubit_pairs = [node.machine.qubit_pairs[qp] for qp in node.parameters.qubit_pairs]
 
     if len(qubit_pairs) == 0:
         raise ValueError("No qubit pairs selected")
@@ -76,12 +73,12 @@ def run_once(pair_name:str, depth_squences:tuple[int]|None=None):
 
     # Open Communication with the QOP
     if node.parameters.load_data_id is None:
-        qmm = machine.connect()
+        qmm = node.machine.connect()
 
-    config = machine.generate_config()
+    config = node.machine.generate_config()
 
 
-    # {Random circuit generation}
+    # %% {Random circuit generation}
 
     interleaved_RB = InterleavedRB(
         target_gate=node.parameters.target_gate,
@@ -104,15 +101,15 @@ def run_once(pair_name:str, depth_squences:tuple[int]|None=None):
             circuit_with_measurement = circuit + [66] # readout
             circuits_as_ints.append(circuit_with_measurement)
 
-    # {QUA_program}
+    # %% {QUA_program}
 
     num_pairs = len(qubit_pairs)
 
-    qua_program_handler = QuaProgramHandler(node, num_pairs, circuits_as_ints, machine, qubit_pairs)
+    qua_program_handler = QuaProgramHandler(node, num_pairs, circuits_as_ints, node.machine, qubit_pairs)
 
     rb = qua_program_handler.get_qua_program()
 
-    # {Simulate_or_execute}
+    # %% {Simulate_or_execute}
     if node.parameters.simulate:
         simulation_config = SimulationConfig(duration=node.parameters.simulation_duration_ns//4)  # in clock cycles
         job = qmm.simulate(config, rb, simulation_config)
@@ -123,12 +120,12 @@ def run_once(pair_name:str, depth_squences:tuple[int]|None=None):
         node.results = {}
         date_time = datetime.now(timezone(timedelta(hours=3))).strftime("%Y-%m-%d %H:%M:%S")
         
-        with qm_session(qmm, config, timeout=node.parameters.timeout) as qm:
+        with qm_session(node.machine.qmm, config, timeout=node.parameters.timeout) as qm:
             if node.parameters.use_input_stream:
                 num_sequences = len(qua_program_handler.sequence_lengths)
                 circuits_as_ints_batched_padded = [batch + [0] * (qua_program_handler.max_current_sequence_length - len(batch)) for batch in qua_program_handler.circuits_as_ints_batched]    
                 
-                if machine.network['cloud']:
+                if node.machine.network['cloud']:
                     write_sync_hook(circuits_as_ints_batched_padded)
 
                     job = qm.execute(rb,
@@ -149,22 +146,17 @@ def run_once(pair_name:str, depth_squences:tuple[int]|None=None):
                 # Progress bar
                 progress_counter(n, node.parameters.num_averages, start_time=results.start_time)
 
-    # {Plot_sequence}
-
-    # for num in flatten(circuits_as_ints):
-    #     print(gate_mapping[num])
         
-    # {Plot and save if simulation}
+    # %% {Plot and save if simulation}
     if node.parameters.simulate:
         qubit_names = [qubit_pair.qubit_control.name for qubit_pair in qubit_pairs] + [qubit_pair.qubit_target.name for qubit_pair in qubit_pairs]
         readout_lines = set([q[1] for q in qubit_names])
         fig = plot_samples(samples, qubit_names, readout_lines=list(readout_lines), xlim=(0,10000))
         
         # node.results["figure"] = fig
-        # node.machine = machine
         # node.save()
 
-    # {Data_fetching_and_dataset_creation}
+    # %% {Data_fetching_and_dataset_creation}
     if node.parameters.load_data_id is None:
         ds = fetch_results_as_xarray(
         job.result_handles,
@@ -176,7 +168,7 @@ def run_once(pair_name:str, depth_squences:tuple[int]|None=None):
         ds = node.results["ds"]
     # Add the dataset to the node
     node.results = {"ds": ds}
-    # {Data_analysis and plotting}
+    # %% {Data_analysis and plotting}
 
     # Assume ds is your input dataset and ds['state'] is your DataArray
     state = ds['state']  # shape: (qubit, shots, sequence, depths)
@@ -203,35 +195,39 @@ def run_once(pair_name:str, depth_squences:tuple[int]|None=None):
     ds_transposed = ds.rename({"shots": "average", "sequence": "repeat", "depths": "circuit_depth"})
     ds_transposed = ds_transposed.transpose("qubit", "repeat", "circuit_depth", "average")
 
-    #
+    rb_result = {}
     fidelity = []
     pairs = []
     for qp in qubit_pairs:
 
-        rb_result = RBResult(
+        rb_result[qp.id] = InterleavedRBResult(
+            # standard_rb_alpha=node.machine.qubit_pairs[qp.id].macros["cz"].fidelity.get("StandardRB", 1).get("alpha", 1),
+            standard_rb_alpha=qp.extras.StandardRB.alpha, # if "StandardRB" in qp.extras else 1,
             circuit_depths=list(node.parameters.circuit_lengths),
             num_repeats=node.parameters.num_circuits_per_length,
             num_averages=node.parameters.num_averages,
             state=ds_transposed.sel(qubit=qp.name).state.data
         )
 
-        fig = rb_result.plot_with_fidelity(pair_label=qp.name)
-        import matplotlib.pyplot as plt
-        node.results = {"figure": fig}
-        fidelity.append(rb_result.fidelity)
+        # Fit the data and calculate all error and fidelity metrics
+        rb_result[qp.id].fit()
+        
+        # Plot the results
+        fig = rb_result[qp.id].plot_with_fidelity()
+        fig.suptitle(f"2Q {node.parameters.target_gate.upper()} Interleaved Randomized Benchmarking - {qp.name}")
+        # node.add_node_info_subtitle(fig)
+        fig.show()
+        
+        node.results[f"{qp.id}_figure_IRB_decay"] = fig
+        fidelity.append(rb_result[qp.id].fidelity)
         pairs.append(qp.name)
-        plt.close()
-    
-    # {Save_results}
-    if not node.parameters.simulate:    
-        node.outcomes = {q.name: "successful" for q in qubit_pairs}
-        node.results['initial_parameters'] = node.parameters.model_dump()
-        node.machine = machine
-        node.save()
 
-        ### The end of the copy ### 
-        #modify the parameters you want to save
-        qmm.close_all_qms()
+    # with node.record_state_updates():
+    #     for qp in qubit_pairs:
+    #         qp.extras['Interleaved_RB'] = rb_result[qp.id].fidelity
+    
+    node.save()
+    qmm.close_all_qms()
 
         
 
@@ -242,13 +238,14 @@ def to_float_clean(x):
     return float(s)
 
 if __name__ == "__main__":
-    num_runs = 1 # Change, 'inf' or an integer 
-    cooldown_sec = 3 #Chnage
-    pairs_to_run:list[str] = ["coupler_q1_q2", "coupler_q2_q3", "coupler_q3_q4", "coupler_q4_q5"]
+    num_runs = 'inf' # Change, 'inf' or an integer 
+    cooldown_sec = 5 #Chnage
+    target_operaion:Literal["cz", "idle_2q"] = 'cz'
+    pairs_to_run:list[str] = ["coupler_q1_q2", "coupler_q4_q5","coupler_q2_q3", "coupler_q3_q4"]
 
     i = 0
     # folder path to save the file
-    out_dir = Path('/home/ratiswu/Qualibrate_data/5Q4C_Qcage/2025-11-14/#9a9a_2QRB_Tracking') #Chnage
+    out_dir = Path('/home/ratiswu/Qualibrate_data/5Q4C_Qcage/2025-12-04/#9a9a_2QRB_Tracking') #Chnage
     out_dir.mkdir(parents=True, exist_ok=True)
 
     # csv file name (contains the time to avoid overlap)
@@ -268,7 +265,7 @@ if __name__ == "__main__":
             CZ_fidelity, pair_names = [], []
             # Because 2QRB node can not run multiple pairs
             for pair in pairs_to_run:
-                fidelity, name = run_once(pair)
+                fidelity, name = run_once(pair,target_operation=target_operaion)
                 CZ_fidelity.append(fidelity)
                 pair_names.append(name)
 

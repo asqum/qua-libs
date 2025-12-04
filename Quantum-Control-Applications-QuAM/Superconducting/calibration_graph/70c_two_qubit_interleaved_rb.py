@@ -63,10 +63,10 @@ from quam_libs.experiments.rb_standard.plot_utils import gate_mapping
 # %% {Node_parameters}
 
 class Parameters(NodeParameters):
-    qubit_pairs: Optional[List[str]] = ["coupler_q2_q3"]#None
-    circuit_lengths: tuple[int] = (0,1,2,4,5,7,8,10,12,16,32) # in number of cliffords
+    qubit_pairs: Optional[List[str]] = ["coupler_q2_q3"] #None
+    circuit_lengths: tuple[int] = (0,1,2,3,4,5,6,7,8,11,14,19,25,35,40) # in number of cliffords
     num_circuits_per_length: int = 15
-    num_averages: int =50
+    num_averages: int = 150
     target_gate: str = "cz" # "idle_2q" or "cz" supported 
     basis_gates: list[str] = ['rz', 'sx', 'x', 'cz'] 
     flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
@@ -244,7 +244,7 @@ for qp in qubit_pairs:
     
     # Plot the results
     fig = rb_result[qp.id].plot_with_fidelity()
-    fig.suptitle(f"2Q Interleaved Randomized Benchmarking - {qp.name}")
+    fig.suptitle(f"2Q {node.parameters.target_gate.upper()} Interleaved Randomized Benchmarking - {qp.name}")
     # node.add_node_info_subtitle(fig)
     fig.show()
     
