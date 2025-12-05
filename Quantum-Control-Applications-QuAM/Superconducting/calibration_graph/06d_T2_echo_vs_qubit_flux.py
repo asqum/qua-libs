@@ -133,7 +133,6 @@ with program() as t2_echo_vs_coupler_flux:
                             amplitude_scale=flux_qubit / qubit.z.operations["const"].amplitude,
                             duration=t,
                         )
-                        wait(2000)
 
                     qubit.xy.wait(t + 1)
                     qubit.xy.play("x180")
@@ -146,7 +145,6 @@ with program() as t2_echo_vs_coupler_flux:
                             amplitude_scale=flux_qubit / qubit.z.operations["const"].amplitude,
                             duration=t,
                         )
-                        wait(2000)
                         
 
                     qubit.xy.play("-x90")
