@@ -121,6 +121,7 @@ with program() as t2_echo_vs_coupler_flux:
         else:
             qubit_pair.coupler.to_decouple_idle()
         wait(1000)
+        qubit_pair.align()
 
         with for_(n, 0, n < n_avg, n + 1):
             save(n, n_st)
@@ -145,6 +146,7 @@ with program() as t2_echo_vs_coupler_flux:
                     if not node.parameters.use_coupler_flux_pulse:
                         qubit_pair.coupler.set_dc_offset(flux_coupler)
                         wait(1000)
+                        qubit_pair.align()
 
                     qubit.xy.play("x90")
 
