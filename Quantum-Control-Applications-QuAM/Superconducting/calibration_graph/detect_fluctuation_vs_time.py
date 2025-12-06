@@ -9,19 +9,20 @@ def to_float_clean(x):
     s = str(x).strip().lstrip("'")
     return float(s)
 
-num_runs = 50 #Chnage
-cooldown_sec = 60 #Chnage
+num_runs = 'inf' #Change an integer. If you wanna keep tracking, set it as 'inf'.
+cooldown_sec = 5 #Change
 
 # folder path to save the file
-out_dir = Path(r'd:\qm_code\as\qua-libs\Quantum-Control-Applications-QuAM\Superconducting\data') #Chnage
+out_dir = Path('/home/ratiswu/Qualibrate_data/5Q4C_Qcage/2025-12-06/#a123_OFFSET_tracking') #Change
 out_dir.mkdir(parents=True, exist_ok=True)
 
 # csv file name (contains the time to avoid overlap)
 session_ts = datetime.now().isoformat(timespec="seconds").replace(":", "-")
 wide_csv = out_dir / f"independent_offset_{session_ts}.csv" 
-
+i = 0
 header_qubits = None  
-for i in range(1, num_runs + 1):
+while True:
+    i += 1
     ts = datetime.now().isoformat(timespec="seconds")
     print(f"[{i:02d}/{num_runs}] {ts} Starting run…")
 
@@ -46,6 +47,10 @@ for i in range(1, num_runs + 1):
         print(f"[{i:02d}/{num_runs}] error: {e!r}, continuing to the next run…")
 
     time.sleep(cooldown_sec)
+    if not isinstance(num_runs, str):
+        if isinstance(num_runs, int):
+            if i == num_runs :
+                break
 
 print(f"All runs finished: {wide_csv}")
 
