@@ -1,21 +1,26 @@
 """
-        RESONATOR SPECTROSCOPY VERSUS FLUX
-This sequence involves measuring the resonator by sending a readout pulse and demodulating the signals to
-extract the 'I' and 'Q' quadratures. This is done across various readout intermediate dfs and flux biases.
-The resonator frequency as a function of flux bias is then extracted and fitted so that the parameters can be stored in the state.
+THREE-TONE COUPLER SPECTROSCOPY WITH COUPLER DC OFFSET
 
-This information can then be used to adjust the readout frequency for the maximum and minimum frequency points.
+Overview:
+    In the absence of a dedicated readout circuit for the coupler, we use three-tone spectroscopy
+    with an target qubit to find the coupler frequency. The coupler frequency is set
+    by using `set_dc_offset`.
+
+Methdology:
+    We begin by applying a weak probe tone to the target qubit at its transition frequency and monitor its
+    state by sending a continuous wave to its readout resonator.
+    At the same time, we strongly drive the coupler through the drive line
+    of the control qubit. When the control qubit drive tone is in resonance with the coupler frequency, the
+    coupler gets partially excited, and the target qubit frequency shifts down due to dispersive
+    interaction between the target qubit and the coupler. As a result, the weak probe tone driving the target
+    qubit no longer excites it, leading to a change in the readout signal of the ancilla qubit. This
+    effectively maps the coupler state to the readout signal of the target qubit.
 
 Prerequisites:
-    - Calibration of the time of flight, offsets, and gains (referenced as "time_of_flight").
-    - Calibration of the IQ mixer connected to the readout line (be it an external mixer or an Octave port).
-    - Identification of the resonator's resonance frequency (referred to as "resonator_spectroscopy").
-    - Configuration of the readout pulse amplitude and duration.
-    - Specification of the expected resonator depletion time in the state.
+    - Calibrations of the readout of the target qubit
 
-Before proceeding to the next node:
-    - Update the relevant flux biases in the state.
-    - Save the current state
+State update:
+    - Coupler RF frequency: `qubit_pair.coupler.RF_frequency`
 """
 
 # %% {Imports}
@@ -41,21 +46,37 @@ import warnings
 # %% {Node_parameters}
 class Parameters(NodeParameters):
     qubit_pairs: Optional[List[str]] = ["coupler_q2_q3"]
-    operation: str = "saturation" #"x180"
-    operation_amplitude_factor: Optional[float] = 0.005 # 1.0
-    operation_len_in_ns: Optional[int] = 1000 #None
+    """List of qubit pair names to measure."""
+    operation: str = "saturation"
+    """Type of operation to perform on the target qubit (e.g., "saturation", "x180"). Defaults to "saturation"."""
+    operation_amplitude_factor: Optional[float] = 0.005  # 0.05  # 0.004, 0.02
+    """Relative amplitude factor for the operation pulse. Defaults to 0.005."""
+    operation_len_in_ns: Optional[int] = 1000
+    """Duration of the operation pulse in nanoseconds. Defaults to 1000 ns."""
     num_averages: int = 1000
-    frequency_span_in_mhz: float = 500
-    frequency_step_in_mhz: float = 0.25
+    """Number of times to average each measurement point. Defaults to 1000."""
+    frequency_span_in_mhz: float = 300
+    """Total frequency span to sweep in MHz. Defaults to 200 MHz."""
+    frequency_step_in_mhz: float = 0.2
+    """Frequency step size in MHz. Defaults to 0.2 MHz."""
     flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
+    """Whether to apply the same flux bias to all qubits or independently. Can be "joint" or "independent". Defaults to "joint"."""
     simulate: bool = False
+    """Whether to run in simulation mode instead of real hardware. Defaults to False."""
     simulation_duration_ns: int = 10_000
+    """Duration of simulation in nanoseconds. Defaults to 10,000 ns."""
     timeout: int = 100
+    """Timeout in seconds for the measurement. Defaults to 100 seconds."""
     load_data_id: Optional[int] = None
+    """Optional ID of previously saved data to load instead of running new measurement. Defaults to None."""
     reset_type: Literal["active", "thermal"] = "active"
-    RF_frequency_startpoint: Optional[float] = 6.80e9
+    """Type of qubit reset to use - "active" or "thermal". Defaults to "active"."""
+    RF_frequency_startpoint: Optional[float] = 6.85e9
+    """Starting RF frequency of coupler in Hz for the scan. Defaults to 6.80 GHz."""
     use_state_discrimination: bool = False
-    coupler_flux: float = 0.20
+    """Whether to use state discrimination in readout. Defaults to False."""
+    coupler_flux: float = 0.05
+    """Coupler flux value set  """
 
 
 node = QualibrationNode(name="50a_three_tone_coupler_spectroscopy_dc_offset", parameters=Parameters())
@@ -79,11 +100,8 @@ qubit_pair_names = [qp.name for qp in qubit_pairs]
 num_qubit_pairs = len(qubit_pairs)
 
 operation = node.parameters.operation  # The qubit operation to play
-
-# Adjust the pulse duration and amplitude to drive the qubit into a mixed state - can be None
 operation_len = node.parameters.operation_len_in_ns
 if node.parameters.operation_amplitude_factor:
-    # pre-factor to the value defined in the config - restricted to [-2; 2)
     operation_amp = node.parameters.operation_amplitude_factor
 else:
     operation_amp = 1.0
@@ -117,7 +135,6 @@ coupler_IFs = {
 
 with program() as multi_res_spec_vs_flux:
     # Declare 'I' and 'Q' and the corresponding streams for the two resonators.
-    # For instance, here 'I' is a python list containing two QUA fixed variables.
     I, I_st, Q, Q_st, n, n_st = qua_declaration(num_qubits=num_qubit_pairs)
     state_target = [declare(int) for _ in range(num_qubit_pairs)]
     state_stream_target = [declare_stream() for _ in range(num_qubit_pairs)]
@@ -126,16 +143,16 @@ with program() as multi_res_spec_vs_flux:
 
     if flux_point == "joint":
         # Bring the active qubits to the desired frequency point
-        machine.set_all_fluxes(flux_point=flux_point, target=qubit_pairs[0].qubit_target)       
-
+        machine.set_all_fluxes(flux_point=flux_point, target=qubit_pairs[0].qubit_target)
+        for qp in qubit_pairs:
+            qp.coupler.set_dc_offset(node.parameters.coupler_flux)
+            wait(1000)       
     align()
+    
     with for_(n, 0, n < n_avg, n + 1):
         save(n, n_st)
         for i, qp in enumerate(qubit_pairs):
-            with for_(*from_array(df, dfs)):  # type: ignore
-                
-                qp.coupler.set_dc_offset(node.parameters.coupler_flux)
-                wait(1000)
+            with for_(*from_array(df, dfs)):  
                 
                 # Qubit initialization
                 qubit_control = qp.qubit_control
@@ -150,7 +167,7 @@ with program() as multi_res_spec_vs_flux:
                     qubit_target.wait(qubit_target.thermalization_time * u.ns)
                     qp.align()
 
-                # update the frequency of the control qubit
+                # update the frequency of the control qubit to couler drive frequency
                 qubit_control.xy.update_frequency(df + coupler_IFs[qp.name])
                 duration = (
                     operation_len * u.ns
@@ -160,9 +177,9 @@ with program() as multi_res_spec_vs_flux:
                 qp.align()
                 
                 # Drive coupler through qubit with a strong drive
-                qubit_control.xy.play("x180", amplitude_scale=0.5, duration=200)
+                qubit_control.xy.play("x180", amplitude_scale=0.25, duration=200)
                 
-                # Apply a probe tone to target qubit   
+                # Apply a probe tone to target qubit
                 qubit_target.xy.play(
                     operation,
                     amplitude_scale=operation_amp,
@@ -224,7 +241,8 @@ if not node.parameters.simulate:
         ds = node.results["ds"]
     else:
         ds = fetch_results_as_xarray(job.result_handles, qubit_pairs, {"freq": dfs})
-        ds = ds.assign({"IQ_abs": np.sqrt(ds["I"] ** 2 + ds["Q"] ** 2)})
+        if not node.parameters.use_state_discrimination:
+            ds = ds.assign({"IQ_abs": np.sqrt(ds["I"] ** 2 + ds["Q"] ** 2)})
         # Add the coupler  RF frequency to the dataset coordinates for plotting
         RF_freq = np.array([dfs + coupler_RFs[qp.name] for qp in qubit_pairs])
         ds = ds.assign_coords({"freq_full_control": (["qubit", "freq"], RF_freq)})
@@ -264,7 +282,6 @@ if not node.parameters.simulate:
     grid.fig.suptitle(f"Coupler spectroscopy \n Coupler flux = {node.parameters.coupler_flux *1e3} mV")
     plt.tight_layout()
     plt.show()
-
     node.results["coupler_spectroscopy"] = grid.fig
 
     # %% {Update_state}
