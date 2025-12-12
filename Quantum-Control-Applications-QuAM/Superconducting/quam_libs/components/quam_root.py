@@ -212,7 +212,7 @@ class QuAM(QuamRoot):
         target.align()
         return target_bias
 
-    def connect(self) -> QuantumMachinesManager:
+    def connect(self, timeout: int = 100) -> QuantumMachinesManager:
         """Open a Quantum Machine Manager with the credentials ("host" and "cluster_name") as defined in the network file.
 
         Returns: the opened Quantum Machine Manager.
@@ -221,6 +221,7 @@ class QuAM(QuamRoot):
             host=self.network["host"],
             cluster_name=self.network["cluster_name"],
             octave=self.get_octave_config(),
+            timeout=timeout,
         )
         if "port" in self.network:
             settings["port"] = self.network["port"]
