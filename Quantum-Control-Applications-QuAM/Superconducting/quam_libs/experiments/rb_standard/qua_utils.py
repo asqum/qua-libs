@@ -211,6 +211,7 @@ def play_gate(gate: QuaVariable, qubit_pair: TransmonPair, state: QuaVariable, s
         with case_(66):
             
             align()
+            wait(4)
             
             readout_state(qubit_pair.qubit_control, state_control)
             readout_state(qubit_pair.qubit_target, state_target)

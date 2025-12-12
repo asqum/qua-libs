@@ -64,20 +64,20 @@ from numpy import arange
 # - Cases with only Z gates (via .frame_rotation()): assign value 0
 # - Case 64 (CZ gate): assign value 1
 # Average number of gate per layer ≈ 1.51
-average_gates_per_2q_layer = 1.51
+average_gates_per_2q_layer = None
 
 
 # %% {Node_parameters}
 
 class Parameters(NodeParameters):
-    qubit_pairs: Optional[List[str]] = ["coupler_q1_q2"]#None
-    circuit_lengths: tuple[int] = (0,1,5,10,25,30,50,80,120,150) # in number of cliffords
-    num_circuits_per_length: int = 15
-    num_averages: int = 150
+    qubit_pairs: Optional[List[str]] = ["coupler_q2_q3"]#None
+    circuit_lengths: tuple[int] = (0,1,2,3,5,6,8,9,10,12,16) # in number of cliffords
+    num_circuits_per_length: int = 20
+    num_averages: int = 100
     basis_gates: list[str] = ['rz', 'sx', 'x', 'cz'] 
     flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
     reset_type_thermal_or_active: Literal["thermal", "active"] = "active"
-    reduce_to_1q_cliffords: bool = True
+    reduce_to_1q_cliffords: bool = False
     use_input_stream: bool = False
     simulate: bool = False
     simulation_duration_ns: int = 10000
@@ -268,9 +268,9 @@ with node.record_state_updates():
     for qp in qubit_pairs:
         qp.extras["StandardRB"] = {
             "error_per_clifford": 1 - rb_result[qp.id].fidelity, 
-            "error_per_2q_layer": rb_result[qp.id].error_per_2q_layer,
-            "error_per_gate": rb_result[qp.id].error_per_gate,
-            "average_gate_fidelity": 1 - rb_result[qp.id].error_per_gate,
+            # "error_per_2q_layer": rb_result[qp.id].error_per_2q_layer,
+            # "error_per_gate": rb_result[qp.id].error_per_gate,
+            # "average_gate_fidelity": 1 - rb_result[qp.id].error_per_gate,
             "alpha": rb_result[qp.id].alpha}
 # %% {Save_results}
 node.save()

@@ -305,3 +305,61 @@ class InterleavedRBResult(RBResult):
         Calculates the interleaved gate fidelity using the formula from https://arxiv.org/pdf/1203.4550.
         """
         return 1 - ((2**2 - 1) * (1 - alpha / self.standard_rb_alpha) / 2**2)
+    
+def plot_combined_rb(qp_name, rb_result_SRB, rb_result_IRB):
+
+    fig, ax = plt.subplots(figsize=(8, 6))
+    decay_curve_SRB = rb_result_SRB.get_decay_curve()
+    error_bars_SRB = (rb_result_SRB.data == 0).stack(combined=("average", "repeat")).std(dim="combined").state.data / np.sqrt(rb_result_SRB.num_repeats * rb_result_SRB.num_averages)
+
+    ax.errorbar(
+        rb_result_SRB.circuit_depths,
+        decay_curve_SRB,
+        yerr=error_bars_SRB,
+        fmt="o", 
+        capsize=3,
+        elinewidth=1.0,
+        color="red",
+        label="SRB Experimental Data",
+    )
+
+    circuit_depths_smooth = np.linspace(rb_result_SRB.circuit_depths[0], rb_result_SRB.circuit_depths[-1], 100)
+    ax.plot(
+        circuit_depths_smooth,
+        rb_decay_curve(np.array(circuit_depths_smooth), rb_result_SRB.A, rb_result_SRB.alpha, rb_result_SRB.B),
+        color="red",
+        linestyle="--",
+        linewidth=2,
+        label=f"SRB Fit (Clifford Fidelity = {rb_result_SRB.fidelity * 100:.2f}%)",
+    )
+    
+
+    decay_curve_IRB = rb_result_IRB.get_decay_curve()
+    error_bars_IRB = (rb_result_IRB.data == 0).stack(combined=("average", "repeat")).std(dim="combined").state.data / np.sqrt(rb_result_IRB.num_repeats * rb_result_IRB.num_averages)
+    ax.errorbar(
+        rb_result_IRB.circuit_depths,
+        decay_curve_IRB,
+        yerr=error_bars_IRB,
+        fmt="s", 
+        capsize=3,
+        elinewidth=1.0,
+        color="blue",
+        label="IRB Experimental Data",
+    )
+
+    ax.plot(
+        circuit_depths_smooth,
+        rb_decay_curve(np.array(circuit_depths_smooth), rb_result_IRB.A, rb_result_IRB.alpha, rb_result_IRB.B),
+        color="blue",
+        linestyle="-",
+        linewidth=2,
+        label=f"IRB Fit (Target Gate Fidelity = {rb_result_IRB.fidelity * 100:.2f}%)",
+    )
+
+    ax.set_title(f"2Q Randomized Benchmarking - {qp_name}", fontsize=16)
+    ax.set_xlabel("Circuit Depth")
+    ax.set_ylabel(r"Probability to recover to a given state")
+    ax.legend(loc='best', frameon=True, shadow=True)
+    ax.grid(True, linestyle=':', alpha=0.7)
+    
+    return fig
