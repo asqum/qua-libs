@@ -60,19 +60,19 @@ from quam_libs.experiments.rb_standard.data_utils import plot_combined_rb
 from quam_libs.experiments.rb_standard.plot_utils import gate_mapping
 
 
-
+# Question data S-11094 I-11095 -> CZ 100%
 
 # %% {Node_parameters}
 
 class Parameters(NodeParameters):
     qubit_pairs: Optional[List[str]] = ["coupler_q2_q3"]#None
-    circuit_lengths: tuple[int] = (0,1,2,3,5,6,8,9,10,12,16) # in number of cliffords
+    circuit_lengths: tuple[int] = (0,) # in number of cliffords
     num_circuits_per_length: int = 1
     num_averages: int =1
-    target_gate: str = "cz" # "idle_2q" or "cz" supported 
-    basis_gates: list[str] = ['rz', 'sx', 'x', 'cz'] 
-    load_data_id_SRB: Optional[int] = 1518 #put the data id of the standard RB here
-    load_data_id_IRB: Optional[int] = 1519 #put the data id of the interleaved RB here
+    target_gate: str = "" # "idle_2q" or "cz" supported 
+    basis_gates: list[str] = [] 
+    load_data_id_SRB: Optional[int] = 11115 #put the data id of the standard RB here
+    load_data_id_IRB: Optional[int] = 11116 #put the data id of the interleaved RB here
     reduce_to_1q_cliffords: bool = False
     timeout: int = 100
     seed: int = 0
@@ -99,6 +99,7 @@ config = node.machine.generate_config()
 #%% {Load_data_IRB}
 node_IRB = node.load_from_id(node.parameters.load_data_id_IRB)
 ds_IRB = node_IRB.results["ds"]
+target_gate = node_IRB.parameters.target_gate
 circuit_depths_IRB = list(node_IRB.parameters.circuit_lengths)
 num_repeats_IRB = node_IRB.parameters.num_circuits_per_length
 num_averages_IRB = node_IRB.parameters.num_averages 
@@ -184,11 +185,11 @@ for qp in qubit_pairs:
     
     node.results[f"{qp.id}_figure_IRB_decay"] = fig_IRB
 
-
     fig_combined = plot_combined_rb(
         qp.name,
         rb_result_SRB[qp.id],
-        rb_result_IRB[qp.id]
+        rb_result_IRB[qp.id],
+        target_gate=target_gate.upper()
     )
 
     fig_combined.show()

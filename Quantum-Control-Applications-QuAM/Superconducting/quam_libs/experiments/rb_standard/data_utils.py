@@ -304,9 +304,13 @@ class InterleavedRBResult(RBResult):
         """
         Calculates the interleaved gate fidelity using the formula from https://arxiv.org/pdf/1203.4550.
         """
+        n_qubits = 2  # Assuming 2 qubits as per the context
+        d = 2**n_qubits
+        self.IRB_decayTau = 1 - (1 - alpha - (1 - alpha) / d) # error per clifford
+        
         return 1 - ((2**2 - 1) * (1 - alpha / self.standard_rb_alpha) / 2**2)
     
-def plot_combined_rb(qp_name, rb_result_SRB, rb_result_IRB):
+def plot_combined_rb(qp_name, rb_result_SRB, rb_result_IRB, target_gate:str|None=None):
 
     fig, ax = plt.subplots(figsize=(8, 6))
     decay_curve_SRB = rb_result_SRB.get_decay_curve()
@@ -336,6 +340,7 @@ def plot_combined_rb(qp_name, rb_result_SRB, rb_result_IRB):
 
     decay_curve_IRB = rb_result_IRB.get_decay_curve()
     error_bars_IRB = (rb_result_IRB.data == 0).stack(combined=("average", "repeat")).std(dim="combined").state.data / np.sqrt(rb_result_IRB.num_repeats * rb_result_IRB.num_averages)
+    _ = rb_result_IRB.get_fidelity(rb_result_IRB.alpha)
     ax.errorbar(
         rb_result_IRB.circuit_depths,
         decay_curve_IRB,
@@ -344,7 +349,7 @@ def plot_combined_rb(qp_name, rb_result_SRB, rb_result_IRB):
         capsize=3,
         elinewidth=1.0,
         color="blue",
-        label="IRB Experimental Data",
+        label=f"IRB Experimental Data",
     )
 
     ax.plot(
@@ -353,10 +358,10 @@ def plot_combined_rb(qp_name, rb_result_SRB, rb_result_IRB):
         color="blue",
         linestyle="-",
         linewidth=2,
-        label=f"IRB Fit (Target Gate Fidelity = {rb_result_IRB.fidelity * 100:.2f}%)",
+        label=f"IRB Fit, Fidelity = {rb_result_IRB.IRB_decayTau*100:.2f}%",
     )
 
-    ax.set_title(f"2Q Randomized Benchmarking - {qp_name}", fontsize=16)
+    ax.set_title(f"{qp_name} {'Target' if target_gate is None else target_gate} Gate Fidelity = {rb_result_IRB.fidelity * 100:.2f}%", fontsize=16)
     ax.set_xlabel("Circuit Depth")
     ax.set_ylabel(r"Probability to recover to a given state")
     ax.legend(loc='best', frameon=True, shadow=True)
