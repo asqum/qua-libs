@@ -45,23 +45,29 @@ class Parameters(NodeParameters):
 
     qubit_pairs: Optional[List[str]] = ["coupler_q2_q3"]
     """List of qubit pair names to measure. Defaults to ["coupler_q2_q3"]."""
-    operation: str = "saturation"
+    control_drive_operation: Literal["x180_Square", "x180"] = "x180_Square"
+    """Type of control qubit drive operation."""
+    control_pulse_duration_in_ns: int = 800
+    """Duration of the control qubit pulse in ns."""
+    control_pulse_amplitude: float = 0.2
+    """Amplitude scale for the control qubit pulse."""
+    target_drive_operation: str = "saturation"
     """Type of operation to perform on the target qubit (e.g., "saturation", "x180"). Defaults to "saturation"."""
-    operation_amplitude_factor: Optional[float] = 0.005  # 0.05  # 0.004, 0.02
-    """Relative amplitude factor for the operation pulse. Defaults to 0.005."""
-    operation_len_in_ns: Optional[int] = 1000
-    """Duration of the operation pulse in nanoseconds. Defaults to 1000 ns."""
-    num_averages: int = 1000
+    target_pulse_amplitude: Optional[float] = 0.005  # 0.05  # 0.004, 0.02
+    """Relative amplitude factor for the target drive pulse. Defaults to 0.005."""
+    target_pulse_duration_in_ns: Optional[int] = 1000
+    """Duration of the target qubit pulse in nanoseconds. Defaults to 1000 ns."""
+    num_averages: int = 200
     """Number of times to average each measurement point. Defaults to 1000."""
-    frequency_span_in_mhz: float = 200
+    frequency_span_in_mhz: float = 900
     """Total frequency span to sweep in MHz. Defaults to 200 MHz."""
-    frequency_step_in_mhz: float = 0.2
+    frequency_step_in_mhz: float = 2.0
     """Frequency step size in MHz. Defaults to 0.2 MHz."""
     flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
     """Whether to apply the same flux bias to all qubits or independently. Can be "joint" or "independent". Defaults to "joint"."""
     coupler_flux_min: float = 0.0
     """Minimum coupler flux bias value. Defaults to -0.2."""
-    coupler_flux_max: float = 0.2
+    coupler_flux_max: float = 0.3
     """Maximum coupler flux bias value. Defaults to 0.2."""
     coupler_flux_num_step: float = 51
     """Number of flux bias steps to scan. Defaults to 21."""
@@ -75,9 +81,9 @@ class Parameters(NodeParameters):
     """Optional ID of previously saved data to load instead of running new measurement. Defaults to None."""
     reset_type: Literal["active", "thermal"] = "active"
     """Type of qubit reset to use - "active" or "thermal". Defaults to "active"."""
-    RF_frequency_startpoint: Optional[float] = 6.85e9
+    RF_frequency_startpoint: Optional[float] = 7.2e9
     """Starting RF frequency of coupler in Hz for the scan. Defaults to 6.80 GHz."""
-    use_state_discrimination: bool = False
+    use_state_discrimination: bool = True
     """Whether to use state discrimination in readout. Defaults to False."""
     use_flux_pulse: bool = False
     """Whether to use flux pulse for coupler. Defaults to False."""
@@ -103,15 +109,6 @@ qubit_pair_names = [qp.name for qp in qubit_pairs]
 
 num_qubit_pairs = len(qubit_pairs)
 
-operation = node.parameters.operation
-
-# Adjust the pulse duration and amplitude to drive the qubit into a mixed state - can be None
-operation_len = node.parameters.operation_len_in_ns
-if node.parameters.operation_amplitude_factor:
-    # pre-factor to the value defined in the config - restricted to [-2; 2)
-    operation_amp = node.parameters.operation_amplitude_factor
-else:
-    operation_amp = 1.0
 # Generate the OPX and Octave configurations
 config = machine.generate_config()
 # Open Communication with the QOP
@@ -181,21 +178,32 @@ with program() as multi_res_spec_vs_flux:
 
                     # update the frequency of the control qubit to couler drive frequency
                     qubit_control.xy.update_frequency(df + coupler_IFs[qp.name])
-                    duration = (
-                        operation_len * u.ns
-                        if operation_len is not None
-                        else qubit_target.xy.operations[operation].length * u.ns
+                    
+                    target_pulse_duration = (
+                        node.parameters.target_pulse_duration_in_ns * u.ns
+                        if node.parameters.target_pulse_duration_in_ns is not None
+                        else qubit_target.xy.operations[node.parameters.target_drive_operation].length * u.ns
+                        )
+                    control_pulse_duration = (
+                        node.parameters.control_pulse_duration_in_ns * u.ns
+                        if node.parameters.control_pulse_duration_in_ns is not None
+                        else qubit_control.xy.operations[node.parameters.control_drive_operation].length * u.ns
                     )
+
                     qp.align()
                     
                     # Drive coupler through qubit with a strong drive
-                    qubit_control.xy.play("x180", amplitude_scale=0.25, duration=200)
+                    qubit_control.xy.play(
+                        node.parameters.control_drive_operation,
+                        amplitude_scale=node.parameters.control_pulse_amplitude,
+                        duration=control_pulse_duration,
+                    )
                     
                     # Apply a probe tone to target qubit
                     qubit_target.xy.play(
-                        operation,
-                        amplitude_scale=operation_amp,
-                        duration=duration,
+                        node.parameters.target_drive_operation,
+                        amplitude_scale=node.parameters.target_pulse_amplitude,
+                        duration=target_pulse_duration,
                     )
                     qp.align()
                     

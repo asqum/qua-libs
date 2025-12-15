@@ -27,10 +27,8 @@ State update:
 from qualibrate import QualibrationNode, NodeParameters
 from quam_libs.components import QuAM
 from quam_libs.macros import qua_declaration, active_reset_simple, readout_state
-from quam_libs.lib.qua_datasets import convert_IQ_to_V
 from quam_libs.lib.plot_utils import QubitPairGrid, grid_iter, grid_pair_names
-from quam_libs.lib.save_utils import fetch_results_as_xarray, load_dataset
-from quam_libs.lib.fit import fit_oscillation
+from quam_libs.lib.save_utils import fetch_results_as_xarray
 from qualang_tools.results import progress_counter, fetching_tool
 from qualang_tools.loops import from_array
 from qualang_tools.multi_user import qm_session
@@ -40,27 +38,32 @@ from qm.qua import *
 from typing import Literal, Optional, List
 import matplotlib.pyplot as plt
 import numpy as np
-import warnings
 
 
 # %% {Node_parameters}
 class Parameters(NodeParameters):
     qubit_pairs: Optional[List[str]] = ["coupler_q2_q3"]
     """List of qubit pair names to measure."""
-    operation: str = "saturation"
-    """Type of operation to perform on the target qubit (e.g., "saturation", "x180"). Defaults to "saturation"."""
-    operation_amplitude_factor: Optional[float] = 0.005  # 0.05  # 0.004, 0.02
-    """Relative amplitude factor for the operation pulse. Defaults to 0.005."""
-    operation_len_in_ns: Optional[int] = 1000
-    """Duration of the operation pulse in nanoseconds. Defaults to 1000 ns."""
     num_averages: int = 1000
     """Number of times to average each measurement point. Defaults to 1000."""
-    frequency_span_in_mhz: float = 300
+    frequency_span_in_mhz: float = 800
     """Total frequency span to sweep in MHz. Defaults to 200 MHz."""
-    frequency_step_in_mhz: float = 0.2
+    frequency_step_in_mhz: float = 1.0
     """Frequency step size in MHz. Defaults to 0.2 MHz."""
     flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
     """Whether to apply the same flux bias to all qubits or independently. Can be "joint" or "independent". Defaults to "joint"."""
+    control_drive_operation: Literal["x180_Square", "x180"] = "x180_Square"
+    """Type of control qubit drive operation."""
+    control_pulse_duration_in_ns: int = 800
+    """Duration of the control qubit pulse in ns."""
+    control_pulse_amplitude: float = 0.2
+    """Amplitude scale for the control qubit pulse."""
+    target_drive_operation: str = "saturation"
+    """Type of operation to perform on the target qubit (e.g., "saturation", "x180"). Defaults to "saturation"."""
+    target_pulse_amplitude: Optional[float] = 0.005  # 0.05  # 0.004, 0.02
+    """Relative amplitude factor for the target drive pulse. Defaults to 0.005."""
+    target_pulse_duration_in_ns: Optional[int] = 1000
+    """Duration of the target qubit pulse in nanoseconds. Defaults to 1000 ns."""
     simulate: bool = False
     """Whether to run in simulation mode instead of real hardware. Defaults to False."""
     simulation_duration_ns: int = 10_000
@@ -71,11 +74,11 @@ class Parameters(NodeParameters):
     """Optional ID of previously saved data to load instead of running new measurement. Defaults to None."""
     reset_type: Literal["active", "thermal"] = "active"
     """Type of qubit reset to use - "active" or "thermal". Defaults to "active"."""
-    RF_frequency_startpoint: Optional[float] = 6.85e9
+    RF_frequency_startpoint: Optional[float] = 7.4e9
     """Starting RF frequency of coupler in Hz for the scan. Defaults to 6.80 GHz."""
     use_state_discrimination: bool = False
     """Whether to use state discrimination in readout. Defaults to False."""
-    coupler_flux: float = 0.05
+    coupler_flux: float = 0.07
     """Coupler flux value set  """
 
 
@@ -98,13 +101,6 @@ num_qubit_pairs = len(qubit_pairs)
 qubit_pair_names = [qp.name for qp in qubit_pairs]
 
 num_qubit_pairs = len(qubit_pairs)
-
-operation = node.parameters.operation  # The qubit operation to play
-operation_len = node.parameters.operation_len_in_ns
-if node.parameters.operation_amplitude_factor:
-    operation_amp = node.parameters.operation_amplitude_factor
-else:
-    operation_amp = 1.0
 
 # Generate the OPX and Octave configurations
 config = machine.generate_config()
@@ -146,18 +142,18 @@ with program() as multi_res_spec_vs_flux:
         machine.set_all_fluxes(flux_point=flux_point, target=qubit_pairs[0].qubit_target)
         for qp in qubit_pairs:
             qp.coupler.set_dc_offset(node.parameters.coupler_flux)
-            wait(1000)       
-    align()
-    
+            wait(1000)
+        align()
+
     with for_(n, 0, n < n_avg, n + 1):
         save(n, n_st)
         for i, qp in enumerate(qubit_pairs):
-            with for_(*from_array(df, dfs)):  
-                
+            with for_(*from_array(df, dfs)):
+
                 # Qubit initialization
                 qubit_control = qp.qubit_control
                 qubit_target = qp.qubit_target
-                
+
                 if node.parameters.reset_type == "active":
                     active_reset_simple(qubit_control)
                     active_reset_simple(qubit_target)
@@ -169,24 +165,37 @@ with program() as multi_res_spec_vs_flux:
 
                 # update the frequency of the control qubit to couler drive frequency
                 qubit_control.xy.update_frequency(df + coupler_IFs[qp.name])
-                duration = (
-                    operation_len * u.ns
-                    if operation_len is not None
-                    else qubit_target.xy.operations[operation].length * u.ns
+
+                target_pulse_duration = (
+                    node.parameters.target_pulse_duration_in_ns * u.ns
+                    if node.parameters.target_pulse_duration_in_ns is not None
+                    else qubit_target.xy.operations[node.parameters.target_drive_operation].length * u.ns
                 )
+                control_pulse_duration = (
+                    node.parameters.control_pulse_duration_in_ns * u.ns
+                    if node.parameters.control_pulse_duration_in_ns is not None
+                    else qubit_control.xy.operations[node.parameters.control_drive_operation].length * u.ns
+                )
+
                 qp.align()
-                
+
                 # Drive coupler through qubit with a strong drive
-                qubit_control.xy.play("x180", amplitude_scale=0.25, duration=200)
-                
+                qubit_control.xy.play(
+                    node.parameters.control_drive_operation,
+                    amplitude_scale=node.parameters.control_pulse_amplitude,
+                    duration=control_pulse_duration,
+                )
+                # qp.align()
+
                 # Apply a probe tone to target qubit
                 qubit_target.xy.play(
-                    operation,
-                    amplitude_scale=operation_amp,
-                    duration=duration,
+                    node.parameters.target_drive_operation,
+                    amplitude_scale=node.parameters.target_pulse_amplitude,
+                    duration=target_pulse_duration,
                 )
-                qp.align()
                 
+                qp.align()
+
                 # Measure target qubit and save data
                 if node.parameters.use_state_discrimination:
                     readout_state(qp.qubit_target, state_target[i])
@@ -260,16 +269,16 @@ if not node.parameters.simulate:
 
     min_freqs = ds.freq_full_control.isel(freq=min_idx)
     for qp in qubit_pairs:
-        print(f"coupler Frequency for {qp.name} at flux {node.parameters.coupler_flux} V: {min_freqs.sel(qubit=qp.name).values*1e-9:.2f} GHz")
+        print(
+            f"coupler Frequency for {qp.name} at flux {node.parameters.coupler_flux} V: {min_freqs.sel(qubit=qp.name).values*1e-9:.2f} GHz"
+        )
 
     # %% {Plotting}
     grid_names, qubit_pair_names = grid_pair_names(qubit_pairs)
     grid = QubitPairGrid(grid_names, qubit_pair_names)
     for ax, qp in grid_iter(grid):
         if node.parameters.use_state_discrimination:
-            ds.assign_coords(freq_GHz=ds.freq_full_control / 1e9).sel(qubit=qp["qubit"]).state.plot(
-                ax=ax, x="freq_GHz"  
-            )
+            ds.assign_coords(freq_GHz=ds.freq_full_control / 1e9).sel(qubit=qp["qubit"]).state.plot(ax=ax, x="freq_GHz")
         else:
             ds.assign_coords(freq_GHz=ds.freq_full_control / 1e9).sel(qubit=qp["qubit"]).IQ_abs.plot(
                 ax=ax, x="freq_GHz"
