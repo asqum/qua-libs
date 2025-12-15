@@ -36,7 +36,10 @@ def qiskit_to_qua_macro(circuit: QuantumCircuit, machine: QuAM, target_qubits: L
         try:
             qubits = instruction.qubits
             if instruction.operation.name == "barrier":
-               continue
+                # Align the qubits involved in the barrier
+               involved_qubits = [machine.active_qubits[qubit_indices[q]] for q in qubits]
+               involved_qubits[0].align(*involved_qubits[1:])
+               
             if instruction.operation.name == "multiplexed_measurement":
                 involved_qubits = [machine.active_qubits[qubit_indices[q]] for q in qubits]
                 clbits_indices = [qc.find_bit(clbit).index for clbit in instruction.clbits]
