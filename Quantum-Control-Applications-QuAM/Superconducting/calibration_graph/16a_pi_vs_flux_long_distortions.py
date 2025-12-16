@@ -13,7 +13,7 @@ from qualang_tools.loops import from_array
 from qualang_tools.multi_user import qm_session
 from qualang_tools.results import fetching_tool, progress_counter
 from qualang_tools.units import unit
-from quam_libs.macros import qua_declaration, active_reset
+from quam_libs.macros import qua_declaration, active_reset, active_reset_simple
 
 from qualibrate import QualibrationNode, NodeParameters
 from quam_libs.trackable_object import tracked_updates
@@ -33,28 +33,28 @@ Pi vs Flux :
 """
 
 class Parameters(NodeParameters):
-    qubits: Optional[List[str]] = ["q1"]
-    num_shots: int = 100
+    qubits: Optional[List[str]] = ["q2"]
+    num_shots: int = 10
     operation: str = "x180"
     operation_amplitude_factor: float = 1.0
-    duration_in_ns: int = 9000
-    time_axis: Literal["linear", "log"] = "linear"
+    duration_in_ns: int = 1000_000
+    time_axis: Literal["linear", "log"] = "log"
     time_step_in_ns: int = 48
-    time_step_num: int = 200
+    time_step_num: int = 50
     frequency_span_in_mhz: float = 300
-    frequency_step_in_mhz: float = 0.4
+    frequency_step_in_mhz: float = 1.0
     fitting_base_fractions: List[float] = [0.4, 0.15, 0.05]
     update_state: bool = False
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
     timeout: int = 100
     multiplexed: bool = False
-    reset_type_active_or_thermal: Literal["active", "thermal"] = "thermal"
-    thermal_reset_extra_time_in_us: int = 20_000
+    reset_type_active_or_thermal: Literal["active", "thermal"] = "active"
+    thermal_reset_extra_time_in_us: int = 0
     min_wait_time_in_ns: int = 32
     use_state_discrimination: bool = False
     load_data_id:str = None
     simulate:str = None 
-    detuning_in_mhz: int = 200
+    detuning_in_mhz: int = 50
 
 node = QualibrationNode(
     name="16a_pi_vs_flux_long_distortions",
@@ -181,7 +181,16 @@ with program() as qua_prog:
             with for_(*from_array(df, dfs)):
                 # Time delay loop
                 with for_each_(t_delay, times):
-                    wait(thermal_reset_extra_time_in_us//4)
+                    
+                    if node.parameters.reset_type_active_or_thermal == "active":
+                        active_reset(qubit)
+                    else:
+                        qubit.wait(qubit.thermalization_time * u.ns)
+                   
+                    if node.parameters.thermal_reset_extra_time_in_us:
+                        qubit.wait(node.parameters.thermal_reset_extra_time_in_us * u.us)
+                    qubit.align()
+                    
                     # Step the qubit spectroscopy tone frequency
                     qubit.xy.update_frequency(df + qubit.xy.intermediate_frequency - if_update[i])
                     qubit.align()
@@ -272,7 +281,6 @@ node.results["fit_results"] = {k: asdict(v) for k, v in fit_results.items()}
 # %% {Plot}
 ds = node.results["ds_proc"]
 fig = plot_fit(ds, qubits, node.results.get("fit_results"))
-plt.show()
 plt.show()
 node.results["fitted_data"] = fig
 
