@@ -45,7 +45,7 @@ class Parameters(NodeParameters):
 
     qubit_pairs: Optional[List[str]] = ["coupler_q2_q3"]
     """List of qubit pair names to be measured. If None or empty, all active qubit pairs are measured."""
-    num_averages: int = 200
+    num_averages: int = 50
     """Number of averages for the measurement."""
     frequency_span_in_mhz: float = 400
     """Frequency span around the coupler RF frequency for the scan."""
@@ -53,17 +53,17 @@ class Parameters(NodeParameters):
     """Frequency step size for the scan."""
     flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
     """Whether to set flux point jointly for all qubits or independently."""
-    duration_in_ns: Optional[int] = 2000_000
+    duration_in_ns: Optional[int] = 300_000
     """Total duration of the flux pulse in ns."""
-    time_axis: Literal["linear", "log"] = "log"
+    time_axis: Literal["linear", "log"] = "linear"
     """Type of time axis for the flux pulse duration sweep."""
-    time_step_num: Optional[int] = 50 
+    time_step_num: Optional[int] = 101 
     """Number of time steps for logarithmic time axis."""
-    min_wait_time_in_ns: Optional[int] = 100
+    min_wait_time_in_ns: Optional[int] = 16
     """Minimum wait time in ns for the flux pulse duration sweep."""
     use_state_discrimination: bool = False
     """Whether to use state discrimination in readout. Defaults to False."""
-    coupler_flux: float = 0.1
+    coupler_flux: float = 0.09
     """Coupler flux value set  """
     detuning_in_mhz: Optional[float] = 0.0
     """Detuning of the coupler from its RF frequency in MHz."""
@@ -71,7 +71,7 @@ class Parameters(NodeParameters):
     """Type of control qubit drive operation."""
     control_pulse_duration_in_ns: int = 500 
     """Duration of the control qubit pulse in ns."""
-    control_pulse_amplitude: float = 0.09
+    control_pulse_amplitude: float = 0.08
     """Amplitude scale for the control qubit pulse."""
     target_drive_operation: str = "saturation"
     """Type of operation to perform on the target qubit (e.g., "saturation", "x180"). Defaults to "saturation"."""
@@ -87,7 +87,7 @@ class Parameters(NodeParameters):
     """Timeout for the QOP session in seconds."""
     load_data_id: Optional[int] = None
     """If provided, load data from the specified node ID instead of executing the program."""
-    reset_type: Literal["active", "thermal"] = "active"
+    reset_type: Literal["active", "thermal"] = "thermal"
     """Type of qubit reset to use: 'active' or 'thermal'."""
     wait_extra_time: Optional[bool] = True
     """Whether to wait extra time after flux pulse before control pulse."""
@@ -125,7 +125,7 @@ n_avg = node.parameters.num_averages  # The number of averages
 span = node.parameters.frequency_span_in_mhz * u.MHz
 step = node.parameters.frequency_step_in_mhz * u.MHz
 # dfs = np.arange(-span / 2, +span / 2, step)
-dfs = np.arange(-100e6, -50e6, step)  # Fixing the frequency range for better fitting
+dfs = np.arange(-180e6, -150e6, step)  # Fixing the frequency range for better fitting
 
 # Flux bias sweep
 if node.parameters.time_axis == "linear":
@@ -190,8 +190,8 @@ with program() as multi_res_spec_vs_flux:
                         qp.align()
 
                     else:
-                        qubit_control.reset_qubit_thermal()
-                        qubit_target.reset_qubit_thermal()
+                        qubit_control.wait(qubit_control.thermalization_time * u.ns)
+                        qubit_target.wait(qubit_target.thermalization_time * u.ns)
                         qp.align()
 
                     if node.parameters.wait_extra_time:
@@ -217,7 +217,7 @@ with program() as multi_res_spec_vs_flux:
                     qp.coupler.play(
                         "const",
                         amplitude_scale=node.parameters.coupler_flux / qp.coupler.operations["const"].amplitude,
-                        duration=t_delay + 200,
+                        duration=t_delay + 400,
                     )
                     qubit_control.xy.wait(t_delay)
                     
@@ -312,7 +312,7 @@ if not node.parameters.simulate:
     import xarray as xr
     from calibration_utils.pi_flux.analysis import fit_gaussian, PiFluxParameters, optimize_start_fractions
     
-    node.parameters.fitting_base_fractions = [0.4, 0.1, 0.05]
+    node.parameters.fitting_base_fractions = [0.4, 0.1, 0.005]
     if node.parameters.use_state_discrimination and "state_target" in ds.data_vars:
         state_da = ds["state_target"].transpose("qubit", "time", "detuning")
         center_freqs = xr.apply_ufunc(
@@ -326,7 +326,7 @@ if not node.parameters.simulate:
         )
     else:
         # center_freqs = extract_center_freqs_iq(ds, dfs)
-        stacked = ds.Q.transpose("qubit", "time", "detuning")
+        stacked = ds.IQ_abs.transpose("qubit", "time", "detuning")
         center_freqs = xr.apply_ufunc(
             lambda iq_slice: fit_gaussian(dfs, iq_slice),
             stacked,
@@ -342,7 +342,7 @@ if not node.parameters.simulate:
     
     # Calculate flux response from frequency shifts
     flux_response = np.sqrt(-1*center_freqs )
-    flux_response_normalized = flux_response # / flux_response.isel(time = slice(0, 5)).mean(dim = "time")
+    flux_response_normalized = flux_response / flux_response.isel(time = slice(0, 5)).mean(dim = "time")
     # Store results in dataset
     ds['center_freqs'] = center_freqs
     ds['flux_response'] = flux_response
@@ -353,7 +353,7 @@ if not node.parameters.simulate:
         t_data = flux_response_normalized.sel(qubit=q.name).time.values
         y_data = flux_response_normalized.sel(qubit=q.name).values
         fit_successful, best_fractions, best_components, best_a_dc, best_rms = optimize_start_fractions(
-            t_data, y_data, node.parameters.fitting_base_fractions, bounds_scale=0.5
+            t_data, y_data, node.parameters.fitting_base_fractions, bounds_scale=0.5, a_dc=flux_response_normalized.min().values
         )
         fit_results[q.name] = PiFluxParameters(
             fit_successful=fit_successful,
@@ -429,7 +429,7 @@ if not node.parameters.simulate:
         ax_top = fig.add_subplot(gs[0, :])  # span both columns
         if ds is not None:
             if "IQ_abs" in ds.data_vars:
-                ds.Q.sel(qubit=qubit_name).plot(ax=ax_top, label="IQ_abs", cmap = "viridis")
+                ds.IQ_abs.sel(qubit=qubit_name).plot(ax=ax_top, label="IQ_abs", cmap = "viridis")
             elif "I" in ds.data_vars:
                 ds.I.sel(qubit=qubit_name).plot(ax=ax_top, label="I", cmap = "viridis")
             elif "state_target" in ds.data_vars:
