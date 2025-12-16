@@ -20,6 +20,7 @@ class TunableCoupler(SingleChannel):
 
     decouple_offset: float = 0.0
     interaction_offset: float = 0.0
+    RF_frequency: float = 0.0
 
     def __post_init__(self):
         if isinstance(self.opx_output, LFFEMAnalogOutputPort):
