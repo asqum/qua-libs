@@ -62,7 +62,7 @@ def plot_raw_data_with_fit(
         secax.set_xlabel("Detuning (MHz)")
 
         ax_main.set_title(qp_name)
-        ax_main.set_xlabel("Amplitude (V)")
+        ax_main.set_xlabel("Qubit flux shift (V)")
         ax_main.set_ylabel("# CZ operations")
         ax_main.legend(loc="upper right", fontsize=8)
         cbar = fig.colorbar(pcm, ax=ax_main, shrink=0.85)
