@@ -155,6 +155,7 @@ with program() as CPhase_Oscillations:
     control_initial = declare(int)
     flux_coupler = declare(float)
     flux_qubit = declare(float)
+    comp_flux_qubit = declare(float)
     n = declare(int)
     n_st = declare_stream()
     state_control = [declare(int) for _ in range(num_qubit_pairs)]
@@ -190,6 +191,12 @@ with program() as CPhase_Oscillations:
                             else:
                                 wait(qp.qubit_control.thermalization_time * u.ns)
                             qp.align()
+                            if "coupler_qubit_crosstalk" in qp.extras:
+                                assign(comp_flux_qubit, flux_qubit + qp.extras["coupler_qubit_crosstalk"] * flux_coupler)
+                            else:
+                                print("No crosstalk compensated")
+                                assign(comp_flux_qubit, flux_qubit)
+
                             reset_frame(qp.qubit_target.xy.name)
                             reset_frame(qp.qubit_control.xy.name)
                             # setting both qubits ot the initial state
@@ -201,7 +208,7 @@ with program() as CPhase_Oscillations:
 
                             # play the CZ gate
                             qp.gates[operation_name].execute(
-                                amplitude_scale=flux_qubit / qp.gates[operation_name].flux_pulse_control.amplitude, 
+                                amplitude_scale=comp_flux_qubit / qp.gates[operation_name].flux_pulse_control.amplitude, 
                                 coupler_amplitude_scale=flux_coupler/qp.gates[operation_name].coupler_flux_pulse.amplitude
                                 )
                             align()
