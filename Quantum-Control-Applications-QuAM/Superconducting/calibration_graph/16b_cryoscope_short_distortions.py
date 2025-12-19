@@ -96,6 +96,8 @@ class Parameters(NodeParameters):
     """Reset type"""
     use_state_discrimination: bool = "False"
     """Whether to use state discrimination"""
+    t_guard: int = 300
+    """A gaurd time to make sure second xy pulse play after the flux pulse has ended. Dont exeed ~20% of T2*"""
     timeout: int = 100
     """Mesurement timeout"""
     simulate:str = None 
@@ -246,7 +248,7 @@ with program() as qua_prog:
                                 qubit.xy.play("x90")
                                 qubit.z.wait((qubit.xy.operations["x90"].length + 16) // 4)
                                 baked_signals[qubit.name][j - 1].run()  # Play the baked pulse
-                                qubit.xy.wait((cryoscope_len + 16) >> 2)  # 16ns buffer between pulses
+                                qubit.xy.wait((cryoscope_len + node.parameters.t_guard) >> 2)  # 16ns buffer between pulses
                                 qubit.xy.frame_rotation_2pi(frame)
                                 qubit.xy.play("x90")
                 # For pulse durations above 16ns we combine baking with regular play statements.
@@ -267,7 +269,7 @@ with program() as qua_prog:
                                 duration=t_cycles,
                                 amplitude_scale=amplitude / qubit.z.operations["const"].amplitude,
                             )
-                            qubit.xy.wait((cryoscope_len + 16) // 4)
+                            qubit.xy.wait((cryoscope_len + node.parameters.t_guard) // 4)
                             qubit.xy.frame_rotation_2pi(frame)
                             qubit.xy.play("x90")
                         # Play the pulse multiple of 4 followed by the baked pulse of the missing duration
@@ -282,7 +284,7 @@ with program() as qua_prog:
                                     amplitude_scale=amplitude / qubit.z.operations["const"].amplitude,
                                 )
                                 baked_signals[qubit.name][j - 1].run()
-                                qubit.xy.wait((cryoscope_len + 16) // 4)
+                                qubit.xy.wait((cryoscope_len + node.parameters.t_guard) // 4)
                                 qubit.xy.frame_rotation_2pi(frame)
                                 qubit.xy.play("x90")
                 # Wait for the idle time set slightly above the maximum flux pulse duration
@@ -298,6 +300,7 @@ with program() as qua_prog:
                 else:
                     save(I[0], I_st[0])
                     save(Q[0], Q_st[0])
+                align()
 
     with stream_processing():
         # for the progress counter
@@ -309,7 +312,7 @@ with program() as qua_prog:
             Q_st[0].buffer(len(frames)).buffer(cryoscope_len).average().save("Q1")
 
 
-# %% {Simulate}
+# %% {Simulate or execule}
 if node.parameters.simulate:
     # Simulates the QUA program for the specified duration
     simulation_config = SimulationConfig(duration=node.parameters.simulation_duration_ns // 4)  # In clock cycles = 4ns
@@ -367,14 +370,14 @@ node.outcomes = {
 }
 
 
-# % {Plot_data}
+# %% {Plot_data}
 fig_flux = plot_fit(node.results["ds_fit"], node.namespace["qubits"], fits=node.results["ds_fit"])
 
 node.results["figure_flux"] = fig_flux
 
 
 # %% {Update_state}
-if not node.parameters.update_state:
+if not node.parameters.simulate:
     with node.record_state_updates():
         for q in qubits:
             components = node.results["fit_results"][q.name]["components"]
