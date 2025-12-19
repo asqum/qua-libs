@@ -34,7 +34,7 @@ from scipy.signal import find_peaks
 from scipy.ndimage import gaussian_filter1d
 
 # %% {Node_parameters}
-qubit_pair_indexes = [4] 
+qubit_pair_indexes = [1] 
 class Parameters(NodeParameters):
 
     qubit_pairs: Optional[List[str]] =  ["coupler_q%s_q%s"%(i,i+1) for i in qubit_pair_indexes]
@@ -47,7 +47,7 @@ class Parameters(NodeParameters):
 
     # coupler_q1_q2:
     coupler_flux_min : float = -0.1
-    coupler_flux_max : float = 0.35
+    coupler_flux_max : float = 0.3
     # coupler_q2_q3:
     # coupler_flux_min : float = -0.1 
     # coupler_flux_max : float = 0.3
@@ -58,9 +58,9 @@ class Parameters(NodeParameters):
     # coupler_flux_min : float = 0.269
     # coupler_flux_max : float = 0.450
 
-    coupler_flux_step : float = 0.00225
+    coupler_flux_step : float = 0.002
     idle_time_min : int = 16
-    idle_time_max : int = 116
+    idle_time_max : int = 616
     idle_time_step : int = 4
     use_state_discrimination: bool = True
     operation:Literal["CZ","iSWAP"] = "CZ"
@@ -324,6 +324,7 @@ for ax, qp in grid_iter(grid):
 
 # %% {Test }
 
+desired_position:float|None = -0.24
 
 grid = QubitPairGrid(grid_names, qubit_pair_names,size=7)  
 for ax, qp in grid_iter(grid):
@@ -422,7 +423,7 @@ for ax, qp in grid_iter(grid):
         print(f"Period deviation: {std_dev:.4f}")
         print("-" * 30)
         
-        return period_T, valley_x_values
+        return abs(period_T), valley_x_values
     
     def estimate_period_by_peak_distance(x_data, y_data, peak_definitions):
         """
@@ -488,20 +489,30 @@ for ax, qp in grid_iter(grid):
         print(f"Period deviation: {std_dev:.4f}")
         print("-" * 30)
         
-        return period_T, peak_x_values
+        return abs(period_T), peak_x_values
     
     T, poles = estimate_period_by_valley_distance(np.array(x),np.array(logy),peak_definitions)
     if T is None:
         T, poles = estimate_period_by_peak_distance(np.array(x),np.array(logy),peak_definitions)
     
     symmetric_axis = np.mean(poles)
+    if desired_position is not None:
+        desired_decouple_offset = desired_position*T + symmetric_axis
+
+
+    
     (1e3*ds.dominant_frequency.sel(qubit=qp['qubit'])).plot(ax = ax, marker = '.', ls = 'None', x = 'flux_coupler')
     qubit_pair = machine.qubit_pairs[qp['qubit']]
     ax.axvline(x = qubit_pair.coupler.decouple_offset, color = 'black',label='Current_Decouple_Offset')
     ax.axvline(x = symmetric_axis, color = 'red',label="Symmetric Axis")
+    if desired_position is not None:
+        ax.axvline(x = desired_decouple_offset, color = 'cyan',label='Desired_Decouple_Offset')
     ax.axvline(x = np.min(poles), color = 'red', ls = '--',label="A period")
     ax.axvline(x = np.max(poles), color = 'red', ls = '--')
-    ax.set_title(f"{qp['qubit']}, coupler set point: {qubit_pair.coupler.decouple_offset}, about {round((qubit_pair.coupler.decouple_offset-symmetric_axis)*100/T,2)} % period to Symmetirc Axis", fontsize = 10)
+    if desired_position is None:
+        ax.set_title(f"{qp['qubit']}, coupler set point: {qubit_pair.coupler.decouple_offset}, about {round((qubit_pair.coupler.decouple_offset-symmetric_axis)*100/T,2)} % period to Symmetirc Axis", fontsize = 10)
+    else:
+        ax.set_title(f"{qp['qubit']}, desired coupler set point: {desired_decouple_offset} V")
     ax.set_xlabel('Flux Coupler')
     ax.set_ylabel('Frequency (MHz)')
     
@@ -511,6 +522,14 @@ plt.legend()
 plt.tight_layout()
 plt.show()
 node.results['PositioningDecoupleOffset'] = grid.fig
+
+
+# %% {Update state}
+if not node.parameters.simulate:
+    if desired_position is not None:
+        with node.record_state_updates():
+            for qp in qubit_pairs:
+                qp.coupler.decouple_offset = desired_decouple_offset
 
 
 # %% {Save_results}

@@ -36,7 +36,7 @@ Prerequisites:
 from datetime import datetime, timezone, timedelta
 from typing import List, Literal, Optional
 from more_itertools import flatten
-from quam_libs.experiments.rb.data_utils import RBResult
+from quam_libs.experiments.rb_standard.data_utils import RBResult, InterleavedRBResult
 import xarray as xr
 
 
@@ -46,27 +46,27 @@ from qualang_tools.multi_user import qm_session
 
 from qualang_tools.results import progress_counter, fetching_tool
 
-from qualibrate import NodeParameters, QualibrationNode
-from quam_libs.experiments.rb.circuit_utils import layerize_quantum_circuit, process_circuit_to_integers
-from quam_libs.experiments.rb.qua_utils import QuaProgramHandler
+from qualibrate  import NodeParameters, QualibrationNode
+from quam_libs.experiments.rb_standard.circuit_utils import layerize_quantum_circuit, process_circuit_to_integers
+from quam_libs.experiments.rb_standard.qua_utils import QuaProgramHandler
 from quam_libs.lib.plot_utils import plot_samples
-from quam_libs.lib.save_utils import fetch_results_as_xarray, get_node_id
+from quam_libs.lib.save_utils import fetch_results_as_xarray
 
 from quam_libs.components import QuAM
-from quam_libs.experiments.rb.cloud_utils import write_sync_hook
-from quam_libs.experiments.rb.rb_utils import InterleavedRB
-from quam_libs.experiments.rb.plot_utils import gate_mapping
-from numpy import arange
+from quam_libs.experiments.rb_standard.cloud_utils import write_sync_hook
+from quam_libs.experiments.rb_standard.rb_utils import InterleavedRB
+from quam_libs.experiments.rb_standard.plot_utils import gate_mapping
+
 
 
 
 # %% {Node_parameters}
 
 class Parameters(NodeParameters):
-    qubit_pairs: Optional[List[str]] = ["coupler_q2_q3"]
-    circuit_lengths: tuple[int] = (0,1,2,3,4,5,7,8,10,16,32)#tuple(arange(0,21,1).tolist()) # in number of cliffords
+    qubit_pairs: Optional[List[str]] = ["coupler_q2_q3"] #None
+    circuit_lengths: tuple[int] = (0,1,2,3,4,5,6,7,8,11,14,19,25,35,40) # in number of cliffords
     num_circuits_per_length: int = 15
-    num_averages: int = 100
+    num_averages: int = 150
     target_gate: str = "cz" # "idle_2q" or "cz" supported 
     basis_gates: list[str] = ['rz', 'sx', 'x', 'cz'] 
     flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
@@ -76,22 +76,22 @@ class Parameters(NodeParameters):
     simulate: bool = False
     simulation_duration_ns: int = 10000
     load_data_id: Optional[int] = None
-    timeout: int = 600
+    timeout: int = 100
     seed: int = 0
+    targets_name = "qubit_pairs"
 
-node = QualibrationNode(name="2Q_interleaved_rb", parameters=Parameters())
-node_id = get_node_id()
+node = QualibrationNode(name="70c_two_qubit_interleaved_rb", parameters=Parameters())
 
 # %% {Initialize_QuAM_and_QOP}
 
 # Instantiate the QuAM class from the state file
-machine = QuAM.load()
+node.machine = QuAM.load()
 
 # Get the relevant QuAM components
 if node.parameters.qubit_pairs is None or node.parameters.qubit_pairs == "":
-    qubit_pairs = machine.active_qubit_pairs
+    qubit_pairs = node.machine.active_qubit_pairs
 else:
-    qubit_pairs = [machine.qubit_pairs[qp] for qp in node.parameters.qubit_pairs]
+    qubit_pairs = [node.machine.qubit_pairs[qp] for qp in node.parameters.qubit_pairs]
 
 if len(qubit_pairs) == 0:
     raise ValueError("No qubit pairs selected")
@@ -100,10 +100,9 @@ if len(qubit_pairs) == 0:
 
 # Open Communication with the QOP
 if node.parameters.load_data_id is None:
-    # qmm = machine.connect(timeout=node.parameters.timeout)
-    qmm = machine.connect()
+    qmm = node.machine.connect()
 
-config = machine.generate_config()
+config = node.machine.generate_config()
 
 
 # %% {Random circuit generation}
@@ -133,7 +132,7 @@ for circuits_per_len in transpiled_circuits_as_ints.values():
 
 num_pairs = len(qubit_pairs)
 
-qua_program_handler = QuaProgramHandler(node, num_pairs, circuits_as_ints, machine, qubit_pairs)
+qua_program_handler = QuaProgramHandler(node, num_pairs, circuits_as_ints, node.machine, qubit_pairs)
 
 rb = qua_program_handler.get_qua_program()
 
@@ -148,12 +147,12 @@ elif node.parameters.load_data_id is None:
     node.results = {}
     date_time = datetime.now(timezone(timedelta(hours=3))).strftime("%Y-%m-%d %H:%M:%S")
     
-    with qm_session(qmm, config, timeout=node.parameters.timeout) as qm:
+    with qm_session(node.machine.qmm, config, timeout=node.parameters.timeout) as qm:
         if node.parameters.use_input_stream:
             num_sequences = len(qua_program_handler.sequence_lengths)
             circuits_as_ints_batched_padded = [batch + [0] * (qua_program_handler.max_current_sequence_length - len(batch)) for batch in qua_program_handler.circuits_as_ints_batched]    
             
-            if machine.network['cloud']:
+            if node.machine.network['cloud']:
                 write_sync_hook(circuits_as_ints_batched_padded)
 
                 job = qm.execute(rb,
@@ -166,7 +165,8 @@ elif node.parameters.load_data_id is None:
         
         else:
             job = qm.execute(rb)
-            results = fetching_tool(job, ["iteration"], mode="live")
+        
+        results = fetching_tool(job, ["iteration"], mode="live")
         while results.is_processing():
             # Fetch results
             n = results.fetch_all()[0]
@@ -185,7 +185,6 @@ if node.parameters.simulate:
     fig = plot_samples(samples, qubit_names, readout_lines=list(readout_lines), xlim=(0,10000))
     
     # node.results["figure"] = fig
-    # node.machine = machine
     # node.save()
 
  # %% {Data_fetching_and_dataset_creation}
@@ -200,7 +199,6 @@ else:
     ds = node.results["ds"]
 # Add the dataset to the node
 node.results = {"ds": ds}
-
 # %% {Data_analysis and plotting}
 
 # Assume ds is your input dataset and ds['state'] is your DataArray
@@ -228,26 +226,34 @@ probs_00 = probs_00.astype(int)
 ds_transposed = ds.rename({"shots": "average", "sequence": "repeat", "depths": "circuit_depth"})
 ds_transposed = ds_transposed.transpose("qubit", "repeat", "circuit_depth", "average")
 
-#%%
+rb_result = {}
+
 for qp in qubit_pairs:
 
-    rb_result = RBResult(
+    rb_result[qp.id] = InterleavedRBResult(
+        # standard_rb_alpha=node.machine.qubit_pairs[qp.id].macros["cz"].fidelity.get("StandardRB", 1).get("alpha", 1),
+        standard_rb_alpha=qp.extras.StandardRB.alpha, # if "StandardRB" in qp.extras else 1,
         circuit_depths=list(node.parameters.circuit_lengths),
         num_repeats=node.parameters.num_circuits_per_length,
         num_averages=node.parameters.num_averages,
         state=ds_transposed.sel(qubit=qp.name).state.data
     )
 
-    fig = rb_result.plot_with_fidelity(pair_label=node.parameters.qubit_pairs[0])
-    import matplotlib.pyplot as plt
-    node.results["figure"] = fig
-    print(rb_result.fidelity)
+    # Fit the data and calculate all error and fidelity metrics
+    rb_result[qp.id].fit()
+    
+    # Plot the results
+    fig = rb_result[qp.id].plot_with_fidelity()
+    fig.suptitle(f"2Q {node.parameters.target_gate.upper()} Interleaved Randomized Benchmarking - {qp.name}")
+    # node.add_node_info_subtitle(fig)
+    fig.show()
+    
+    node.results[f"{qp.id}_figure_IRB_decay"] = fig
 
+# %% {Update_state}
+with node.record_state_updates():
+    for qp in qubit_pairs:
+        qp.extras['Interleaved_RB'] = rb_result[qp.id].fidelity
 # %% {Save_results}
-if not node.parameters.simulate:    
-    node.outcomes = {q.name: "successful" for q in qubit_pairs}
-    node.results['initial_parameters'] = node.parameters.model_dump()
-    node.machine = machine
-    node.save()
-
-# %% {Run all}
+node.save()
+# %%
