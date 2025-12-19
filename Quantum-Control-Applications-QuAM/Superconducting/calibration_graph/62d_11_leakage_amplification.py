@@ -273,12 +273,7 @@ if node.parameters.use_state_discrimination:
 for qp in qubit_pairs:
     qpname = qp.name
     P11 = ds.P11.sel(qubit=qpname)        
-    # Compute slope across number_of_operations for each coupler_amp
-    P11_slope = P11.differentiate("number_of_operations")
-    # Compute absolute slope and average over N
-    avg_slope = abs(P11_slope).mean(dim="number_of_operations")
-    # Find minimum-slope index (flattest point)
-    data_min_idx = avg_slope.argmin(dim="coupler_amp")
+    data_min_idx = P11.mean("number_of_operations").argmax()
     optimal_coupler_flux_shift = ds.flux_coupler.sel(qubit=qpname)[data_min_idx]  # corresponding flux value
     print(f"\n Optimal values:")
     print(f" optimal coupler flux shift = {optimal_coupler_flux_shift:.4f} V")
