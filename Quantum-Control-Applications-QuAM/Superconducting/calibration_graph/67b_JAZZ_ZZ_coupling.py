@@ -4,26 +4,18 @@ Two-Qubit ZZ Coupling Measurement
 
 This experiment measures the static ZZ interaction (cross-Kerr coupling) between two qubits connected via a tunable coupler. 
 The ZZ coupling quantifies the conditional frequency shift experienced by one qubit depending on the state of the other qubit. 
+For each coupler flux bias, we measure, population of the target qubit as a function of idle time in the JAZZ sequence. 
+The ZZ interaction introduces a relative phase ϕ accumulated on the superposition state of target qubit, |0⟩ + e^iϕ |1⟩, which can be read out, 
+P|0⟩ = (1 − cos ϕ) /2. 
+Therefore, the population is oscillating with the duration t, where t/2 is defined as the pulse duration of the applied Z-pulse.
+The phase can ebe simply expressed as ϕ =  ζ_ZZ t/2 + ϕ0, where the first term arises from the ZZ interaction and second term ϕ0 is due to any detuning between 
+the qubit drive frequency and the qubit frequency (f0). 
+With the frequency f extracted from fitting the the oscillating signal P|0⟩, the ZZ interaction is calculated as ζ = 2(f − f0).
 
 The process involves:
-1. Preparing one qubit (control) in either the |0⟩ or |1⟩ state.
-2. Performing a Ramsey Echo experiment on the other qubit (target).
-3. Repeating the measurement while varying the coupler flux bias.
+1. Performing a JAZZ (Joint Amplification of ZZ interaction) pulse sequence (PHYS. REV. X 14, 041050 (2024)).
+2. Repeating the measurement while varying the coupler flux bias.
 
-For each coupler flux bias, we measure:
-1. The Ramsey oscillation of the target qubit when the control is in |0⟩.
-2. The Ramsey oscillation of the target qubit when the control is in |1⟩.
-
-The difference in the fitted Ramsey frequencies for the two control states gives the static ZZ coupling:
-    
-    ζ_ZZ = (ω_target|control=1 − ω_target|control=0)
-
-The measurement process involves:
-1. Initializing both qubits to the ground state.
-2. Preparing the control qubit in |0⟩ or |1⟩.
-3. Applying a Ramsey sequence on the target qubit with variable idle time.
-4. Sweeping the coupler flux to map ζ_ZZ(Φ_coupler).
-5. Fitting the Ramsey fringes to extract frequency differences.
 
 The outcome of this measurement will be used to:
 1. Identify the coupler flux bias point where ζ_ZZ ≈ 0 (the “zero-ZZ” operating point).
@@ -37,7 +29,6 @@ Prerequisites:
 Outcomes:
 - ζ_ZZ as a function of coupler flux bias.
 - Identification of the zero-ZZ operating point.
-- Ramsey traces and fitted frequency differences for control = 0 and control = 1.
 """
 
 # %% {Imports}
@@ -69,7 +60,7 @@ qubit_pair_indexes = [2]  # The indexes of the qubit pairs to measure
 class Parameters(NodeParameters):
 
     qubit_pairs: Optional[List[str]] = ["coupler_q%s_q%s"%(i,i+1) for i in qubit_pair_indexes]
-    num_averages: int = 100
+    num_averages: int = 20
     flux_point_joint_or_independent_or_pairwise: Literal["joint", "independent", "pairwise"] = "joint"
     reset_type: Literal['active', 'thermal'] = "active"
     simulate: bool = False
@@ -127,8 +118,8 @@ flux_point = node.parameters.flux_point_joint_or_independent_or_pairwise  # 'ind
 
 # Loop parameters
 fluxes_coupler = np.linspace(
-        -node.parameters.flux_span/2,
-        node.parameters.flux_span/2,
+        -0.05,
+        0.3,
         node.parameters.flux_num,
     )
 idle_times = np.arange(
@@ -136,7 +127,7 @@ idle_times = np.arange(
     node.parameters.max_wait_time_in_ns // 4,
     node.parameters.wait_time_step_in_ns // 4,
 )
-reset_coupler_bias = False
+reset_coupler_bias = True
 
 with program() as Ramsey_ZZ_coupling:
     n = declare(int)
@@ -172,54 +163,70 @@ with program() as Ramsey_ZZ_coupling:
             save(n, n_st)
             with for_(*from_array(flux_coupler, fluxes_coupler)):
                 with for_(*from_array(t, idle_times)):
-                    with for_(*from_array(control_initial, [0, 1])):
-                        # Read the state of the qubit before Ramsey starts
-                        readout_state(q_target, init_state[i])
-                        q_target.align() 
-                        # Rotate the frame of the second x90 gate to implement a virtual Z-rotation
-                        # 4*tau because tau was in clock cycles and 1e-9 because tau is ns                    
-                        assign(phi, Cast.mul_fixed_by_int(detuning * 1e-9, 4 * t))
-                        assign(t_half, t/2)
-                        # state preparation of control qubit
-                        q_control.xy.play("x180", condition=control_initial == 1)
-                        align()
-                        # Ramsey Echo sequence on target qubit 
-                        q_control.xy.wait(q_target.xy.operations["x90"].length // 4 + t_half + 1)
-                        q_target.xy.play("x90")
-                        q_target.xy.frame_rotation_2pi(phi)
-                        q_target.xy.wait(t_half + 1)
-                        qp.coupler.wait(duration=q_target.xy.operations["x90"].length // 4 + XY_delay // 4)
-                        qp.coupler.play("const", amplitude_scale = flux_coupler / qp.coupler.operations["const"].amplitude, duration = t_half)
-                        
-                        q_target.xy.play("x180")
-                        q_control.xy.play("x180")
-                        
-                        qp.coupler.wait(duration=q_target.xy.operations["x180"].length // 4)
-                        qp.coupler.play("const", amplitude_scale = flux_coupler / qp.coupler.operations["const"].amplitude, duration = t_half)
-                        q_target.xy.wait(t_half)
-                        q_target.xy.play("x90")
-                        align()  
-                        
-                        # target qubit readout
-                        if node.parameters.use_state_discrimination:
-                            readout_state(q_target, current_state[i])
-                            assign(state_target[i], init_state[i] ^ current_state[i])
-                            save(state_target[i], state_st_target[i])
-                            reset_frame(q_target.xy.name)
-                        else:
-                            q_target.resonator.measure("readout", qua_vars=(I_target[i], Q_target[i]))
-                            save(I_target[i], I_st_target[i])
-                            save(Q_target[i], Q_st_target[i])
-                        align()
+                    # Rotate the frame of the second x90 gate to implement a virtual Z-rotation
+                    # 4*tau because tau was in clock cycles and 1e-9 because tau is ns                    
+                    assign(phi, Cast.mul_fixed_by_int(detuning * 1e-9, 4 * t))
+                    
+                    assign(t_half, t/2)
+                    
+                    if node.parameters.reset_type == "active":
+                        active_reset(qp.qubit_control)
+                        active_reset(qp.qubit_target)
+                    else:
+                        wait(qp.qubit_control.thermalization_time * u.ns)
+                    qp.align()
+                    
+                    # Reset the frames of both qubits
+                    reset_frame(qp.qubit_target.xy.name)
+                    reset_frame(qp.qubit_control.xy.name)
+                    
+                    # pi pulse on target qubit
+                    qp.qubit_target.xy.play("x90")
+                    qp.align()
+                    
+                    # Coupler flux pulse
+                    qp.coupler.play(
+                        "const", amplitude_scale=flux_coupler / qp.coupler.operations["const"].amplitude, duration=t_half
+                    )
+                    qp.align()
+                    
+                    # Echo pulse
+                    qp.qubit_control.xy.play("x180")
+                    qp.qubit_target.xy.play("x180")
+                    qp.align()
+                    
+                    # Coupler flux pulse
+                    qp.coupler.play(
+                        "const", amplitude_scale=flux_coupler / qp.coupler.operations["const"].amplitude, duration=t_half
+                    )
+                    qp.align()
+                    
+                    # rotate the frame
+                    qp.qubit_target.xy.frame_rotation_2pi(phi)
+                    # Tomographic rotation on the target qubit
+                    qp.qubit_target.xy.play("x90")
+                    qp.align() 
+                    
+                    # target qubit readout
+                    if node.parameters.use_state_discrimination:
+                        readout_state(q_target, current_state[i])
+                        assign(state_target[i], init_state[i] ^ current_state[i])
+                        save(state_target[i], state_st_target[i])
+                        reset_frame(q_target.xy.name)
+                    else:
+                        q_target.resonator.measure("readout", qua_vars=(I_target[i], Q_target[i]))
+                        save(I_target[i], I_st_target[i])
+                        save(Q_target[i], Q_st_target[i])
+                    align()
         
     with stream_processing():
         n_st.save("n")
         for i in range(num_qubit_pairs):
             if node.parameters.use_state_discrimination:
-                state_st_target[i].buffer(2).buffer(len(idle_times)).buffer(len(fluxes_coupler)).average().save(f"state_target{i + 1}")
+                state_st_target[i].buffer(len(idle_times)).buffer(len(fluxes_coupler)).average().save(f"state_target{i + 1}")
             else:
-                I_st_target[i].buffer(2).buffer(len(idle_times)).buffer(len(fluxes_coupler)).average().save(f"I_target{i + 1}")
-                Q_st_target[i].buffer(2).buffer(len(idle_times)).buffer(len(fluxes_coupler)).average().save(f"Q_target{i + 1}")
+                I_st_target[i].buffer(len(idle_times)).buffer(len(fluxes_coupler)).average().save(f"I_target{i + 1}")
+                Q_st_target[i].buffer(len(idle_times)).buffer(len(fluxes_coupler)).average().save(f"Q_target{i + 1}")
 
 # %% {Simulate_or_execute}
 if node.parameters.simulate:
@@ -248,7 +255,7 @@ elif node.parameters.load_data_id is None:
 if not node.parameters.simulate:
     if node.parameters.load_data_id is None:
         # Fetch the data from the OPX and convert it into a xarray with corresponding axes (from most inner to outer loop)
-        ds = fetch_results_as_xarray(job.result_handles, qubit_pairs, {"control_state": [0,1], "idle_time": idle_times, "flux_coupler": fluxes_coupler})
+        ds = fetch_results_as_xarray(job.result_handles, qubit_pairs, {"idle_time": idle_times, "flux_coupler": fluxes_coupler})
     else:
         ds, machine = load_dataset(node.parameters.load_data_id)
 
@@ -295,15 +302,10 @@ if not node.parameters.simulate:
             )
             ds["state_target_fit"] = fitted
 
-            f0 = fit_data.sel(fit_vals="f", control_state=0)
-            f1 = fit_data.sel(fit_vals="f", control_state=1)
-            chiZZ = (f1 - f0) * 1e3  # MHz → kHz
+            chiZZ = 2 * (fit_data.sel(fit_vals="f") * 1e3 - node.parameters.frequency_detuning_in_mhz * 1e3)  # MHz → kHz
             ds["chiZZ"] = chiZZ
 
-            chiZZ_std = 1e3 * np.sqrt(
-                fit_data.sel(fit_vals="f_f", control_state=0)
-                + fit_data.sel(fit_vals="f_f", control_state=1)
-            )
+            chiZZ_std = 1e3 * np.sqrt(fit_data.sel(fit_vals="f_f"))
             ds["chiZZ_std"] = chiZZ_std
 
             chiZZ_std_filt = chiZZ_std.where(chiZZ_std < chiZZ_std.median() * 2)
@@ -357,25 +359,24 @@ if not node.parameters.simulate:
         flux_mV = 1e3 * flux_full.squeeze()
         idle_time_us = ds_pair["idle_time"]
 
-        for ctrl in [0, 1]:
-            fig, ax = plt.subplots(figsize=(6, 4))
-            data = ds_pair["state_target"].sel(control_state=ctrl)
-            im = ax.pcolormesh(
-                flux_mV,
-                idle_time_us,
-                data.transpose(),
-                shading="auto",
-                cmap="viridis",
-                vmin=0,
-                vmax=1,
-            )
-            fig.colorbar(im, ax=ax, label="State probability")
-            ax.set_xlabel("Coupler flux [mV]")
-            ax.set_ylabel("Idle time [µs]")
-            ax.set_title(f"{qubit_name} – Raw Ramsey (control={ctrl})", fontsize=10)
-            plt.tight_layout()
-            node.results[f"figure_raw_{qubit_name}_ctrl{ctrl}"] = fig
-            plt.show()
+        fig, ax = plt.subplots(figsize=(6, 4))
+        data = ds_pair["state_target"]
+        im = ax.pcolormesh(
+            flux_mV,
+            idle_time_us,
+            data.transpose(),
+            shading="auto",
+            cmap="viridis",
+            vmin=0,
+            vmax=1,
+        )
+        fig.colorbar(im, ax=ax, label="State probability")
+        ax.set_xlabel("Coupler flux [mV]")
+        ax.set_ylabel("Idle time [µs]")
+        ax.set_title(f"{qubit_name} – Raw Ramsey", fontsize=10)
+        plt.tight_layout()
+        node.results[f"figure_raw_{qubit_name}"] = fig
+        plt.show()
 
         if fit_status == "successful" and "chiZZ" in ds:
             print(f"Plotting χZZ analysis for {qubit_name}")
@@ -464,21 +465,18 @@ if not node.parameters.simulate:
                 idle_time = ds_pair["idle_time"]
 
                 fig, axes = plt.subplots(1, 2, figsize=(8, 4), sharex=True)
-                for ctrl in [0, 1]:
-                    axes[0].plot(
-                        idle_time,
-                        meas.sel(control_state=ctrl),
-                        "-",
-                        label=f"control={ctrl}",
-                        alpha=0.8,
-                    )
-                    axes[1].plot(
-                        idle_time,
-                        fit.sel(control_state=ctrl),
-                        "-",
-                        label=f"control={ctrl}",
-                        lw=2,
-                    )
+                axes[0].plot(
+                    idle_time,
+                    meas,
+                    "-",
+                    alpha=0.8,
+                )
+                axes[1].plot(
+                    idle_time,
+                    fit,
+                    "-",
+                    lw=2,
+                )
                 axes[0].set_title(f"Measured ({qubit_name})")
                 axes[1].set_title("Fitted")
                 for ax_ in axes:
