@@ -82,6 +82,7 @@ def qiskit_to_qua_macro(circuit: QuantumCircuit, machine: QuAM, target_qubits: L
                             raise ValueError(f"Duration must be greater than 16 when unit is set to dt (received {duration})" )
                         elif duration % 4 != 0:
                             raise ValueError(f"Duration must be a multiple of 4 when unit is set to dt (received {duration})" )
+                        duration = duration // 4 # Convert to clock cycles (integer division)
                     elif instruction.operation.unit == "ns":
                         duration = duration // 4  # Convert to clock cycles (integer division)
                     elif instruction.operation.unit == "s":
