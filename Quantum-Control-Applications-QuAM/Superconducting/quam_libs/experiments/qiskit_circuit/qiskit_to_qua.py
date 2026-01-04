@@ -72,6 +72,40 @@ def qiskit_to_qua_macro(circuit: QuantumCircuit, machine: QuAM, target_qubits: L
                 qubit_pair.apply(instruction.operation.name, *instruction.operation.params)
             elif len(qubits) == 1:
                 qubit = machine.active_qubits[qubit_indices[qubits[0]]]
+                
+                if instruction.operation.name == "delay":
+                    duration = instruction.operation.duration
+                    if instruction.operation.unit == "dt":
+                        if not isinstance(duration, int):
+                            raise ValueError(f"Duration must be an integer when unit is set to dt (received {type(duration)}: {duration})" )
+                        elif duration < 16:
+                            raise ValueError(f"Duration must be greater than 16 when unit is set to dt (received {duration})" )
+                        elif duration % 4 != 0:
+                            raise ValueError(f"Duration must be a multiple of 4 when unit is set to dt (received {duration})" )
+                    elif instruction.operation.unit == "ns":
+                        duration = duration // 4  # Convert to clock cycles (integer division)
+                    elif instruction.operation.unit == "s":
+                        duration = int(round(duration / 4e-9))  # Convert to clock cycles
+                    elif instruction.operation.unit == "ms":
+                        duration = int(round(duration / 4e-6))  # Convert to clock cycles
+                    elif instruction.operation.unit == "us":
+                        duration = int(round(duration / 4e-3))  # Convert to clock cycles
+                    elif instruction.operation.unit == "ps":
+                        duration = int(round(duration / 4e-12))  # Convert to clock cycles
+                    else:
+                        raise ValueError(f"Unknown unit: {instruction.operation.unit}")
+                    
+                    # Validate converted duration meets QUA requirements
+                    if duration < 16:
+                        raise ValueError(f"Converted duration must be >= 16 clock cycles (got {duration})")
+                    if duration % 4 != 0:
+                        # Round up to nearest multiple of 4
+                        duration = ((duration + 3) // 4) * 4
+                        # Or raise error: raise ValueError(f"Converted duration must be a multiple of 4 (got {duration})")
+                    
+                    # Update the instruction parameters with converted duration
+                    instruction.operation.duration = duration
+                    instruction.operation.unit = "dt"
                 result = qubit.apply(instruction.operation.name, *instruction.operation.params)
                 qubit.align()
                 if instruction.clbits:

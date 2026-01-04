@@ -7,4 +7,6 @@ __all__ = ["DelayMacro"]
 @quam_dataclass
 class DelayMacro(QubitMacro):
     def apply(self, duration) -> None:
-        self.qubit.wait(duration)
+        channels = list(self.qubit.channels.values())
+        for channel in channels:
+            channel.wait(duration)
