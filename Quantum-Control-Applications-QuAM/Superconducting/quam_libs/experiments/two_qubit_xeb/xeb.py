@@ -976,7 +976,7 @@ class XEBResult:
                             s=13.5, c="blue")
             else:
                 warnings.warn(f"Log XEB data for {qubit_label} is a singularity.")
-
+        ret_figs = []
         if self.xeb_config.disjoint_processing:
             for q, qubit in enumerate(self.qubit_names):
                 if separate_plots and q > 0:
@@ -992,6 +992,7 @@ class XEBResult:
                 if separate_plots:
                     plt.tight_layout()
                     plt.show()
+                ret_figs.append(plt.gcf())
         else:
             xx = np.linspace(0, self.linear_fidelities["depth"].max())
             Fxeb = np.nanmean(self.log_fidelities, axis=0)
@@ -1001,10 +1002,11 @@ class XEBResult:
             plt.title("XEB Fidelity")
             plt.legend(loc="best")
             plt.tight_layout()
+            ret_figs.append(plt.gcf())
             plt.show()
 
-        return figs
-
+        return ret_figs
+    
     def plot_records(self):
         """
         Plot the records for the XEB experiment
@@ -1025,6 +1027,7 @@ class XEBResult:
             _lines += [l]  # for legend
             return pd.Series({"fidelity": fid_lsq})
 
+        ret_figs = []
         if not self.xeb_config.disjoint_processing:
             plt.figure()
             fids = self.records.groupby("depth").apply(per_cycle_depth, _lines).reset_index()
@@ -1035,6 +1038,8 @@ class XEBResult:
             title = "Fxeb_linear = %s" % [fids["fidelity"][x] for x in [0, 1]]
             plt.title(title)
             plt.tight_layout()
+            ret_figs.append(plt.gcf())
+            
         else:
             fids = []
             for i, q in enumerate(self.qubit_names):
@@ -1052,7 +1057,10 @@ class XEBResult:
                         [fids[i]["fidelity"][x] for x in [0, 1]],
                     )
                 )
+                ret_figs.append(plt.gcf())
                 plt.show()
+        
+        return ret_figs
 
     def plot_state_heatmap(self):
         """
@@ -1084,7 +1092,7 @@ class XEBResult:
         num_plots = len(titles)
         plots_per_fig = 4  # Adjust this value based on the desired grid size (e.g., 2x2 grid)
         num_figs = (num_plots + plots_per_fig - 1) // plots_per_fig
-
+        ret_figs = []
         for fig_idx in range(num_figs):
             fig, axs = plt.subplots(2, 2, figsize=(10, 8))  # Adjust the grid size as needed
             axs = axs.flatten()
@@ -1119,6 +1127,8 @@ class XEBResult:
 
             plt.tight_layout()
             plt.show()
+            ret_figs.append(fig)
+        return ret_figs
 
     @property
     def measured_probs(self):
