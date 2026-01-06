@@ -16,14 +16,97 @@ from typing import Literal, Optional, List
 import matplotlib.pyplot as plt
 import numpy as np
 import xarray as xr
-from sklearn.mixture import GaussianMixture
+import matplotlib.animation as animation
+
+
+# %%
+from scipy.interpolate import UnivariateSpline
+def auto_optimize_readout_voltage(ds, qubit_name, plot=True):
+    """
+    自動估算平滑係數並尋找最佳讀取電壓。
+    """
+    # 1. 取得數據並轉為 dB
+    snr_data = ds.snr.sel(qubit=qubit_name).mean(dim="N")
+    snr_db = 20 * np.log10(snr_data.where(snr_data > 0, 1e-6))
+    
+    v_data = ds.voltage.values
+    snr_values = snr_db.values
+    m = len(v_data)
+
+    # 2. 自動估算雜訊 (Sigma)
+    # 透過計算相鄰點的差值來估算高頻雜訊
+    sigma = np.std(np.diff(snr_values)) 
+    
+    # 3. 根據經驗公式設定自動 s
+    # s = m * sigma^2 是統計學上的經典建議值
+    auto_s = m * (sigma**2)
+    
+    # 限制 s 的範圍，避免過度平滑或完全沒平滑
+    auto_s = np.clip(auto_s, 0.5, 20) 
+
+    # 4. 進行擬合
+    spline = UnivariateSpline(v_data, snr_values, s=auto_s)
+    v_fine = np.linspace(v_data.min(), v_data.max(), 1000)
+    snr_smooth = spline(v_fine)
+    
+    best_v = v_fine[np.argmax(snr_smooth)]
+    max_snr_db = np.max(snr_smooth)
+
+    # 5. 繪圖
+    if plot:
+        plt.figure(figsize=(8, 4))
+        plt.plot(v_data, snr_values, 'b.', label='Raw Data', alpha=0.3)
+        plt.plot(v_fine, snr_smooth, 'r-', lw=2, label=f'Auto Spline (s={auto_s:.2f})')
+        plt.axvline(best_v, color='green', linestyle='--', 
+                   label=f'Best V: {best_v:.3f}V\nSNR: {max_snr_db:.2f} dB')
+        plt.title(f"{qubit_name}: Auto-optimized SNR")
+        plt.xlabel("Coupler Voltage (V)")
+        plt.ylabel("SNR (dB)")
+        plt.legend()
+        plt.show()
+
+    return float(best_v)
+
+def verify_snr(ds, qubit_name, voltage_val):
+        # 1. 提取特定 qubit 與電壓下的數據 (state: 0=Ground, 1=Excited)
+        data = ds.sel(qubit=qubit_name).sel(voltage=voltage_val, method="nearest")
+        
+        Ig = data.I.sel(state=0)
+        Qg = data.Q.sel(state=0)
+        Ie = data.I.sel(state=1)
+        Qe = data.Q.sel(state=1)
+
+        # 2. 計算平均值 (Center of the clouds)
+        mu_g = np.array([Ig.mean().item(), Qg.mean().item()])
+        mu_e = np.array([Ie.mean().item(), Qe.mean().item()])
+        
+        # 3. 計算距離平方 (Signal Power)
+        dist_sq = np.sum((mu_e - mu_g)**2)
+        
+        # 4. 計算變異數 (Noise Power)
+        # Var(Total) = Var(I) + Var(Q)
+        var_g = Ig.var().item() + Qg.var().item()
+        var_e = Ie.var().item() + Qe.var().item()
+        var_max = max(var_g, var_e)
+        
+        # 5. 計算 SNR 與 SNR dB
+        snr_python = np.sqrt(dist_sq / var_max)
+        snr_db_python = 20 * np.log10(snr_python)
+        
+        # 6. 讀取 QUA 計算的 SNR dB (取 N 次實驗的平均值)
+        snr_db_qua = ds.snr_db.sel(qubit=qubit_name).sel(voltage=voltage_val, method="nearest").mean(dim='N').item()
+
+        # absolute error 
+        abs_error = round(abs(snr_db_python-snr_db_qua),2)
+        
+        return abs_error
 
 
 # %% {Node_parameters}
 class Parameters(NodeParameters):
 
     qubits: Optional[List[str]] = ['q1', 'q2']
-    num_runs: int = 2000
+    num_runs: int = 4096
     reset_type_thermal_or_active: Literal["thermal", "active"] = "active"
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
     c_min_v: float = -0.2
@@ -179,9 +262,9 @@ with program() as iq_blobs_snr:
                 qubit.resonator.wait(node.parameters.z_rising_time_ns//4)
                 qubit.resonator.measure("readout", qua_vars=(I_g[i], Q_g[i]))
 
-                assign(sum_Ig[i], sum_Ig[i] + I_g[i] * inv_n)
-                assign(sum_Qg[i], sum_Qg[i] + Q_g[i] * inv_n)
-                assign(sum_sq_g[i], sum_sq_g[i] + (I_g[i] * I_g[i] + Q_g[i] * Q_g[i]) * inv_n)
+                assign(sum_Ig[i], sum_Ig[i] + I_g[i])
+                assign(sum_Qg[i], sum_Qg[i] + Q_g[i])
+                assign(sum_sq_g[i], sum_sq_g[i] + (I_g[i] * I_g[i] + Q_g[i] * Q_g[i]))
 
                 save(I_g[i], I_g_st[i])
                 save(Q_g[i], Q_g_st[i])
@@ -247,9 +330,9 @@ with program() as iq_blobs_snr:
             # for i, qubit in enumerate(qubits):
                 qubit.resonator.measure("readout", qua_vars=(I_e[i], Q_e[i]))
 
-                assign(sum_Ie[i], sum_Ie[i] + I_e[i] * inv_n)
-                assign(sum_Qe[i], sum_Qe[i] + Q_e[i] * inv_n)
-                assign(sum_sq_e[i], sum_sq_e[i] + (I_e[i]**2 + Q_e[i]**2) * inv_n)
+                assign(sum_Ie[i], sum_Ie[i] + I_e[i])
+                assign(sum_Qe[i], sum_Qe[i] + Q_e[i])
+                assign(sum_sq_e[i], sum_sq_e[i] + (I_e[i]*I_e[i] + Q_e[i]*Q_e[i]))
 
                 save(I_e[i], I_e_st[i])
                 save(Q_e[i], Q_e_st[i])
@@ -258,32 +341,62 @@ with program() as iq_blobs_snr:
         
         # --- Calculate SNR after shotting ---
         for i in range(num_qubits):
+            m_Ig = declare(fixed)
+            m_Qg = declare(fixed)
+            m_Ie = declare(fixed)
+            m_Qe = declare(fixed)
+            m_sq_g = declare(fixed)
+            m_sq_e = declare(fixed)
+            snr_db_guard = declare(fixed, value=0.03) # ~ -30 dB
+            
+            # 1. 計算平均值 (在此時才乘 inv_n)
+            assign(m_Ig, sum_Ig[i] * inv_n)
+            assign(m_Qg, sum_Qg[i] * inv_n)
+            assign(m_Ie, sum_Ie[i] * inv_n)
+            assign(m_Qe, sum_Qe[i] * inv_n)
+            assign(m_sq_g, sum_sq_g[i] * inv_n)
+            assign(m_sq_e, sum_sq_e[i] * inv_n)
+
+            # 2. 計算距離平方 Dist^2 = |mu_e - mu_g|^2
             dist_sq = declare(fixed)
+            assign(dist_sq, (m_Ie - m_Ig)*(m_Ie - m_Ig) + (m_Qe - m_Qg)*(m_Qe - m_Qg))
+            
+            # 3. 計算變異數 Var = E[X^2] - (E[X])^2
             var_g = declare(fixed)
             var_e = declare(fixed)
-            var_max = declare(fixed)
-            snr_val = declare(fixed)
+            assign(var_g, m_sq_g - (m_Ig*m_Ig + m_Qg*m_Qg))
+            assign(var_e, m_sq_e - (m_Ie*m_Ie + m_Qe*m_Qe))
 
-            # 1. S**2
-            assign(dist_sq, (sum_Ie[i] - sum_Ig[i])**2 + (sum_Qe[i] - sum_Qg[i])**2)
+            # avoid a negative variance
+            with if_(var_g < 1e-9):
+                assign(var_g, 1e-9)
+                
+            with if_(var_e < 1e-9):
+                assign(var_e, 1e-9)
             
-            # 2. σ**2
-            assign(var_g, sum_sq_g[i] - (sum_Ig[i]**2 + sum_Qg[i]**2))
-            assign(var_e, sum_sq_e[i] - (sum_Ie[i]**2 + sum_Qe[i]**2))
-            
-            # 3. Select Max Variance
+            # 4. 計算 SNR = sqrt(Dist^2 / Max(Var))
+            var_max = declare(fixed)
             with if_(var_e > var_g):
                 assign(var_max, var_e)
             with else_():
                 assign(var_max, var_g)
             
-            # 4. SNR = sqrt(Dist^2 / var_max)
-            with if_(var_max > 0):
-                assign(snr_val, Math.sqrt(Math.div(dist_sq, var_max)))
+            snr_final = declare(fixed)
+            with if_(var_max > 1e-9):
+                # 使用 Math.div 進行除法比較安全
+                assign(snr_final, Math.sqrt(Math.div(dist_sq, var_max)))
+                with if_(snr_final < snr_db_guard):
+                    assign(snr_final, snr_db_guard) # Too small
             with else_():
-                assign(snr_val, 0.0)
+                # 如果噪聲低到無法計算，但有訊號差，給予一個預設值或 0
+                with if_(dist_sq > 1e-9):
+                    assign(snr_final, 7.99) # 給予 QUA fixed 的最大值代表高 SNR
+                with else_():
+                    assign(snr_final, snr_db_guard) # Too small
 
-            save(snr_val, snr_st[i])
+            # 為了配合你的 stream_processing buffer 結構，我們把這個值存入 stream
+            with for_(n, 0, n < n_runs, n + 1):
+                save(snr_final, snr_st[i])
 
     with stream_processing():
         n_st.save("n")
@@ -294,7 +407,7 @@ with program() as iq_blobs_snr:
             Q_e_st[i].buffer(n_runs).buffer(len(dcs)).save(f"Q_e{i + 1}")
 
             # SNR
-            snr_st[i].buffer(len(dcs)).save(f"snr{i + 1}")
+            snr_st[i].buffer(n_runs).buffer(len(dcs)).save(f"snr{i + 1}")
 
 
 if node.parameters.simulate:
@@ -330,7 +443,7 @@ if not node.parameters.simulate:
         ds = fetch_results_as_xarray(
             job.result_handles, 
             qubits, 
-            {"voltage": dcs, "N": np.linspace(1, n_runs, n_runs)}
+            {"N": np.linspace(1, n_runs, n_runs), "voltage": dcs}
         )
 
         ds_rearranged = xr.Dataset()
@@ -359,37 +472,107 @@ if not node.parameters.simulate:
 
     #%% Plot
     ## Plot SNR
-    for q in ds.qubit.values:
-        plt.figure(figsize=(8, 4))
-        ds.snr.sel(qubit=q).plot(marker='o')
-        plt.title(f"SNR vs Coupler DC - Qubit {q}")
-        plt.xlabel("Coupler DC (V)")
-        plt.ylabel("SNR")
-        plt.grid(True)
-        plt.show()
-        node.results["figs"][f"Figure_{q}_SNR"] = plt.gcf()
+    best_amp = {}
+    grid = QubitGrid(ds, [q.grid_location for q in qubits])
+    ds["snr_db"] = 20 * np.log10(ds.snr.where(ds.snr > 0, 1e-6))
+    for ax, qubit in grid_iter(grid):
+        node.results["results"][qubit["qubit"]] = {}
+        optimal_voltage = auto_optimize_readout_voltage(ds, qubit["qubit"], False)
+        node.results["results"][qubit["qubit"]]["best_coupler_voltage"] = optimal_voltage
+        ds.snr_db.sel(qubit=qubit["qubit"]).mean(dim="N").plot(ax=ax)
+        ax.axvline(optimal_voltage, color="k", linestyle="dashed")
+        ax.set_xlabel("Coupler flux pulse amplitude (V)")
+        ax.set_ylabel("SNR (dB)")
+        ax.set_title(f'{qubit["qubit"]}, coupler at {round(optimal_voltage, 3)} is good')
+        ax.grid()
+    grid.fig.suptitle("Coupler flux pulse vs Readout SNR")
+    
+    plt.tight_layout()
+    plt.show()
+    node.results["figs"][f"Figure_SNR"] = grid.fig
 
+    # %%
     ## Plot Raw 
+    
+    #%%
     if node.parameters.plot_raw:
+    
+        # 1. 預先計算所有數據的全局最大/最小值，以固定座標軸 (避免畫面跳動)
+        # 這樣才能看出 Cloud 真的在移動，而不是座標軸在伸縮
+        all_I = ds.I.values.flatten()
+        all_Q = ds.Q.values.flatten()
+        I_min, I_max = all_I.min(), all_I.max()
+        Q_min, Q_max = all_Q.min(), all_Q.max()
+        
+        # 稍微放寬一點邊界 (Buffer)
+        margin_I = (I_max - I_min) * 0.1
+        margin_Q = (Q_max - Q_min) * 0.1
+        lim_I = (I_min - margin_I, I_max + margin_I)
+        lim_Q = (Q_min - margin_Q, Q_max + margin_Q)
+
+        # 2. 建立畫布 (只需要一列，因為我們會隨著時間更新這列)
         fig, axes = plt.subplots(
-            ncols=num_qubits,
-            nrows=len(ds.voltage),
-            sharex=False,
-            sharey=False,
-            squeeze=False,
-            figsize=(5 * num_qubits, 5 * len(ds.voltage)),
+            ncols=num_qubits, 
+            nrows=1, 
+            figsize=(5 * num_qubits, 6), 
+            squeeze=False # 確保 axes 總是 2D array，方便索引
         )
-        for voltage, ax1 in zip(ds.voltage, axes):
-            for q, ax2 in zip(list(qubits), ax1):
-                ds_q = ds.sel(qubit=q.name, voltage=voltage)
-                ax2.plot(ds_q.I.sel(state=0), ds_q.Q.sel(state=0), ".", alpha=0.2, label="Ground", markersize=2)
-                ax2.plot(ds_q.I.sel(state=1), ds_q.Q.sel(state=1), ".", alpha=0.2, label="Excited", markersize=2)
-                ax2.set_xlabel("I")
-                ax2.set_ylabel("Q")
-                ax2.set_title(f"{q.name}, {float(voltage)}")
-                ax2.axis("equal")
-        plt.show()
-        node.results["figure_raw_data"] = fig
+        axes = axes[0] # 取出第一列
+
+        # 3. 定義更新函數 (每一幀要做的事情)
+        def update(frame_idx):
+            voltage = float(ds.voltage[frame_idx])
+            
+            for i, q in enumerate(list(qubits)):
+                ax = axes[i]
+                ax.clear() # 清除上一幀的圖
+                
+                # 選取當前電壓點的數據
+                ds_q = ds.sel(qubit=q.name).isel(voltage=frame_idx)
+                
+                # 繪製 Ground (state=0) 和 Excited (state=1)
+                # 使用 scatter 或是 plot('.', ...)
+                ax.plot(ds_q.I.sel(state=0), ds_q.Q.sel(state=0), ".", 
+                        color="tab:blue", alpha=0.3, label="Ground", markersize=2)
+                ax.plot(ds_q.I.sel(state=1), ds_q.Q.sel(state=1), ".", 
+                        color="tab:orange", alpha=0.3, label="Excited", markersize=2)
+                
+                # 計算該點的 SNR 誤差 (呼叫你原本的 verify_snr)
+                err = verify_snr(ds, q.name, voltage)
+                qua_snr = ds.snr_db.sel(qubit=q.name).sel(voltage=voltage, method="nearest").mean(dim='N').item()
+                # 設定標題與標籤
+                ax.set_title(f"{q.name}\nCoupler Voltage: {voltage:.4f} V\nSNR: {qua_snr:.2f} dB, error: {err:.3f} dB")
+                ax.set_xlabel("I")
+                if i == 0: ax.set_ylabel("Q") # 只在最左邊顯示 Y 軸標籤
+                
+                # 關鍵：固定座標軸範圍
+                ax.set_xlim(lim_I)
+                ax.set_ylim(lim_Q)
+    
+                # ax.axis("equal") # 如果希望比例尺 1:1 可開啟，但可能會破壞固定範圍
+                ax.legend(loc="upper right", markerscale=3)
+                ax.grid(True, alpha=0.3)
+                
+
+        # 4. 建立動畫
+        # frames=len(ds.voltage) 代表總共有多少個電壓點
+        # interval=200 代表每一幀停留 200ms (即每秒 5 張圖)
+        ani = animation.FuncAnimation(fig, update, frames=len(ds.voltage), interval=200)
+
+        # 5. 存檔 (儲存為 GIF 或 MP4)
+    
+        
+        # 存成 GIF (通常最通用，不需要額外安裝 ffmpeg)
+        # ani.save(save_path, writer='pillow', fps=5)
+        
+        # 如果你有安裝 ffmpeg，也可以存成 mp4 (檔案較小，畫質較好)
+        # ani.save("coupler_flux_sweep.mp4", writer='ffmpeg', fps=5)
+        
+        plt.close() # 關閉畫布，避免在 Jupyter Notebook 中重複顯示靜態圖
+        
+        # 將動畫物件存入 node results (雖然動畫很難直接序列化存入，但可以存路徑)
+       
+
 
     # Plot Centroid vs coupler bias
     plt.figure(figsize=(8, 6))
@@ -407,7 +590,34 @@ if not node.parameters.simulate:
     plt.legend()
     plt.axis('equal')
     plt.show()
-    node.results["figs"][f"Figure_MovingCentroid"] = plt.gcf()
+    
+
+    dSNR = []
+    max_dSNR = {"q":"", "voltage":0, "dsnr":-1000}
+    import pandas as pd
+    for voltage in ds.voltage:
+        for q in list(qubits):
+            dsnr = verify_snr(ds, q.name, float(voltage))
+            dSNR.append(dsnr)
+
+            if dsnr >= max_dSNR['dsnr']:
+                max_dSNR['q'] = q.name
+                max_dSNR['voltage'] = float(voltage)
+                max_dSNR['dsnr'] = dsnr
+
+    ds_q = ds.sel(qubit=max_dSNR['q'], voltage=max_dSNR['voltage'])
+
+    plt.plot(ds_q.I.sel(state=0), ds_q.Q.sel(state=0), ".", alpha=0.2, label="Ground", markersize=2)
+    plt.plot(ds_q.I.sel(state=1), ds_q.Q.sel(state=1), ".", alpha=0.2, label="Excited", markersize=2)
+    plt.xlabel("I")
+    plt.ylabel("Q")
+    plt.title(f"{max_dSNR['q']}, C @ {round(max_dSNR['voltage'],4)}, QUA-SNR= {round(ds.snr_db.sel(qubit=max_dSNR['q']).sel(voltage=max_dSNR['voltage'], method='nearest').mean(dim='N').item(), 2)} dB, SNR error (Max)= { max_dSNR['dsnr']} dB")
+    plt.axis("equal")
+    plt.show()
+    node.results["figs"][f"Max_SNR_calculation_error"] = plt.gcf()
+    se = pd.Series(np.array(dSNR))
+    print(" *** All qubits |QUA_SNR - Post_SNR| statistics, unit: dB *** ")
+    print(se.describe())
 
 
     # %% {Update_state}
@@ -430,5 +640,47 @@ if not node.parameters.simulate:
         node.results["initial_parameters"] = node.parameters.model_dump()
         node.machine = machine
         node.save()
+
+
+# %%
+if node.parameters.plot_raw: 
+    from qualibrate_config.resolvers import get_qualibrate_config_path, get_qualibrate_config
+    from qualibrate.utils.node.path_solver import get_node_dir_path
+    import os
+    qs = get_qualibrate_config(get_qualibrate_config_path())
+    base_path = qs.storage.location
+
+    node_dir = get_node_dir_path(node.snapshot_idx, base_path)
+   
+    ani.save(os.path.join(node_dir, f"coupler_flux_sweep.gif"), writer='pillow', fps=5)
+
+
+
+# 假設 node.parameters.plot_raw 為 True
+
+# %%
+if node.parameters.plot_raw:
+    wnat_flux_locs = [0] # what flux amplitude want to plot
+    fig, axes = plt.subplots(
+        ncols=num_qubits,
+        nrows=len(wnat_flux_locs),
+        sharex=False,
+        sharey=False,
+        squeeze=False,
+        figsize=(5 * num_qubits, 5 * len(wnat_flux_locs)),
+    )
+    for amplitude, ax1 in zip(wnat_flux_locs, axes):
+        for q, ax2 in zip(list(qubits), ax1):
+            ds_q = ds.sel(qubit=q.name).sel(voltage=amplitude, method='nearest')
+            ax2.plot(ds_q.I.sel(state=0), ds_q.Q.sel(state=0), ".", alpha=0.2, label="Ground", markersize=2)
+            ax2.plot(ds_q.I.sel(state=1), ds_q.Q.sel(state=1), ".", alpha=0.2, label="Excited", markersize=2)
+            ax2.set_xlabel("I")
+            ax2.set_ylabel("Q")
+            ax2.set_title(f"{q.name}\nCoupler Voltage: {amplitude:.4f}")
+            ax2.axis("equal")
+            ax2.grid(alpha=0.3)
+
+    plt.tight_layout()
+    plt.show()
 
 # %%
