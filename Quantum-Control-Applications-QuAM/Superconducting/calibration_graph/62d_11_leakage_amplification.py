@@ -35,7 +35,7 @@ Outcomes:
 # %% {Imports}
 from qualibrate import QualibrationNode, NodeParameters
 from quam_libs.components import QuAM
-from quam_libs.macros import active_reset, readout_state_gef
+from quam_libs.macros import active_reset, readout_state_gef, readout_state
 from quam_libs.lib.plot_utils import QubitPairGrid, grid_iter, grid_pair_names
 from quam_libs.lib.save_utils import fetch_results_as_xarray, load_dataset
 from qualang_tools.results import progress_counter, fetching_tool
@@ -57,7 +57,7 @@ qubit_pair_indexes = [2]  # The indexes of the qubit pairs to measure
 class Parameters(NodeParameters):
 
     qubit_pairs: Optional[List[str]] = ["coupler_q%s_q%s"%(i,i+1) for i in qubit_pair_indexes]
-    num_averages: int = 50
+    num_averages: int = 100
     flux_point_joint_or_independent_or_pairwise: Literal["joint", "independent", "pairwise"] = "joint"
     reset_type: Literal['active', 'thermal'] = "active"
     simulate: bool = False
@@ -67,8 +67,8 @@ class Parameters(NodeParameters):
     """Number of operations to perform for each amplitude. Default is 10."""
     operation: Literal["Cz_flattop", "Cz_unipolar", "Cz_bipolar"] = "Cz_unipolar"
     """Type of CZ operation to perform. Options are 'cz_flattop', 'cz_unipolar', or 'cz_bipolar'. Default is 'cz_unipolar'."""
-    coupler_amp_range : float = 0.05
-    coupler_amp_step : float = 0.0001
+    coupler_amp_range : float = 0.1
+    coupler_amp_step : float = 0.0005
     use_state_discrimination: bool = True
 
 
@@ -142,8 +142,8 @@ with program() as leakage_amplification:
     
     
     for i, qp in enumerate(qubit_pairs):
-        qp.gates['Cz'].phase_shift_control = 0.0
-        qp.gates['Cz'].phase_shift_target = 0.0
+        qp.gates[operation_name].phase_shift_control = 0.0
+        qp.gates[operation_name].phase_shift_target = 0.0
         # Bring the active qubits to the minimum frequency point
         machine.set_all_fluxes(flux_point, qp)
         if reset_coupler_bias:

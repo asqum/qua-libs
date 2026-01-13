@@ -60,16 +60,16 @@ qubit_pair_indexes = [2]  # The indexes of the qubit pairs to measure
 class Parameters(NodeParameters):
 
     qubit_pairs: Optional[List[str]] = ["coupler_q%s_q%s"%(i,i+1) for i in qubit_pair_indexes]
-    num_averages: int = 10
+    num_averages: int = 100
     flux_point_joint_or_independent_or_pairwise: Literal["joint", "independent", "pairwise"] = "joint"
     reset_type: Literal['active', 'thermal'] = "active"
     simulate: bool = False
     timeout: int = 100
     load_data_id: Optional[int] = None
     qubit_amp_range : float = 0.1
-    qubit_amp_step : float = 0.001
-    coupler_amp_range : float = 0.05
-    coupler_amp_step : float = 0.001
+    qubit_amp_step : float = 0.0025
+    coupler_amp_range : float = 0.1
+    coupler_amp_step : float = 0.0025
     use_state_discrimination: bool = True
     operation: Literal["Cz_flattop", "Cz_unipolar", "Cz_bipolar"] = "Cz_unipolar"
     """Type of CZ operation to perform. Options are 'cz_flattop', 'cz_unipolar', or 'cz_bipolar'. Default is 'cz_unipolar'."""
@@ -142,8 +142,8 @@ with program() as CPhase_Oscillations:
     
     
     for i, qp in enumerate(qubit_pairs):
-        qp.gates['Cz'].phase_shift_control = 0.0
-        qp.gates['Cz'].phase_shift_target = 0.0
+        qp.gates[operation_name].phase_shift_control = 0.0
+        qp.gates[operation_name].phase_shift_target = 0.0
         # Bring the active qubits to the minimum frequency point
         machine.set_all_fluxes(flux_point, qp)
         if reset_coupler_bias:
@@ -156,8 +156,10 @@ with program() as CPhase_Oscillations:
                 with for_(*from_array(flux_qubit_amp, flux_qubit_amplitudes)):
                         # reset
                         if node.parameters.reset_type == "active":
-                            active_reset(qp.qubit_control)
-                            active_reset(qp.qubit_target)
+                            # active_reset(qp.qubit_control)
+                            # active_reset(qp.qubit_target)
+                            active_reset_gef(qp.qubit_control)
+                            active_reset_gef(qp.qubit_target)
                         else:
                             wait(qp.qubit_control.thermalization_time * u.ns)
                             wait(qp.qubit_target.thermalization_time * u.ns)
@@ -173,6 +175,8 @@ with program() as CPhase_Oscillations:
                         if node.parameters.use_state_discrimination:
                             readout_state_gef(qp.qubit_control, state_control[i])
                             readout_state_gef(qp.qubit_target, state_target[i])
+                            # readout_state(qp.qubit_control, state_control[i])
+                            # readout_state(qp.qubit_target, state_target[i])
                             save(state_control[i], state_st_control[i])
                             save(state_target[i], state_st_target[i])
 
