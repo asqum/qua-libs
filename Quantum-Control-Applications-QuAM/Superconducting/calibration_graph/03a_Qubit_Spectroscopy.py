@@ -47,12 +47,12 @@ import numpy as np
 # %% {Node_parameters}
 class Parameters(NodeParameters):
 
-    qubits: Optional[List[str]] = None #["q1","q2","q3","q4"] #None
-    num_averages: int = 300
+    qubits: Optional[List[str]] = None
+    num_averages: int = 100
     operation: str = "saturation"
-    operation_amplitude_factor: Optional[float] = 0.1 #0.004, 0.0004
+    operation_amplitude_factor: Optional[float] = 0.3 #0.004, 0.0004
     operation_len_in_ns: Optional[int] = None
-    frequency_span_in_mhz: float = 150 #200, 4, 800
+    frequency_span_in_mhz: float = 400 #200, 4, 800
     frequency_step_in_mhz: float = 0.4 #0.25, 0.01
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
     target_peak_width: Optional[float] = 1e6 #1e6
@@ -132,6 +132,12 @@ with program() as qubit_spec:
 
     machine.apply_all_couplers_to_min()
     for i, qubit in enumerate(qubits):
+        max_freq = dfs[-1] + qubit.xy.intermediate_frequency
+        min_freq = dfs[0] + qubit.xy.intermediate_frequency
+        assert max_freq <= 400e6 and min_freq >= -400e6, (
+            f"{qubit.name} IF span out of range: min={min_freq/1e6:.2f} MHz, "
+            f"max={max_freq/1e6:.2f} MHz (limit ±400 MHz), please adjust the frequency span.")
+        
         # Bring the active qubits to the desired frequency point
         machine.set_all_fluxes(flux_point=flux_point, target=qubit)
         if "c" in qubit.id: qubit.z.set_dc_offset(qubit.z.joint_offset) # for coupler-test case
@@ -142,6 +148,7 @@ with program() as qubit_spec:
             with for_(*from_array(df, dfs)):
                 # Update the qubit frequency
                 qubit.xy.update_frequency(df + qubit.xy.intermediate_frequency + detunings[qubit.name])
+                
                 # qubit.xy.update_frequency(df + qubit.xy.intermediate_frequency + detunings[qubit.name] + 700e6) # for coupler search 
                 qubit.align()
                 duration = operation_len * u.ns if operation_len is not None else (qubit.xy.operations[operation].length + qubit.z.settle_time) * u.ns
@@ -313,6 +320,7 @@ if not node.parameters.simulate:
 
     # %% {Update_state}
     if node.parameters.load_data_id is None:
+        node.machine = machine
         with node.record_state_updates():
             for q in qubits:
                 if not np.isnan(result.sel(qubit=q.name).position.values):
@@ -349,7 +357,7 @@ if not node.parameters.simulate:
         # %% {Save_results}
         node.outcomes = {q.name: "successful" for q in qubits}
         node.results["initial_parameters"] = node.parameters.model_dump()
-        node.machine = machine
+        
         node.save()
 
 
