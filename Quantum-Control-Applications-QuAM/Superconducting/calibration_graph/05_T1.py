@@ -39,7 +39,7 @@ class Parameters(NodeParameters):
     min_wait_time_in_ns: int = 16
     max_wait_time_in_ns: int = 90000
     wait_time_step_in_ns: int = 300
-    flux_point_joint_or_independent_or_arbitrary: Literal["joint", "independent", "arbitrary"] = "independent"
+    flux_point_joint_or_independent_or_arbitrary: Literal["joint", "independent"] = "independent"
     reset_type: Literal["active", "thermal"] = "thermal"
     use_state_discrimination: bool = False
     simulate: bool = False
@@ -115,14 +115,16 @@ with program() as t1:
 
                 qubit.xy.play("x180")
                 qubit.align()
-                qubit.z.wait(20)
-                qubit.z.play(
-                    "const",
-                    amplitude_scale=arb_flux_bias_offset[qubit.name] / qubit.z.operations["const"].amplitude,
-                    duration=t,
-                )
-                qubit.z.wait(20)
-                qubit.align()
+                # qubit.z.wait(20)
+                # qubit.z.play(
+                #     "const",
+                #     amplitude_scale=arb_flux_bias_offset[qubit.name] / qubit.z.operations["const"].amplitude,
+                #     duration=t,
+                # )
+                # qubit.z.wait(20)
+                # qubit.align()
+                qubit.wait(t)
+               
 
                 # Measure the state of the resonators
                 if node.parameters.use_state_discrimination:
@@ -154,6 +156,8 @@ if node.parameters.simulate:
     job = qmm.simulate(config, t1, simulation_config)
     # Get the simulated samples and plot them for all controllers
     samples = job.get_simulated_samples()
+    waveform_report = job.get_simulated_waveform_report()
+    waveform_report.create_plot(samples, plot=True)
     fig, ax = plt.subplots(nrows=len(samples.keys()), sharex=True)
     for i, con in enumerate(samples.keys()):
         plt.subplot(len(samples.keys()), 1, i + 1)

@@ -1,27 +1,6 @@
 # %%
 from qualibrate import QualibrationNode, NodeParameters
 from typing import Optional, Literal, List
-
-
-# %% {Node_parameters}
-class Parameters(NodeParameters):
-    qubits: Optional[List[str]] = None
-    num_averages: int = 300
-    min_wait_time_in_ns: int = 16
-    max_wait_time_in_ns: int = 10008
-    wait_time_step_in_ns: int = 100
-    flux_point_joint_or_independent_or_arbitrary: Literal['joint', 'independent', 'arbitrary'] = "independent"    
-    simulate: bool = False
-    timeout: int = 100
-    use_state_discrimination: bool = True
-    reset_type: Literal['active', 'thermal'] = "active"
-
-node = QualibrationNode(
-    name="06b_T2_echo",
-    parameters=Parameters()
-)
-
-
 from qm.qua import *
 from qm import SimulationConfig
 from qualang_tools.results import progress_counter, fetching_tool
@@ -41,7 +20,23 @@ from quam_libs.lib.save_utils import fetch_results_as_xarray
 from quam_libs.lib.fit import fit_decay_exp, decay_exp
 
 
+# %% {Node_parameters}
+class Parameters(NodeParameters):
+    qubits: Optional[List[str]] = None #The qubit to be measured. If None, all active qubits will be measured
+    num_averages: int = 300
+    min_wait_time_in_ns: int = 16
+    max_wait_time_in_ns: int = 5000
+    wait_time_step_in_ns: int = 50
+    flux_point_joint_or_independent_or_arbitrary: Literal['joint', 'independent'] = 'independent'   
+    simulate: bool = False
+    timeout: int = 100
+    use_state_discrimination: bool = True
+    reset_type: Literal['active', 'thermal'] = "thermal"
 
+node = QualibrationNode(
+    name="06b_T2_echo",
+    parameters=Parameters()
+)
 
 
 # Class containing tools to help handle units and conversions.
@@ -57,7 +52,7 @@ qmm = machine.connect()
 if node.parameters.qubits is None or node.parameters.qubits == '':
     qubits = machine.active_qubits
 else:
-    qubits = machine.get_qubits_used_in_node(node.parameters)
+    qubits = [machine.qubits[q] for q in node.parameters.qubits]
 num_qubits = len(qubits)
 
 
@@ -114,19 +109,22 @@ with program() as t1:
                 
                     
                 qubit.xy.play("x90")
-                qubit.align()
-                qubit.z.wait(20)
-                qubit.z.play("const", amplitude_scale=arb_flux_bias_offset[qubit.name]/qubit.z.operations["const"].amplitude, duration=t)
-                qubit.z.wait(20)
-                qubit.align()
+                # qubit.align()
+                # qubit.z.wait(20)
+                # qubit.z.play("const", amplitude_scale=arb_flux_bias_offset[qubit.name]/qubit.z.operations["const"].amplitude, duration=t)
+                # qubit.z.wait(20)
+                # qubit.align()
+                qubit.wait(t)
                 qubit.xy.play("x180")
-                qubit.align()
-                qubit.z.wait(20)
-                qubit.z.play("const", amplitude_scale=arb_flux_bias_offset[qubit.name]/qubit.z.operations["const"].amplitude, duration=t)
-                qubit.z.wait(20)
-                qubit.align()
+                # qubit.align()
+                # qubit.z.wait(20)
+                # qubit.z.play("const", amplitude_scale=arb_flux_bias_offset[qubit.name]/qubit.z.operations["const"].amplitude, duration=t)
+                # qubit.z.wait(20)
+                # qubit.align()
+                qubit.wait(t)
                 qubit.xy.play("-x90")
                 qubit.align()
+
                 
                 # Measure the state of the resonators
                 if node.parameters.use_state_discrimination:
@@ -179,9 +177,9 @@ else:
                 progress_counter(n, n_avg, start_time=results.start_time)
 
 
-# %% {Data_fetching_and_dataset_creation}
+# %%
 if not node.parameters.simulate:
-    
+    # {Data_fetching_and_dataset_creation}
     # Fetch the data from the OPX and convert it into a xarray with corresponding axes (from most inner to outer loop)
     ds = fetch_results_as_xarray(job.result_handles, qubits, {"idle_time": idle_times})
 
