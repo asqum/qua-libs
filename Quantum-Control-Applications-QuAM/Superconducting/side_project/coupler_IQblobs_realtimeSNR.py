@@ -1,6 +1,7 @@
 # %% {Imports}
 from qualibrate import QualibrationNode, NodeParameters
 from quam_libs.components import QuAM
+from quam_libs.components.transmon_pair import Transmon, TransmonPair
 from quam_libs.lib import find_c_with_q
 from quam_libs.macros import qua_declaration, active_reset, active_reset_simple
 from quam_libs.lib.plot_utils import QubitGrid, grid_iter
@@ -12,12 +13,12 @@ from qualang_tools.multi_user import qm_session
 from qualang_tools.units import unit
 from qm import SimulationConfig
 from qm.qua import *
-from typing import Literal, Optional, List
+from typing import Literal, Optional, List, Dict
 import matplotlib.pyplot as plt
 import numpy as np
 import xarray as xr
 import matplotlib.animation as animation
-
+from sklearn.mixture import GaussianMixture
 
 # %%
 from scipy.interpolate import UnivariateSpline
@@ -102,12 +103,246 @@ def verify_snr(ds, qubit_name, voltage_val):
         return abs_error
 
 
+def SNR_realtime_calc(sum_G:dict, sum_E:dict, sum_G_sq:list, sum_E_sq:list, total_counts:int, snr_st:list, ret:bool=False):
+    """ 
+    Calculate SNR and return the dict contained qubit individual SNR and over all qubits averaged SNR.
+    """
+    
+    num_qubits = len(sum_G_sq)
+    inv_n = 1.0 / total_counts
+    inv_num_qubits = 1.0 / num_qubits
+
+   
+    n = declare(int)
+    snr_final = declare(fixed)
+    avg_snr = declare(fixed, value=0.0)
+    
+    
+    each_snr = [declare(fixed, value=0.0) for _ in range(num_qubits)]
+
+    
+    m_Ig, m_Qg = declare(fixed), declare(fixed)
+    m_Ie, m_Qe = declare(fixed), declare(fixed)
+    m_sq_g, m_sq_e = declare(fixed), declare(fixed)
+    dist_sq = declare(fixed)
+    var_g, var_e, var_max = declare(fixed), declare(fixed), declare(fixed)
+    
+    snr_db_guard = 0.03 
+    
+    # --- Loop over qubits ---
+    for i in range(num_qubits):
+        
+        # Reset calculation variables not needed, strictly overwritten by assign below
+
+        # 1. Calculate Means
+        assign(m_Ig, sum_G['I'][i] * inv_n)
+        assign(m_Qg, sum_G['Q'][i] * inv_n)
+        assign(m_Ie, sum_E['I'][i] * inv_n)
+        assign(m_Qe, sum_E['Q'][i] * inv_n)
+        assign(m_sq_g, sum_G_sq[i] * inv_n)
+        assign(m_sq_e, sum_E_sq[i] * inv_n)
+
+        # 2. Dist^2
+        assign(dist_sq, (m_Ie - m_Ig)*(m_Ie - m_Ig) + (m_Qe - m_Qg)*(m_Qe - m_Qg))
+        
+        # 3. Variance
+        assign(var_g, m_sq_g - (m_Ig*m_Ig + m_Qg*m_Qg))
+        assign(var_e, m_sq_e - (m_Ie*m_Ie + m_Qe*m_Qe))
+
+        # Protection
+        with if_(var_g < 1e-9): assign(var_g, 1e-9)
+        with if_(var_e < 1e-9): assign(var_e, 1e-9)
+        
+        # 4. SNR Calc
+        with if_(var_e > var_g):
+            assign(var_max, var_e)
+        with else_():
+            assign(var_max, var_g)
+        
+        with if_(var_max > 1e-9):
+            assign(snr_final, Math.sqrt(Math.div(dist_sq, var_max)))
+            with if_(snr_final < snr_db_guard):
+                assign(snr_final, snr_db_guard)
+        with else_():
+            with if_(dist_sq > 1e-9):
+                assign(snr_final, 7.99)
+            with else_():
+                assign(snr_final, snr_db_guard)
+
+        # 5. Save Stream (match stream processing structure)
+        with for_(n, 0, n < total_counts, n + 1):
+            save(snr_final, snr_st[i])
+        
+        # 6. Accumulate Average SNR 
+        assign(each_snr[i], snr_final)
+        # AVG
+        assign(avg_snr, avg_snr + snr_final * inv_num_qubits)
+    
+    if ret:
+        return {"individual": each_snr, "averaged": avg_snr}, snr_st
+    else:
+        return None
+
+def SNR_observer(qubits:List[Transmon], qubit_pairs:List[TransmonPair], dcs:np.ndarray, n_runs:int=4096, z_rising_time_ns:int=1000, reset_type:Literal['thermal', 'active']='thermal', simulation:bool = False):
+    ro_time = 0
+    xy_time = 0
+    num_qubits = len(qubits)
+    I_g, I_g_st, Q_g, Q_g_st, n, n_st = qua_declaration(num_qubits=num_qubits)
+    I_e, I_e_st, Q_e, Q_e_st, _, _ = qua_declaration(num_qubits=num_qubits)
+    snr_st = [declare_stream() for _ in range(len(qubits))]
+    z_rising_time = z_rising_time_ns//4
+    dc = declare(fixed)
+    
+    # flux crosstalk compensate coef
+    fcc_flux_amp = {q.name: declare(fixed, value=0.0) for q in qubits}
+    
+    # averaging and square sum accumulator
+    sum_Ig = [declare(fixed, value=0.0) for _ in range(num_qubits)]
+    sum_Qg = [declare(fixed, value=0.0) for _ in range(num_qubits)]
+    sum_Ie = [declare(fixed, value=0.0) for _ in range(num_qubits)]
+    sum_Qe = [declare(fixed, value=0.0) for _ in range(num_qubits)]
+    sum_sq_g = [declare(fixed, value=0.0) for _ in range(num_qubits)]
+    sum_sq_e = [declare(fixed, value=0.0) for _ in range(num_qubits)]
+    
+    # Check readout and driving duration
+    for q in qubits:
+        if q.xy.operations["x180"].length//4 >= xy_time:
+            xy_time = q.xy.operations["x180"].length//4
+        if q.resonator.operations["readout"].length//4 >= ro_time:
+            ro_time = q.resonator.operations["readout"].length//4
+
+
+    align()     
+
+    with for_(*from_array(dc, dcs)): 
+    
+        # reset
+        for i, q in enumerate(qubits):
+            assign(sum_Ig[i], 0.0)
+            assign(sum_Qg[i], 0.0)
+            assign(sum_Ie[i], 0.0)
+            assign(sum_Qe[i], 0.0)
+            assign(sum_sq_g[i], 0.0)
+            assign(sum_sq_e[i], 0.0)
+            assign(fcc_flux_amp[q.name], 0.0)
+
+        # flux crosstalk compenstation
+        for qp in qubit_pairs:
+            if "FCC" in qp.extras:   
+                for q_name in qp.extras['FCC']:    
+                    if q_name in fcc_flux_amp:
+                        assign(fcc_flux_amp[q_name], fcc_flux_amp[q_name]+qp.extras["FCC"][q_name] * dc)
+            
+
+
+        with for_(n, 0, n < n_runs, n + 1):
+            # ground iq blobs for all qubits
+            save(n, n_st)
+        
+            """ Prepare Ground |0> """
+            for i, qubit in enumerate(qubits):
+                if reset_type == "active":
+                    active_reset_simple(qubit, "readout")
+                elif reset_type == "thermal":
+                    if not simulation:
+                        qubit.wait(qubit.thermalization_time * u.ns)
+                    else:
+                        qubit.wait(16 * u.ns)
+                else:
+                    raise ValueError(f"Unrecognized reset type {reset_type}.")
+
+            align()
+
+            for i, qp in enumerate(qubit_pairs):
+                
+                qp.coupler.play(
+                    "const", 
+                    amplitude_scale = dc / qp.coupler.operations["const"].amplitude, 
+                    duration = z_rising_time + ro_time
+                ) 
+                
+            
+            for i, qubit in enumerate(qubits):
+                qubit.z.play(
+                    "const", 
+                    amplitude_scale = fcc_flux_amp[qubit.name] / qubit.z.operations["const"].amplitude, 
+                    duration = z_rising_time + ro_time
+                )
+                qubit.resonator.wait(z_rising_time)
+                qubit.resonator.measure("readout", qua_vars=(I_g[i], Q_g[i]))
+
+                assign(sum_Ig[i], sum_Ig[i] + I_g[i])
+                assign(sum_Qg[i], sum_Qg[i] + Q_g[i])
+                assign(sum_sq_g[i], sum_sq_g[i] + (I_g[i] * I_g[i] + Q_g[i] * Q_g[i]))
+
+                save(I_g[i], I_g_st[i])
+                save(Q_g[i], Q_g_st[i])
+            
+            align()
+            
+            """ Prepare Excited |1> """
+
+            for i, qubit in enumerate(qubits):
+                if reset_type == "active":
+                    active_reset_simple(qubit, "readout")
+                elif reset_type == "thermal":
+                    if not simulation:
+                        qubit.wait(qubit.thermalization_time * u.ns)
+                    else:
+                        qubit.wait(16 * u.ns)
+                else:
+                    raise ValueError(f"Unrecognized reset type {reset_type}.")
+            
+            align()
+
+            
+            for i, qp in enumerate(qubit_pairs):
+                qp.coupler.play(
+                    "const", 
+                    amplitude_scale = dc / qp.coupler.operations["const"].amplitude, 
+                    duration = z_rising_time + xy_time + ro_time
+                )
+
+            
+            for i, qubit in enumerate(qubits):
+                qubit.z.play(
+                    "const", 
+                    amplitude_scale = fcc_flux_amp[qubit.name] / qubit.z.operations["const"].amplitude, 
+                    duration = z_rising_time + xy_time + ro_time
+                )
+                qubit.resonator.wait(z_rising_time + xy_time)
+                qubit.xy.wait(z_rising_time)
+                qubit.xy.play("x180")
+            
+            
+                qubit.resonator.measure("readout", qua_vars=(I_e[i], Q_e[i]))
+
+                assign(sum_Ie[i], sum_Ie[i] + I_e[i])
+                assign(sum_Qe[i], sum_Qe[i] + Q_e[i])
+                assign(sum_sq_e[i], sum_sq_e[i] + (I_e[i]*I_e[i] + Q_e[i]*Q_e[i]))
+
+                save(I_e[i], I_e_st[i])
+                save(Q_e[i], Q_e_st[i])
+
+            align()
+            
+        SNR_realtime_calc(sum_G={"I":sum_Ig,"Q":sum_Qg}, sum_E={"I":sum_Ie,"Q":sum_Qe}, sum_G_sq=sum_sq_g, sum_E_sq=sum_sq_e, total_counts=n_runs, snr_st=snr_st)
+        
+
+    streaming = {"Ig":I_g_st, "Qg":Q_g_st, "Ie":I_e_st, "Qe":Q_e_st, "SNR":snr_st, "n":n_st}
+    
+    return streaming
+    
+
+
+
+
 # %% {Node_parameters}
 class Parameters(NodeParameters):
 
     qubits: Optional[List[str]] = ['q1', 'q2']
     num_runs: int = 4096
-    reset_type_thermal_or_active: Literal["thermal", "active"] = "active"
+    reset_type_thermal_or_active: Literal["thermal", "active"] = "thermal"
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
     c_min_v: float = -0.2
     c_max_v: float = 0.2
@@ -150,36 +385,10 @@ flux_point = node.parameters.flux_point_joint_or_independent  # 'independent' or
 reset_type = node.parameters.reset_type_thermal_or_active  # "active" or "thermal"
 dcs = np.linspace(node.parameters.c_min_v, node.parameters.c_max_v, node.parameters.v_nums)
 
-# Check out the longest pi-pulse duration
-xy_dura = 0
-for qubit in qubits:
-    if qubit.xy.operations["x180"].length > xy_dura:
-        xy_dura = qubit.xy.operations["x180"].length
-
-# Check out the longest readout time
-ro_dura = 0
-for qubit in qubits:
-    if qubit.resonator.operations["readout"].length > ro_dura:
-        ro_dura = qubit.resonator.operations["readout"].length
 
 
 
 with program() as iq_blobs_snr:
-    I_g, I_g_st, Q_g, Q_g_st, n, n_st = qua_declaration(num_qubits=num_qubits)
-    I_e, I_e_st, Q_e, Q_e_st, _, _ = qua_declaration(num_qubits=num_qubits)
-    dc = declare(fixed)
-
-    # --- SNR calculation related ---
-    snr_st = [declare_stream() for _ in range(num_qubits)]
-    # averaging and square sum accumulator
-    sum_Ig = [declare(fixed, value=0.0) for _ in range(num_qubits)]
-    sum_Qg = [declare(fixed, value=0.0) for _ in range(num_qubits)]
-    sum_Ie = [declare(fixed, value=0.0) for _ in range(num_qubits)]
-    sum_Qe = [declare(fixed, value=0.0) for _ in range(num_qubits)]
-    sum_sq_g = [declare(fixed, value=0.0) for _ in range(num_qubits)]
-    sum_sq_e = [declare(fixed, value=0.0) for _ in range(num_qubits)]
-    
-    inv_n = 1.0 / n_runs # avoid > 8
 
     if not node.parameters.simulate:
         machine.apply_all_couplers_to_min()
@@ -191,223 +400,18 @@ with program() as iq_blobs_snr:
             qubit.z.settle()
             qubit.align()
     
-    align()       
-    
-    with for_(*from_array(dc, dcs)):
-        
-        # --- 每個新 dc 開始前，重置累加器 ---
-        for i in range(num_qubits):
-            assign(sum_Ig[i], 0.0)
-            assign(sum_Qg[i], 0.0)
-            assign(sum_Ie[i], 0.0)
-            assign(sum_Qe[i], 0.0)
-            assign(sum_sq_g[i], 0.0)
-            assign(sum_sq_e[i], 0.0)
-            
-
-        with for_(n, 0, n < n_runs, n + 1):
-            # ground iq blobs for all qubits
-            save(n, n_st)
-        
-
-            for i, qubit in enumerate(qubits):
-                if reset_type == "active":
-                    active_reset_simple(qubit, "readout")
-                elif reset_type == "thermal":
-                    if node.parameters.simulate:
-                        qubit.wait(16 * u.ns)
-                    else:
-                        qubit.wait(qubit.thermalization_time * u.ns)
-                else:
-                    raise ValueError(f"Unrecognized reset type {reset_type}.")
-
-            align()
-
-            for i, qp in enumerate(qubit_pairs):
-                qp.coupler.play(
-                    "const", 
-                    amplitude_scale = dc / qp.coupler.operations["const"].amplitude, 
-                    duration = node.parameters.z_rising_time_ns//4 + ro_dura//4
-                )
-
-                # flux crosstalk compenstation
-                comp_control, comp_target = declare(fixed), declare(fixed)
-                if "FCC" in qp.extras:           
-                    if 'control' in qp.extras['FCC']:
-                        assign(comp_control,  qp.extras["FCC"]["control"] * dc )
-                    else:
-                        assign(comp_control, 0.0)
-                    if 'target' in qp.extras['FCC']:
-                        assign(comp_target,  qp.extras["FCC"]["target"] * dc )
-                    else:
-                        assign(comp_target, 0.0)  
-                else:
-                    assign(comp_control, 0.0)
-                    assign(comp_target, 0.0)
-
-                qp.qubit_control.z.play(
-                    "const", 
-                    amplitude_scale = comp_control / qp.qubit_control.z.operations["const"].amplitude, 
-                    duration = node.parameters.z_rising_time_ns//4 + ro_dura//4
-                )
-                qp.qubit_target.z.play(
-                    "const", 
-                    amplitude_scale = comp_target / qp.qubit_control.z.operations["const"].amplitude, 
-                    duration = node.parameters.z_rising_time_ns//4 + ro_dura//4
-                )
-
-                # end of compensation
-            
-            for i, qubit in enumerate(qubits):
-                qubit.resonator.wait(node.parameters.z_rising_time_ns//4)
-                qubit.resonator.measure("readout", qua_vars=(I_g[i], Q_g[i]))
-
-                assign(sum_Ig[i], sum_Ig[i] + I_g[i])
-                assign(sum_Qg[i], sum_Qg[i] + Q_g[i])
-                assign(sum_sq_g[i], sum_sq_g[i] + (I_g[i] * I_g[i] + Q_g[i] * Q_g[i]))
-
-                save(I_g[i], I_g_st[i])
-                save(Q_g[i], Q_g_st[i])
-            
-            align()
-
-            for i, qubit in enumerate(qubits):
-                if reset_type == "active":
-                    active_reset_simple(qubit, "readout")
-                elif reset_type == "thermal":
-                    if node.parameters.simulate:
-                        qubit.wait(16 * u.ns)
-                    else:
-                        qubit.wait(qubit.thermalization_time * u.ns)
-                else:
-                    raise ValueError(f"Unrecognized reset type {reset_type}.")
-            
-            align()
-
-
-            for i, qp in enumerate(qubit_pairs):
-                qp.coupler.play(
-                    "const", 
-                    amplitude_scale = dc / qp.coupler.operations["const"].amplitude, 
-                    duration = node.parameters.z_rising_time_ns//4 + xy_dura//4 + ro_dura//4
-                )
-
-                # Flux crosstalk compensation
-                comp_control, comp_target = declare(fixed), declare(fixed)
-                if "FCC" in qp.extras:           
-                    if 'control' in qp.extras['FCC']:
-                        assign(comp_control,  qp.extras["FCC"]["control"] * dc )
-                    else:
-                        assign(comp_control, 0.0)
-                    if 'target' in qp.extras['FCC']:
-                        assign(comp_target,  qp.extras["FCC"]["target"] * dc )
-                    else:
-                        assign(comp_target, 0.0)  
-                else:
-                    assign(comp_control, 0.0)
-                    assign(comp_target, 0.0)
-
-                qp.qubit_control.z.play(
-                    "const", 
-                    amplitude_scale = comp_control / qp.qubit_control.z.operations["const"].amplitude, 
-                    duration = node.parameters.z_rising_time_ns//4 + ro_dura//4
-                )
-                qp.qubit_target.z.play(
-                    "const", 
-                    amplitude_scale = comp_target / qp.qubit_control.z.operations["const"].amplitude, 
-                    duration = node.parameters.z_rising_time_ns//4 + ro_dura//4
-                )
-                # end of compensation
-            
-            # align()
-
-            for i, qubit in enumerate(qubits):
-                qubit.xy.wait(node.parameters.z_rising_time_ns//4)
-                qubit.xy.play("x180")
-            
-            # align()
-            
-            # for i, qubit in enumerate(qubits):
-                qubit.resonator.measure("readout", qua_vars=(I_e[i], Q_e[i]))
-
-                assign(sum_Ie[i], sum_Ie[i] + I_e[i])
-                assign(sum_Qe[i], sum_Qe[i] + Q_e[i])
-                assign(sum_sq_e[i], sum_sq_e[i] + (I_e[i]*I_e[i] + Q_e[i]*Q_e[i]))
-
-                save(I_e[i], I_e_st[i])
-                save(Q_e[i], Q_e_st[i])
-
-            align()
-        
-        # --- Calculate SNR after shotting ---
-        for i in range(num_qubits):
-            m_Ig = declare(fixed)
-            m_Qg = declare(fixed)
-            m_Ie = declare(fixed)
-            m_Qe = declare(fixed)
-            m_sq_g = declare(fixed)
-            m_sq_e = declare(fixed)
-            snr_db_guard = declare(fixed, value=0.03) # ~ -30 dB
-            
-            # 1. 計算平均值 (在此時才乘 inv_n)
-            assign(m_Ig, sum_Ig[i] * inv_n)
-            assign(m_Qg, sum_Qg[i] * inv_n)
-            assign(m_Ie, sum_Ie[i] * inv_n)
-            assign(m_Qe, sum_Qe[i] * inv_n)
-            assign(m_sq_g, sum_sq_g[i] * inv_n)
-            assign(m_sq_e, sum_sq_e[i] * inv_n)
-
-            # 2. 計算距離平方 Dist^2 = |mu_e - mu_g|^2
-            dist_sq = declare(fixed)
-            assign(dist_sq, (m_Ie - m_Ig)*(m_Ie - m_Ig) + (m_Qe - m_Qg)*(m_Qe - m_Qg))
-            
-            # 3. 計算變異數 Var = E[X^2] - (E[X])^2
-            var_g = declare(fixed)
-            var_e = declare(fixed)
-            assign(var_g, m_sq_g - (m_Ig*m_Ig + m_Qg*m_Qg))
-            assign(var_e, m_sq_e - (m_Ie*m_Ie + m_Qe*m_Qe))
-
-            # avoid a negative variance
-            with if_(var_g < 1e-9):
-                assign(var_g, 1e-9)
-                
-            with if_(var_e < 1e-9):
-                assign(var_e, 1e-9)
-            
-            # 4. 計算 SNR = sqrt(Dist^2 / Max(Var))
-            var_max = declare(fixed)
-            with if_(var_e > var_g):
-                assign(var_max, var_e)
-            with else_():
-                assign(var_max, var_g)
-            
-            snr_final = declare(fixed)
-            with if_(var_max > 1e-9):
-                # 使用 Math.div 進行除法比較安全
-                assign(snr_final, Math.sqrt(Math.div(dist_sq, var_max)))
-                with if_(snr_final < snr_db_guard):
-                    assign(snr_final, snr_db_guard) # Too small
-            with else_():
-                # 如果噪聲低到無法計算，但有訊號差，給予一個預設值或 0
-                with if_(dist_sq > 1e-9):
-                    assign(snr_final, 7.99) # 給予 QUA fixed 的最大值代表高 SNR
-                with else_():
-                    assign(snr_final, snr_db_guard) # Too small
-
-            # 為了配合你的 stream_processing buffer 結構，我們把這個值存入 stream
-            with for_(n, 0, n < n_runs, n + 1):
-                save(snr_final, snr_st[i])
+    streaming = SNR_observer(qubits, qubit_pairs, dcs, n_runs, node.parameters.z_rising_time_ns, reset_type, node.parameters.simulate)  
 
     with stream_processing():
-        n_st.save("n")
+        streaming['n'].save("n")
         for i in range(num_qubits):
-            I_g_st[i].buffer(n_runs).buffer(len(dcs)).save(f"I_g{i + 1}")
-            Q_g_st[i].buffer(n_runs).buffer(len(dcs)).save(f"Q_g{i + 1}")
-            I_e_st[i].buffer(n_runs).buffer(len(dcs)).save(f"I_e{i + 1}")
-            Q_e_st[i].buffer(n_runs).buffer(len(dcs)).save(f"Q_e{i + 1}")
+            streaming['Ig'][i].buffer(n_runs).buffer(len(dcs)).save(f"I_g{i + 1}")
+            streaming['Qg'][i].buffer(n_runs).buffer(len(dcs)).save(f"Q_g{i + 1}")
+            streaming['Ie'][i].buffer(n_runs).buffer(len(dcs)).save(f"I_e{i + 1}")
+            streaming['Qe'][i].buffer(n_runs).buffer(len(dcs)).save(f"Q_e{i + 1}")
 
             # SNR
-            snr_st[i].buffer(n_runs).buffer(len(dcs)).save(f"snr{i + 1}")
+            streaming['SNR'][i].buffer(n_runs).buffer(len(dcs)).save(f"snr{i + 1}")
 
 
 if node.parameters.simulate:
@@ -557,7 +561,7 @@ if not node.parameters.simulate:
         # 4. 建立動畫
         # frames=len(ds.voltage) 代表總共有多少個電壓點
         # interval=200 代表每一幀停留 200ms (即每秒 5 張圖)
-        ani = animation.FuncAnimation(fig, update, frames=len(ds.voltage), interval=200)
+        ani = animation.FuncAnimation(fig, update, frames=len(ds.voltage), interval=1000)
 
         # 5. 存檔 (儲存為 GIF 或 MP4)
     
