@@ -244,3 +244,106 @@ class CosineFlatTopPulse(Pulse):
             p = p * np.exp(1j * self.axis_angle)
 
         return p.tolist()
+
+@quam_dataclass
+class FreeCosineBipolarPulse(Pulse):
+    """
+    Bipolar pulse defined by ratios, allowing asymmetric positive/negative lobes.
+
+    Args:
+        length (int): Total length in samples.
+        amplitude (float): The amplitude of the pulse (V).
+        switch_point_ratio (float): Ratio of total length allocated to the positive lobe.
+            Range [0.0, 1.0]. E.g., 0.6 means first 60% is positive.
+        flat_length_ratio (float): Ratio of length within each lobe that is flat.
+            Range [0.0, 1.0]. E.g., 0.9 means 90% of the lobe is flat top.
+        axis_angle (float, optional): IQ axis angle in radians.
+    """
+
+    amplitude: float
+    axis_angle: float = None
+    flat_length_ratio: float
+    switch_point_ratio:float
+
+    def waveform_function(self):
+        # --- Helper functions ---
+        # 0 -> 1 (Rising edge)
+        def halfcos_up(n: int):
+            if n <= 0: return np.array([])
+            t = np.arange(n) / n
+            return 0.5 * (1 - np.cos(np.pi * t))
+
+        # 1 -> 0 (Falling edge)
+        def halfcos_down(n: int):
+            if n <= 0: return np.array([])
+            t = np.arange(n) / n
+            return 0.5 * (1 + np.cos(np.pi * t))
+
+        L = int(self.length)
+        A = float(self.amplitude)
+        
+        # 1. calc the length of postive pole and negative pole
+        # flip_point_ratio = 0.6  --> pos_total_len = 0.6 * L
+        
+        pos_total_len = int(np.round(L * self.switch_point_ratio))
+        neg_total_len = L - pos_total_len
+
+        # 2. calc flat length
+        # flat_length_ratio = 0.9 
+        pos_flat_len = int(np.round(pos_total_len * self.flat_length_ratio))
+        neg_flat_len = int(np.round(neg_total_len * self.flat_length_ratio))
+
+        # 3. calc transition length
+        
+        
+        # [Positive Lobe]
+        pos_remain = pos_total_len - pos_flat_len
+        len_rise = pos_remain // 2                    # 0 -> A
+        len_fall_to_zero = pos_remain - len_rise      # A -> 0 
+
+        # [Negative Lobe]
+        neg_remain = neg_total_len - neg_flat_len
+        len_fall_from_zero = neg_remain // 2          # 0 -> -A 
+        len_return_zero = neg_remain - len_fall_from_zero # -A -> 0
+
+        # 4. Create waveform
+        # Part A: Positive Side
+        seg_rise = A * halfcos_up(len_rise)
+        seg_flat_pos = A * np.ones(pos_flat_len)
+        seg_switch_1 = A * halfcos_down(len_fall_to_zero) # 1 -> 0
+
+        # Part B: Negative Side
+        # halfcos_up 
+        seg_switch_2 = -A * halfcos_up(len_fall_from_zero) 
+        seg_flat_neg = -A * np.ones(neg_flat_len)
+        # halfcos_down 
+        seg_return = -A * halfcos_down(len_return_zero)
+
+        # 5. connect
+        p = np.concatenate([
+            seg_rise, 
+            seg_flat_pos, 
+            seg_switch_1,  # Cross 0 (Pos end)
+            seg_switch_2,  # Cross 0 (Neg start)
+            seg_flat_neg, 
+            seg_return
+        ])
+
+        # 6. Padding / Trimming
+        current_len = len(p)
+        if current_len < L:
+            pad_total = L - current_len
+            pad_front = pad_total // 2
+            pad_back = pad_total - pad_front
+            p = np.concatenate([np.zeros(pad_front), p, np.zeros(pad_back)])
+        elif current_len > L:
+            trim_total = current_len - L
+            trim_front = trim_total // 2
+            trim_back = trim_total - trim_front
+            p = p[trim_front: current_len - trim_back]
+
+        # 7. IQ rotation
+        if self.axis_angle is not None:
+            p = p * np.exp(1j * self.axis_angle)
+
+        return p.tolist()
