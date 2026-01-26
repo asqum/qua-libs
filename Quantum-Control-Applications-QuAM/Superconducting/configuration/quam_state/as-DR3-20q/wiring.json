@@ -211,8 +211,8 @@
             },
             "q3-4": {
                 "c": {
-                    "control_qubit": "#/qubits/q3",
-                    "target_qubit": "#/qubits/q4",
+                    "control_qubit": "#/qubits/q4",
+                    "target_qubit": "#/qubits/q3",
                     "opx_output": "#/ports/analog_outputs/con1/4/3"
                 }
             },
@@ -232,22 +232,22 @@
             },
             "q6-7": {
                 "c": {
-                    "control_qubit": "#/qubits/q6",
-                    "target_qubit": "#/qubits/q7",
+                    "control_qubit": "#/qubits/q7",
+                    "target_qubit": "#/qubits/q6",
                     "opx_output": "#/ports/analog_outputs/con1/4/6"
                 }
             },
             "q7-8": {
                 "c": {
-                    "control_qubit": "#/qubits/q7",
-                    "target_qubit": "#/qubits/q8",
+                    "control_qubit": "#/qubits/q8",
+                    "target_qubit": "#/qubits/q7",
                     "opx_output": "#/ports/analog_outputs/con1/4/7"
                 }
             },
             "q8-9": {
                 "c": {
-                    "control_qubit": "#/qubits/q9",
-                    "target_qubit": "#/qubits/q8",
+                    "control_qubit": "#/qubits/q8",
+                    "target_qubit": "#/qubits/q9",
                     "opx_output": "#/ports/analog_outputs/con1/4/8"
                 }
             },
@@ -274,15 +274,15 @@
             },
             "q12-13": {
                 "c": {
-                    "control_qubit": "#/qubits/q12",
-                    "target_qubit": "#/qubits/q13",
+                    "control_qubit": "#/qubits/q13",
+                    "target_qubit": "#/qubits/q12",
                     "opx_output": "#/ports/analog_outputs/con1/5/4"
                 }
             },
             "q13-14": {
                 "c": {
-                    "control_qubit": "#/qubits/q13",
-                    "target_qubit": "#/qubits/q14",
+                    "control_qubit": "#/qubits/q14",
+                    "target_qubit": "#/qubits/q13",
                     "opx_output": "#/ports/analog_outputs/con1/5/5"
                 }
             },
