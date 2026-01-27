@@ -67,24 +67,24 @@ and preparing the system for entangling gate calibration.
 """
 
 # %% {Node_parameters}
-qubit_pair_indexes = [2]  # [1, 2]
+qubit_pair_indexes = [7]  # [1, 2]
 class Parameters(NodeParameters):
     qubit_pairs: Optional[List[str]] = ["coupler_q%s_q%s"%(i,i+1) for i in qubit_pair_indexes] # ["coupler_q1_q2"]
-    num_averages: int = 100
+    num_averages: int = 200
     flux_point_joint_or_independent_or_pairwise: Literal["joint", "independent", "pairwise"] = "joint"
     reset_type: Literal['active', 'thermal'] = "active"
     simulate: bool = False
     timeout: int = 100
     load_data_id: Optional[int] = None
 
-    coupler_flux_min : float = -0.1#relative to the coupler set point
-    coupler_flux_max : float = 0.1 #relative to the coupler set point
+    coupler_flux_min : float = -0.2#relative to the coupler set point
+    coupler_flux_max : float = -0.06 #relative to the coupler set point
 
-    coupler_flux_step : float = 0.001
-    qubit_flux_span : float = 0.03# relative to the known/calculated detuning between the qubits
-    qubit_flux_step : float = 0.0001
+    coupler_flux_step : float = 0.0026
+    qubit_flux_span : float = 0.04# relative to the known/calculated detuning between the qubits
+    qubit_flux_step : float = 0.0008
     use_state_discrimination: bool = True
-    pulse_duration_ns: int = 128
+    pulse_duration_ns: int = 80
     cz_or_iswap: Literal["cz", "iswap"] = "cz"
     use_saved_detuning: bool = False
 
@@ -139,7 +139,7 @@ for qp in qubit_pairs:
         est_flux_shift = np.sqrt(-(qp.qubit_control.xy.RF_frequency - qp.qubit_target.xy.RF_frequency) / qp.qubit_control.freq_vs_flux_01_quad_term) #TODO: figure out how to make this run properly after filters
     elif node.parameters.cz_or_iswap == "cz":
         est_flux_shift = np.sqrt(-(qp.qubit_control.xy.RF_frequency - qp.qubit_target.xy.RF_frequency - qp.qubit_target.anharmonicity) / qp.qubit_control.freq_vs_flux_01_quad_term) #TODO: figure out how to make this run properly after filters
-    est_flux_shift = 0.0875
+    est_flux_shift = -0.04
     fluxes_qp[qp.name] = fluxes_qubit + est_flux_shift
 
 assert node.parameters.pulse_duration_ns % 4 == 0, \
@@ -152,6 +152,8 @@ with program() as coupler_zero_point_calibration:
     flux_coupler = declare(float)
     flux_qubit = declare(float)
     comp_flux_qubit = declare(float)
+    comp_flux_target_qubit = declare(float)
+    comp_flux_coupler = declare(float)
     n_st = declare_stream()
     qua_pulse_duration = declare(int, value = pulse_duration_ns // 4)
     if node.parameters.use_state_discrimination:
@@ -188,8 +190,10 @@ with program() as coupler_zero_point_calibration:
                 with for_(*from_array(flux_qubit, fluxes_qp[qp.name])):
                     # reset
                     if node.parameters.reset_type == "active":
-                        active_reset_simple(qp.qubit_control)
-                        active_reset_simple(qp.qubit_target)
+                        # active_reset_simple(qp.qubit_control)
+                        # active_reset_simple(qp.qubit_target)
+                        active_reset(qp.qubit_control)
+                        active_reset(qp.qubit_target)
                         qp.align()
                     else:
                         wait(qp.qubit_control.thermalization_time * u.ns)
@@ -197,16 +201,20 @@ with program() as coupler_zero_point_calibration:
                     align()
                     if "coupler_qubit_crosstalk" in qp.extras:
                         assign(comp_flux_qubit, flux_qubit  +  qp.extras["coupler_qubit_crosstalk"] * flux_coupler )
+                        assign(comp_flux_coupler, flux_coupler  +  qp.extras["qubit_coupler_crosstalk"] * flux_qubit )
+                        assign(comp_flux_target_qubit,  -0.20 * flux_coupler)
                     else:
                         print("No crosstalk compensated")
                         assign(comp_flux_qubit, flux_qubit)
+                        assign(comp_flux_coupler, flux_coupler)
+
                     # setting both qubits ot the initial state
                     qp.qubit_control.xy.play("x180")
                     if node.parameters.cz_or_iswap == "cz":
                         qp.qubit_target.xy.play("x180")
                     align()
                     qp.qubit_control.z.play("const", amplitude_scale = comp_flux_qubit / qp.qubit_control.z.operations["const"].amplitude, duration = qua_pulse_duration)
-                    qp.coupler.play("const", amplitude_scale = flux_coupler / qp.coupler.operations["const"].amplitude, duration = qua_pulse_duration)
+                    qp.coupler.play("const", amplitude_scale = comp_flux_coupler / qp.coupler.operations["const"].amplitude, duration = qua_pulse_duration)
                     align()
                     wait(20)
                     # readout
@@ -214,6 +222,8 @@ with program() as coupler_zero_point_calibration:
                         if node.parameters.cz_or_iswap == "cz":
                             readout_state_gef(qp.qubit_control, state_control[i])
                             readout_state_gef(qp.qubit_target, state_target[i])
+                            # readout_state(qp.qubit_control, state_control[i])
+                            # readout_state(qp.qubit_target, state_target[i])
                         else:
                             readout_state(qp.qubit_control, state_control[i])
                             readout_state(qp.qubit_target, state_target[i])
@@ -447,7 +457,7 @@ if not node.parameters.simulate:
             ax.set_ylabel("Coupler flux [mV]")
             ax.set_title(f"{qubit_name}", fontsize=9)
             if legend_entries:
-                ax.legend(fontsize=7, loc="upper right", frameon=True)
+                ax.legend(fontsize=3, loc="upper right", frameon=True)
 
         # --- Layout / title ---
         grid.fig.suptitle(f'{state_type.capitalize()} Qubit', y=0.97, fontsize=12, weight='bold')
