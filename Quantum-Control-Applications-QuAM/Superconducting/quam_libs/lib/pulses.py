@@ -72,6 +72,43 @@ class FluxPulse(Pulse):
         return waveform
 
 @quam_dataclass
+class CosineFluxPulse(Pulse):
+    """Pure cosine-lobe flux pulse (0 → amplitude → 0).
+
+    Args:
+        length (int): Total pulse length in samples, including zero padding.
+        amplitude (float): Peak amplitude of the pulse.
+        zero_padding (int): Number of samples at the end set to zero.
+    """
+
+    amplitude: float
+    zero_padding: int = 0
+
+    def waveform_function(self):
+        if self.zero_padding > self.length:
+            raise ValueError(
+                f"Flux pulse zero padding ({self.zero_padding} ns) exceeds "
+                f"pulse length ({self.length} ns)."
+            )
+
+        active_length = self.length - self.zero_padding
+        if active_length <= 0:
+            return np.zeros(self.length)
+
+        t = np.arange(active_length)
+
+        waveform = 0.5 * self.amplitude * (
+            1 - np.cos(2 * np.pi * t / (active_length - 1))
+        )
+
+        if self.zero_padding:
+            waveform = np.concatenate(
+                [waveform, np.zeros(self.zero_padding)]
+            )
+
+        return waveform
+
+@quam_dataclass
 class SNZPulse(Pulse):
     amplitude: float
     step_amplitude: float
