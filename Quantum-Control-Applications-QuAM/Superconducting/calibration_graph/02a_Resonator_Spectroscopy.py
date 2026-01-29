@@ -43,7 +43,7 @@ class Parameters(NodeParameters):
     num_averages: int = 300
     frequency_span_in_mhz: float = 40 #20.0
     frequency_step_in_mhz: float = 0.1
-    simulate: bool = True
+    simulate: bool = False
     simulation_duration_ns: int = 2500
     timeout: int = 100
     load_data_id: Optional[int] = None
@@ -231,6 +231,7 @@ if not node.parameters.simulate:
 
     # %% {Update_state}
     if node.parameters.load_data_id is None:
+        node.machine = machine
         with node.record_state_updates():
             for index, q in enumerate(qubits):
                 q.resonator.intermediate_frequency += int(fits[q.name].params["omega_r"].value)
@@ -241,6 +242,5 @@ if not node.parameters.simulate:
         node.machine = machine
         node.save()
         print("Results saved")
-
 
 # %%

@@ -193,7 +193,7 @@ else:
 
     # %% {Update_state}
     print(f"Time Of Flight to add: {delays} ns")
-
+    node.machine = machine
     with node.record_state_updates():
         for q in qubits:
             if node.parameters.time_of_flight_in_ns is not None:
@@ -202,8 +202,8 @@ else:
                 q.resonator.time_of_flight += int(ds.sel(qubit=q.name).delays)
 
     # Revert the change done at the beginning of the node
-    for resonator in tracked_resonators:
-        resonator.revert_changes()
+    # for resonator in tracked_resonators:
+    #     resonator.revert_changes()
 
     # %% {Save_results}
     node.outcomes = {rr.name: "successful" for rr in resonators}
