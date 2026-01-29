@@ -17,16 +17,16 @@ def get_band(freq):
         raise ValueError(f"The specified frequency {freq} HZ is outside of the MW fem bandwidth [50 MHz, 10.5 GHz]")
 
 
-path = "/Users/adamachuck/Documents/GitHub/ASQUM/qua-libs/Quantum-Control-Applications-QuAM/Superconducting/configuration/quam_state/main"
-machine = QuAM.load()
+path = "/Users/jackchao/Desktop/Project/QM/AS/qua-libs/Quantum-Control-Applications-QuAM/Superconducting/configuration/quam_state/AS_winter_school"
+machine = QuAM.load( )
 u = unit(coerce_to_integer=True)
 
 # %%
 # Change active qubits
 # machine.active_qubit_names = ["q0"]
 
-# for i in range(len(machine.qubits.items())):
-#     machine.qubits[f"q{i+1}"].grid_location = f"{i},0"
+for i in range(len(machine.qubits.items())):
+    machine.qubits[f"q{i+1}"].grid_location = f"{i},0"
 
 # Update frequencies
 # rr_freq = np.array([5932987219.0, 6023928729.0, 5866936123.0, 6079048431.0, 5971697831.0]) #* u.GHz
@@ -100,14 +100,14 @@ u = unit(coerce_to_integer=True)
 # machine.qubits["q5"].resonator.thread = "a"
 
 # Default: 
-# machine.qubits["q1"].xy.thread = "a"
-# machine.qubits["q2"].xy.thread = "b"
+machine.qubits["q1"].xy.thread = "a"
+machine.qubits["q2"].xy.thread = "b"
 # machine.qubits["q3"].xy.thread = "c"
 # machine.qubits["q4"].xy.thread = "d"
 # machine.qubits["q5"].xy.thread = "e"
 
-# machine.qubits["q1"].resonator.thread = "a"
-# machine.qubits["q2"].resonator.thread = "b"
+machine.qubits["q1"].resonator.thread = "a"
+machine.qubits["q2"].resonator.thread = "b"
 # machine.qubits["q3"].resonator.thread = "c"
 # machine.qubits["q4"].resonator.thread = "d"
 # machine.qubits["q5"].resonator.thread = "e"
@@ -115,30 +115,30 @@ u = unit(coerce_to_integer=True)
 # %%
 q1 = machine.qubits["q1"]
 q2 = machine.qubits["q2"]
-q3 = machine.qubits["q3"]
-q4 = machine.qubits["q4"]
-q5 = machine.qubits["q5"]
+# q3 = machine.qubits["q3"]
+# q4 = machine.qubits["q4"]
+# q5 = machine.qubits["q5"]
 print("q1's z.independent_offset: %s" %(q1.z.independent_offset))
 print("q2's z.independent_offset: %s" %(q2.z.independent_offset))
-print("q3's z.independent_offset: %s" %(q3.z.independent_offset))
-print("q4's z.independent_offset: %s" %(q4.z.independent_offset))
-print("q5's z.independent_offset: %s" %(q5.z.independent_offset))
+# print("q3's z.independent_offset: %s" %(q3.z.independent_offset))
+# print("q4's z.independent_offset: %s" %(q4.z.independent_offset))
+# print("q5's z.independent_offset: %s" %(q5.z.independent_offset))
 
 coupler_q1_q2 = machine.qubit_pairs["coupler_q1_q2"]
-coupler_q2_q3 = machine.qubit_pairs["coupler_q2_q3"]
-coupler_q3_q4 = machine.qubit_pairs["coupler_q3_q4"]
-coupler_q4_q5 = machine.qubit_pairs["coupler_q4_q5"]
+# coupler_q2_q3 = machine.qubit_pairs["coupler_q2_q3"]
+# coupler_q3_q4 = machine.qubit_pairs["coupler_q3_q4"]
+# coupler_q4_q5 = machine.qubit_pairs["coupler_q4_q5"]
 print("coupler_q1_q2's decouple_offset: %s" %(coupler_q1_q2.coupler.decouple_offset))
-print("coupler_q2_q3's decouple_offset: %s" %(coupler_q2_q3.coupler.decouple_offset))
-print("coupler_q3_q4's decouple_offset: %s" %(coupler_q3_q4.coupler.decouple_offset))
-print("coupler_q4_q5's decouple_offset: %s" %(coupler_q4_q5.coupler.decouple_offset))
+# print("coupler_q2_q3's decouple_offset: %s" %(coupler_q2_q3.coupler.decouple_offset))
+# print("coupler_q3_q4's decouple_offset: %s" %(coupler_q3_q4.coupler.decouple_offset))
+# print("coupler_q4_q5's decouple_offset: %s" %(coupler_q4_q5.coupler.decouple_offset))
 
 # RESET ALL Z:  
 q1.z.independent_offset = 0.14680368846347974
 q2.z.independent_offset = 0.186121519336561
-q3.z.independent_offset = 0.14358641659578292
-q4.z.independent_offset = 0.06616501763503031
-q5.z.independent_offset = 0.14088017951374093
+# q3.z.independent_offset = 0.14358641659578292
+# q4.z.independent_offset = 0.06616501763503031
+# q5.z.independent_offset = 0.14088017951374093
 print("\nqubits' offset updated.........\n")
 
 # OFF-points: (or close-by)  
@@ -152,10 +152,10 @@ print("\nqubits' offset updated.........\n")
 # (q2 @ q3).coupler.decouple_offset = 0.109
 # (q1 @ q2).coupler.decouple_offset = 0.130 
 # INITIAL guess for couplers' offset:
-coupler_q1_q2.coupler.decouple_offset = -0.2
-coupler_q2_q3.coupler.decouple_offset = -0.2
-coupler_q3_q4.coupler.decouple_offset = -0.2
-coupler_q4_q5.coupler.decouple_offset = -0.2
+# coupler_q1_q2.coupler.decouple_offset = -0.2
+# coupler_q2_q3.coupler.decouple_offset = -0.2
+# coupler_q3_q4.coupler.decouple_offset = -0.2
+# coupler_q4_q5.coupler.decouple_offset = -0.2
 print("\ncouplers' offset updated.........\n")
 
 # %%

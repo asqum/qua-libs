@@ -3,7 +3,6 @@ name = "quam_libs"
 version = "0.1.0"
 description = "QuAM Components for Quantum Control"
 readme = "README.md"
-authors = ["Dean Poulos <dean.poulos@quantum-machines.co>"]
 license = "BSD-3-Clause"
 keywords = []
 classifiers = [
@@ -14,14 +13,14 @@ classifiers = [
 
 [tool.poetry.dependencies]
 python = ">=3.10"
-quam = ">0.4.0"
+quam = ">=0.4.2"
 qualang-tools = ">=0.19.0"
 xarray = "*"
 lmfit = "*"
 qiskit-experiments = "*"
 tqdm = "*"
 qualibrate = "*"
-qm-qua = ">=1.2.2"
+qm-qua = ">=1.2.4a1"
 tomli = { version = "^2.0.1", python = "<3.11" }
 colorama = "*"
 

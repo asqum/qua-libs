@@ -5,7 +5,7 @@ from quam_libs.components import QuAM
 from quam_libs.quam_builder.machine import save_machine
 import numpy as np
 
-path = "D:\\qm_code\\as\\qua-libs\\Quantum-Control-Applications-QuAM\\Superconducting\\configuration\\quam_state\\as_qpu_opx1000"
+path = "/Users/jackchao/Desktop/Project/QM/AS/qua-libs/Quantum-Control-Applications-QuAM/Superconducting/configuration/quam_state/AS_winter_school"
 machine = QuAM.load(path)
 
 # %%                                 QUAM loading and auxiliary functions
@@ -76,13 +76,13 @@ def get_full_scale_power_dBm_and_amplitude(desired_power: float, max_amplitude: 
 ########################################################################################################################
 # %%
 # Change active qubits
-machine.active_qubit_names = ["q1","q2","q3","q4","q5"]  #change
+machine.active_qubit_names = ["q1","q2"]  #change
 
 for i in range(len(machine.qubits.items())):
     machine.qubits[f"q{i+1}"].grid_location = f"{i},0"
 
 # Update frequencies
-rr_freq = np.array([5932987219.0, 6023928729.0, 5866936123.0, 6079048431.0, 5971697831.0]) #* u.GHz #change
+rr_freq = np.array([5932987219.0, 6023928729.0]) #* u.GHz #change
 rr_LO = 5.95 * u.GHz #change
 rr_if = rr_freq - rr_LO 
 assert np.all(np.abs(rr_if) < 400 * u.MHz), (
@@ -99,8 +99,8 @@ rr_full_scale, rr_amplitude = get_full_scale_power_dBm_and_amplitude(
     readout_power, max_amplitude= 0.5 / len(machine.qubits)
 )
 
-xy_freq = np.array([5108604110.9, 4834229255.6, 5146263353.0, 4674709204.1, 4880175329.7]) #* u.GHz #change
-xy_LO = np.array([4.9, 4.9, 4.9, 4.9, 4.9]) * u.GHz #change
+xy_freq = np.array([5108604110.9, 4834229255.6]) #* u.GHz #change
+xy_LO = np.array([4.9, 4.9]) * u.GHz #change
 # xy_LO = np.array([4.9]*5) * u.GHz
 xy_if = xy_freq - xy_LO
 assert np.all(np.abs(xy_if) < 400 * u.MHz), (

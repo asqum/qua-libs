@@ -4,31 +4,31 @@ from qualang_tools.wirer import Instruments, Connectivity, allocate_wiring, visu
 from quam_libs.quam_builder.machine import build_quam_wiring
 
 # Define static parameters
-host_ip = "10.21.19.201"  # QOP IP address
-port = 9504  # QOP Port
-cluster_name = "QPX1000_4"  # Name of the cluster
+host_ip = "192.168.50.136"  # QOP IP address
+port = None  # QOP Port
+cluster_name = "Cluster_1"  # Name of the cluster
 # Desired location of wiring.json and state.json
 # The folder must not contain other json files.
-path = "/Users/adamachuck/Documents/GitHub/ASQUM/qua-libs/Quantum-Control-Applications-QuAM/Superconducting/configuration/quam_state"
+path = "/Users/jackchao/Desktop/Project/QM/AS/qua-libs/Quantum-Control-Applications-QuAM/Superconducting/configuration/quam_state/AS_winter_school"
 
 # Define the available instrument setup
 instruments = Instruments()
-instruments.add_lf_fem(controller=1, slots=[1, 2, ])
-instruments.add_mw_fem(controller=1, slots=[6, ])
+instruments.add_lf_fem(controller=1, slots=[2,])
+instruments.add_mw_fem(controller=1, slots=[1, ])
 
 # Define which qubit indices are present in the system
-qubits = [1,]
-qubit_pairs = []
+qubits = [1,2]
+qubit_pairs = [(1,2)]
 # Allocate the wiring to the connectivity object based on the available instruments
 connectivity = Connectivity()
 
 # Single feed-line for reading the resonators & individual qubit drive lines
 # Define any custom/hardcoded channel addresses
 connectivity.add_resonator_line(qubits=qubits)
-connectivity.add_qubit_flux_lines(qubits=qubits[0], constraints=lf_fem_spec(out_slot=1))
+connectivity.add_qubit_flux_lines(qubits=qubits, constraints=lf_fem_spec(out_slot=2))
 # connectivity.add_qubit_flux_lines(qubits=qubits[1:])
 connectivity.add_qubit_drive_lines(qubits=qubits)
-# connectivity.add_qubit_pair_flux_lines(qubit_pairs=qubit_pairs)  # Tunable coupler
+connectivity.add_qubit_pair_flux_lines(qubit_pairs=qubit_pairs)  # Tunable coupler
 allocate_wiring(connectivity, instruments)
 
 # Single feed-line for reading the resonators & driving the qubits + flux on specific fem slot
