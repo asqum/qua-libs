@@ -369,6 +369,7 @@
                         "fem_id": 2,
                         "port_id": 2,
                         "delay": 199,
+                        "shareable": true,
                         "__class__": "quam.components.ports.analog_outputs.LFFEMAnalogOutputPort"
                     },
                     "3": {
@@ -376,6 +377,7 @@
                         "fem_id": 2,
                         "port_id": 3,
                         "delay": 199,
+                        "shareable": true,
                         "upsampling_mode": "pulse",
                         "output_mode": "amplified",
                         "__class__": "quam.components.ports.analog_outputs.LFFEMAnalogOutputPort"
@@ -392,6 +394,7 @@
                         "port_id": 1,
                         "band": 1,
                         "upconverter_frequency": 5000000000.0,
+                        "shareable": true,
                         "full_scale_power_dbm": -2,
                         "__class__": "quam.components.ports.analog_outputs.MWFEMAnalogOutputPort"
                     },
@@ -402,6 +405,7 @@
                         "band": 1,
                         "upconverter_frequency": 5000000000.0,
                         "delay": 32,
+                        "shareable": true,
                         "__class__": "quam.components.ports.analog_outputs.MWFEMAnalogOutputPort"
                     },
                     "3": {
@@ -411,6 +415,7 @@
                         "band": 1,
                         "upconverter_frequency": 5000000000.0,
                         "delay": 32,
+                        "shareable": true,
                         "__class__": "quam.components.ports.analog_outputs.MWFEMAnalogOutputPort"
                     }
                 }
@@ -425,6 +430,7 @@
                         "port_id": 1,
                         "band": 1,
                         "downconverter_frequency": 5000000000.0,
+                        "shareable": true,
                         "__class__": "quam.components.ports.analog_inputs.MWFEMAnalogInputPort"
                     }
                 }
