@@ -39,8 +39,8 @@ default_additional_files = {
 # OPX configuration #
 #####################
 con = "con1"
-lf_fem = 2
-mw_fem = 1
+lf_fem = 1
+mw_fem = 6
 # Set octave_config to None if no octave are present
 octave_config = None
 

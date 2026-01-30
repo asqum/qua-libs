@@ -13,8 +13,8 @@ path = "/Users/jackchao/Desktop/Project/QM/AS/qua-libs/Quantum-Control-Applicati
 
 # Define the available instrument setup
 instruments = Instruments()
-instruments.add_lf_fem(controller=1, slots=[2,])
-instruments.add_mw_fem(controller=1, slots=[1, ])
+instruments.add_lf_fem(controller=1, slots=[1,])
+instruments.add_mw_fem(controller=1, slots=[6, ])
 
 # Define which qubit indices are present in the system
 qubits = [1,2]
@@ -25,7 +25,7 @@ connectivity = Connectivity()
 # Single feed-line for reading the resonators & individual qubit drive lines
 # Define any custom/hardcoded channel addresses
 connectivity.add_resonator_line(qubits=qubits)
-connectivity.add_qubit_flux_lines(qubits=qubits, constraints=lf_fem_spec(out_slot=2))
+connectivity.add_qubit_flux_lines(qubits=qubits, constraints=lf_fem_spec(out_slot=1))
 # connectivity.add_qubit_flux_lines(qubits=qubits[1:])
 connectivity.add_qubit_drive_lines(qubits=qubits)
 connectivity.add_qubit_pair_flux_lines(qubit_pairs=qubit_pairs)  # Tunable coupler
