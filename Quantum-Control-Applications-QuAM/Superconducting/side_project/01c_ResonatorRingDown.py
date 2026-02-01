@@ -25,6 +25,84 @@ from typing import Optional, List
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy.signal import savgol_filter
+from scipy.optimize import curve_fit
+
+def robust_fit_exponential(t_data, y_data):
+        """
+        Args:
+            t_data: time, size is compatitable with y_data
+            y_data: Magnitude
+        Returns:
+            popt: the best [A, tau, C]
+            r_squared: fitting accuracy = R^2
+            fit_curve: the curve to plot
+        """
+        def decay_model(t, A, tau, C):
+            return A * np.exp(-t / tau) + C
+
+
+        ### 1. Estimation
+        n_points = len(y_data)
+        tail_len = max(1, int(n_points * 0.1)) 
+        C_guess = np.mean(y_data[-tail_len:])
+        
+        # Amplitude (A): 
+        A_guess = np.max(y_data) - C_guess
+        if A_guess <= 0: A_guess = np.max(y_data) * 0.5 
+        
+        # Time Constant (tau): 
+        total_duration = t_data[-1] - t_data[0]
+        tau_candidates = [
+            total_duration * 0.1,  # decay fast
+            total_duration * 0.3,  # intermediately decay
+            total_duration * 0.6,  # slow
+            total_duration * 1.5   # almost flat
+        ]
+        
+        best_popt = None
+        best_loss = np.inf 
+        
+        ### 2. try every guess
+        for tau_guess in tau_candidates:
+            p0 = [A_guess, tau_guess, C_guess]
+            
+            ##  bounds
+            # bounds = ([0, 0, -np.inf], [np.inf, np.inf, np.inf])
+            
+            try:
+                popt, pcov = curve_fit(
+                    decay_model, t_data, y_data, 
+                    p0=p0, 
+                    maxfev=5000, 
+                    bounds=([0, 0, -np.inf], [np.inf, np.inf, np.inf]) # we force A, tau > 0
+                )
+                
+                # Sum of Squared Residuals
+                residuals = y_data - decay_model(t_data, *popt)
+                loss = np.sum(residuals**2)
+                
+                # if it's better, we kept it.
+                if loss < best_loss:
+                    best_loss = loss
+                    best_popt = popt
+                    
+            except RuntimeError:
+                continue # diverged then skip it
+
+
+        if best_popt is None:
+            raise RuntimeError("All fit attempts failed.")
+        
+        # fit curve to plot
+        fit_curve = decay_model(t_data, *best_popt)
+            
+        # R^2 to estimate the accuracy
+        residuals = y_data - fit_curve
+        ss_res = np.sum(residuals**2)
+        ss_tot = np.sum((y_data - np.mean(y_data))**2)
+        r_squared = 1 - (ss_res / ss_tot)
+
+        return best_popt, r_squared, fit_curve
 
 
 # %% {Node_parameters}
@@ -39,7 +117,7 @@ class Parameters(NodeParameters):
     timeout: int = 100
 
 
-node = QualibrationNode(name="01b_Time_of_Flight_MW_FEM", parameters=Parameters())
+node = QualibrationNode(name="01c_ResonatorRingDown", parameters=Parameters())
 
 
 # %% {Initialize_QuAM_and_QOP}
@@ -160,11 +238,6 @@ else:
     )
 
     # %% {Plotting}
-    from scipy.optimize import curve_fit
-
-    
-    def decay_model(t, A, tau, C):
-        return A * np.exp(-t / tau) + C
 
     fit_results = {}
 
@@ -192,16 +265,11 @@ else:
         
         time_shifted = time_fit_segment - t_peak
         
-        ## initial guess, tau=500ns
-        p0 = [amp_peak, 200, mag_fit_segment[-1]]
         
         try:
             
-            popt, pcov = curve_fit(decay_model, time_shifted, mag_fit_segment, p0=p0, maxfev=5000)
+            popt, r2, fitted_curve_segment = robust_fit_exponential(time_shifted, mag_fit_segment)
             A_fit, tau_fit, C_fit = popt
-            
-        
-            fitted_curve_segment = decay_model(time_shifted, A_fit, tau_fit, C_fit)
             
             
             effective_time = t_peak + tau_fit
@@ -209,15 +277,15 @@ else:
             
             fit_results[q_name] = {
                 'tau': tau_fit,
-                't_peak': t_peak,
-                'effective_time': effective_time
+                'TOF': t_peak,
+                'RingDown': effective_time
             }
             
             
             ax.plot(time_fit_segment, fitted_curve_segment, 'k--', lw=2, label='RingDownFit')
             
             # 標示 Peak 位置
-            ax.axvline(t_peak, color='k', linestyle=':', alpha=0.5)
+            ax.axvline(t_peak, color='k', linestyle=':', alpha=0.9)
 
         except Exception as e:
             print(f"Fitting failed for {q_name}: {e}")
@@ -229,38 +297,42 @@ else:
         ax.set_title(f"{q_name}")
         ax.set_xlabel("Time [ns]")
         ax.set_ylabel("Readout amplitude [mV]")
-        
+        ax.grid()
         ax.legend(loc="upper right", fontsize=8)
 
-    grid.fig.suptitle("Averaged run with Decay Fit")
+    grid.fig.suptitle("Cavity Ring Down Fit")
     plt.tight_layout()
     plt.show()
     node.results["RingDownFig"] = grid.fig
    
     if len(list(fit_results.keys())) != 0:
-        sorted_by_effective_time = sorted(fit_results.items(), key=lambda x: x[1]['effective_time'], reverse=True)
-        longest_effective_time = int(4*(float(sorted_by_effective_time[0])//4))
+        sorted_by_effective_time = sorted(fit_results.items(), key=lambda x: x[1]['RingDown'], reverse=True)
+        longest_ringdown_time = int(4*(float(sorted_by_effective_time[0][-1]['RingDown'])//4))
+
     else:
-        longest_effective_time = None
+        longest_ringdown_time = None
+
+    print(f"Longest ring down time will be: {longest_ringdown_time} ns")
     
 
 
     # %% {Update_state}
     with node.record_state_updates():
-        if longest_effective_time is not None:
+        if longest_ringdown_time is not None:
             for q in qubits:
-                q.resonator.depletion_time = longest_effective_time
+                q.resonator.depletion_time = longest_ringdown_time*10 # (10*T1)
             
 
     # Revert the change done at the beginning of the node
     for resonator in tracked_resonators:
-        resonator.revert_changes()
+        resonator.revert_changes() #TODO: This doesn't work !!!
 
     # %% {Save_results}
     node.outcomes = {rr.name: "successful" for rr in resonators}
     node.results["ds"] = ds
+    node.results['The_answers'] = fit_results
     node.results["initial_parameters"] = node.parameters.model_dump()
-    node.machine = machine
+    # node.machine = machine
     node.save()
 
 
