@@ -1789,7 +1789,7 @@
                     0.10102739726027396
                 ],
                 "coupler_qubit_crosstalk": 0.03,
-                "CZ_coupler_flux": -0.04552506923186988,
+                "CZ_coupler_flux": -0.012,
                 "CZ_qubit_flux": -0.24,
                 "CZ_time": 88,
                 "StandardRB": {
