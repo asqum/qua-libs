@@ -23,8 +23,10 @@ pip install qm-qua, qualang_tools
 # Basic files
 You can find some example QUA programs in this folder. 
 
+### Configuration
 - [configuration.py](configuration.py): This file contains the configuration for the opx1000. You can modify it according to your hardware setup.
 
+### QUA Syntax basics
 - [00_hello_qua_1](00_hello_qua_1.py): It shows how we can play a xy, z and resonator pulse at the same time by using the QUA commands. 
 
 - [00_hello_qua_2](00_hello_qua_2.py): It shows how we can use `align()` to order multiple elements in QUA.
@@ -35,6 +37,7 @@ You can find some example QUA programs in this folder.
 
 - [00_hello_qua_5](00_hello_qua_5.py): It shows how we can dynamically sweep pulse amplitude in QUA.
 
+### Hardware calibration
 - [02_raw_adc_traces_mw_fem](02_raw_adc_traces_mw_fem.py): A script used to look at the raw ADC data, this allows checking that the ADC 
 is not saturated, correct for DC offsets and check the multiplexed readout levels.
 
@@ -42,3 +45,8 @@ is not saturated, correct for DC offsets and check the multiplexed readout level
 
 - [Resonator Spectroscopy](04_resonator_spectroscopy_single.py) - Performs a 1D frequency sweep on a given resonator.
 
+# Exercise
+The goal of this exercise is to get familiar with the QUA programming language and the basic hardware calibration procedures. By completing the provided scripts, you will learn how to write QUA programs for the OPX1000, and perform essential calibration tasks for quantum experiments.
+
+## Task1: T1 experiment
+## Task2: Ramsey experiment
