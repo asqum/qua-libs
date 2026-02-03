@@ -19,7 +19,7 @@ u = unit(coerce_to_integer=True)
 ######################
 # Network parameters #
 ######################
-qop_ip = "192.168.50.136"  # Write the QM router IP address
+qop_ip = "127.0.0.1"  # Write the QM router IP address
 cluster_name = "Cluster_1"  # Write your cluster_name if version >= QOP220
 qop_port = None  # Write the QOP port if version < QOP220
 
