@@ -16,7 +16,7 @@ duration_np = np.arange(20, 220, 20)
 ###################
 with program() as hello_qua:
     t_qua = declare(int)
-    with for_(*from_array(t_qua, duration_np)):  # QUA for_ loop for sweeping the frequency
+    with for_(*from_array(t_qua, duration_np)):  # QUA for_ loop for sweeping duration values
         play("x180", "q1_xy")
         align()
         play("const", "q1_z", duration=t_qua)

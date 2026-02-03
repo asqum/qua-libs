@@ -2,24 +2,32 @@
 
 This guide will help you install the QUA programming language and its associated tools on your local machine. After the installation, you will be ready to write QUA programs and send the execution jobs to OPX1000. Follow the steps below to get started.
 
-## Step 1: create a  virtual environment
+## Step 0: Preparation
+ - Start by [installing Anaconda 3](https://www.anaconda.com/download) if you have not done so already. 
+This is recommended, but you can also use other tools to create your Python environment if you prefer.
+
+- Make sure you have an IDE installed (e.g., VS Code, PyCharm, etc.).
+
+## Step 1: Create a  virtual environment
 It is recommended to create a virtual environment to manage the dependencies for QUA. You can use `conda` for this purpose.
 
 ### Using conda
+From an Anaconda terminal, run the following commands:
 ```bash
 conda create -n qua-env python=3.11
 conda activate qua-env
 ```
 
-## Step 2: install QUA and related packages
+## Step 2: Install QUA and related packages
 First, activate your virtual environment if you haven't already:
 ```bash
 conda activate qua-env
 ``` 
 Then, install the QUA package along with other necessary libraries using pip:
 ```bash
-pip install qm-qua, qualang_tools
+pip install qm-qua qualang_tools
 ```
+
 # Basic files
 You can find some example QUA programs in this folder. 
 
@@ -48,6 +56,14 @@ is not saturated, correct for DC offsets and check the multiplexed readout level
 # Exercise
 The goal of this exercise is to get familiar with the QUA programming language and the basic hardware calibration procedures. By completing the provided scripts, you will learn how to write QUA programs for the OPX1000, and perform essential calibration tasks for quantum experiments.
 
-## Task1: T1 experiment
-## Task2: Ramsey experiment
-## Task3: Rabi experiment
+## Task1: Rabi experiment
+## Task2: T1 experiment
+## Task3: Ramsey experiment
+
+## More Reference
+- [Documentation website](https://docs.quantum-machines.co/latest/)
+- [QM GitHub](https://github.com/qua-platform)
+  - [Tutorials](https://github.com/qua-platform/qua-libs/tree/main/Tutorials)
+  - [Useful tools](https://github.com/qua-platform/py-qua-tools/tree/main/qualang_tools)
+  - [QUA codes](https://github.com/qua-platform/qua-libs/tree/main/Quantum-Control-Applications)
+  - [QUAlibrate codes](https://github.com/qua-platform/qua-libs/tree/main/qualibration_graphs/superconducting)

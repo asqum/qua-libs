@@ -16,7 +16,7 @@ amp_np = np.linspace(0.1, 0.9, 9)
 ###################
 with program() as hello_qua:
     amp_qua = declare(fixed)
-    with for_(*from_array(amp_qua, amp_np)):  # QUA for_ loop for sweeping the frequency
+    with for_(*from_array(amp_qua, amp_np)):  # QUA for_ loop for sweeping the amplitude values
         play("x180"*amp(amp_qua), "q1_xy")
         align()
         play("const", "q1_z")
