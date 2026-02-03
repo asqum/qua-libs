@@ -50,3 +50,4 @@ The goal of this exercise is to get familiar with the QUA programming language a
 
 ## Task1: T1 experiment
 ## Task2: Ramsey experiment
+## Task3: Rabi experiment
