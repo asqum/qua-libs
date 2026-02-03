@@ -18,6 +18,7 @@ Next steps before going to the next node:
     - Update the g -> e threshold (ge_threshold) in the state.
     - Save the current state by calling machine.save("quam")
 """
+
 # TODO: this script isn't working great, the readout amp found at the end isn't always correct maybe because of SNR...
 
 # %% {Imports}
@@ -44,11 +45,11 @@ from sklearn.mixture import GaussianMixture
 class Parameters(NodeParameters):
 
     qubits: Optional[List[str]] = None
-    num_runs: int = 2000
+    num_runs: int = 200
     reset_type_thermal_or_active: Literal["thermal", "active"] = "thermal"
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
     start_amp: float = 0.02
-    end_amp: float = 1.2
+    end_amp: float = 1.5
     num_amps: int = 100
     outliers_threshold: float = 0.98
     plot_raw: bool = False
@@ -97,10 +98,11 @@ with program() as iq_blobs:
 
         # Bring the active qubits to the desired frequency point
         machine.set_all_fluxes(flux_point=flux_point, target=qubit)
-        if "c" in qubit.id: qubit.z.set_dc_offset(qubit.z.joint_offset) # for coupler-test case
+        if "c" in qubit.id:
+            qubit.z.set_dc_offset(qubit.z.joint_offset)  # for coupler-test case
         qubit.z.settle()
         qubit.align()
-        # align() # True multiplexed       
+        # align() # True multiplexed
 
         with for_(n, 0, n < n_runs, n + 1):
             # ground iq blobs for all qubits
@@ -158,7 +160,7 @@ if node.parameters.simulate:
     samples = job.get_simulated_samples()
     fig, ax = plt.subplots(nrows=len(samples.keys()), sharex=True)
     for i, con in enumerate(samples.keys()):
-        plt.subplot(len(samples.keys()),1,i+1)
+        plt.subplot(len(samples.keys()), 1, i + 1)
         samples[con].plot()
         plt.title(con)
     plt.tight_layout()
@@ -182,9 +184,18 @@ elif node.parameters.load_data_id is None:
 if not node.parameters.simulate:
     if node.parameters.load_data_id is None:
         # Fetch the data from the OPX and convert it into a xarray with corresponding axes (from most inner to outer loop)
-        ds = fetch_results_as_xarray(job.result_handles, qubits, {"amplitude": amps, "N": np.linspace(1, n_runs, n_runs)})
+        ds = fetch_results_as_xarray(
+            job.result_handles, qubits, {"amplitude": amps, "N": np.linspace(1, n_runs, n_runs)}
+        )
         # Add the absolute readout power to the dataset
-        ds = ds.assign_coords({"readout_amp": (["qubit", "amplitude"], np.array([amps * q.resonator.operations["readout"].amplitude for q in qubits]))})
+        ds = ds.assign_coords(
+            {
+                "readout_amp": (
+                    ["qubit", "amplitude"],
+                    np.array([amps * q.resonator.operations["readout"].amplitude for q in qubits]),
+                )
+            }
+        )
         # Rearrange the data to combine I_g and I_e into I, and Q_g and Q_e into Q
         ds_rearranged = xr.Dataset()
         # Combine I_g and I_e into I
@@ -205,8 +216,9 @@ if not node.parameters.simulate:
         # Replace the original dataset with the rearranged one
         ds = ds_rearranged
     else:
-        ds, machine, json_data, qubits, node.parameters = load_dataset(node.parameters.load_data_id, parameters = node.parameters)
-
+        ds, machine, json_data, qubits, node.parameters = load_dataset(
+            node.parameters.load_data_id, parameters=node.parameters
+        )
 
     node.results = {"ds": ds, "results": {}, "figs": {}}
 
@@ -230,7 +242,6 @@ if not node.parameters.simulate:
                 ax2.axis("equal")
         plt.show()
         node.results["figure_raw_data"] = fig
-
 
     # %% {Data_analysis}
     def apply_fit_gmm(I, Q):
@@ -305,7 +316,6 @@ if not node.parameters.simulate:
         node.results["results"][q.name]["fidelity"] = float(fidelity)
         node.results["results"][q.name]["confusion_matrix"] = np.array([[gg, ge], [eg, ee]])
         node.results["results"][q.name]["rus_threshold"] = float(RUS_threshold)
-
 
     # %% {Plotting}
     grid = QubitGrid(ds, [q.grid_location for q in qubits])
@@ -392,7 +402,6 @@ if not node.parameters.simulate:
     plt.show()
     node.results["figure_fidelities"] = grid.fig
 
-
     # %% {Update_state}
     if node.parameters.load_data_id is None:
         with node.record_state_updates():
@@ -400,13 +409,14 @@ if not node.parameters.simulate:
                 qubit.resonator.operations["readout"].integration_weights_angle -= float(
                     node.results["results"][qubit.name]["angle"]
                 )
-                qubit.resonator.operations["readout"].threshold = float(node.results["results"][qubit.name]["threshold"])
+                qubit.resonator.operations["readout"].threshold = float(
+                    node.results["results"][qubit.name]["threshold"]
+                )
                 qubit.resonator.operations["readout"].rus_exit_threshold = float(
                     node.results["results"][qubit.name]["rus_threshold"]
                 )
                 qubit.resonator.operations["readout"].amplitude = float(node.results["results"][qubit.name]["best_amp"])
                 qubit.resonator.confusion_matrix = node.results["results"][qubit.name]["confusion_matrix"].tolist()
-
 
         # %% {Save_results}
         node.outcomes = {q.name: "successful" for q in qubits}

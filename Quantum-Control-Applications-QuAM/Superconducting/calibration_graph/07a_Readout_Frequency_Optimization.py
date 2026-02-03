@@ -38,8 +38,8 @@ import numpy as np
 class Parameters(NodeParameters):
 
     qubits: Optional[List[str]] = None
-    num_averages: int = 350 #150
-    frequency_span_in_mhz: float = 25
+    num_averages: int = 100 #150
+    frequency_span_in_mhz: float = 20
     frequency_step_in_mhz: float = 0.1
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
     simulate: bool = False
@@ -240,7 +240,7 @@ if not node.parameters.simulate:
         )
         ax.set_xlabel("Detuning [MHz]")
         ax.set_ylabel("Resonator response [mV]")
-        ax.legend(loc="upper left")
+        # ax.legend(loc="upper left")
     plt.tight_layout()
     plt.show()
     node.results["figure2"] = grid.fig
@@ -258,3 +258,5 @@ if not node.parameters.simulate:
         node.machine = machine
         node.save()
 
+
+# %%

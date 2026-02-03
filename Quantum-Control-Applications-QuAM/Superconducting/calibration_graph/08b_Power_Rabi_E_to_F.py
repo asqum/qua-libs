@@ -41,12 +41,12 @@ import numpy as np
 # %% {Node_parameters}
 class Parameters(NodeParameters):
 
-    qubits: Optional[List[str]] = None
+    qubits: Optional[List[str]] = ["q1", "q2"]
     num_averages: int = 200
     operation: str = "x180"
     min_amp_factor: float = 0.0
-    max_amp_factor: float = 1.5
-    amp_factor_step: float = 0.005
+    max_amp_factor: float = 1.99
+    amp_factor_step: float = 0.01
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
     simulate: bool = False
     timeout: int = 100
@@ -136,7 +136,7 @@ with program() as power_rabi:
                     qubit.xy.name, qubit.xy.intermediate_frequency - qubit.anharmonicity
                 )
                 wait(4)
-                qubit.xy.play(operation, amplitude_scale=a)
+                qubit.xy.play("EF_x180", amplitude_scale=a)
                 align()
                 qubit.resonator.measure("readout", qua_vars=(I[i], Q[i]))
                 save(I[i], I_st[i])
@@ -181,7 +181,7 @@ else:
         {
             "abs_amp": (
                 ["qubit", "amp"],
-                np.array([q.xy.operations[operation].amplitude * amps for q in qubits]),
+                np.array([q.xy.operations["EF_x180"].amplitude * amps for q in qubits]),
             )
         }
     )
@@ -210,7 +210,7 @@ else:
         # amplitude factor for getting an |e> -> |f> pi pulse
         factor = float(1.0 * (np.pi - phi_fit) / (2 * np.pi * f_fit))
         # Calibrated |e> -> |f> pi pulse absolute amplitude
-        new_pi_amp = q.xy.operations[operation].amplitude * factor
+        new_pi_amp = q.xy.operations["EF_x180"].amplitude * factor
         if np.abs(new_pi_amp) < 0.3:  # TODO: 1 for OPX1000 MW
             print(
                 f"amplitude for E-F Pi pulse is modified by a factor of {factor:.2f} w.r.t the original pi pulse amplitude"
@@ -265,3 +265,5 @@ else:
     node.results["initial_parameters"] = node.parameters.model_dump()
     node.machine = machine
     node.save()
+
+# %%

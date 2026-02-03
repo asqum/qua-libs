@@ -55,14 +55,14 @@ qubit_pair_indexes = [1]  # The indexes of the qubit pair in the QuAM
 class Parameters(NodeParameters):
 
     qubit_pairs: Optional[List[str]] = ["coupler_q%s_q%s"%(i,i+1) for i in qubit_pair_indexes]
-    num_averages: int = 900
-    max_time_in_ns: int = 1200 #200
+    num_averages: int = 100
+    max_time_in_ns: int = 400 #200
     flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
-    reset_type: Literal['active', 'thermal'] = "active"
+    reset_type: Literal['active', 'thermal'] = "thermal"
     simulate: bool = False
     timeout: int = 100
-    amp_range : float = 0.2 #0.1
-    amp_step : float = 0.002
+    amp_range : float = 0.05 #0.1
+    amp_step : float = 0.005
     load_data_id: Optional[int] = None  
 
 node = QualibrationNode(
@@ -159,11 +159,11 @@ with program() as CPhase_Oscillations:
     for i, qp in enumerate(qubit_pairs):
         # Bring the active qubits to the minimum frequency point
         machine.set_all_fluxes(flux_point, qp)
-        assign(comp_flux_coupler, qp.extras["CZ_coupler_flux"])
+        assign(comp_flux_coupler, qp.extras["Cz_coupler_flux"])
         if "coupler_qubit_crosstalk" in qp.extras:
-            assign(comp_flux_qubit, qp.extras["CZ_qubit_flux"]  +  qp.extras["coupler_qubit_crosstalk"] * qp.extras["CZ_coupler_flux"] )
+            assign(comp_flux_qubit, qp.extras["Cz_qubit_flux"]  +  qp.extras["coupler_qubit_crosstalk"] * qp.extras["CZ_coupler_flux"] )
         else:
-            assign(comp_flux_qubit, qp.extras["CZ_qubit_flux"])        
+            assign(comp_flux_qubit, qp.extras["Cz_qubit_flux"])        
         with for_(n, 0, n < n_avg, n + 1):
             save(n, n_st)
             
@@ -194,7 +194,7 @@ with program() as CPhase_Oscillations:
                                 
                     # measure both qubits
                     readout_state_gef(qp.qubit_control, state_control[i])
-                    readout_state(qp.qubit_target, state_target[i])
+                    readout_state_gef(qp.qubit_target, state_target[i])
                     save(state_control[i], state_st_control[i])
                     save(state_target[i], state_st_target[i])
 
@@ -248,10 +248,10 @@ if not node.parameters.simulate:
             crosstalk[qp.name] = 0.0
     
     def abs_amp(qp, amp):
-        return amp * (qp.extras["CZ_qubit_flux"] + crosstalk[qp.name] * qp.extras["CZ_coupler_flux"])
+        return amp * (qp.extras["Cz_qubit_flux"] + crosstalk[qp.name] * qp.extras["Cz_coupler_flux"])
 
     def detuning(qp, amp):
-        return -(amp * (qp.extras["CZ_qubit_flux"] + crosstalk[qp.name] * qp.extras["CZ_coupler_flux"]))**2 * qp.qubit_control.freq_vs_flux_01_quad_term
+        return -(amp * (qp.extras["Cz_qubit_flux"] + crosstalk[qp.name] * qp.extras["Cz_coupler_flux"]))**2 * qp.qubit_control.freq_vs_flux_01_quad_term
     
     ds = ds.assign_coords(
         {"amp_full": (["qubit", "amp"], np.array([abs_amp(qp, ds.amp.data) for qp in qubit_pairs]))}

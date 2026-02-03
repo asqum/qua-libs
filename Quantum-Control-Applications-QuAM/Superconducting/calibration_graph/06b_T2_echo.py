@@ -23,14 +23,14 @@ from quam_libs.lib.fit import fit_decay_exp, decay_exp
 # %% {Node_parameters}
 class Parameters(NodeParameters):
     qubits: Optional[List[str]] = None #The qubit to be measured. If None, all active qubits will be measured
-    num_averages: int = 300
+    num_averages: int = 100
     min_wait_time_in_ns: int = 16
-    max_wait_time_in_ns: int = 5000
-    wait_time_step_in_ns: int = 50
+    max_wait_time_in_ns: int = 10000
+    wait_time_step_in_ns: int = 100
     flux_point_joint_or_independent_or_arbitrary: Literal['joint', 'independent'] = 'independent'   
     simulate: bool = False
     timeout: int = 100
-    use_state_discrimination: bool = True
+    use_state_discrimination: bool = False
     reset_type: Literal['active', 'thermal'] = "thermal"
 
 node = QualibrationNode(

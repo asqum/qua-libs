@@ -70,13 +70,13 @@ average_gates_per_2q_layer = None
 # %% {Node_parameters}
 
 class Parameters(NodeParameters):
-    qubit_pairs: Optional[List[str]] = ["coupler_q2_q3"]#None
+    qubit_pairs: Optional[List[str]] = ["coupler_q1_q2"]#None
     circuit_lengths: tuple[int] = (0,1,2,3,5,6,8,9,10,12,16) # in number of cliffords
     num_circuits_per_length: int = 20
     num_averages: int = 100
     basis_gates: list[str] = ['rz', 'sx', 'x', 'cz'] 
     flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
-    reset_type_thermal_or_active: Literal["thermal", "active"] = "active"
+    reset_type_thermal_or_active: Literal["thermal", "active"] = "thermal"
     reduce_to_1q_cliffords: bool = False
     use_input_stream: bool = False
     simulate: bool = False

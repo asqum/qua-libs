@@ -42,13 +42,13 @@ import warnings
 # %% {Node_parameters}
 class Parameters(NodeParameters):
 
-    qubits: Optional[List[str]] = None #["q3"] #["q1"]
+    qubits: Optional[List[str]] = None
     num_averages: int = 50
-    min_flux_offset_in_v: float = -0.5
-    max_flux_offset_in_v: float = 0.5
-    num_flux_points: int = 201
-    frequency_span_in_mhz: float = 7.5 #15
-    frequency_step_in_mhz: float = 0.05 #0.1
+    min_flux_offset_in_v: float = -0.4
+    max_flux_offset_in_v: float = 0.4
+    num_flux_points: int = 101
+    frequency_span_in_mhz: float = 20  # 15
+    frequency_step_in_mhz: float = 0.1  # 0.1
     flux_point_joint_or_independent: Literal["joint", "independent", ""] = "independent"
     input_line_impedance_in_ohm: float = 50
     line_attenuation_in_db: float = 0
@@ -57,6 +57,7 @@ class Parameters(NodeParameters):
     simulation_duration_ns: int = 2500
     timeout: int = 100
     load_data_id: Optional[int] = None
+
 
 node = QualibrationNode(name="02b_Resonator_Spectroscopy_vs_Flux", parameters=Parameters())
 
@@ -85,7 +86,7 @@ config = machine.generate_config()
 if node.parameters.load_data_id is None:
     qmm = machine.connect()
 
-# selected coupler to drive flux from: 
+# selected coupler to drive flux from:
 # qp = machine.qubit_pairs["coupler_q1_q2"]
 
 
@@ -118,7 +119,8 @@ with program() as multi_res_spec_vs_flux:
         rr = resonators[i]
         # Bring the active qubits to the minimum frequency point
         machine.set_all_fluxes(flux_point=flux_point, target=qubit)
-        if "c" in qubit.id: qubit.z.set_dc_offset(qubit.z.joint_offset)
+        if "c" in qubit.id:
+            qubit.z.set_dc_offset(qubit.z.joint_offset)
         qubit.z.settle()
         qubit.align()
 
@@ -159,7 +161,7 @@ if node.parameters.simulate:
     samples = job.get_simulated_samples()
     fig, ax = plt.subplots(nrows=len(samples.keys()), sharex=True)
     for i, con in enumerate(samples.keys()):
-        plt.subplot(len(samples.keys()),1,i+1)
+        plt.subplot(len(samples.keys()), 1, i + 1)
         samples[con].plot()
         plt.title(con)
     plt.tight_layout()
@@ -181,7 +183,9 @@ elif node.parameters.load_data_id is None:
 if not node.parameters.simulate:
     # Fetch the data from the OPX and convert it into a xarray with corresponding axes (from most inner to outer loop)
     if node.parameters.load_data_id is not None:
-        ds, machine, json_data, qubits, node.parameters = load_dataset(node.parameters.load_data_id, parameters = node.parameters)
+        ds, machine, json_data, qubits, node.parameters = load_dataset(
+            node.parameters.load_data_id, parameters=node.parameters
+        )
     else:
         ds = fetch_results_as_xarray(job.result_handles, qubits, {"freq": dfs, "flux": dcs})
         # Convert IQ data into volts
@@ -222,7 +226,7 @@ if not node.parameters.simulate:
     flux_min = flux_min * (np.abs(flux_min) < 0.5) + 0.5 * (flux_min > 0.5) - 0.5 * (flux_min < -0.5)
     # finding the frequency as the sweet spot flux
     rel_freq_shift = peak_freq.sel(flux=idle_offset, method="nearest")
-    abs_freqs = ds.sel(flux=idle_offset, method="nearest").sel(freq = rel_freq_shift).freq_full
+    abs_freqs = ds.sel(flux=idle_offset, method="nearest").sel(freq=rel_freq_shift).freq_full
     # Save fitting results
     fit_results = {}
     for q in qubits:
@@ -287,8 +291,7 @@ if not node.parameters.simulate:
         # Location of the current resonator frequency
         ax.plot(
             idle_offset.loc[qubit].values,
-            abs_freqs.sel(qubit=qubit["qubit"]).values
-            * 1e-9,
+            abs_freqs.sel(qubit=qubit["qubit"]).values * 1e-9,
             "r*",
             markersize=10,
         )
@@ -307,9 +310,9 @@ if not node.parameters.simulate:
                 if not (np.isnan(float(idle_offset.sel(qubit=q.name).data))):
                     if flux_point == "independent":
                         q.z.independent_offset = float(idle_offset.sel(qubit=q.name).data)
-                        if "c" in q.id: 
-                            q.z.independent_offset =  float(flux_min.sel(qubit=q.name).data)
-                            q.z.joint_offset =  float(idle_offset.sel(qubit=q.name).data)
+                        if "c" in q.id:
+                            q.z.independent_offset = float(flux_min.sel(qubit=q.name).data)
+                            q.z.joint_offset = float(idle_offset.sel(qubit=q.name).data)
                     else:
                         q.z.joint_offset = float(idle_offset.sel(qubit=q.name).data)
 
@@ -326,7 +329,6 @@ if not node.parameters.simulate:
         node.results["initial_parameters"] = node.parameters.model_dump()
         node.machine = machine
         node.save()
-
 
 
 # %%
