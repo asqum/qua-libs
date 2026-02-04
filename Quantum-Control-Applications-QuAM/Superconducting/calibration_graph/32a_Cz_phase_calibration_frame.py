@@ -349,11 +349,11 @@ if not node.parameters.simulate:
         node.results['figure_leak'] = grid.fig    
 
 # %% {Update_state}
-if not node.parameters.simulate:
-    if node.parameters.load_data_id is None:
-        with node.record_state_updates():
-            for qp in qubit_pairs:
-                qp.gates[operation_name].flux_pulse_control.amplitude = optimal_amps[qp.name]          
+# if not node.parameters.simulate:
+#     if node.parameters.load_data_id is None:
+#         with node.record_state_updates():
+#             for qp in qubit_pairs:
+#                 qp.gates[operation_name].flux_pulse_control.amplitude = optimal_amps[qp.name]          
 # %% {Save_results}
 if not node.parameters.simulate:
     node.outcomes = {qp.name: "successful" for qp in qubit_pairs}

@@ -60,20 +60,19 @@ qubit_pair_indexes = [1]  # The indexes of the qubit pairs to measure
 class Parameters(NodeParameters):
 
     qubit_pairs: Optional[List[str]] = ["coupler_q%s_q%s"%(i,i+1) for i in qubit_pair_indexes]
-    num_averages: int = 50
+    num_averages: int = 100
     flux_point_joint_or_independent_or_pairwise: Literal["joint", "independent", "pairwise"] = "joint"
     reset_type: Literal['active', 'thermal'] = "thermal"
     simulate: bool = False
     timeout: int = 100
     load_data_id: Optional[int] = None
-    coupler_flux_min: float = -0.02  # relative to the coupler set point
-    coupler_flux_max: float = 0.01 # relative to the coupler set point
+    coupler_flux_min: float = -0.05  # relative to the coupler set point
+    coupler_flux_max: float = -0.03 # relative to the coupler set point
 
-    coupler_flux_step: float = 0.001
-    qubit_flux_span: float = 0.03  # relative to the known/calculated detuning between the qubits
-    qubit_flux_step: float = 0.001
+    coupler_flux_step: float = 0.0005
+    qubit_flux_span: float = 0.025  # relative to the known/calculated detuning between the qubits
+    qubit_flux_step: float = 0.0005
     use_state_discrimination: bool = True
-    pulse_duration_ns: int = 88
     operation: Literal["Cz_flattop", "Cz_unipolar", "Cz_bipolar"] = "Cz_unipolar"
     """Type of CZ operation to perform. Options are 'cz_flattop', 'cz_unipolar', or 'cz_bipolar'. Default is 'cz_unipolar'."""
     
@@ -139,7 +138,6 @@ with program() as CPhase_Oscillations:
     flux_qubit = declare(float)
     comp_flux_qubit = declare(float)
     n_st = declare_stream()
-    qua_pulse_duration = declare(int, value=node.parameters.pulse_duration_ns // 4)
     
     state_control = [declare(int) for _ in range(num_qubit_pairs)]
     state_target = [declare(int) for _ in range(num_qubit_pairs)]
@@ -156,6 +154,7 @@ with program() as CPhase_Oscillations:
     
     
     for i, qp in enumerate(qubit_pairs):
+        qua_pulse_duration = qp.gates[operation_name].coupler_flux_pulse.length // 4 
         qp.gates[operation_name].phase_shift_control = 0.0
         qp.gates[operation_name].phase_shift_target = 0.0
         # Bring the active qubits to the minimum frequency point
@@ -416,13 +415,13 @@ if not node.parameters.simulate:
         # store figure
         node.results[f"figure_11_leakage"] = grid.fig
 
-# %% {Update_state}
-if not node.parameters.simulate:
-    if not node.parameters.simulate:
-        with node.record_state_updates():
-            for qp in qubit_pairs:
-                    qp.extras["Cz_coupler_flux"] = node.results["results"][qp.name]["flux_coupler_max"]
-                    qp.gates[operation_name].coupler_flux_pulse.amplitude = node.results["results"][qp.name]["flux_coupler_max"]
+# # %% {Update_state}
+# if not node.parameters.simulate:
+#     if not node.parameters.simulate:
+#         with node.record_state_updates():
+#             for qp in qubit_pairs:
+#                     qp.extras["Cz_coupler_flux"] = node.results["results"][qp.name]["flux_coupler_max"]
+#                     qp.gates[operation_name].coupler_flux_pulse.amplitude = node.results["results"][qp.name]["flux_coupler_max"]
 # %% {Save_results}
 if not node.parameters.simulate:    
     node.outcomes = {q.name: "successful" for q in qubit_pairs}

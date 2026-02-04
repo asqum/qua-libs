@@ -72,15 +72,15 @@ qubit_pair_indexes = [1]  # [1, 2]
 
 class Parameters(NodeParameters):
     qubit_pairs: Optional[List[str]] = ["coupler_q%s_q%s" % (i, i + 1) for i in qubit_pair_indexes]  # ["coupler_q1_q2"]
-    num_averages: int = 50
+    num_averages: int = 100
     flux_point_joint_or_independent_or_pairwise: Literal["joint", "independent", "pairwise"] = "joint"
     reset_type: Literal["active", "thermal"] = "thermal"
     simulate: bool = False
     timeout: int = 200
     load_data_id: Optional[int] = None
 
-    coupler_flux_min: float = -0.02  # relative to the coupler set point
-    coupler_flux_max: float = 0.05 # relative to the coupler set point
+    coupler_flux_min: float = -0.05  # relative to the coupler set point
+    coupler_flux_max: float = 0.02 # relative to the coupler set point
 
     coupler_flux_step: float = 0.001
     qubit_flux_span: float = 0.025  # relative to the known/calculated detuning between the qubits
@@ -237,8 +237,8 @@ with program() as coupler_zero_point_calibration:
                             readout_state_gef(qp.qubit_control, state_control[i])
                             readout_state(qp.qubit_target, state_target[i])
                         else:
-                            readout_state_gef(qp.qubit_control, state_control[i])
-                            readout_state_gef(qp.qubit_target, state_target[i])
+                            readout_state(qp.qubit_control, state_control[i])
+                            readout_state(qp.qubit_target, state_target[i])
                         assign(state[i], state_control[i] * 2 + state_target[i])
                         save(state_control[i], state_st_control[i])
                         save(state_target[i], state_st_target[i])
@@ -363,7 +363,7 @@ if not node.parameters.simulate:
             cut = contrast.sel(flux_qubit=fq_min, method="nearest")
 
             # windows (tune)
-            coupler_below = 0.03   # volts to look below fc_min
+            coupler_below = 0.015# volts to look below fc_min
 
             # "underneath" region: below in coupler, near in qubit
             under = cut.where(
@@ -518,52 +518,52 @@ if not node.parameters.simulate:
 
 
 # %% {Update_state}
-if not node.parameters.simulate:
-    # --- Record updated gate parameters after analysis ---
-    with node.record_state_updates():
-         # --- Select gate type and naming ---
-        if node.parameters.cz_or_iswap == "cz":
-            GateClass = CZGate
-            gate_label = "Cz"
-            coupler_arg_name = "coupler_flux_pulse"
-            coupler_attr = "coupler_flux_pulse"
-        elif node.parameters.cz_or_iswap == "iswap":
-            GateClass = SWAP_Coupler_Gate
-            gate_label = "SWAP"
-            coupler_arg_name = "coupler_pulse_control"
-            coupler_attr = "coupler_pulse_control"
-        else:
-            raise ValueError(f"Unknown gate type: {node.parameters.cz_or_iswap}")
+# if not node.parameters.simulate:
+#     # --- Record updated gate parameters after analysis ---
+#     with node.record_state_updates():
+#          # --- Select gate type and naming ---
+#         if node.parameters.cz_or_iswap == "cz":
+#             GateClass = CZGate
+#             gate_label = "Cz"
+#             coupler_arg_name = "coupler_flux_pulse"
+#             coupler_attr = "coupler_flux_pulse"
+#         elif node.parameters.cz_or_iswap == "iswap":
+#             GateClass = SWAP_Coupler_Gate
+#             gate_label = "SWAP"
+#             coupler_arg_name = "coupler_pulse_control"
+#             coupler_attr = "coupler_pulse_control"
+#         else:
+#             raise ValueError(f"Unknown gate type: {node.parameters.cz_or_iswap}")
 
-        for qp in qubit_pairs:
-            res = node.results["results"][qp.name]
+#         for qp in qubit_pairs:
+#             res = node.results["results"][qp.name]
 
-            # qp.coupler.decouple_offset = res["flux_coupler_min_full"]
-            qp.detuning = res["flux_qubit_max"]
+#             # qp.coupler.decouple_offset = res["flux_coupler_min_full"]
+#             qp.detuning = res["flux_qubit_max"]
 
-            # Keys for extras
-            time_key = f"{gate_label}_time"
-            qubit_flux_key = f"{gate_label}_qubit_flux"
-            coupler_flux_key = f"{gate_label}_coupler_flux"
+#             # Keys for extras
+#             time_key = f"{gate_label}_time"
+#             qubit_flux_key = f"{gate_label}_qubit_flux"
+#             coupler_flux_key = f"{gate_label}_coupler_flux"
 
-            # Store in extras
-            qp.extras[time_key] = int(np.ceil(node.parameters.pulse_duration_ns / 4) * 4)
-            qp.extras[qubit_flux_key] = res["flux_qubit_max"]
-            qp.extras[coupler_flux_key] = res["flux_coupler_max"]
+#             # Store in extras
+#             qp.extras[time_key] = int(np.ceil(node.parameters.pulse_duration_ns / 4) * 4)
+#             qp.extras[qubit_flux_key] = res["flux_qubit_max"]
+#             qp.extras[coupler_flux_key] = res["flux_coupler_max"]
 
-            # Convenience refs
-            t = qp.extras[time_key]
-            q_flux = qp.extras[qubit_flux_key]
-            c_flux = qp.extras[coupler_flux_key]
+#             # Convenience refs
+#             t = qp.extras[time_key]
+#             q_flux = qp.extras[qubit_flux_key]
+#             c_flux = qp.extras[coupler_flux_key]
 
-            # --- Update Unipolar ---
-            gate = qp.gates[f"{gate_label}_unipolar"]
-            gate.flux_pulse_control.amplitude = q_flux
-            getattr(gate, coupler_attr).amplitude = c_flux
-            gate.flux_pulse_control.length = t
-            getattr(gate, coupler_attr).length = t
+#             # --- Update Unipolar ---
+#             gate = qp.gates[f"{gate_label}_unipolar"]
+#             gate.flux_pulse_control.amplitude = q_flux
+#             getattr(gate, coupler_attr).amplitude = c_flux
+#             gate.flux_pulse_control.length = t
+#             getattr(gate, coupler_attr).length = t
 
-# %% {Save_results}
+# # %% {Save_results}
 if not node.parameters.simulate:
     node.outcomes = {q.name: "successful" for q in qubit_pairs}
     node.results["initial_parameters"] = node.parameters.model_dump()
