@@ -193,7 +193,7 @@ else:
 
     # %% {Update_state}
     print(f"Time Of Flight to add: {delays} ns")
-
+    node.machine = machine
     with node.record_state_updates():
         for q in qubits:
             if node.parameters.time_of_flight_in_ns is not None:

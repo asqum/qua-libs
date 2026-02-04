@@ -231,6 +231,7 @@ if not node.parameters.simulate:
 
     # %% {Update_state}
     if node.parameters.load_data_id is None:
+        node.machine = machine
         with node.record_state_updates():
             for index, q in enumerate(qubits):
                 q.resonator.intermediate_frequency += int(fits[q.name].params["omega_r"].value)
