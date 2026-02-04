@@ -19,7 +19,6 @@ nodes = [
     "close_other_qms",
     "IQ_blobs",
     "ramsey_flux_calibration",
-    "IQ_blobs_gef",
     "power_rabi_x180",
     "power_rabi_x90",
     "single_qubit_randomized_benchmarking",
@@ -40,12 +39,6 @@ g = QualibrationGraph(
         ),
         "ramsey_flux_calibration": library.nodes["06a_Ramsey_vs_Flux_Calibration"].copy(
             flux_point_joint_or_independent="independent", multiplexed=multiplexed, name="Ramsey_Flux_Calibration"
-        ),
-        "IQ_blobs_gef": library.nodes["11e_IQ_Blobs_G_E_F"].copy(
-            flux_point_joint_or_independent="joint",
-            multiplexed=multiplexed,
-            name="IQ_blobs_gef",
-            reset_type_thermal_or_active="thermal",
         ),
         "power_rabi_x180": library.nodes["04_Power_Rabi"].copy(
             flux_point_joint_or_independent="joint",
