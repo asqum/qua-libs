@@ -98,15 +98,15 @@
             },
             "q4-5": {
                 "c": {
-                    "control_qubit": "#/qubits/q4",
-                    "target_qubit": "#/qubits/q5",
+                    "control_qubit": "#/qubits/q5",
+                    "target_qubit": "#/qubits/q4",
                     "opx_output": "#/ports/analog_outputs/con1/3/2"
                 }
             },
             "q5-6": {
                 "c": {
-                    "control_qubit": "#/qubits/q5",
-                    "target_qubit": "#/qubits/q6",
+                    "control_qubit": "#/qubits/q6",
+                    "target_qubit": "#/qubits/q5",
                     "opx_output": "#/ports/analog_outputs/con1/3/4"
                 }
             }
