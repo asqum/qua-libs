@@ -282,6 +282,7 @@ else:
     node.results["figure"] = grid.fig
 
     # %% {Update_state}
+    node.machine = machine
     with node.record_state_updates():
         for q in qubits:
             q.xy.operations[operation].amplitude = fit_results[q.name]["Pi_amplitude"]

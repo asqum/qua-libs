@@ -52,7 +52,7 @@ class Parameters(NodeParameters):
     operation: str = "saturation"
     operation_amplitude_factor: Optional[float] = 0.3 #0.004, 0.0004
     operation_len_in_ns: Optional[int] = None
-    frequency_span_in_mhz: float = 400 #200, 4, 800
+    frequency_span_in_mhz: float = 200 #200, 4, 800
     frequency_step_in_mhz: float = 0.4 #0.25, 0.01
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
     target_peak_width: Optional[float] = 1e6 #1e6

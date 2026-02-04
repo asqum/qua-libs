@@ -248,6 +248,7 @@ if not node.parameters.simulate:
     # %% {Update_state}
     if node.parameters.load_data_id is None:
         for q in qubits:
+            node.machine = machine
             with node.record_state_updates():
                 q.resonator.intermediate_frequency += int(fit_results[q.name]["detuning"])
                 q.chi = float(fit_results[q.name]["chi"])

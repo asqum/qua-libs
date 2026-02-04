@@ -283,6 +283,7 @@ if not node.parameters.simulate:
 
     # %% {Update_state}
     if node.parameters.load_data_id is None:
+        node.machine = machine
         with node.record_state_updates():
             for q in qubits:
                 if not np.isnan(flux_shift.sel(qubit=q.name).values):

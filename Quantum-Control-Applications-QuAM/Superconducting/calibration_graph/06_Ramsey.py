@@ -187,6 +187,7 @@ if not node.parameters.simulate:
 
     # %% {Update_state}
     if node.parameters.load_data_id is None:
+        node.machine = machine
         with node.record_state_updates():
             for q in qubits:
                 q.xy.intermediate_frequency -= float(fits[q.name].freq_offset)

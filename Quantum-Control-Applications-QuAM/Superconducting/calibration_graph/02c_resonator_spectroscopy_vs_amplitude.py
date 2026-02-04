@@ -303,6 +303,7 @@ if not node.parameters.simulate:
     for q in qubits:
         fit_results[q.name] = {}
         if not node.parameters.load_data_id:
+            node.machine = machine
             with node.record_state_updates():
                 if not np.isnan(rr_optimal_power_dbm[q.name]):
                     power_settings = q.resonator.set_output_power(

@@ -395,6 +395,7 @@ if not node.parameters.simulate:
 
     # %% {Update_state}
     if node.parameters.load_data_id is None:
+        node.machine = machine
         with node.record_state_updates():
             for qubit in qubits:
                 qubit.resonator.operations["readout"].integration_weights_angle -= float(

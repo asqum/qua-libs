@@ -302,6 +302,7 @@ if not node.parameters.simulate:
 
     # %% {Update_state}
     if not node.parameters.load_data_id:
+        node.machine = machine
         with node.record_state_updates():
             for q in qubits:
                 if not (np.isnan(float(idle_offset.sel(qubit=q.name).data))):

@@ -52,7 +52,7 @@ class Parameters(NodeParameters):
     qubits: Optional[List[str]] = None
     num_averages: int = 200
     operation: str = "saturation"
-    operation_amplitude_factor: Optional[float] = 0.0075
+    operation_amplitude_factor: Optional[float] = 1
     operation_len_in_ns: Optional[int] = None
     frequency_span_in_mhz: float = 300
     frequency_step_in_mhz: float = 0.15
@@ -260,6 +260,7 @@ else:
     node.results["figure"] = grid.fig
 
     # %% {Update_state}
+    node.machine = machine
     with node.record_state_updates():
         for q in qubits:
             fit_results[q.name] = {}
