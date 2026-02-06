@@ -91,8 +91,8 @@
             },
             "q3-4": {
                 "c": {
-                    "control_qubit": "#/qubits/q4",
-                    "target_qubit": "#/qubits/q3",
+                    "control_qubit": "#/qubits/q3",
+                    "target_qubit": "#/qubits/q4",
                     "opx_output": "#/ports/analog_outputs/con1/2/6"
                 }
             },
