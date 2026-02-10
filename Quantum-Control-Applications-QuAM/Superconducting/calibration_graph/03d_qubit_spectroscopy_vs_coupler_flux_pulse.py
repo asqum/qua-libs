@@ -40,18 +40,19 @@ from scipy.signal import find_peaks
 # %% {Node_parameters}
 class Parameters(NodeParameters):
 
-    qubits: Optional[List[str]] = ["q1", "q2"]
-    qubit_pair: str = "coupler_q1_q2"
-    num_averages: int = 25
+    qubits: Optional[List[str]] = ["q2", "q3"]
+    qubit_pair: str = "coupler_q2_q3"
+    num_averages: int = 20
     operation: str = "saturation"
-    operation_amplitude_factor: Optional[float] = 0.005
+    operation_amplitude_factor: Optional[float] = 0.01
     reset_type: Literal["active", "thermal"] = "thermal"
     operation_len_in_ns: Optional[int] = None
-    frequency_span_in_mhz: float = 50
-    frequency_step_in_mhz: float = 0.5
-    min_flux_offset_in_v: float = -0.35
-    max_flux_offset_in_v: float = 0.45
-    num_flux_points: int = 101
+    frequency_span_in_mhz: float = 100
+    frequency_step_in_mhz: float = 1.0
+    min_flux_offset_in_v: float = -0.2
+    max_flux_offset_in_v: float = 0.2
+    num_flux_points: int = 51
+    coupler_qubit_crosstalk: float = 0.00
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
     simulate: bool = False
     simulation_duration_ns: int = 2500
@@ -133,10 +134,8 @@ with program() as multi_qubit_spec_vs_flux:
                         qubit.resonator.wait(qubit.thermalization_time * u.ns)
                         qubit_pair.align()
                     
-                    if "coupler_qubit_crosstalk" in qubit_pair.extras:
-                        assign(comp_flux_qubit, qubit_pair.extras["coupler_qubit_crosstalk"] * dc )
-                    else:
-                        assign(comp_flux_qubit, 0.0)
+                    assign(comp_flux_qubit, node.parameters.coupler_qubit_crosstalk * dc )
+                    
                     # Flux sweeping for a qubit
                     duration = operation_len * u.ns if operation_len is not None else qubit.xy.operations[operation].length * u.ns
                     # Bring the qubit to the desired point during the saturation pulse
@@ -228,6 +227,11 @@ if not node.parameters.simulate:
         ds.freq_full.attrs["units"] = "GHz"
     # Add the dataset to the node
     node.results = {"ds": ds}
+    
+    flux_coupler_full = np.array([dcs + qubit_pair.coupler.decouple_offset])
+    flux_coupler_full_1d = np.asarray(flux_coupler_full).squeeze()  # (N,)
+    ds = ds.assign_coords(flux_coupler_full=("flux", flux_coupler_full_1d))
+
 
     # %% {Data_analysis}
     # # Find the resonance dips for each flux point
@@ -261,12 +265,12 @@ if not node.parameters.simulate:
 
     # Add new coordinate for plotting in mV
     ds = ds.assign_coords(freq_GHz=ds.freq_full / 1e9)
-    ds = ds.assign_coords(flux_mV=ds.flux * 1e3)
+    ds = ds.assign_coords(flux_mV=ds.flux_coupler_full * 1e3)
 
     for ax, qubit in grid_iter(grid):
         ds.loc[qubit].I.plot(
             ax=ax,
-            x="flux_mV",       # <— use millivolts instead of volts
+            x="flux_mV",       
             y="freq_GHz",
             robust=True,
             add_colorbar=False,
@@ -278,9 +282,9 @@ if not node.parameters.simulate:
         min_vline = ds["freq_GHz"].values.min()
         max_vline = ds["freq_GHz"].values.max()
 
-        for flux_val in avoided_crossing:
-            ax.vlines(flux_val * 1e3, min_vline, max_vline, color="red", linestyle="--", label="Avoided crossings")
-        ax.vlines(decouple_offset * 1e3, min_vline, max_vline, color="red", linestyle="-", label="Decoupling offset")
+        # for flux_val in avoided_crossing:
+        #     ax.vlines(flux_val * 1e3, min_vline, max_vline, color="red", linestyle="--", label="Avoided crossings")
+        # ax.vlines(decouple_offset * 1e3, min_vline, max_vline, color="red", linestyle="-", label="Decoupling offset")
 
         ax.legend(fontsize=8)
         ax.set_ylabel("Freq (GHz)")

@@ -34,15 +34,15 @@ import numpy as np
 
 # %% {Node_parameters}
 class Parameters(NodeParameters):
-    qubits: Optional[List[str]] = ["q2"]
+    qubits: Optional[List[str]] = ["q10"]
     """List of qubits to measure. If None or empty, uses all control qubits in the qubit pair."""
-    qubit_pair: str = "coupler_q2_q3"
+    qubit_pair: str = "coupler_q9_q10"
     """Qubit pair to use for the measurement."""
-    num_averages: int = 20
+    num_averages: int = 200
     """Number of averages to perform."""
     min_wait_time_in_ns: int = 16
     """Minimum wait time in nanoseconds."""
-    max_wait_time_in_ns: int = 150000
+    max_wait_time_in_ns: int = 120000
     """Maximum wait time in nanoseconds."""
     wait_time_step_in_ns: int = 1000
     """Step size for wait time in nanoseconds."""
@@ -50,7 +50,7 @@ class Parameters(NodeParameters):
     """Flux point setting for the qubits: 'joint', 'independent', or 'arbitrary'."""
     reset_type: Literal["active", "thermal"] = "thermal"
     """Type of reset to use before each measurement: 'active' or 'thermal'."""
-    use_state_discrimination: bool = True
+    use_state_discrimination: bool = False
     """Whether to use state discrimination for readout."""
     simulate: bool = False
     """Whether to simulate the QUA program instead of executing it."""
@@ -68,7 +68,7 @@ class Parameters(NodeParameters):
     """Minimum coupler flux value."""
     coupler_flux_max : float =  0.5 # relative to the coupler set point
     """Maximum coupler flux value."""
-    coupler_flux_num_points : float = 21
+    coupler_flux_num_points : float = 41
     """Number of coupler flux points."""
     use_coupler_flux_pulse: bool = False
     """Whether to use a coupler flux pulse on the coupler during the idle time."""
@@ -299,7 +299,7 @@ for ax, qubit in grid_iter(grid):
         )
         ax.set_ylabel("Idle time (µs)")
 
-    ax.set_title(f"{qname}")
+    ax.set_title(f"{qname}-{qubit_pair.name}")
     ax.set_xlabel("Coupler flux (mV)")
     cb = grid.fig.colorbar(im, ax=ax)
     cb.set_label(("state" if node.parameters.use_state_discrimination else "I"))
@@ -323,7 +323,7 @@ for ax, qubit in grid_iter(grid):
             cmap="viridis"
     )
 
-    ax.set_title(f"{qname}")
+    ax.set_title(f"{qname}-{qubit_pair.name}")
     ax.set_xlabel("Coupler flux (mV)")
     ax.set_ylabel("Idle time (µs)")
     cb = grid.fig.colorbar(im, ax=ax)
@@ -346,7 +346,7 @@ for ax, qubit in grid_iter(grid):
     T1err = tau_error.sel(qubit=qname).values
 
     # Ignore negative/unphysical values
-    mask = T1 > 0
+    mask = (T1 > 0) & (T1err <= 0.5 * T1)
     T1 = np.where(mask, T1, np.nan)
     T1err = np.where(mask, T1err, np.nan)
 
@@ -358,7 +358,7 @@ for ax, qubit in grid_iter(grid):
         capsize=3,
     )
 
-    ax.set_title(f"{qname}")
+    ax.set_title(f"{qname}-{qubit_pair.name}")
     ax.set_xlabel("Coupler flux (mV)")
     ax.set_ylabel("T1 (µs)")
 
