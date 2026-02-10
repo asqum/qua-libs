@@ -178,7 +178,7 @@ def plot_individual_linear_fit(ax: Axes, fit_result: dict, peak_result: dict):
     # Plot linear fit if successful
     if fit_result["success"]:
         # Generate smooth line for fit
-        flux_smooth = np.linspace(flux_bias.min(), flux_bias.max(), 100)
+        flux_smooth = np.linspace(float(flux_bias.min()), float(flux_bias.max()),100)
         freq_smooth = (fit_result["linear_fit_slope"] * flux_smooth + fit_result["linear_fit_intercept"])
         
         ax.plot(flux_smooth, freq_smooth, 'r-', linewidth=3,
