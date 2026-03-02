@@ -20,11 +20,10 @@ Before proceeding to the next node:
 from datetime import datetime, timezone, timedelta
 from qualibrate import QualibrationNode, NodeParameters
 from quam_libs.components import QuAM
-from quam_libs.macros import qua_declaration, active_reset_simple
+from quam_libs.macros import qua_declaration
 from quam_libs.lib.qua_datasets import convert_IQ_to_V
 from quam_libs.lib.plot_utils import QubitGrid, grid_iter
 from quam_libs.lib.save_utils import fetch_results_as_xarray, load_dataset
-from quam_libs.lib.fit import peaks_dips
 from qualang_tools.results import progress_counter, fetching_tool
 from qualang_tools.loops import from_array
 from qualang_tools.multi_user import qm_session
@@ -34,20 +33,18 @@ from qm.qua import *
 from typing import Literal, Optional, List
 import matplotlib.pyplot as plt
 import numpy as np
-from scipy.signal import find_peaks
-from quam_libs.lib.fit import fit_oscillation
 
 
 # %% {Node_parameters}
 class Parameters(NodeParameters):
 
-    qubits: Optional[List[str]] = ["q1"]
+    qubits: Optional[List[str]] = ["q1", "q2"]
     qubit_pair: str = "coupler_q1_q2"
     num_averages: int = 50
-    frequency_span_in_mhz: float = 15
-    frequency_step_in_mhz: float = 0.05
-    min_flux_offset_in_v: float = -0.5
-    max_flux_offset_in_v: float = 0.5
+    frequency_span_in_mhz: float = 30
+    frequency_step_in_mhz: float = 0.1
+    min_flux_offset_in_v: float = -0.4
+    max_flux_offset_in_v: float = 0.4
     num_flux_points: int = 101
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
     simulate: bool = False
@@ -117,7 +114,6 @@ with program() as multi_qubit_spec_vs_flux:
                 else:
                     assign(comp_flux_qubit, 0.0)
                 # Flux sweeping for a qubit
-                duration = operation_len * u.ns if operation_len is not None else qubit.xy.operations[operation].length * u.ns
                 # Bring the qubit to the desired point during the saturation pulse
                 qubit_pair.coupler.set_dc_offset(dc)
                 qubit_pair.align()
@@ -191,29 +187,37 @@ if not node.parameters.simulate:
                 )
             }
         )
+        flux_coupler_full = np.array([dcs])
+        flux_coupler_full_1d = np.asarray(flux_coupler_full).squeeze()  # (N,)
+        ds = ds.assign_coords(flux_coupler_full=("flux", flux_coupler_full_1d))
+        ds = ds.assign_coords(flux_mV=ds.flux_coupler_full * 1e3)
         ds.freq_full.attrs["long_name"] = "Frequency"
         ds.freq_full.attrs["units"] = "GHz"
+       
     # Add the dataset to the node
     node.results = {"ds": ds}
-
-    # %% {Data_analysis}
+    
 
     # %% {Plotting}
     grid = QubitGrid(ds, [q.grid_location for q in qubits])
 
     ds = ds.assign_coords(freq_GHz=ds.freq_full / 1e9)
     for ax, qubit in grid_iter(grid):
-        ds.loc[qubit].IQ_abs.plot(ax=ax, x="flux", y="freq_GHz", robust=True, add_colorbar=False)
+        ds.loc[qubit].IQ_abs.plot(ax=ax, x="flux_mV", y="freq_GHz", robust=True, add_colorbar=False, cmap="viridis")
         ax.legend(fontsize=8)
         ax.set_ylabel("Freq (GHz)")
         ax.set_xlabel("Coupler flux (V)")
         ax.set_title(f"{qubit['qubit']} - {qubit_pair.coupler.name}")
+        min_vline = ds["freq_GHz"].values.min()
+        max_vline = ds["freq_GHz"].values.max()
+        ax.vlines(qubit_pair.coupler.decouple_offset * 1e3, min_vline, max_vline, color="red", linestyle="-", label="Current Decoupling offset")
+        ax.legend(fontsize=8)
+
     grid.fig.suptitle(f"Resonator spectroscopy vs coupler flux")
     
     plt.tight_layout()
     plt.show()
     node.results["figure"] = grid.fig
-
 
     # %% {Save_results}
     node.results["ds"] = ds

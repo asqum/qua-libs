@@ -20,7 +20,7 @@ Before proceeding to the next node:
 from datetime import datetime, timezone, timedelta
 from qualibrate import QualibrationNode, NodeParameters
 from quam_libs.components import QuAM
-from quam_libs.macros import qua_declaration
+from quam_libs.macros import qua_declaration, active_reset_simple
 from quam_libs.lib.qua_datasets import convert_IQ_to_V
 from quam_libs.lib.plot_utils import QubitGrid, grid_iter
 from quam_libs.lib.save_utils import fetch_results_as_xarray, load_dataset
@@ -44,13 +44,14 @@ class Parameters(NodeParameters):
     qubit_pair: str = "coupler_q1_q2"
     num_averages: int = 25
     operation: str = "saturation"
-    operation_amplitude_factor: Optional[float] = 0.1
+    operation_amplitude_factor: Optional[float] = 0.05
     operation_len_in_ns: Optional[int] = None
-    frequency_span_in_mhz: float = 125
-    frequency_step_in_mhz: float = 0.2
-    min_flux_offset_in_v: float = -0.5
-    max_flux_offset_in_v: float = 0.5
-    num_flux_points: int = 201
+    frequency_span_in_mhz: float = 100
+    frequency_step_in_mhz: float = 0.5
+    min_flux_offset_in_v: float = -0.4
+    max_flux_offset_in_v: float = 0.4
+    reset_type: Literal["active", "thermal"] = "thermal"
+    num_flux_points: int = 51
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
     simulate: bool = False
     simulation_duration_ns: int = 2500
@@ -114,7 +115,7 @@ with program() as multi_qubit_spec_vs_flux:
     I, I_st, Q, Q_st, n, n_st = qua_declaration(num_qubits=num_qubits)
     df = declare(int)  # QUA variable for the qubit frequency
     dc = declare(fixed)  # QUA variable for the flux dc level
-
+    comp_flux_qubit = declare(float)
     for i, qubit in enumerate(qubits):
         # Bring the active qubits to the minimum frequency point
         machine.set_all_fluxes(flux_point=flux_point, target=qubit)
@@ -126,6 +127,17 @@ with program() as multi_qubit_spec_vs_flux:
                 # Update the qubit frequency
                 qubit.xy.update_frequency(df + qubit.xy.intermediate_frequency)
                 with for_(*from_array(dc, dcs)):
+                    if node.parameters.reset_type == "active":
+                        # active_reset(qubit, "readout")
+                        active_reset_simple(qubit, "readout")
+                    else:
+                        qubit.resonator.wait(qubit.thermalization_time * u.ns)
+                        qubit_pair.align()
+                    
+                    if "coupler_qubit_crosstalk" in qubit_pair.extras:
+                        assign(comp_flux_qubit, qubit_pair.extras["coupler_qubit_crosstalk"] * dc )
+                    else:
+                        assign(comp_flux_qubit, 0.0)
                     # Flux sweeping for a qubit
                     duration = operation_len * u.ns if operation_len is not None else qubit.xy.operations[operation].length * u.ns
                     # Bring the qubit to the desired point during the saturation pulse
@@ -133,12 +145,18 @@ with program() as multi_qubit_spec_vs_flux:
                     qubit_pair.align()
                     # Apply saturation pulse to all qubits
                     # qubit.xy.wait(qubit.z.settle_time * u.ns)
+                    qubit.z.play(
+                        "const", 
+                        amplitude_scale = comp_flux_qubit / qubit.z.operations["const"].amplitude, 
+                        duration = duration + 200
+                    )
+                    qubit.xy.wait(200)
                     qubit.xy.play(
                         operation,
                         amplitude_scale=operation_amp,
                         duration=duration,
                     )
-                    qubit.align()
+                    qubit_pair.align()
                     # QUA macro to read the state of the active resonators
                     qubit.resonator.measure("readout", qua_vars=(I[i], Q[i]))
                     # save data
@@ -260,7 +278,7 @@ if not node.parameters.simulate:
         ax.legend(fontsize=8)
         ax.set_ylabel("Freq (GHz)")
         ax.set_xlabel("Flux (V)")
-        #ax.set_title(f"{qubit["qubit"]} - {qubit_pair.coupler.name}")
+        ax.set_title(f"{qubit['qubit']} - {qubit_pair.coupler.name}")
     #grid.fig.suptitle(f"Qubit spectroscopy vs coupler flux \n {date_time} GMT+3  #{node_id}")
     
     plt.tight_layout()
