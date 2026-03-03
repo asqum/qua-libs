@@ -67,25 +67,25 @@ and preparing the system for entangling gate calibration.
 """
 
 # %% {Node_parameters}
-qubit_pair_indexes = [1]  # [1, 2]
+qubit_pair_indexes = [3]  # [1, 2]
 
 
 class Parameters(NodeParameters):
     qubit_pairs: Optional[List[str]] = ["coupler_q%s_q%s" % (i, i + 1) for i in qubit_pair_indexes]  # ["coupler_q1_q2"]
     num_averages: int = 100
     flux_point_joint_or_independent_or_pairwise: Literal["joint", "independent", "pairwise"] = "joint"
-    reset_type: Literal["active", "thermal"] = "thermal"
+    reset_type: Literal["active", "thermal"] = "active"
     simulate: bool = False
     timeout: int = 200
     load_data_id: Optional[int] = None
 
-    coupler_flux_min: float = -0.05  # relative to the coupler set point
-    coupler_flux_max: float = 0.05 # relative to the coupler set point
+    coupler_flux_min: float = -0.5  # relative to the coupler set point
+    coupler_flux_max: float = 0.5 # relative to the coupler set point
 
-    coupler_flux_step: float = 0.001
-    qubit_flux_span: float = 0.025  # relative to the known/calculated detuning between the qubits
-    qubit_flux_step: float = 0.001
-    guess_flux_detuning: float = -0.09  # initial guess for the qubit flux detuning to bring the qubits closer to resonance (relative to the qubit set point)
+    coupler_flux_step: float = 0.02
+    qubit_flux_span: float = 0.1  # relative to the known/calculated detuning between the qubits
+    qubit_flux_step: float = 0.002
+    guess_flux_detuning: float = -0.12  # initial guess for the qubit flux detuning to bring the qubits closer to resonance (relative to the qubit set point)
     use_state_discrimination: bool = True
     pulse_duration_ns: int = 88
     cz_or_iswap: Literal["cz", "iswap"] = "cz"
