@@ -399,7 +399,7 @@ if not node.parameters.simulate:
     else:  # 5+ qubits
         text_fontsize = 4
     
-    fig_confusion = plt.figure(figsize=(5 * num_cols, 4 * num_rows))
+    fig_confusion = plt.figure(figsize=(5 * num_cols, 5 * num_rows))
     for idx, qg in enumerate(qubit_groups):
         ax = fig_confusion.add_subplot(num_rows, num_cols, idx + 1)
         print(qg.name)
@@ -413,13 +413,14 @@ if not node.parameters.simulate:
                     ax.text(j, i, f"{100 * conf[i][j]:.1f}%", ha="center", va="center", color="w", fontsize=text_fontsize)
         ax.set_ylabel('prepared')
         ax.set_xlabel('measured')
-        ax.set_title(f"Confusion matrix {qg.name} ({num_qubits}Q) \n {node.date_time} GMT+{node.time_zone} #{node.node_id} \n reset type = {node.parameters.reset_type}")
+        # ax.set_title(f"Confusion matrix {qg.name} ({num_qubits}Q) \n {node.date_time} GMT+{node.time_zone} #{node.node_id} \n reset type = {node.parameters.reset_type}")
+        ax.set_title(f"Confusion matrix {qg.name} ({num_qubits}Q) \n reset type = {node.parameters.reset_type}")
     fig_confusion.tight_layout()
     fig_confusion.show()
     node.results["figure_confusion"] = fig_confusion
 
     # Kronecker product confusion matrix plot
-    fig_kron = plt.figure(figsize=(5 * num_cols, 4 * num_rows))
+    fig_kron = plt.figure(figsize=(5 * num_cols, 5 * num_rows))
     for idx, qg in enumerate(qubit_groups):
         ax = fig_kron.add_subplot(num_rows, num_cols, idx + 1)
         conf = kron_confs[qg.name]
@@ -432,13 +433,14 @@ if not node.parameters.simulate:
                     ax.text(j, i, f"{100 * conf[i][j]:.1f}%", ha="center", va="center", color="w", fontsize=text_fontsize)
         ax.set_ylabel('prepared')
         ax.set_xlabel('measured')
-        ax.set_title(f"Kronecker Confusion matrix {qg.name} ({num_qubits}Q) \n {node.date_time} GMT+{node.time_zone} #{node.node_id} \n reset type = {node.parameters.reset_type}")
+        ax.set_title(f"Kronecker Confusion matrix {qg.name} ({num_qubits}Q) \n reset type = {node.parameters.reset_type}")
+        # ax.set_title(f"Kronecker Confusion matrix {qg.name} ({num_qubits}Q) \n {node.date_time} GMT+{node.time_zone} #{node.node_id} \n reset type = {node.parameters.reset_type}")
     fig_kron.tight_layout()
     fig_kron.show()
     node.results["figure_kron"] = fig_kron
 
     # Subtraction (difference) matrix plot
-    fig_diff = plt.figure(figsize=(5 * num_cols, 4 * num_rows))
+    fig_diff = plt.figure(figsize=(5 * num_cols, 5 * num_rows))
     for idx, qg in enumerate(qubit_groups):
         ax = fig_diff.add_subplot(num_rows, num_cols, idx + 1)
         diff = confusions[qg.name] - kron_confs[qg.name]
@@ -451,7 +453,8 @@ if not node.parameters.simulate:
                     ax.text(j, i, f"{100 * val:.1f}%", ha="center", va="center", color="k" if abs(val) < 0.5 * max_abs else "w", fontsize=text_fontsize)
         ax.set_ylabel('prepared')
         ax.set_xlabel('measured')
-        ax.set_title(f"Difference (Direct - Kron) {qg.name} ({num_qubits}Q) \n {node.date_time} GMT+{node.time_zone} #{node.node_id} \n reset type = {node.parameters.reset_type}")
+        # ax.set_title(f"Difference (Direct - Kron) {qg.name} ({num_qubits}Q) \n {node.date_time} GMT+{node.time_zone} #{node.node_id} \n reset type = {node.parameters.reset_type}")
+        ax.set_title(f"Difference (Direct - Kron) {qg.name} ({num_qubits}Q) \n reset type = {node.parameters.reset_type}")
     fig_diff.tight_layout()
     fig_diff.show()
     node.results["figure_diff"] = fig_diff
