@@ -47,13 +47,13 @@ import numpy as np
 # %% {Node_parameters}
 class Parameters(NodeParameters):
 
-    qubits: Optional[List[str]] = None
-    num_averages: int = 100
+    qubits: Optional[List[str]] = ['q3']
+    num_averages: int = 2000
     operation: str = "saturation"
-    operation_amplitude_factor: Optional[float] = 0.3 #0.004, 0.0004
-    operation_len_in_ns: Optional[int] = None
-    frequency_span_in_mhz: float = 400 #200, 4, 800
-    frequency_step_in_mhz: float = 0.4 #0.25, 0.01
+    operation_amplitude_factor: Optional[float] = 0.02    #0.004, 0.0004
+    operation_len_in_ns: Optional[int] = 50_000
+    frequency_span_in_mhz: float = 300 #200, 4, 800
+    frequency_step_in_mhz: float = 1 #0.25, 0.01
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
     target_peak_width: Optional[float] = 1e6 #1e6
     arbitrary_flux_bias: Optional[float] = None
@@ -343,10 +343,10 @@ if not node.parameters.simulate:
                         factor_cw = float(target_peak_width / result.sel(qubit=q.name).width.values)
                         factor_pi = np.pi / (result.sel(qubit=q.name).width.values * Pi_length * 1e-9)
                         limits = instrument_limits(q.xy)
-                        if factor_cw * used_amp / operation_amp < limits.max_wf_amplitude:
-                            q.xy.operations["saturation"].amplitude = factor_cw * used_amp / operation_amp
-                        else:
-                            q.xy.operations["saturation"].amplitude = limits.max_wf_amplitude
+                        # if factor_cw * used_amp / operation_amp < limits.max_wf_amplitude:
+                        #     q.xy.operations["saturation"].amplitude = factor_cw * used_amp / operation_amp
+                        # else:
+                        #     q.xy.operations["saturation"].amplitude = limits.max_wf_amplitude
 
                         if factor_pi * used_amp < limits.max_x180_wf_amplitude:
                             q.xy.operations["x180"].amplitude = factor_pi * used_amp

@@ -1,12 +1,12 @@
 import inspect
 from pathlib import Path
-from typing import Optional, Union
+from typing import Optional, Union, Literal
 import warnings
 
 from qm.qua import *
 from quam_libs.components import QuAM
-from quam_libs.components import Transmon
-from quam.utils.qua_types import QuaVariable
+from quam_libs.components import Transmon, TransmonPair
+from quam.utils.qua_types import QuaVariable, ScalarFloat
 
 __all__ = [
     "qua_declaration",
@@ -125,7 +125,7 @@ def readout_state_gef(
         )
     wait(4)
     assign(state, Math.argmin(diff))
-    wait(qubit.resonator.depletion_time // 4, qubit.resonator.name)
+    qubit.wait(qubit.resonator.depletion_time // 4)
 
 
 def active_reset_gef(
@@ -141,6 +141,8 @@ def active_reset_gef(
     attempts = declare(int)
     assign(attempts, 0)
     qubit.align()
+    qubit.resonator.wait(4*(qubit.resonator.depletion_time//4))       
+    wait(4)
     with while_((success < 2) & (attempts < max_attempts)):
         readout_state_gef(qubit, res_ar, readout_pulse_name)
         qubit.align()
@@ -220,3 +222,90 @@ def active_reset(
     qubit.align()
     if save_qua_var is not None:
         save(attempts, save_qua_var)
+
+
+def split_bipolar_macro(
+        qbORqp:Transmon|TransmonPair,
+        amplitude_scale:float|ScalarFloat = 1.0,
+        neg_pole_amp_ratio:float|ScalarFloat = 1.0,
+        debug:bool=False):
+
+    ### ========== Composing ==========
+    if isinstance(qbORqp, Transmon):
+        channel = qbORqp.z
+    elif isinstance(qbORqp, TransmonPair):
+        channel = qbORqp.coupler
+    else:
+        raise TypeError(f"Target assigned for split_bipolar macro must be Transmon or TransmonPair ! Go checking it plz.")
+    
+    
+    if not debug:
+        ## Half Cosine Raise
+        channel.play('flattopV2', amplitude_scale=amplitude_scale)
+        ## Half Cosine Fall
+        channel.play('flattopV2', amplitude_scale=-1*neg_pole_amp_ratio*amplitude_scale)
+    else:
+        ## Half Cosine Raise
+        channel.play('Cz_flattop', amplitude_scale=amplitude_scale)
+        ## Half Cosine Fall
+        channel.play('Cz_flattop', amplitude_scale=-1*neg_pole_amp_ratio*amplitude_scale)
+        
+    # qbORqp.align()
+
+def readout_state_coupler(
+        qb2read:Transmon,
+        state: QuaVariable,
+        method:Literal["aswap", "3tone", "zz-pi"],
+        flux_applied_target:Transmon|TransmonPair|None = None,
+        readout_gef:bool = False,
+        buffer_b4_readout:bool = True,
+        zz_pi_pulse_duration_scale:int = 100,
+    ):
+    '''
+    A readout macro for reading a coupler, can be achieved by either performing an aswap and reading the qubit, or by performing a 3-tone spectroscopy.
+    * Note: For the aSWAP method, the pulse for performing the aSWAP should be pre-configured in the state.json with the name "aSWAP". The pulse should be designed to bring the qubit and coupler into resonance for the swap. The flux_applied_target parameter should be set accordingly based on whether the flux pulse is applied to the coupler or the qubit. From Li-Chieh's experiences, the amplitude and duration can be set to a half flux period and 400ns.
+    :param qb2read: readout qubit.
+    ### Warning: Here is a global align() in the beginning.\n
+    :param state: the readout result will be assigned to this variable.
+    :param method: supports both methods of reading the coupler: "aswap", "zz-pi" and "3tone". The 'zz-pi' method uses a 10 times long pi-pulse to drive readout qubit, and the '3tone' method uses a saturation pulse to drive the readout qubit.
+    :param flux_applied_target: If method is 'aswap', we should apply a flux pulse on either the coupler (TransmonPair) or the qubit (Transmon) to bring them into resonance for the swap. This parameter specifies which one to apply the flux pulse on, and it's determined by the frequency position. The None (default) was given, the flux pulse will be applied on the readout qubit itself.
+    :param readout_gef: whether to use GEF-readout or GE-readout.
+    :param buffer_b4_readout: Add some buffer time before the readout. The buffer time is fixed at this moment.
+    :param zz_pi_pulse_duration_scale: Only for 'zz-pi' method. The duration of the long pi pulse is determined by multiplying the original pi pulse duration with this scale factor. The amplitude is set to be the inverse of this scale factor to make sure the total pulse area is the same as the original pi pulse.
+    
+    '''
+    align() # to make sure the timing is correct when performing the aSWAP and the readout
+    match method:
+        case "aswap":
+            try:
+                if flux_applied_target is not None:
+                    if isinstance(flux_applied_target, TransmonPair):
+                        flux_applied_target.coupler.play('aSWAP', amplitude_scale= 1.0)
+                    elif isinstance(flux_applied_target, Transmon):
+                        flux_applied_target.z.play('aSWAP', amplitude_scale= 1.0)
+                else:
+                    qb2read.z.play('aSWAP', amplitude_scale= 1.0)
+                align()
+                if buffer_b4_readout:
+                    wait(25) # optional wait time, 40ns is recommended by Li-Chieh  
+                if not readout_gef:
+                    readout_state(qb2read, state=state, pulse_name='readout')
+                else:
+                    readout_state_gef(qb2read, state=state, pulse_name='readout')
+            except:
+                print("Got an issue when performing the aSWAP readout. Please check if the flux pulse is properly configured with the name 'aSWAP' in the state.json")
+        case "zz-pi":
+            long_pi_dura = (qb2read.xy.operations['x180'].length * zz_pi_pulse_duration_scale)//4 # to QUA clicks
+            qb2read.xy.play('x180', amplitude_scale=1/zz_pi_pulse_duration_scale, duration=long_pi_dura) # long pi-pulse with 10*pi duration and 0.1*amplitude
+            qb2read.align()
+            if buffer_b4_readout:
+                wait(4) # buffer
+            if not readout_gef:
+                readout_state(qb2read, state=state, pulse_name='readout')
+            else:
+                readout_state_gef(qb2read, state=state, pulse_name='readout')
+            assign(state, 1-state) # flip the state since the qubit is in excited state after the long pi pulse
+    
+        case _:
+            pass # (extend it in the near future for 3-tone spectroscopy (saturation driving) method)
+        

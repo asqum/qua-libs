@@ -17,7 +17,7 @@ def get_band(freq):
         raise ValueError(f"The specified frequency {freq} HZ is outside of the MW fem bandwidth [50 MHz, 10.5 GHz]")
 
 
-path = "/Users/adamachuck/Documents/GitHub/ASQUM/qua-libs/Quantum-Control-Applications-QuAM/Superconducting/configuration/quam_state/main"
+path = "/home/ratiswu/Documents/GitHub/qua-libs/Quantum-Control-Applications-QuAM/Superconducting/configuration/quam_state/10Q9Cv2_12_260119_q6q10"
 machine = QuAM.load()
 u = unit(coerce_to_integer=True)
 

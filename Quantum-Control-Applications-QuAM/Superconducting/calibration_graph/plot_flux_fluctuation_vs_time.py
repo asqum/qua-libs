@@ -3,8 +3,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 # ======= Configuration =======
-csv_path = Path(r"d:\qm_code\as\qua-libs\Quantum-Control-Applications-QuAM\Superconducting\data\independent_offset_2025-10-17T02-50-34.csv")
-base_dir = Path(r"d:\qm_code\as\qua-libs\Quantum-Control-Applications-QuAM\Superconducting\data")
+csv_path = Path("/home/ratiswu/Qualibrate_data/10Q9Cv2_q1q5/2026-02-01/#a123_OFFSET_tracking/independent_offset_2026-02-01T18-24-02.csv")
+base_dir = Path("/home/ratiswu/Qualibrate_data/10Q9Cv2_q1q5/2026-02-01/#a123_OFFSET_tracking")
 x_axis = "timestamp"   # can be "run_index" or "timestamp"
 # =============================
 

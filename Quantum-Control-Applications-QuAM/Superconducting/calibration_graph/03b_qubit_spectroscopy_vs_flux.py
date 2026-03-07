@@ -39,17 +39,17 @@ import numpy as np
 # %% {Node_parameters}
 class Parameters(NodeParameters):
 
-    qubits: Optional[List[str]] = None
-    num_averages: int = 200
+    qubits: Optional[List[str]] = ['q4']
+    num_averages: int = 300
     operation: str = "saturation"
-    operation_amplitude_factor: Optional[float] = 0.1 #0.004, 0.02
+    operation_amplitude_factor: Optional[float] = 0.01 #0.004, 0.02 # q6:3e-3, q7:1e-2, q8:3e-3, q9:***,
     operation_len_in_ns: Optional[int] = None
-    frequency_span_in_mhz: float = 120 #12, 120
+    frequency_span_in_mhz: float = 300 #12, 120
     frequency_step_in_mhz: float = 1 #0.1, 1
     frequency_shift_in_mhz: float = 0 #0  
-    min_flux_offset_in_v: float = -0.1# -0.042
-    max_flux_offset_in_v: float = 0.1 #0.042
-    num_flux_points: int = 51
+    min_flux_offset_in_v: float = 0.3 ##-0.042
+    max_flux_offset_in_v: float = 0.2 #0.042
+    num_flux_points: int = 101
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
     simulate: bool = False
     simulation_duration_ns: int = 2500
@@ -97,7 +97,7 @@ else:
 span = node.parameters.frequency_span_in_mhz * u.MHz
 step = node.parameters.frequency_step_in_mhz * u.MHz
 shift = int(node.parameters.frequency_shift_in_mhz * u.MHz)
-dfs = np.arange(-span // 2, span // 2, step, dtype=np.int32)
+dfs = np.arange(-span, 0, step, dtype=np.int32)
 # Flux bias sweep
 dcs = np.linspace(
     node.parameters.min_flux_offset_in_v,
@@ -117,8 +117,9 @@ with program() as multi_qubit_spec_vs_flux:
 
         # Fixed qubit for debugging unknown flux-dependency: 
         fixed_qubit = machine.qubits[qubit.name]
+        c = machine.qubits['q2'].z #machine.qubit_pairs['coupler_q5_q6'].coupler
         # fixed_qubit = machine.qubits["q4"]
-
+        # for q in machine.active_qubits:
         # Bring the active qubits to the minimum frequency point
         machine.set_all_fluxes(flux_point=flux_point, target=qubit)
         if "c" in qubit.id: qubit.z.set_dc_offset(qubit.z.joint_offset) # for coupler-test case
@@ -135,6 +136,7 @@ with program() as multi_qubit_spec_vs_flux:
                     # Flux sweeping for a qubit
                     duration = operation_len * u.ns if operation_len is not None else qubit.xy.operations[operation].length * u.ns
                     # Bring the qubit to the desired point during the saturation pulse
+                    # qubit.z.play("const", amplitude_scale=dc / qubit.z.operations["const"].amplitude, duration=duration)
                     qubit.z.play("const", amplitude_scale=dc / qubit.z.operations["const"].amplitude, duration=duration)
                     # qp.coupler.play("const", amplitude_scale=dc / qubit.z.operations["const"].amplitude, duration=duration)
                     # Apply saturation pulse to all qubits
@@ -285,6 +287,7 @@ if not node.parameters.simulate:
     if node.parameters.load_data_id is None:
         with node.record_state_updates():
             for q in qubits:
+                # if q.name in ['q3', 'q5']:
                 if not np.isnan(flux_shift.sel(qubit=q.name).values):
                     if flux_point == "independent":
                         q.z.independent_offset += fit_results[q.name]["flux_shift"]

@@ -34,7 +34,7 @@ import numpy as np
 
 # %% {Node_parameters}
 class Parameters(NodeParameters):
-    coupler:int = 2
+    coupler:int = 1
     num_averages: int = 300
     min_wait_time_in_ns: int = 16
     max_wait_time_in_ns: int = 90016

@@ -300,7 +300,7 @@ class FreeCosineBipolarPulse(Pulse):
     amplitude: float
     axis_angle: float = None
     flat_length_ratio: float
-    switch_point_ratio:float
+    neg_amp_scal:float
 
     def waveform_function(self):
         # --- Helper functions ---
@@ -322,7 +322,7 @@ class FreeCosineBipolarPulse(Pulse):
         # 1. calc the length of postive pole and negative pole
         # flip_point_ratio = 0.6  --> pos_total_len = 0.6 * L
         
-        pos_total_len = int(np.round(L * self.switch_point_ratio))
+        pos_total_len = int(np.round(L * 0.5))
         neg_total_len = L - pos_total_len
 
         # 2. calc flat length
@@ -351,10 +351,10 @@ class FreeCosineBipolarPulse(Pulse):
 
         # Part B: Negative Side
         # halfcos_up 
-        seg_switch_2 = -A * halfcos_up(len_fall_from_zero) 
-        seg_flat_neg = -A * np.ones(neg_flat_len)
+        seg_switch_2 = -A * self.neg_amp_scal * halfcos_up(len_fall_from_zero) 
+        seg_flat_neg = -A * self.neg_amp_scal * np.ones(neg_flat_len)
         # halfcos_down 
-        seg_return = -A * halfcos_down(len_return_zero)
+        seg_return = -A * self.neg_amp_scal * halfcos_down(len_return_zero)
 
         # 5. connect
         p = np.concatenate([
@@ -380,6 +380,154 @@ class FreeCosineBipolarPulse(Pulse):
             p = p[trim_front: current_len - trim_back]
 
         # 7. IQ rotation
+        if self.axis_angle is not None:
+            p = p * np.exp(1j * self.axis_angle)
+
+        return p.tolist()
+    
+
+## ===== Trying to split bipolar to different segment so that we can esily modify it in QUA =====
+@quam_dataclass
+class FlatPulse(Pulse):
+    """Flat segment in bipolar.
+
+    Args:
+        length (int): The total length of the pulse in samples.
+        amplitude (float): The amplitude of the pulse in volts.
+    """
+
+    amplitude: float
+
+    def waveform_function(self):
+        waveform = self.amplitude * np.ones(self.length)
+        return waveform.tolist()
+@quam_dataclass  
+class HalfCosineRisePulse(Pulse):
+    """
+    cos (0 -> Amplitude)
+    which is the halfcos_up * A segment in FreeCosineBipolarPulse
+    """
+    amplitude: float
+    def waveform_function(self):
+        
+        if self.length <= 0:
+            return np.array([])
+        t = np.arange(self.length) / self.length
+        
+        p = self.amplitude * 0.5 * (1 - np.cos(np.pi * t))
+        
+        return p.tolist()
+@quam_dataclass  
+class HalfCosineFallPulse(Pulse):
+    """
+    cos (Amplitude -> 0)
+    which is the halfcos_down * A segment in FreeCosineBipolarPulse
+    """
+    amplitude: float
+    def waveform_function(self):
+        if self.length <= 0:
+            return np.array([])
+        t = np.arange(self.length) / self.length
+        p = self.amplitude * 0.5 * (1 + np.cos(np.pi * t))
+        return p.tolist()
+
+@quam_dataclass  
+class CosineRatioFlatTopPulse(Pulse):
+    """
+    Cosine flat-top pulse (unipolar, smooth rise/fall).
+
+    Args:
+        length (int): Total pulse duration in samples.
+        amplitude (float): Peak amplitude of the pulse.
+        axis_angle (float, optional): IQ axis angle in radians.
+            If None (default), pulse is real and drives a single channel.
+            If set, pulse becomes complex-valued for IQ outputs.
+        flat_length_ratio (float): ratio of samples at full amplitude (the flat-top region).
+    """
+
+    amplitude: float
+    axis_angle: float = None
+    flat_ratio: float = 0.9  # default no flat top
+
+    def waveform_function(self):
+        
+        L = int(self.length)
+        F = int(self.flat_ratio*L)
+
+        if self.flat_ratio > 1.0:
+            raise ValueError(
+                f"CosineFlatTopPulse.flat_length ({F}) cannot exceed total length ({L})."
+            )
+
+        # Remaining samples divided into rise and fall
+        remaining = L - F
+        rise_len = remaining // 2
+        fall_len = remaining - rise_len
+
+        def halfcos_up(n: int):
+            if n <= 0:
+                return np.array([])
+            t = np.arange(n) / n
+            return 0.5 * (1 - np.cos(np.pi * t))  # 0 → 1
+
+        def halfcos_down(n: int):
+            if n <= 0:
+                return np.array([])
+            t = np.arange(n) / n
+            return 0.5 * (1 + np.cos(np.pi * t))  # 1 → 0
+
+        A = float(self.amplitude)
+        seg_rise = A * halfcos_up(rise_len)
+        seg_flat = A * np.ones(F)
+        seg_fall = A * halfcos_down(fall_len)
+
+        # Concatenate waveform
+        p = np.concatenate([seg_rise, seg_flat, seg_fall])
+
+        # Ensure exact total length (pad/trim if needed)
+        current_len = len(p)
+        if current_len < L:
+            p = np.pad(p, (0, L - current_len))
+        elif current_len > L:
+            p = p[:L]
+
+        # Apply axis angle for IQ output if provided
+        if self.axis_angle is not None:
+            p = p * np.exp(1j * self.axis_angle)
+
+        return p.tolist()
+
+
+
+@quam_dataclass  
+class aSWAPPulse(Pulse):
+    """
+    The aSWAP pulse shape
+
+    Args:
+        length (int): Total pulse duration in samples.
+        amplitude (float): Peak amplitude of the pulse.
+        axis_angle (float, optional): IQ axis angle in radians.
+            If None (default), pulse is real and drives a single channel.
+            If set, pulse becomes complex-valued for IQ outputs.
+        slope_direction (Literal[1, -1]): The sign of the slope when choosing the amplitude for the aSWAP pulse. It can be either 1 or -1.
+    """
+
+    amplitude: float
+    axis_angle: float = None
+    slope_direction: int = 1 # 1 for positive slope, -1 for negative slope
+
+    def waveform_function(self):
+        
+        L = int(self.length)
+        S = int(self.slope_direction)
+
+        if S == 1:
+            p = np.linspace(0, self.amplitude, L)
+        else:
+            p = np.linspace(self.amplitude, 0, L)
+
+        # Apply axis angle for IQ output if provided
         if self.axis_angle is not None:
             p = p * np.exp(1j * self.axis_angle)
 

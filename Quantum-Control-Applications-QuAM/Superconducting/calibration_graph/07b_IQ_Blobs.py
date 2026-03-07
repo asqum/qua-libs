@@ -31,7 +31,7 @@ from quam_libs.components import QuAM
 from quam_libs.experiments.iq_blobs.fetch_dataset import fetch_dataset
 from quam_libs.experiments.iq_blobs.parameters import Parameters
 from quam_libs.experiments.simulation import simulate_and_plot
-from quam_libs.macros import qua_declaration, active_reset, active_reset_simple
+from quam_libs.macros import qua_declaration, active_reset, active_reset_simple, active_reset_gef
 from quam_libs.lib.qua_datasets import convert_IQ_to_V
 from quam_libs.lib.plot_utils import QubitGrid, grid_iter
 from quam_libs.lib.save_utils import fetch_results_as_xarray
@@ -43,14 +43,47 @@ from qm import SimulationConfig
 from qm.qua import *
 
 
+# QC-test port forward test
+# from rcci_client.client import RCCIClient
+
+
+
+# import time
+# start_time = time.time()
+
+# my_token ="c8c57e1d51422ebf724e25076ee565b263395ad3c745ad3195ee36f66c6d9ef4"
+# my_qcsetup = ["qpu1_DR1_OPX1000_5_0"]
+# my_service = "hackthon"
+# my_client = RCCIClient(token=my_token)
+
+# my_old_jobs = my_client.get_job_status()
+# end_get_status_time = time.time()
+# if len(my_old_jobs) > 0:
+#     for old_job in my_old_jobs:
+#         my_client.close_job(job_id=old_job.job_id)
+
+# job_response = my_client.start_event_job(qc_setup_list=my_qcsetup, service_name=my_service)
+# start_event_job_time = time.time()
+
+# job_id = job_response.job_id
+# status = job_response.status
+# if hasattr(job_response, 'message'):
+#     print("message =", job_response.message)
+# print(f"Started job with ID: {job_id}")
+# print(f"Status: {status}")
+# access_port = my_client.wait_until_running(job_id=job_id, timeout=180)
+# print(f"Access port :{access_port}")
+
+
 # %% {Node_parameters}
 node = QualibrationNode(
     name="07b_IQ_Blobs",
     parameters=Parameters(
         qubits=None,
-        multiplexed=False,
+        multiplexed=1,
         flux_point_joint_or_independent="independent",
-        num_runs=3000,
+        num_runs=4096*1,
+        reset_type_thermal_or_active = 'active',
         load_data_id=None,
         simulate=False,
         simulation_duration_ns=1000,
@@ -62,7 +95,9 @@ node = QualibrationNode(
 u = unit(coerce_to_integer=True)
 
 machine = QuAM.load()
+# machine.network["port"] = int(access_port)
 
+# print(f"Machine access port :{access_port}")
 if node.parameters.load_data_id is None:
     qmm = machine.connect()
 
@@ -94,8 +129,9 @@ with program() as iq_blobs:
                 for i, qubit in multiplexed_qubits.items():
                     if reset_type == "active":
                         active_reset(qubit)
+                        # active_reset_gef(qubit)
                     elif reset_type == "thermal":
-                        qubit.wait(4 * qubit.thermalization_time * u.ns)
+                        qubit.wait(2 * qubit.thermalization_time * u.ns)
                     else:
                         raise ValueError(f"Unrecognized reset type {reset_type}.")
 
@@ -119,7 +155,7 @@ with program() as iq_blobs:
                         if reset_type == "active":
                             active_reset(qubit)
                         elif reset_type == "thermal":
-                            qubit.wait(qubit.thermalization_time * u.ns)
+                            qubit.wait(2*qubit.thermalization_time * u.ns)
                         else:
                             raise ValueError(f"Unrecognized reset type {reset_type}.")
 
@@ -258,9 +294,9 @@ if not node.parameters.simulate:
         ax.set_ylabel("Q [mV]")
         ax.set_title(qubit["qubit"])
 
-    ax.legend(loc="center left", bbox_to_anchor=(1, 0.5))
+    # ax.legend(loc="center left", bbox_to_anchor=(1, 0.5))
     grid.fig.suptitle("g.s. and e.s. discriminators (rotated)")
-    plt.tight_layout()
+    # plt.tight_layout()
     node.results["figure_IQ_blobs"] = grid.fig
 
     grid = QubitGrid(ds, [q.grid_location for q in qubits])
@@ -310,7 +346,9 @@ if not node.parameters.simulate:
         node.outcomes = {q.name: "successful" for q in qubits}
         node.results["initial_parameters"] = node.parameters.model_dump()
         node.machine = machine
-        node.save()
+        node.save()          
 
 
+# %%
+# my_client.close_job(job_id=job_id)
 # %%

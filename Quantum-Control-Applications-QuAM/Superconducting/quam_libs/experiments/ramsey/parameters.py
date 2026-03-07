@@ -16,6 +16,7 @@ from quam_libs.experiments.node_parameters import (
 
 class RamseyParameters(RunnableParameters):
     num_averages: int = 100
+    reset_type:Literal['active', 'thermal'] = 'active'
     frequency_detuning_in_mhz: float = 1.0
     min_wait_time_in_ns: int = 16
     max_wait_time_in_ns: int = 3000

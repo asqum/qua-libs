@@ -44,13 +44,13 @@ class Parameters(NodeParameters):
     qubits: Optional[List[str]] = None
     use_state_discrimination: bool = True
     use_strict_timing: bool = False
-    num_random_sequences: int = 200  # Number of random sequences
-    num_averages: int = 30
+    num_random_sequences: int = 70  # Number of random sequences
+    num_averages: int = 100
     max_circuit_depth: int = 400  # Maximum circuit depth
     delta_clifford: int = 10
     seed: int = 345324
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
-    reset_type_thermal_or_active: Literal["thermal", "active"] = "thermal"
+    reset_type_thermal_or_active: Literal["thermal", "active"] = "active"
     simulate: bool = False
     simulation_duration_ns: int = 2500
     timeout: int = 100
@@ -253,6 +253,7 @@ with program() as randomized_benchmarking:
                                     [q.z.name for q in machine.qubits.values()]))
                         # Initialize the qubits
                         if reset_type == "active":
+                            qubit.resonator.wait(qubit.resonator.depletion_time * u.ns)
                             active_reset(qubit)
                         else:
                             qubit.resonator.wait(qubit.thermalization_time * u.ns)

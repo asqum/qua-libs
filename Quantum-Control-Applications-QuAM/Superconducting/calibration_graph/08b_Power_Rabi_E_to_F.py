@@ -20,6 +20,8 @@ Next steps before going to the next node:
 
 
 # %% {Imports}
+import dataclasses
+from dataclasses import asdict
 from qualibrate import QualibrationNode, NodeParameters
 from quam.components import pulses
 from quam_libs.components import QuAM
@@ -43,9 +45,9 @@ class Parameters(NodeParameters):
 
     qubits: Optional[List[str]] = None
     num_averages: int = 200
-    operation: str = "x180"
+    operation: str = "EF_x180"
     min_amp_factor: float = 0.0
-    max_amp_factor: float = 1.5
+    max_amp_factor: float = 1.79
     amp_factor_step: float = 0.005
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
     simulate: bool = False
@@ -90,6 +92,16 @@ amps = np.arange(
     node.parameters.amp_factor_step,
 )
 
+for qubit in qubits:
+        # Check if the qubit has the required operations
+        if hasattr(qubit.xy.operations, "EF_x180"):
+            continue
+        else:
+            x180 = qubit.xy.operations["x180"]
+            qubit.xy.operations["EF_x180"] = (
+                dataclasses.replace(x180, alpha=0.0) if hasattr(x180, "alpha") else dataclasses.replace(x180)
+            )
+
 with program() as power_rabi:
     I, I_st, Q, Q_st, n, n_st = qua_declaration(num_qubits=num_qubits)
     a = declare(fixed)  # QUA variable for the qubit drive amplitude pre-factor
@@ -129,14 +141,14 @@ with program() as power_rabi:
                 update_frequency(qubit.xy.name, qubit.xy.intermediate_frequency)
                 # Drive the qubit to the excited state
                 wait(4)
-                qubit.xy.play(operation)
+                qubit.xy.play("x180")
                 # Update the qubit frequency to scan around the expected f_12
                 wait(4)
                 update_frequency(
                     qubit.xy.name, qubit.xy.intermediate_frequency - qubit.anharmonicity
                 )
                 wait(4)
-                qubit.xy.play(operation, amplitude_scale=a)
+                qubit.xy.play("EF_x180", amplitude_scale=a)
                 align()
                 qubit.resonator.measure("readout", qua_vars=(I[i], Q[i]))
                 save(I[i], I_st[i])
@@ -164,8 +176,6 @@ if node.parameters.simulate:
 else:
     with qm_session(qmm, config, timeout=node.parameters.timeout) as qm:
         job = qm.execute(power_rabi)
-
-        # %% {Live_plot}
         results = fetching_tool(job, ["n"], mode="live")
         while results.is_processing():
             n = results.fetch_all()[0]
@@ -210,7 +220,7 @@ else:
         # amplitude factor for getting an |e> -> |f> pi pulse
         factor = float(1.0 * (np.pi - phi_fit) / (2 * np.pi * f_fit))
         # Calibrated |e> -> |f> pi pulse absolute amplitude
-        new_pi_amp = q.xy.operations[operation].amplitude * factor
+        new_pi_amp = q.xy.operations["EF_x180"].amplitude * factor
         if np.abs(new_pi_amp) < 0.3:  # TODO: 1 for OPX1000 MW
             print(
                 f"amplitude for E-F Pi pulse is modified by a factor of {factor:.2f} w.r.t the original pi pulse amplitude"

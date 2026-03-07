@@ -13,7 +13,7 @@ num_runs = 'inf' #Change an integer. If you wanna keep tracking, set it as 'inf'
 cooldown_sec = 5 #Change
 
 # folder path to save the file
-out_dir = Path('/home/ratiswu/Qualibrate_data/5Q4C_Qcage/2025-12-06/#a123_OFFSET_tracking') #Change
+out_dir = Path('/home/ratiswu/Qualibrate_data/10Q9Cv2_q1q5/2026-02-01/#a123_OFFSET_tracking') #Change
 out_dir.mkdir(parents=True, exist_ok=True)
 
 # csv file name (contains the time to avoid overlap)

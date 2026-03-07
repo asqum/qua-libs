@@ -26,7 +26,7 @@ from quam_libs.experiments.ramsey.analysis.fitting import fit_frequency_detuning
 from quam_libs.experiments.ramsey.parameters import Parameters, get_idle_times_in_clock_cycles
 from quam_libs.experiments.ramsey.plotting import plot_ramseys_data_with_fit
 from quam_libs.experiments.simulation import simulate_and_plot
-from quam_libs.macros import qua_declaration, readout_state
+from quam_libs.macros import qua_declaration, readout_state, active_reset
 from qualang_tools.results import progress_counter, fetching_tool
 from qualang_tools.loops import from_array
 from qualang_tools.multi_user import qm_session
@@ -39,15 +39,19 @@ node = QualibrationNode(
     name="06_Ramsey",
     parameters=Parameters(
         qubits=None,
-        num_averages=100,
-        frequency_detuning_in_mhz=2.0,
+        num_averages=1000,
+        reset_type='active',
+        frequency_detuning_in_mhz=4.0,
         min_wait_time_in_ns=16,
-        max_wait_time_in_ns=2000,
+        max_wait_time_in_ns=2016,
         num_time_points=200,
         log_or_linear_sweep="log",
         use_state_discrimination=False,
         flux_point_joint_or_independent="independent",
-        multiplexed=False
+        multiplexed=False,
+        simulate=False,
+        use_waveform_report=True,
+        simulation_duration_ns=10_000
     )
 )
 
@@ -99,7 +103,13 @@ with program() as ramsey:
                     align()
 
                     for i, qubit in multiplexed_qubits.items():
+                        if node.parameters.reset_type == "active":
+                            active_reset(qubit, "readout")
+                        else:
+                            qubit.resonator.wait(qubit.thermalization_time * u.ns)
+                        reset_frame(qubit.xy.name)
                         qubit.align()
+                        
 
                         # with strict_timing_():
                         qubit.xy.play("x90")
@@ -118,10 +128,10 @@ with program() as ramsey:
                             save(Q[i], Q_st[i])
                     align()
 
-                    if not node.parameters.simulate:
-                        for i, qubit in multiplexed_qubits.items():
-                            qubit.resonator.wait(qubit.thermalization_time * u.ns)
-                            reset_frame(qubit.xy.name)
+                    # if not node.parameters.simulate:
+                    #     for i, qubit in multiplexed_qubits.items():
+                    #         qubit.resonator.wait(qubit.thermalization_time * u.ns)
+                    #         reset_frame(qubit.xy.name)
 
     with stream_processing():
         n_st.save("n")

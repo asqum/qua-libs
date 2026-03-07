@@ -224,6 +224,7 @@ class QuAM(QuamRoot):
             timeout=timeout,
         )
         if "port" in self.network:
+            print(self.network["port"])
             settings["port"] = self.network["port"]
         self.qmm = QuantumMachinesManager(**settings)
         return self.qmm

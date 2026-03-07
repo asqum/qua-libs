@@ -69,6 +69,16 @@ def fit_single_slice_with_error(ds_slice, qubit_label, y_limit=None, sigma=2.0):
     ransac = RANSACRegressor(random_state=42, residual_threshold=2.0)
     ransac.fit(X, y)
     inlier_mask = ransac.inlier_mask_
+    y_pred_all = ransac.predict(X)
+        
+        
+    residuals = y - y_pred_all.ravel() # .ravel() 轉成 1D
+        
+    # 3. MAD (Median Absolute Deviation)
+    # 這是 RANSAC 內部用來判斷雜訊的標準，這代表了數據的"整體頻寬"或"雜訊大小"
+    # approch a sigma in normal distribution through * 1.4826 
+    mad_error = np.median(np.abs(residuals - np.median(residuals))) * 1.4826
+
 
     # --- D. 關鍵步驟：使用 Scipy 計算標準誤差 ---
     # RANSAC 告訴我們哪些點是乾淨的，我們用這些乾淨的點來算統計誤差
@@ -79,19 +89,30 @@ def fit_single_slice_with_error(ds_slice, qubit_label, y_limit=None, sigma=2.0):
     # 我們的 X 是 Coupler (自變數), y 是 Qubit Offset (應變數)
     slope_result = linregress(X[inlier_mask].ravel(), y[inlier_mask])
     
+    x_std = np.std(X[inlier_mask]) # X軸的擴展範圍
+    n_samples = len(X[inlier_mask]) # 點的數量
+    
+    if x_std == 0 or n_samples == 0:
+        return np.nan, np.nan
+
+    slope_uncertainty = mad_error / (x_std * np.sqrt(n_samples))
+
     # slope_result.slope = 斜率
     # slope_result.stderr = 斜率的標準誤差
-    return slope_result.slope, slope_result.stderr
+    return slope_result.slope, slope_uncertainty
 
 
-def analyze_crosstalk_vs_duration(ds, qubit_label, state='control', y_limit=None):
+def analyze_crosstalk_vs_duration(ds, qubit_label, state='control', state_discriminator:bool=True, y_limit=None, sigma:float=2.0):
     
     # 1. 準備儲存容器
     durations = ds.duration.values
     slopes = []
     errors = []
     
-    target_var = 'state_target' if state.lower() != 'control' else 'state_control'
+    if state_discriminator:
+        target_var = 'state_target' if state.lower() != 'control' else 'state_control'
+    else:
+        target_var = 'I_target' if state.lower() != 'control' else 'I_control'
     print(f"Starting analysis for {len(durations)} duration points...")
 
     # 2. 遍歷每一個 duration
@@ -100,7 +121,7 @@ def analyze_crosstalk_vs_duration(ds, qubit_label, state='control', y_limit=None
         ds_slice = ds[target_var].sel(qubit=qubit_label, duration=d)
         
         # 呼叫上面的核心運算
-        slope, err = fit_single_slice_with_error(ds_slice, qubit_label, y_limit)
+        slope, err = fit_single_slice_with_error(ds_slice, qubit_label, y_limit, sigma)
         
         slopes.append(slope)
         errors.append(err)
@@ -125,7 +146,6 @@ def analyze_crosstalk_vs_duration(ds, qubit_label, state='control', y_limit=None
                 label='Crosstalk')
 
     # 美化圖表
-    ax.set_ylim(-15, -8)
     ax.set_title(f"{ds.attrs['coupler_z_waveform']} Crosstalk vs. Duration ({qubit_label})")
     ax.set_xlabel("Duration [ns]") # 假設單位是 ns，請確認
     ax.set_ylabel("Crosstalk [%]")
@@ -266,13 +286,16 @@ def make_unique_multiples_of_4(arr:np.ndarray):
 
 from matplotlib.animation import FuncAnimation
 
-def animate_crosstalk_evolution(ds, qubit_label, state='control', y_limit=None, sigma=2.0, interval=200, save_path=None):
+def animate_crosstalk_evolution(ds, qubit_label, state='control', state_discriminator:bool=True, y_limit=None, sigma=2.0, interval=200, save_path=None):
     """
     製作 Crosstalk Heatmap 隨 Duration 變化的動畫 (已修正維度錯誤)。
     """
     
     durations = ds.duration.values
-    target_var = 'state_target' if state.lower() != 'control' else 'state_control'
+    if state_discriminator:
+        target_var = 'state_target' if state.lower() != 'control' else 'state_control'
+    else:
+        target_var = 'I_target' if state.lower() != 'control' else 'I_control'
 
     # --- 1. 準備工作與鎖定範圍 (修正處) ---
     # 先針對 qubit 和 state 進行切片，這樣維度就會剩下 (duration, flux_coupler, flux_qubit)
@@ -347,13 +370,13 @@ def animate_crosstalk_evolution(ds, qubit_label, state='control', y_limit=None, 
         title_suffix = "Fit: N/A"
         
         # 2. 畫擬合結果 (加入保護機制：如果對比度太低就不擬合)
-        if len(X) > 5 and data_range > 0.001: 
+        if len(X) > 5:
             try:
                 ransac = RANSACRegressor(random_state=42, residual_threshold=2.0)
                 ransac.fit(X, y)
                 slope = ransac.estimator_.coef_[0]
                 title_suffix = f"Slope: {100*slope:.1f}"
-                
+                print(slope)
                 line_x_pred = ransac.predict(line_y_range)
                 ax.plot(line_x_pred, line_y_range, color='red', linestyle='--', lw=2.5, alpha=0.9)
                 
@@ -362,8 +385,8 @@ def animate_crosstalk_evolution(ds, qubit_label, state='control', y_limit=None, 
 
             except Exception:
                 title_suffix = "Fit Failed"
-
-        ax.set_title(f"{qubit_label} | Waveform: {ds.attrs['coupler_z_waveform']} | Duration: {d:.0f} ns | {title_suffix} %", fontsize=12, fontweight='bold')
+        ax.grid()
+        ax.set_title(f"{qubit_label} | Duration: {d:.0f} ns | {title_suffix} %", fontsize=12, fontweight='bold')
         ax.set_xlabel(f"{ds.attrs['target_q']} Flux amplitude [mV]")
         ax.set_ylabel("Coupler Flux [mV]")
         ax.set_xlim(xlims)
@@ -391,27 +414,28 @@ def animate_crosstalk_evolution(ds, qubit_label, state='control', y_limit=None, 
 # %% {Node_parameters}
 class Parameters(NodeParameters):
     
-    z_source_c:List[str] = ['coupler_q1_q2']
-    target_q:str = 'q1'
-    control_flux_min:float = -0.15
-    control_flux_max:float = 0
-    qubit_flux_step : float = 0.0015
+    z_source_c:List[str] = ['coupler_q3_q4']
+    target_q:str = 'q4'
+    control_flux_min:float = -0.025
+    control_flux_max:float = 0.02
+    qubit_flux_step : float = 0.0005
+
     
-    source_flux_max:float = 0
-    source_flux_min:float = -0.6
+    source_flux_max:float = 0.15
+    source_flux_min:float = -0.05
     
     exam_FCC:bool = False
-    num_averages: int = 300
+    num_averages: int = 1500
     flux_point_joint_or_independent_or_pairwise: Literal["joint", "independent", "pairwise"] = "independent"
     reset_type: Literal['active', 'thermal'] = "active"
     simulate: bool = False
-    timeout: int = 100
+    timeout: int = 1200
     load_data_id: Optional[int] = None
-    operation:Literal['const', 'bipolar'] = 'bipolar'
-    
-    pulse_duration_pts: int = 10
+    use_state_discrimination:bool = True
+    operation:Literal['cz', 'iswap'] = 'iswap'
+    pulse_duration_pts: int = 15   # 100*100*10 *300 runs = 280s (active) 
     target_q_bias:float = 0.2      # if target_q freq is higher than control_q. Applied when coupler's control_q is the assigned target_q
-    
+    force_apply_bias:bool = False
 
 node = QualibrationNode(
     name="SP_FCC", parameters=Parameters()
@@ -425,7 +449,7 @@ u = unit(coerce_to_integer=True)
 machine = QuAM.load()
 
 
-
+operation = 'cardinal'
 
 
 z_sources = [machine.qubit_pairs[c] for c in node.parameters.z_source_c]
@@ -452,6 +476,9 @@ else:
             q_target = c.qubit_control
             q_bias_apply = True
 
+if not q_bias_apply:
+    q_bias_apply = node.parameters.force_apply_bias
+
 bias_wait_time = 800 // 4
 print(f"Ctrl: {q_ctrl.name}, Target: {q_target.name}, CT-flip: {q_bias_apply}")
 
@@ -475,17 +502,10 @@ n_avg = node.parameters.num_averages  # The number of averages
 target_q_bias = node.parameters.target_q_bias
 flux_point = node.parameters.flux_point_joint_or_independent_or_pairwise  # 'independent' or 'joint' or 'pairwise'
 # Loop parameters
-fluxes_source = np.linspace(node.parameters.source_flux_min, node.parameters.source_flux_max+0.0001, 100)
-fluxes_qubit = np.arange(node.parameters.control_flux_min, node.parameters.control_flux_max+0.0001, node.parameters.qubit_flux_step)
-duras = make_unique_multiples_of_4(np.linspace(100, 1000, node.parameters.pulse_duration_pts))
+fluxes_source = np.linspace(node.parameters.source_flux_min, node.parameters.source_flux_max+0.0001, 20)
+fluxes_qubit = np.arange(node.parameters.control_flux_min, node.parameters.control_flux_max+0.0001, node.parameters.qubit_flux_step) -0.05 
+duras = make_unique_multiples_of_4(np.linspace(80, 2080, node.parameters.pulse_duration_pts))
 qua_duras = duras//4
-
-reset_coupler_bias = False
-
-ori_flat_len = {}
-if node.parameters.operation == 'bipolar':
-    for qp in z_sources:
-        ori_flat_len[qp.name] = qp.coupler.operations[node.parameters.operation].flat_length
 
 
 with program() as CPhase_Oscillations:
@@ -497,13 +517,23 @@ with program() as CPhase_Oscillations:
     qua_pulse_duration = declare(int)
         
     
-    state_target = [declare(int) for _ in range(len(z_sources))]
-    state_control = [declare(int) for _ in range(len(z_sources))]
-    state_st_target = [declare_stream() for _ in range(len(z_sources))]
-    state_st_control = [declare_stream() for _ in range(len(z_sources))]
+    if node.parameters.use_state_discrimination:
+        state_target = [declare(int) for _ in range(len(z_sources))]
+        state_control = [declare(int) for _ in range(len(z_sources))]
+        state_st_target = [declare_stream() for _ in range(len(z_sources))]
+        state_st_control = [declare_stream() for _ in range(len(z_sources))]
+    else:
+        I_control = [declare(float) for _ in range(len(z_sources))]
+        Q_control = [declare(float) for _ in range(len(z_sources))]
+        I_target = [declare(float) for _ in range(len(z_sources))]
+        Q_target = [declare(float) for _ in range(len(z_sources))]
+        I_st_control = [declare_stream() for _ in range(len(z_sources))]
+        Q_st_control = [declare_stream() for _ in range(len(z_sources))]
+        I_st_target = [declare_stream() for _ in range(len(z_sources))]
+        Q_st_target = [declare_stream() for _ in range(len(z_sources))]
 
     for i, z_source in enumerate(z_sources):
-
+        
         if not node.parameters.simulate:
             machine.apply_all_couplers_to_min()
             for q in elements_to_reset:
@@ -516,8 +546,7 @@ with program() as CPhase_Oscillations:
             save(n, n_st)  
 
             for idx, qua_pulse_duration in enumerate(qua_duras):   
-                if node.parameters.operation == 'bipolar':
-                    z_source.coupler.operations[node.parameters.operation].flat_length = int(duras[idx]*0.9)    
+                
                 with for_(*from_array(flux_source, fluxes_source)):
                     with for_(*from_array(flux_qubit, fluxes_qubit)):
 
@@ -534,8 +563,8 @@ with program() as CPhase_Oscillations:
                         # reset
                         for j, qubit in enumerate(elements_to_reset):
                             if node.parameters.reset_type == "active":
-                                # active_reset(qubit, "readout")
-                                active_reset_simple(qubit, "readout")
+                                active_reset(qubit, "readout")
+                                # active_reset_simple(qubit, "readout")
                             else:
                                 if not node.parameters.simulate:
                                     qubit.wait(qubit.thermalization_time * u.ns)
@@ -545,34 +574,53 @@ with program() as CPhase_Oscillations:
                         align()
                         # setting both qubits ot the initial state
                         q_ctrl.xy.play("x180")
-                        q_target.xy.play("x180")
+                        if node.parameters.operation == 'cz':
+                            q_target.xy.play("x180")
                         align()
                         if q_bias_apply:
                             q_target.z.play("const", amplitude_scale = target_q_bias / q_target.z.operations["const"].amplitude, duration = qua_pulse_duration+bias_wait_time)
                             q_ctrl.z.wait(bias_wait_time)
                             z_source.coupler.wait(bias_wait_time)
                         
-                        q_ctrl.z.play("const", amplitude_scale = comp_flux_qubit / q_ctrl.z.operations["const"].amplitude, duration = qua_pulse_duration)                
-                        z_source.coupler.play(node.parameters.operation, amplitude_scale = flux_source / z_source.coupler.operations["const"].amplitude, duration = qua_pulse_duration)
+                        q_ctrl.z.play(operation, amplitude_scale = comp_flux_qubit / q_ctrl.z.operations[operation].amplitude, duration = qua_pulse_duration)                
+                        z_source.coupler.play(operation, amplitude_scale = flux_source / z_source.coupler.operations[operation].amplitude, duration = qua_pulse_duration)
                         align()
                         wait(20)
                         # readout
-                        readout_state_gef(q_ctrl, state_control[i])
-                        wait(4)
-                        z_source.align()
-                        wait(4)
-                        readout_state(q_target, state_target[i])
-                        align()
-                        save(state_control[i], state_st_control[i])
-                        save(state_target[i], state_st_target[i])
+                        if node.parameters.use_state_discrimination:
+                            if node.parameters.operation == 'cz':
+                                # readout_state_gef(q_ctrl, state_control[i])
+                                readout_state(q_ctrl, state_control[i])
+                            else:
+                                readout_state(q_ctrl, state_control[i])
+                            wait(4)
+                            z_source.align()
+                            wait(4)
+                            readout_state(q_target, state_target[i])
+                            align()
+                            save(state_control[i], state_st_control[i])
+                            save(state_target[i], state_st_target[i])
+                        else:
+                            q_ctrl.resonator.measure("readout", qua_vars=(I_control[i], Q_control[i]))
+                            q_target.resonator.measure("readout", qua_vars=(I_target[i], Q_target[i]))
+                            save(I_control[i], I_st_control[i])
+                            save(Q_control[i], Q_st_control[i])
+                            save(I_target[i], I_st_target[i])
+                            save(Q_target[i], Q_st_target[i])
                         
         align()
         
     with stream_processing():
         n_st.save("n")
         for i, z_source in enumerate(z_sources):
-            state_st_control[i].buffer(len(fluxes_qubit)).buffer(len(fluxes_source)).buffer(len(duras)).average().save(f"state_control{i + 1}")
-            state_st_target[i].buffer(len(fluxes_qubit)).buffer(len(fluxes_source)).buffer(len(duras)).average().save(f"state_target{i + 1}")
+            if node.parameters.use_state_discrimination:
+                state_st_control[i].buffer(len(fluxes_qubit)).buffer(len(fluxes_source)).buffer(len(duras)).average().save(f"state_control{i + 1}")
+                state_st_target[i].buffer(len(fluxes_qubit)).buffer(len(fluxes_source)).buffer(len(duras)).average().save(f"state_target{i + 1}")
+            else:
+                I_st_control[i].buffer(len(fluxes_qubit)).buffer(len(fluxes_source)).buffer(len(duras)).average().save(f"I_control{i + 1}")
+                Q_st_control[i].buffer(len(fluxes_qubit)).buffer(len(fluxes_source)).buffer(len(duras)).average().save(f"Q_control{i + 1}")
+                I_st_target[i].buffer(len(fluxes_qubit)).buffer(len(fluxes_source)).buffer(len(duras)).average().save(f"I_target{i + 1}")
+                Q_st_target[i].buffer(len(fluxes_qubit)).buffer(len(fluxes_source)).buffer(len(duras)).average().save(f"Q_target{i + 1}")
             
 # %% {Simulate_or_execute}
 if node.parameters.simulate:
@@ -584,8 +632,8 @@ if node.parameters.simulate:
     node.results = {"figure": plt.gcf()}
     wf_report = job.get_simulated_waveform_report()
     wf_report.create_plot(samples, plot=True, save_path=None)
-    node.machine = machine
-    node.save()
+    # node.machine = machine
+    # node.save()
 elif node.parameters.load_data_id is None:
     
     with qm_session(qmm, config, timeout=node.parameters.timeout) as qm:
@@ -607,7 +655,7 @@ if not node.parameters.simulate:
         ds = ds.assign_coords(flux_qubit_full=ds["flux_qubit"].broadcast_like(ds))
         ds = ds.assign_coords(flux_coupler_full=ds["flux_coupler"].broadcast_like(ds))
         ds.attrs["target_q"] = node.parameters.target_q
-        ds.attrs["coupler_z_waveform"] = node.parameters.operation
+        ds.attrs["coupler_z_waveform"] = operation
     else:
         ds, machine = load_dataset(node.parameters.load_data_id)
         
@@ -621,11 +669,11 @@ node.results["results"] = {}
     
     
 # %% {Plotting}
-plot_state:Literal['control', 'target'] = 'target'
+plot_state:Literal['control', 'target'] = 'control'
 if not node.parameters.simulate:
     for qp in z_sources:
         node.results["results"][qp.name] = {}
-        fig, dura, slopes, errs = analyze_crosstalk_vs_duration(ds, qp.name, state=plot_state, y_limit=None)
+        fig, dura, slopes, errs = analyze_crosstalk_vs_duration(ds, qp.name, state=plot_state, state_discriminator=node.parameters.use_state_discrimination, y_limit=None, sigma=12.0)
         # node.results["results"][qp.name][node.parameters.target_q] = slop
         if fig is not None:
             node.results[f'figure_{plot_state}'] = fig
@@ -636,9 +684,7 @@ if not node.parameters.simulate:
 
 # %% {Update_state}
 if not node.parameters.simulate:
-    if node.parameters.operation != 'const':
-        for qp in z_sources:
-            qp.coupler.operations[node.parameters.operation].flat_length = ori_flat_len[qp.name]
+    pass
                     
 # %% {Save_results}
 if not node.parameters.simulate:    
@@ -658,6 +704,6 @@ if not node.parameters.simulate:
     # {Check raw data
     for qp in z_sources:
         save_path = os.path.join(node_dir, f"{qp.name}to{node.parameters.target_q}_FC_vs_duration.gif")
-        animate_crosstalk_evolution(ds, qp.name, state=plot_state, y_limit=None, interval=1000, save_path=save_path)
+        animate_crosstalk_evolution(ds, qp.name, state=plot_state, state_discriminator=node.parameters.use_state_discrimination, sigma=12.0, y_limit=None, interval=1000, save_path=save_path)
         
 # %%

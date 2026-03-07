@@ -34,7 +34,7 @@ class Parameters(NodeParameters):
     time_of_flight_in_ns: Optional[int] = 28 
     intermediate_frequency_in_mhz: Optional[float] = 50
     readout_amplitude_in_dBm: Optional[float] = -3
-    readout_length_in_ns: Optional[int] = None
+    readout_length_in_ns: Optional[int] = 600
     simulate: bool = False
     simulation_duration_ns: int = 2500
     timeout: int = 100
@@ -190,10 +190,10 @@ else:
     plt.tight_layout()
     plt.legend(loc="upper right", ncols=4, bbox_to_anchor=(0.5, 1.35))
     node.results["adc_averaged"] = grid.fig
-
-    # %% {Update_state}
     print(f"Time Of Flight to add: {delays} ns")
 
+
+    # %% {Update_state}
     with node.record_state_updates():
         for q in qubits:
             if node.parameters.time_of_flight_in_ns is not None:
@@ -212,3 +212,5 @@ else:
     node.machine = machine
     node.save()
 
+
+# %%

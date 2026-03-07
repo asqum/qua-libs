@@ -58,12 +58,12 @@ from quam_libs.lib.pulses import FluxPulse
 # %% {Node_parameters}
 class Parameters(NodeParameters):
 
-    qubit_pairs: Optional[List[str]] = ["coupler_q1_q2"]
-    circuit: str = "BELL2" # "BELL1", "BELL2", "H", "CX"
+    qubit_pairs: Optional[List[str]] = ["coupler_q3_q4"]
+    circuit: str = "ARBI" # "BELL1", "BELL2", "H", "CX"
     num_shots: int = 64
     flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
-    reset_type: Literal['active', 'thermal'] = "active"
-    simulate: bool = False
+    reset_type: Literal['active', 'thermal'] = "thermal"
+    simulate: bool = True
     timeout: int = 100
     load_data_id: Optional[int] = None
 
@@ -116,15 +116,16 @@ with program() as CPhase_Oscillations:
     state_st = [declare_stream() for _ in range(num_qubit_pairs)]
     
     for i, qp in enumerate(qubit_pairs):
-        # Bring the active qubits to the minimum frequency point
-        if flux_point == "independent":
-            machine.apply_all_flux_to_min()
-            # qp.apply_mutual_flux_point()
-        elif flux_point == "joint":
-            machine.apply_all_flux_to_joint_idle()
-        else:
-            machine.apply_all_flux_to_zero()
-        wait(1000)
+        if not node.parameters.simulate:
+            # Bring the active qubits to the minimum frequency point
+            if flux_point == "independent":
+                machine.apply_all_flux_to_min()
+                # qp.apply_mutual_flux_point()
+            elif flux_point == "joint":
+                machine.apply_all_flux_to_joint_idle()
+            else:
+                machine.apply_all_flux_to_zero()
+            wait(1000)
 
         with for_(n, 0, n < n_shots, n + 1):
             save(n, n_st)         
@@ -139,7 +140,10 @@ with program() as CPhase_Oscillations:
                     active_reset_simple(qp.qubit_control)
                     active_reset_simple(qp.qubit_target)                       
             else:
-                wait(5*qp.qubit_control.thermalization_time * u.ns)
+                if not node.parameters.simulate:
+                    wait(5*qp.qubit_control.thermalization_time * u.ns)
+                else:
+                    wait(16 * u.ns)
             qp.align()
             # Bell state
             if node.parameters.circuit == "BELL1":
@@ -175,6 +179,14 @@ with program() as CPhase_Oscillations:
                     qp.qubit_target.xy.play("y90")
                     qp.qubit_target.xy.play("x180")
             
+            if node.parameters.circuit == "ARBI":
+                qp.qubit_control.xy.play("x180") 
+                qp.qubit_control.xy.play("x180")
+                qp.qubit_control.xy.play("x180") 
+                qp.qubit_control.z.play("const") 
+                qp.qubit_control.z.play("const")
+                qp.qubit_control.z.play("const")
+
 
             qp.align()
             # readout
@@ -198,10 +210,13 @@ with program() as CPhase_Oscillations:
 # %% {Simulate_or_execute}
 if node.parameters.simulate:
     # Simulates the QUA program for the specified duration
-    simulation_config = SimulationConfig(duration=10_000)  # In clock cycles = 4ns
+    simulation_config = SimulationConfig(duration=10_000//4)  # In clock cycles = 4ns
     job = qmm.simulate(config, CPhase_Oscillations, simulation_config)
-    job.get_simulated_samples().con1.plot()
+    samples = job.get_simulated_samples()
+    samples.con1.plot()
     node.results = {"figure": plt.gcf()}
+    wf_report = job.get_simulated_waveform_report()
+    wf_report.create_plot(samples, plot=True, save_path=None)
     node.machine = machine
     node.save()
 elif node.parameters.load_data_id is None:

@@ -20,6 +20,7 @@ import xarray as xr
 import matplotlib.animation as animation
 from sklearn.mixture import GaussianMixture
 
+
 # %%
 def IQ_observer(qubits:List[Transmon], qubit_pairs:List[TransmonPair], dcs:np.ndarray, n_runs:int=4096, z_rising_time_ns:int=1000, reset_type:Literal['thermal', 'active']='thermal', simulation:bool = False):
     ro_time = 0
@@ -318,15 +319,16 @@ if not node.parameters.simulate:
             qubits, 
             {"N": np.linspace(1, n_runs, n_runs), "amplitude": dcs}
         )
-
+        ds = ds.assign_coords({"readout_amp": (["qubit", "amplitude"], np.array([dcs * 1 for q in qubits]))})
         ds_rearranged = xr.Dataset()
+
 
         # merge I, Q
         ds_rearranged["I"] = xr.concat([ds.I_g, ds.I_e], dim="state").assign_coords(state=[0, 1])
         ds_rearranged["Q"] = xr.concat([ds.Q_g, ds.Q_e], dim="state").assign_coords(state=[0, 1])
 
     
-        ds = ds.assign_coords({"readout_amp": (["qubit", "amplitude"], np.array([dcs * 1 for q in qubits]))})
+        
 
         for var in ds.coords:
             if var not in ds_rearranged.coords:
@@ -359,6 +361,9 @@ if not node.parameters.simulate:
         )
         X = np.array([np.array(I).flatten(), np.array(Q).flatten()]).T
         clf.fit(X)
+        ground_purity = np.sum(clf.predict(np.array([I[0], Q[0]]).T) == 0) / len(I[0])
+
+
         meas_fidelity = (
             np.sum(clf.predict(np.array([I[0], Q[0]]).T) == 0) / len(I[0])
             + np.sum(clf.predict(np.array([I[1], Q[1]]).T) == 1) / len(I[1])
@@ -366,7 +371,7 @@ if not node.parameters.simulate:
         loglikelihood = clf.score_samples(X)
         max_ll = np.max(loglikelihood)
         outliers = np.sum(loglikelihood > np.log(0.01) + max_ll) / len(X)
-        return np.array([meas_fidelity, outliers])
+        return np.array([meas_fidelity, outliers, ground_purity])
 
     fit_res = xr.apply_ufunc(
         apply_fit_gmm,
@@ -377,17 +382,28 @@ if not node.parameters.simulate:
         vectorize=True,
     )
 
-    fit_res = fit_res.assign_coords(result=["meas_fidelity", "outliers"])
+    fit_res = fit_res.assign_coords(result=["meas_fidelity", "outliers", "ground_fidelity"])
 
     plot_individual = False
     best_data = {}
 
     best_amp = {}
+    thrs = node.parameters.outliers_threshold
     for q in qubits:
         fit_res_q = fit_res.sel(qubit=q.name)
-        valid_amps = fit_res_q.amplitude[(fit_res_q.sel(result="outliers") >= node.parameters.outliers_threshold)]
+
+        while True:
+            valid_amps = fit_res_q.amplitude[(fit_res_q.sel(result="outliers") >= thrs)]
+
+            if len(valid_amps.values) == 0:
+                thrs *= 0.97
+            else:
+                break
+
         amps_fidelity = fit_res_q.sel(amplitude=valid_amps.values, result="meas_fidelity")
+        
         best_amp[q.name] = float(amps_fidelity.readout_amp[amps_fidelity.argmax()])
+        
         print(f"amp for {q.name} is {best_amp[q.name]}")
         node.results["results"][q.name] = {}
         node.results["results"][q.name]["best_amp"] = best_amp[q.name]
@@ -421,13 +437,58 @@ if not node.parameters.simulate:
     # %% {Plotting}
     grid = QubitGrid(ds, [q.grid_location for q in qubits])
     for ax, qubit in grid_iter(grid):
-        fit_res.loc[qubit].plot(ax=ax, x="readout_amp", hue="result", add_legend=False)
-        ax.axvline(best_amp[qubit["qubit"]], color="k", linestyle="dashed")
-        ax.set_xlabel("Relative power")
-        ax.set_ylabel("Fidelity / outliers")
-        ax.set_title(qubit["qubit"])
-    grid.fig.suptitle("Assignment fidelity and non-outlier probability")
+        # 1. 取出該 Qubit 的數據
+        # fit_res 的結構应该是 (qubit, readout_amp, result)
+        # 我們先選定 qubit
+        data = fit_res.sel(qubit=qubit["qubit"])
+        
+        # 2. 建立雙 Y 軸 (左邊畫 Fidelity, 右邊畫 Outliers)
+        ax_right = ax.twinx()
+        
+        # --- 左軸: 畫 Meas Fidelity 與 Ground Fidelity ---
+        # 取出 X 軸數據
+        x_vals = data.readout_amp.values
+        
+        # 畫 Meas Fidelity (平均保真度)
+        l1, = ax.plot(x_vals, data.sel(result="meas_fidelity"), 
+                    color="C0", label="Meas Fidelity", linestyle="-")
+        
+        # 畫 Ground Fidelity (Ground Purity)
+        # 建議: 如果這兩條線太接近，可以用透明度 alpha 或點線區分
+        l2, = ax.plot(x_vals, data.sel(result="ground_fidelity"), 
+                    color="green", label="Ground Purity")
 
+        # --- 右軸: 畫 Outliers ---
+        l3, = ax_right.plot(x_vals, (1-data.sel(result="outliers"))*100, 
+                            color="red", label="Outliers",alpha=0.4)
+
+        # 3. 標示最佳振幅點 (Best Amplitude)
+        # 畫一條垂直黑線
+        best_amp_val = best_amp[qubit["qubit"]]
+        l_line = ax.axvline(best_amp_val, color="k", linestyle=":", label="Best Amp")
+
+
+        
+        # 4. 設定 Label 與 標題
+        ax.set_xlabel("Coupler Flux Pulse Amplitude (V)")
+        ax.set_ylabel("Fidelity", color="C0")
+        ax_right.set_ylabel("Outliers Ratio (%)", color="C3")
+        # ax_right.set_yscale('log')
+        ax_right.set_ylim(0, 10)
+        # 設定右軸刻度顏色，方便辨識
+        ax.tick_params(axis='y', labelcolor="C0")
+        ax_right.tick_params(axis='y', labelcolor="C3")
+
+        ax.set_title(f"Qubit: {qubit['qubit']}")
+
+        # 5. 合併 Legend (圖例)
+        # 因為用了兩個軸，普通的 ax.legend() 只會顯示左軸的
+        lines = [l1, l2, l3, l_line]
+        labels = [l.get_label() for l in lines]
+        ax.legend(lines, labels, loc='best', fontsize='small')
+        ax.grid()
+    grid.fig.suptitle("Fidelity and inlier probability VS coupler Bias")
+    grid.fig.set_size_inches(15, 8)
     plt.tight_layout()
     plt.show()
     node.results["figure_assignment_fid"] = grid.fig
@@ -480,6 +541,7 @@ if not node.parameters.simulate:
     ax.legend(loc="center left", bbox_to_anchor=(1, 0.5))
     grid.fig.suptitle("g.s. and e.s. discriminators (rotated)")
     plt.tight_layout()
+
     node.results["figure_IQ_blobs"] = grid.fig
 
     grid = QubitGrid(ds, [q.grid_location for q in qubits])

@@ -27,7 +27,7 @@ import numpy as np
 
 from scipy.ndimage import gaussian_filter
 from sklearn.linear_model import RANSACRegressor
-def fit_crosstalk_slope(ds, qubit_label, y_limit=None, state:str='control', sigma=2.0, plot_result=True):
+def fit_crosstalk_slope(ds, qubit_label, y_limit=None, state:str='control', state_discriminator:bool=True, sigma=2.0, plot_result=True):
     """
     計算 Qubit Flux 對 Coupler Flux 的 Crosstalk 斜率。
     
@@ -44,10 +44,16 @@ def fit_crosstalk_slope(ds, qubit_label, y_limit=None, state:str='control', sigm
     
     # 1. 提取數據 (依照你原本的邏輯)
     # 注意：這裡假設你的 ds 結構與你的程式碼一致
-    if state.lower() != 'control': 
-        data = ds.state_target.sel(qubit=qubit_label)
+    if state_discriminator:
+        if state.lower() != 'control': 
+            data = ds.state_target.sel(qubit=qubit_label)
+        else:
+            data = ds.state_control.sel(qubit=qubit_label)
     else:
-        data = ds.state_control.sel(qubit=qubit_label)
+        if state.lower() != 'control': 
+            data = ds.I_control.sel(qubit=qubit_label)
+        else:
+            data = ds.I_target.sel(qubit=qubit_label)
     
     # 轉換座標單位 (依照你的繪圖邏輯)
     flux_qubit_mV = data.flux_qubit_full.values * 1e3
@@ -127,6 +133,7 @@ def fit_crosstalk_slope(ds, qubit_label, y_limit=None, state:str='control', sigm
         ax.plot(line_x, line_y, 'r--', lw=2, label=f'Fit: slope={slope:.4f}')
         
         # 設定標籤
+        ax.grid()
         ax.set_title(f"Flux source: {qubit_label}")
         ax.set_xlabel(f"{ds.attrs['target_q']} Flux [mV]")
         ax.set_xlim(min(flux_qubit_mV), max(flux_qubit_mV))
@@ -140,27 +147,27 @@ def fit_crosstalk_slope(ds, qubit_label, y_limit=None, state:str='control', sigm
 # %% {Node_parameters}
 class Parameters(NodeParameters):
     
-    z_source_c:List[str] = ['coupler_q1_q2']
-    target_q:str = 'q1'
-    control_flux_min:float = -0.15
-    control_flux_max:float = 0
-    qubit_flux_step : float = 0.0015
+    z_source_c:List[str] = ['coupler_q3_q4']
+    target_q:str = 'q3'
+    control_flux_min:float = -0.05
+    control_flux_max:float = 0.05
+    qubit_flux_step : float = 0.001
+
+    source_flux_max:float = -0.1
+    source_flux_min:float = 0.5
     
-    source_flux_max:float = 0
-    source_flux_min:float = -0.6
-    
-    exam_FCC:bool = True
-    num_averages: int = 200
+    exam_FCC:bool = False
+    num_averages: int = 150
     flux_point_joint_or_independent_or_pairwise: Literal["joint", "independent", "pairwise"] = "independent"
     reset_type: Literal['active', 'thermal'] = "active"
     simulate: bool = False
     timeout: int = 100
     load_data_id: Optional[int] = None
-    
-    
-    pulse_duration_ns: int = 100
-    target_q_bias:float = 0.2      # if target_q freq is higher than control_q. Applied when coupler's control_q is the assigned target_q
-    
+    use_state_discrimination:bool = True
+    operation:Literal['cz', 'iswap'] = 'cz'
+    pulse_duration_ns: int = 88
+    target_q_bias:float = 0.2     # if target_q freq is higher than control_q. Applied when coupler's control_q is the assigned target_q
+    force_apply_bias:bool = False
 
 node = QualibrationNode(
     name="SP_FCC", parameters=Parameters()
@@ -173,7 +180,7 @@ u = unit(coerce_to_integer=True)
 # Instantiate the QuAM class from the state file
 machine = QuAM.load()
 
-
+operation = 'const'
 
 
 
@@ -201,7 +208,10 @@ else:
             q_target = c.qubit_control
             q_bias_apply = True
 
-bias_wait_time = 800 // 4
+if not q_bias_apply:
+    q_bias_apply = node.parameters.force_apply_bias
+
+bias_wait_time = 1000 // 4
 print(f"Ctrl: {q_ctrl.name}, Target: {q_target.name}, CT-flip: {q_bias_apply}")
 
 elements_to_reset = [q_ctrl, q_target]
@@ -225,7 +235,7 @@ target_q_bias = node.parameters.target_q_bias
 flux_point = node.parameters.flux_point_joint_or_independent_or_pairwise  # 'independent' or 'joint' or 'pairwise'
 # Loop parameters
 fluxes_source = np.linspace(node.parameters.source_flux_min, node.parameters.source_flux_max+0.0001, 100)
-fluxes_qubit = np.arange(node.parameters.control_flux_min, node.parameters.control_flux_max+0.0001, node.parameters.qubit_flux_step)
+fluxes_qubit = np.arange(node.parameters.control_flux_min, node.parameters.control_flux_max+0.0001, node.parameters.qubit_flux_step) - 0.14 #z_sources[0].detuning
 
     
 pulse_duration = node.parameters.pulse_duration_ns // 4
@@ -240,11 +250,21 @@ with program() as CPhase_Oscillations:
     qua_pulse_duration = declare(int, value = pulse_duration)
     
         
+    if node.parameters.use_state_discrimination:
+        state_target = [declare(int) for _ in range(len(z_sources))]
+        state_control = [declare(int) for _ in range(len(z_sources))]
+        state_st_target = [declare_stream() for _ in range(len(z_sources))]
+        state_st_control = [declare_stream() for _ in range(len(z_sources))]
+    else:
+        I_control = [declare(float) for _ in range(len(z_sources))]
+        Q_control = [declare(float) for _ in range(len(z_sources))]
+        I_target = [declare(float) for _ in range(len(z_sources))]
+        Q_target = [declare(float) for _ in range(len(z_sources))]
+        I_st_control = [declare_stream() for _ in range(len(z_sources))]
+        Q_st_control = [declare_stream() for _ in range(len(z_sources))]
+        I_st_target = [declare_stream() for _ in range(len(z_sources))]
+        Q_st_target = [declare_stream() for _ in range(len(z_sources))]
     
-    state_target = [declare(int) for _ in range(len(z_sources))]
-    state_control = [declare(int) for _ in range(len(z_sources))]
-    state_st_target = [declare_stream() for _ in range(len(z_sources))]
-    state_st_control = [declare_stream() for _ in range(len(z_sources))]
 
     for i, z_source in enumerate(z_sources):
 
@@ -275,7 +295,7 @@ with program() as CPhase_Oscillations:
                     for j, qubit in enumerate(elements_to_reset):
                         if node.parameters.reset_type == "active":
                             # active_reset(qubit, "readout")
-                            active_reset_simple(qubit, "readout")
+                            active_reset(qubit, "readout")
                         else:
                             if not node.parameters.simulate:
                                 qubit.wait(qubit.thermalization_time * u.ns)
@@ -285,33 +305,52 @@ with program() as CPhase_Oscillations:
                     align()
                     # setting both qubits ot the initial state
                     q_ctrl.xy.play("x180")
-                    q_target.xy.play("x180")
+                    if node.parameters.operation == 'cz':
+                        q_target.xy.play("x180")
                     align()
                     if q_bias_apply:
                         q_target.z.play("const", amplitude_scale = target_q_bias / q_target.z.operations["const"].amplitude, duration = qua_pulse_duration+bias_wait_time)
                         q_ctrl.z.wait(bias_wait_time)
                         z_source.coupler.wait(bias_wait_time)
-                    q_ctrl.z.play("const", amplitude_scale = comp_flux_qubit / q_ctrl.z.operations["const"].amplitude, duration = qua_pulse_duration)                
-                    z_source.coupler.play("const", amplitude_scale = flux_source / z_source.coupler.operations["const"].amplitude, duration = qua_pulse_duration)
+                    q_ctrl.z.play(operation, amplitude_scale = comp_flux_qubit / q_ctrl.z.operations[operation].amplitude, duration = qua_pulse_duration)                
+                    z_source.coupler.play(operation, amplitude_scale = flux_source / z_source.coupler.operations[operation].amplitude, duration = qua_pulse_duration)
                     align()
                     wait(20)
                     # readout
-                    readout_state_gef(q_ctrl, state_control[i])
-                    wait(4)
-                    z_source.align()
-                    wait(4)
-                    readout_state(q_target, state_target[i])
-                    align()
-                    save(state_control[i], state_st_control[i])
-                    save(state_target[i], state_st_target[i])
+                    if node.parameters.use_state_discrimination:
+                        if node.parameters.operation == 'cz':
+                            # readout_state_gef(q_ctrl, state_control[i])
+                            readout_state(q_ctrl, state_control[i])
+                        else:
+                            readout_state(q_ctrl, state_control[i])
+                        wait(4)
+                        z_source.align()
+                        wait(4)
+                        readout_state_gef(q_target, state_target[i])
+                        align()
+                        save(state_control[i], state_st_control[i])
+                        save(state_target[i], state_st_target[i])
+                    else:
+                        q_ctrl.resonator.measure("readout", qua_vars=(I_control[i], Q_control[i]))
+                        q_target.resonator.measure("readout", qua_vars=(I_target[i], Q_target[i]))
+                        save(I_control[i], I_st_control[i])
+                        save(Q_control[i], Q_st_control[i])
+                        save(I_target[i], I_st_target[i])
+                        save(Q_target[i], Q_st_target[i])
                         
         align()
         
     with stream_processing():
         n_st.save("n")
         for i, z_source in enumerate(z_sources):
-            state_st_control[i].buffer(len(fluxes_qubit)).buffer(len(fluxes_source)).average().save(f"state_control{i + 1}")
-            state_st_target[i].buffer(len(fluxes_qubit)).buffer(len(fluxes_source)).average().save(f"state_target{i + 1}")
+            if node.parameters.use_state_discrimination:
+                state_st_control[i].buffer(len(fluxes_qubit)).buffer(len(fluxes_source)).average().save(f"state_control{i + 1}")
+                state_st_target[i].buffer(len(fluxes_qubit)).buffer(len(fluxes_source)).average().save(f"state_target{i + 1}")
+            else:
+                I_st_control[i].buffer(len(fluxes_qubit)).buffer(len(fluxes_source)).average().save(f"I_control{i + 1}")
+                Q_st_control[i].buffer(len(fluxes_qubit)).buffer(len(fluxes_source)).average().save(f"Q_control{i + 1}")
+                I_st_target[i].buffer(len(fluxes_qubit)).buffer(len(fluxes_source)).average().save(f"I_target{i + 1}")
+                Q_st_target[i].buffer(len(fluxes_qubit)).buffer(len(fluxes_source)).average().save(f"Q_target{i + 1}")
             
 # %% {Simulate_or_execute}
 if node.parameters.simulate:
@@ -351,10 +390,10 @@ if not node.parameters.simulate:
     node.results = {"ds": ds}
 # %%
 if not node.parameters.simulate:
-    if reset_coupler_bias:
-        flux_coupler_full = np.array([fluxes_source + qp.coupler.decouple_offset for qp in z_sources])
-    else:
-        flux_coupler_full = np.array([fluxes_source for qp in z_sources])
+    # if reset_coupler_bias:
+    flux_coupler_full = np.array([fluxes_source + qp.coupler.decouple_offset for qp in z_sources])
+    # else:
+        # flux_coupler_full = np.array([fluxes_source for qp in z_sources])
     ds = ds.assign_coords({"flux_coupler_full": (["qubit", "flux_coupler"], flux_coupler_full)})
     ds.attrs["target_q"] = node.parameters.target_q
     node.results = {"ds": ds}
@@ -366,12 +405,13 @@ node.results["results"] = {}
     
     
 # %% {Plotting}
-plot_state:Literal['control', 'target'] = 'target'
+plot_state:Literal['control', 'target'] = 'control'
 if not node.parameters.simulate:
     for qp in z_sources:
         node.results["results"][qp.name] = {}
-        slop, _, fig = fit_crosstalk_slope(ds, qp.name,state=plot_state, sigma=3.0, plot_result=True)
+        slop, _, fig = fit_crosstalk_slope(ds, qp.name,state=plot_state, state_discriminator=node.parameters.use_state_discrimination, sigma=12.0, plot_result=True)
         node.results["results"][qp.name][node.parameters.target_q] = slop
+        print(f"{node.parameters.target_q}: {round(slop*100,2)} %")
         if fig is not None:
             node.results[f'figure_{plot_state}'] = fig
 

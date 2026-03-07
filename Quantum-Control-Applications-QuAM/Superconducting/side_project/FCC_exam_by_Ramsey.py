@@ -39,9 +39,10 @@ import numpy as np
 
 # %% {Node_parameters}
 class Parameters(NodeParameters):
-    qubits: Optional[List[str]] = ['q1'] #['q1']
+    qubits: Optional[List[str]] = ['q2'] #['q1']
     z_source: str = 'coupler_q1_q2'
     num_averages: int = 1500
+    add_in_fcc:bool=True
     frequency_detuning_in_mhz: float = 4.0
     min_wait_time_in_ns: int = 116
     max_wait_time_in_ns: int = 616
@@ -139,17 +140,11 @@ with program() as ramsey:
                     align()
                     # flux crosstalk compenstation
                     comp = declare(fixed)
-                    if "FCC" in source.extras:  
-                        if qubit.name == 'q1':
-                            if 'control' in source.extras['FCC']:
-                                assign(comp,  source.extras["FCC"]["control"] * flux )
-                            else:
-                                assign(comp, 0.0)
+                    if "FCC" in source.extras and node.parameters.add_in_fcc:  
+                        if qubit.name in source.extras["FCC"]:
+                            assign(comp,  source.extras["FCC"][qubit.name] * flux )
                         else:
-                            if 'target' in source.extras['FCC']:
-                                assign(comp,  source.extras["FCC"]["target"] * flux )
-                            else:
-                                assign(comp, 0.0)  
+                            assign(comp, 0.0)
                     else:
                         assign(comp, 0.0)
 
