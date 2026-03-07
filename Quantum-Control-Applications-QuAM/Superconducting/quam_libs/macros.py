@@ -302,9 +302,10 @@ def readout_state_coupler(
                 wait(4) # buffer
             if not readout_gef:
                 readout_state(qb2read, state=state, pulse_name='readout')
+                assign(state, 1-state) # flip the state since the qubit is in excited state after the long pi pulse
             else:
                 readout_state_gef(qb2read, state=state, pulse_name='readout')
-            assign(state, 1-state) # flip the state since the qubit is in excited state after the long pi pulse
+            
     
         case _:
             pass # (extend it in the near future for 3-tone spectroscopy (saturation driving) method)
