@@ -1,19 +1,11 @@
 # %%
 """
-        QUBIT SPECTROSCOPY VERSUS FLUX
-This sequence involves doing a qubit spectroscopy for several flux biases in order to exhibit the qubit frequency
-versus flux response.
+The transition frequency flux spectrum for the target coupler.
 
 Prerequisites:
-    - Identification of the resonator's resonance frequency when coupled to the qubit in question (referred to as "resonator_spectroscopy").
-    - Calibration of the IQ mixer connected to the qubit drive line (whether it's an external mixer or an Octave port).
-    - Identification of the approximate qubit frequency ("qubit_spectroscopy").
+    - the driving frequency for the target coupler.
 
-Before proceeding to the next node:
-    - Update the qubit frequency, in the state.
-    - Update the relevant flux points in the state.
-    - Update the frequency vs flux quadratic term in the state.
-    - Save the current state
+Recommended readout strategy: 'aswap' for better contrast because the ZZ interaction might be small.
 """
 
 
@@ -41,17 +33,17 @@ class Parameters(NodeParameters):
     couplers: str = 'coupler_q3_q4'
     detector_qb:str = 'q4'
     driver_qb:str = 'q3'
-    
+    readout_strategy: Literal['zz-pi', 'aswap'] = 'aswap'
     num_averages: int = 500
     operation: str = "saturation"
     operation_amplitude_factor: Optional[float] = 0.1 #0.004, 0.02 # q6:3e-3, q7:1e-2, q8:3e-3, q9:***,
     operation_len_in_ns: Optional[int] = None
     frequency_span_in_mhz: float = 100 #12, 120
-    frequency_step_in_mhz: float = 0.5 #0.1, 1
+    frequency_step_in_mhz: float = 1 #0.1, 1
     frequency_shift_in_mhz: float = 0 #0  
-    min_flux_offset_in_v: float = -0.35 ##-0.042
+    min_flux_offset_in_v: float = 0.1 ##-0.042
     max_flux_offset_in_v: float = -0.1 #0.042
-    num_flux_points: int = 151
+    num_flux_points: int = 75
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
     simulate: bool = False
     simulation_duration_ns: int = 2500
@@ -144,7 +136,7 @@ with program() as multi_qubit_spec_vs_flux:
                     )
                     qubit.align()
                     # QUA macro to read the state of the active resonators
-                    readout_state_coupler(detector_q[i], state[i], method='aswap')
+                    readout_state_coupler(detector_q[i], state[i], method=node.parameters.readout_strategy)
                     save(state[i], state_st[i])
                     # Wait for the qubit to decay to the ground state
                     # Wait for the qubits to decay to the ground state

@@ -1,20 +1,12 @@
 # %%
 """
-        POWER RABI WITH ERROR AMPLIFICATION
-This sequence involves repeatedly executing the qubit pulse (such as x180) 'N' times and
-measuring the state of the resonator across different qubit pulse amplitudes and number of pulses.
-By doing so, the effect of amplitude inaccuracies is amplified, enabling a more precise measurement of the pi pulse
-amplitude. The results are then analyzed to determine the qubit pulse amplitude suitable for the selected duration.
+The Power Rabi for the target coupler.
 
 Prerequisites:
-    - Having found the resonance frequency of the resonator coupled to the qubit under study (resonator_spectroscopy).
-    - Having calibrated the IQ mixer connected to the qubit drive line (external mixer or Octave port)
-    - Having found the rough qubit frequency and set the desired pi pulse duration (qubit spectroscopy).
-    - Set the desired flux bias
+    - the driving frequency for the target coupler.
 
-Next steps before going to the next node:
-    - Update the qubit pulse amplitude in the state.
-    - Save the current state
+Before the next step:
+    - Check there are two operation in the driver_qb's xy.operation named 'x180_cp' and 'x90_cp', and please make the `"__class__": "quam.components.pulses.DragCosinePulse"` is well defined in it.
 """
 
 
@@ -53,7 +45,7 @@ class Parameters(NodeParameters):
     max_number_rabi_pulses_per_sweep: int = 1 #1, 40
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
     update_x90: bool = True
-    simulate: bool = True
+    simulate: bool = False
     simulation_duration_ns: int = 1500
     timeout: int = 100
     load_data_id: Optional[int] = None

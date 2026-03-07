@@ -1,25 +1,6 @@
 # %%
 """
-        QUBIT SPECTROSCOPY
-This sequence involves sending a saturation pulse to the qubit, placing it in a mixed state,
-and then measuring the state of the resonator across various qubit drive intermediate frequencies dfs.
-In order to facilitate the qubit search, the qubit pulse duration and amplitude can be changed manually in the QUA
-program directly from the node parameters.
-
-The data is post-processed to determine the qubit resonance frequency and the width of the peak.
-
-Note that it can happen that the qubit is excited by the image sideband or LO leakage instead of the desired sideband.
-This is why calibrating the qubit mixer is highly recommended.
-
-Prerequisites:
-    - calibrated the IQ_blobs for detector_q.
-    - Calibration of the IQ mixer connected to the qubit drive line (whether it's an external mixer or an Octave port).
-    - Set the flux bias to the desired working point, independent, joint or arbitrary, in the state.
-    - Configuration of the saturation pulse amplitude and duration to transition the qubit into a mixed state.
-
-Before proceeding to the next node:
-    - Update the qubit frequency in the state, as well as the expected x180 amplitude and IQ rotation angle.
-    - Save the current state
+    Coupler spectroscopy to find the resonant frequency of the coupler.
 """
 
 

@@ -521,10 +521,10 @@
                         "__class__": "quam.components.pulses.DragCosinePulse"
                     },
                     "x180_cp": {
-                        "length": 100,
+                        "length": 24,
                         "digital_marker": "ON",
                         "axis_angle": 0,
-                        "amplitude": 0.08539583736544258,
+                        "amplitude": 0.3673042350976042,
                         "alpha": -0.7601,
                         "anharmonicity": "#/qubits/q3/anharmonicity",
                         "__class__": "quam.components.pulses.DragCosinePulse"
@@ -533,7 +533,7 @@
                         "length": 100,
                         "digital_marker": "ON",
                         "axis_angle": 0,
-                        "amplitude": 0.04269791868272129,
+                        "amplitude": 0.1836521175488021,
                         "alpha": -0.7601,
                         "anharmonicity": "#/qubits/q3/anharmonicity",
                         "__class__": "quam.components.pulses.DragCosinePulse"
@@ -776,7 +776,7 @@
                         "anharmonicity": "#/qubits/q4/anharmonicity",
                         "__class__": "quam.components.pulses.DragCosinePulse"
                     },
-                    "zz-pi":{
+                    "zz-pi": {
                         "length": 1600,
                         "digital_marker": "ON",
                         "axis_angle": 0,

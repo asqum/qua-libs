@@ -1,3 +1,10 @@
+"""
+The T2 echo for the target coupler.
+
+Prerequisites:
+    - pi_pulse for the coupler.
+"""
+
 # %%
 from qualibrate import QualibrationNode, NodeParameters
 from typing import Optional, Literal, List
