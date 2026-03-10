@@ -30,19 +30,18 @@ import numpy as np
 
 # %% {Node_parameters}
 class Parameters(NodeParameters):
-    couplers: str = 'coupler_q3_q4'
-    detector_qb:str = 'q4'
-    driver_qb:str = 'q3'
+    couplers: str = 'coupler_q4_q5'
     readout_strategy: Literal['zz-pi', 'aswap'] = 'aswap'
-    num_averages: int = 500
+    num_averages: int = 1000
     operation: str = "saturation"
-    operation_amplitude_factor: Optional[float] = 0.1 #0.004, 0.02 # q6:3e-3, q7:1e-2, q8:3e-3, q9:***,
+    operation_amplitude_factor: Optional[float] = 0.03 #0.004, 0.02 # q6:3e-3, q7:1e-2, q8:3e-3, q9:***,
     operation_len_in_ns: Optional[int] = None
+    Driving_LO_GHz: float|None = 3.53
     frequency_span_in_mhz: float = 100 #12, 120
     frequency_step_in_mhz: float = 1 #0.1, 1
     frequency_shift_in_mhz: float = 0 #0  
-    min_flux_offset_in_v: float = 0.1 ##-0.042
-    max_flux_offset_in_v: float = -0.1 #0.042
+    min_flux_offset_in_v: float = -0.1 ##-0.042
+    max_flux_offset_in_v: float = 0 #0.042
     num_flux_points: int = 75
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
     simulate: bool = False
@@ -60,16 +59,25 @@ node = QualibrationNode(name="03x_coupler_Spectroscopy_vs_Flux", parameters=Para
 u = unit(coerce_to_integer=True)
 # Instantiate the QuAM class from the state file
 machine = QuAM.load()
+
+
+# Get the relevant QuAM components
+coupler = [machine.qubit_pairs[node.parameters.couplers]] # currently supports 1 coupler a time only.
+drive_q = [machine.qubits[coupler[0].extras["RD"]["driven_q"]]]
+detector_q = [machine.qubits[coupler[0].extras["RD"]["readout_q"]]]
+# Change driving LO
+drive_LO_original = {drive_q[0].name: drive_q[0].xy.opx_output.upconverter_frequency}
+if node.parameters.Driving_LO_GHz is None:
+    drive_q[0].xy.opx_output.upconverter_frequency = coupler[0].extras["RD"]["LO"]
+else:
+    drive_q[0].xy.opx_output.upconverter_frequency = node.parameters.Driving_LO_GHz * 1e9
+
 # Generate the OPX and Octave configurations
 config = machine.generate_config()
 # Open Communication with the QOP
 if node.parameters.load_data_id is None:
     qmm = machine.connect()
 
-# Get the relevant QuAM components
-drive_q = [machine.qubits[node.parameters.driver_qb]]
-detector_q = [machine.qubits[node.parameters.detector_qb]]
-coupler = [machine.qubit_pairs[node.parameters.couplers]] # currently supports 1 coupler a time only.
 
 
 # %% {QUA_program}
@@ -273,20 +281,12 @@ if not node.parameters.simulate:
 
     # %% {Update_state}
     if node.parameters.load_data_id is None:
-        # with node.record_state_updates():
-        #     for q in qubits:
-        #         # if q.name in ['q3', 'q5']:
-        #         if not np.isnan(flux_shift.sel(qubit=q.name).values):
-        #             if flux_point == "independent":
-        #                 q.z.independent_offset += fit_results[q.name]["flux_shift"]
-        #                 if "c" in q.id: # for coupler-test case
-        #                     q.z.joint_offset += fit_results[q.name]["flux_shift"]
-        #                     q.z.independent_offset = q.z.joint_offset - q.phi0_voltage / 2 
-        #             elif flux_point == "joint":
-        #                 q.z.joint_offset += fit_results[q.name]["flux_shift"]
-        #             q.xy.intermediate_frequency += fit_results[q.name]["drive_freq"]
-        #             q.freq_vs_flux_01_quad_term = fit_results[q.name]["quad_term"]
-        pass
+        with node.record_state_updates():
+            for q in drive_q:
+                if node.parameters.Driving_LO_GHz is None:
+                    q.xy.opx_output.upconverter_frequency = drive_LO_original[q.name] # revert the driving LO
+                else:
+                    q.xy.opx_output.upconverter_frequency = node.parameters.Driving_LO_GHz * 1e9
 
     # %% {Save_results}
     node.results["ds"] = ds

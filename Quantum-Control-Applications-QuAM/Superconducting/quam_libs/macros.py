@@ -260,6 +260,7 @@ def readout_state_coupler(
         readout_gef:bool = False,
         buffer_b4_readout:bool = True,
         zz_pi_pulse_duration_scale:int = 100,
+        assign_aswap_duration:int|None = None
     ):
     '''
     A readout macro for reading a coupler, can be achieved by either performing an aswap and reading the qubit, or by performing a 3-tone spectroscopy.
@@ -272,7 +273,8 @@ def readout_state_coupler(
     :param readout_gef: whether to use GEF-readout or GE-readout.
     :param buffer_b4_readout: Add some buffer time before the readout. The buffer time is fixed at this moment.
     :param zz_pi_pulse_duration_scale: Only for 'zz-pi' method. The duration of the long pi pulse is determined by multiplying the original pi pulse duration with this scale factor. The amplitude is set to be the inverse of this scale factor to make sure the total pulse area is the same as the original pi pulse.
-    
+    :param assign_aswap_duration: The pulse duration for the aSWAP pulse, unit in QUA cycle (4ns).
+
     '''
     align() # to make sure the timing is correct when performing the aSWAP and the readout
     match method:
@@ -280,11 +282,21 @@ def readout_state_coupler(
             try:
                 if flux_applied_target is not None:
                     if isinstance(flux_applied_target, TransmonPair):
-                        flux_applied_target.coupler.play('aSWAP', amplitude_scale= 1.0)
+                        if assign_aswap_duration is None:
+                            flux_applied_target.coupler.play('aSWAP', amplitude_scale= 1.0)
+                        else:
+                            flux_applied_target.coupler.play('aSWAP', amplitude_scale= 1.0, duration=assign_aswap_duration)
                     elif isinstance(flux_applied_target, Transmon):
-                        flux_applied_target.z.play('aSWAP', amplitude_scale= 1.0)
+                        if assign_aswap_duration is None:
+                            flux_applied_target.z.play('aSWAP', amplitude_scale= 1.0)
+                        else:
+                            flux_applied_target.z.play('aSWAP', amplitude_scale= 1.0, duration=assign_aswap_duration)
                 else:
-                    qb2read.z.play('aSWAP', amplitude_scale= 1.0)
+                    if assign_aswap_duration is None:
+                        qb2read.z.play('aSWAP', amplitude_scale= 1.0)
+                    else:
+                        qb2read.z.play('aSWAP', amplitude_scale= 1.0, duration=assign_aswap_duration)
+                    
                 align()
                 if buffer_b4_readout:
                     wait(25) # optional wait time, 40ns is recommended by Li-Chieh  

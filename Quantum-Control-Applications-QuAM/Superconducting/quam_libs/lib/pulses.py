@@ -516,16 +516,28 @@ class aSWAPPulse(Pulse):
     amplitude: float
     axis_angle: float = None
     slope_direction: int = 1 # 1 for positive slope, -1 for negative slope
+    truncate_len:int
+
 
     def waveform_function(self):
-        
-        L = int(self.length)
+        totL = int(self.length)
+        tL = int(self.truncate_len)
+
+        if tL > totL:
+            tL = totL
+
+
         S = int(self.slope_direction)
 
         if S == 1:
-            p = np.linspace(0, self.amplitude, L)
+            p = np.linspace(0, self.amplitude, totL)
         else:
-            p = np.linspace(self.amplitude, 0, L)
+            p = np.linspace(self.amplitude, 0, totL)
+
+
+        first_part = p[:tL]
+        zero_part = np.zeros(totL - tL)
+        p = np.concatenate((first_part, zero_part))
 
         # Apply axis angle for IQ output if provided
         if self.axis_angle is not None:

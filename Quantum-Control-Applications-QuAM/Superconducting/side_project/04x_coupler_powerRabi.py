@@ -5,8 +5,6 @@ The Power Rabi for the target coupler.
 Prerequisites:
     - the driving frequency for the target coupler.
 
-Before the next step:
-    - Check there are two operation in the driver_qb's xy.operation named 'x180_cp' and 'x90_cp', and please make the `"__class__": "quam.components.pulses.DragCosinePulse"` is well defined in it.
 """
 
 
@@ -33,11 +31,8 @@ import numpy as np
 # %% {Node_parameters}
 class Parameters(NodeParameters):
 
-    coupler: str = 'coupler_q3_q4'
-    detector_qb:str = 'q4'
-    driver_qb:str = 'q3'
-
-    num_averages: int = 500
+    coupler: str = 'coupler_q4_q5'
+    num_averages: int = 2000
     operation_x180_or_any_90: Literal["x180_cp", "x90_cp"] = "x180_cp"
     min_amp_factor: float = 0.0 #0.001
     max_amp_factor: float = 1.79 #2.0
@@ -46,7 +41,7 @@ class Parameters(NodeParameters):
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
     update_x90: bool = True
     simulate: bool = False
-    simulation_duration_ns: int = 1500
+    simulation_duration_ns: int = 8000
     timeout: int = 100
     load_data_id: Optional[int] = None
     multiplexed: bool = False
@@ -59,16 +54,22 @@ node = QualibrationNode(name="04x_coupler_PowerRabi", parameters=Parameters())
 u = unit(coerce_to_integer=True)
 # Instantiate the QuAM class from the state file
 machine = QuAM.load()
+
+# Get the relevant QuAM components
+coupler = [machine.qubit_pairs[node.parameters.coupler]] # currently supports 1 coupler a time only.
+drive_q = [machine.qubits[coupler[0].extras["RD"]["driven_q"]]]
+detector_q = [machine.qubits[coupler[0].extras["RD"]["readout_q"]]]
+
+# Change driving LO
+drive_LO_original = {drive_q[0].name: drive_q[0].xy.opx_output.upconverter_frequency}
+drive_q[0].xy.opx_output.upconverter_frequency = coupler[0].extras["RD"]["LO"]
+
 # Generate the OPX and Octave configurations
 config = machine.generate_config()
 # Open Communication with the QOP
 if node.parameters.load_data_id is None:
     qmm = machine.connect()
 
-# Get the relevant QuAM components
-drive_q = [machine.qubits[node.parameters.driver_qb]]
-detector_q = [machine.qubits[node.parameters.detector_qb]]
-coupler = [machine.qubit_pairs[node.parameters.coupler]] # currently supports 1 coupler a time only.
 
 
 # %% {QUA_program}
@@ -115,6 +116,8 @@ with program() as power_rabi:
             machine.set_all_fluxes(flux_point=flux_point, target=qubit)
             if "c" in qubit.id: qubit.z.set_dc_offset(qubit.z.joint_offset) # for coupler-test case
             qubit.z.settle()
+        qubit.xy.update_frequency(coupler[0].extras["RD"]["IF"])
+        # update LO
         qubit.align()
 
         with for_(n, 0, n < n_avg, n + 1):
@@ -122,12 +125,17 @@ with program() as power_rabi:
             with for_(*from_array(npi, N_pi_vec)):
                 with for_(*from_array(a, amps)):
                     # Initialize the qubits
-                    if reset_type == "active":
-                        active_reset(qubit, "readout")
-                    else:
-                        if node.parameters.simulate: qubit.wait(16 * u.ns)
-                        # else: qubit.wait(qubit.thermalization_time * u.ns)
-                        else: qubit.wait(machine.thermalization_time * u.ns)
+                    
+                    if not node.parameters.simulate:
+                        if qubit.thermalization_time//5 > coupler[0].extras['T1']*1e9:
+                            wait(qubit.thermalization_time * u.ns)
+                        else:
+                            wait(5*coupler[0].extras['T1']*1e9 * u.ns)
+
+                    # for a better RO fidelity
+                    # align()
+                    # active_reset(detector_q[i], "readout")
+                    # align()
 
                     # Loop for error amplification (perform many qubit pulses)
                     with for_(count, 0, count < npi, count + 1):
@@ -160,7 +168,7 @@ with program() as power_rabi:
 # %% {Simulate_or_execute}
 if node.parameters.simulate:
     # Simulates the QUA program for the specified duration
-    simulation_config = SimulationConfig(duration=node.parameters.simulation_duration_ns * 4)  # In clock cycles = 4ns
+    simulation_config = SimulationConfig(duration=node.parameters.simulation_duration_ns // 4)  # In clock cycles = 4ns
     job = qmm.simulate(config, power_rabi, simulation_config)
     # Get the simulated samples and plot them for all controllers
     samples = job.get_simulated_samples()
@@ -281,6 +289,7 @@ if not node.parameters.simulate:
     if node.parameters.load_data_id is None:
         with node.record_state_updates():
             for q in drive_q:
+                q.xy.opx_output.upconverter_frequency = drive_LO_original[q.name] # revert the driving LO
                 q.xy.operations[operation].amplitude = fit_results[q.name]["Pi_amplitude"]
                 if operation == "x180_cp" and node.parameters.update_x90:
                     q.xy.operations["x90_cp"].amplitude = fit_results[q.name]["Pi_amplitude"] / 2

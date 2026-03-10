@@ -1,9 +1,6 @@
 # %%
 """
     Coupler spectroscopy to find the resonant frequency of the coupler.
-
-    Prerequisites:
-        - Having a aSWAP operation for you detector_qb in state.json with amplitude is a half flux period, length is about 400 ns which can be manually extended in the future if needed.
 """
 
 
@@ -21,7 +18,6 @@ from qualang_tools.results import progress_counter, fetching_tool
 from qualang_tools.loops import from_array
 from qualang_tools.multi_user import qm_session
 from qualang_tools.units import unit
-from quam.components import pulses
 from qm import SimulationConfig
 from qm.qua import *
 from typing import Literal, Optional, List
@@ -32,13 +28,15 @@ import numpy as np
 # %% {Node_parameters}
 class Parameters(NodeParameters):
 
-    couplers: str = 'coupler_q4_q5'
-    num_averages: int = 1000
-    operation: str = "saturation"
-    operation_amplitude_factor: Optional[float] = 0.03    # 0.05 , 0.1 good
+    couplers: str = 'coupler_q3_q4'
+    detector_qb:str = 'q4'
+    driver_qb:str = 'q3'
+    c_sweet_flux_amp: float = -0.235
+    num_averages: int = 5000
+    operation: str = "long_x180_cp"
+    operation_amplitude_factor: Optional[float] = 1    #0.004, 0.0004
     operation_len_in_ns: Optional[int] = None
-    Driving_LO_GHz:float|None = None      # None use state recorded. Otherwise, use this value as the new LO (and will be updated into state)
-    frequency_span_in_mhz: float = 300 #200, 4, 800
+    frequency_span_in_mhz: float = 150 #200, 4, 800
     frequency_step_in_mhz: float = 1 #0.25, 0.01
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
     target_peak_width: Optional[float] = 1e6 #1e6
@@ -60,21 +58,17 @@ u = unit(coerce_to_integer=True)
 # Instantiate the QuAM class from the state file
 machine = QuAM.load()
 # Generate the OPX and Octave configurations
-
-coupler = [machine.qubit_pairs[node.parameters.couplers]] # currently supports 1 coupler a time only.
-drive_q = [machine.qubits[coupler[0].extras["RD"]["driven_q"]]]
-detector_q = [machine.qubits[coupler[0].extras["RD"]["readout_q"]]]
-# Change driving LO
-drive_LO_original = {drive_q[0].name: drive_q[0].xy.opx_output.upconverter_frequency}
-if node.parameters.Driving_LO_GHz is None:
-    drive_q[0].xy.opx_output.upconverter_frequency = coupler[0].extras["RD"]["LO"]
-else:
-    drive_q[0].xy.opx_output.upconverter_frequency = node.parameters.Driving_LO_GHz*1e9
-
 config = machine.generate_config()
 # Open Communication with the QOP
 if node.parameters.load_data_id is None:
     qmm = machine.connect()
+
+
+drive_q = [machine.qubits[node.parameters.driver_qb]]
+detector_q = [machine.qubits[node.parameters.detector_qb]]
+coupler = [machine.qubit_pairs[node.parameters.couplers]] # currently supports 1 coupler a time only.
+
+
 
 
 # %% {QUA_program}
@@ -125,8 +119,8 @@ with program() as qubit_spec:
     if not node.parameters.simulate:
         machine.apply_all_couplers_to_min()
     for i, qubit in enumerate(drive_q):
-        max_freq = dfs[-1] + coupler[0].extras["RD"]["IF"]
-        min_freq = dfs[0] + coupler[0].extras["RD"]["IF"]
+        max_freq = dfs[-1] + qubit.xy.intermediate_frequency
+        min_freq = dfs[0] + qubit.xy.intermediate_frequency
         assert max_freq <= 400e6 and min_freq >= -400e6, (
             f"{qubit.name} IF span out of range: min={min_freq/1e6:.2f} MHz, "
             f"max={max_freq/1e6:.2f} MHz (limit ±400 MHz), please adjust the frequency span.")
@@ -139,37 +133,47 @@ with program() as qubit_spec:
 
         with for_(n, 0, n < n_avg, n + 1):
             save(n, n_st)
-            with for_(*from_array(df, dfs)):
-                # Update the qubit frequency
-                qubit.xy.update_frequency(df + coupler[0].extras["RD"]["IF"] + detunings[qubit.name])
-                
-                # qubit.xy.update_frequency(df + qubit.xy.intermediate_frequency + detunings[qubit.name] + 700e6) # for coupler search 
-                qubit.align()
-                if not node.parameters.simulate:
-                    duration = operation_len * u.ns if operation_len is not None else (qubit.xy.operations[operation].length + qubit.z.settle_time) * u.ns
-                else:
-                    duration = 100 *u.ns
-                # # Bring the qubit to the desired point during the saturation pulse
-                # qubit.z.play("const", amplitude_scale=arb_flux_bias_offset[qubit.name] / qubit.z.operations["const"].amplitude, duration=duration)
-                # # Play the saturation pulse
-                # qubit.xy.wait(qubit.z.settle_time * u.ns)
-                qubit.xy.play(
-                    operation,
-                    amplitude_scale=operation_amp,
-                    duration=duration,
-                )
-                qubit.align()
-
-                # readout the resonator
-                readout_state_coupler(detector_q[i], state[i], method='aswap')
-                save(state[i], state_st[i])
-                # Wait for the qubit to decay to the ground state
-                detector_q[i].resonator.wait(machine.depletion_time * u.ns)
+            for play_pi in [1, 0]:
+                with for_(*from_array(df, dfs)):
+                    # Update the qubit frequency
+                    qubit.xy.update_frequency(df + qubit.xy.intermediate_frequency + detunings[qubit.name])
+                    
+                    # qubit.xy.update_frequency(df + qubit.xy.intermediate_frequency + detunings[qubit.name] + 700e6) # for coupler search 
+                    wait(qubit.thermalization_time * u.ns)
+                    align()
+                    if not node.parameters.simulate:
+                        duration = operation_len * u.ns if operation_len is not None else (qubit.xy.operations[operation].length + qubit.z.settle_time) * u.ns
+                    else:
+                        duration = 100 *u.ns
+                    # # Bring the qubit to the desired point during the saturation pulse
+                    # qubit.z.play("const", amplitude_scale=arb_flux_bias_offset[qubit.name] / qubit.z.operations["const"].amplitude, duration=duration)
+                    # # Play the saturation pulse
+                    # qubit.xy.wait(qubit.z.settle_time * u.ns)
+                    align()
+                    if play_pi:
+                        print("YES PI")
+                        detector_q[i].xy.play('x180')
+                    else:
+                        print("NO PI")
+                    align()
+                    coupler[0].coupler.play("const", amplitude_scale=node.parameters.c_sweet_flux_amp/coupler[0].coupler.operations["const"].amplitude, duration=duration)
+                    qubit.xy.play(
+                        operation,
+                        amplitude_scale=operation_amp,
+                        duration=duration,
+                    )
+                    align()
+                    
+                    # readout the resonator
+                    readout_state_coupler(detector_q[i], state[i], method='zz-pi')
+                    save(state[i], state_st[i])
+                    # Wait for the qubit to decay to the ground state
+                    detector_q[i].resonator.wait(machine.depletion_time * u.ns)
 
     with stream_processing():
         n_st.save("n")
         for i in range(len(drive_q)):
-            state_st[i].buffer(len(dfs)).average().save(f"state{i + 1}")
+            state_st[i].buffer(len(dfs)).buffer(len([1, 0])).average().save(f"state{i + 1}")
 
 
 # %% {Simulate_or_execute}
@@ -202,7 +206,7 @@ if not node.parameters.simulate:
         ds, machine, json_data, qubits, node.parameters = load_dataset(node.parameters.load_data_id, parameters = node.parameters)
     else:
         # Fetch the data from the OPX and convert it into a xarray with corresponding axes (from most inner to outer loop)
-        ds = fetch_results_as_xarray(job.result_handles, drive_q, {"freq": dfs})
+        ds = fetch_results_as_xarray(job.result_handles, drive_q, {"freq": dfs, "detector_pre_state":[1,0]})
         # Convert IQ data into volts
         # ds = convert_IQ_to_V(ds, detector_q)
         # Derive the amplitude IQ_abs = sqrt(I**2 + Q**2) and phase
@@ -222,7 +226,13 @@ if not node.parameters.simulate:
     # Add the dataset to the node
     node.results = {"ds": ds}
     # %%
-    print(np.array(ds.data_vars['state']).shape)
+    print(np.array(ds.state.sel(detector_pre_state=1)).shape)
+    plt.plot(ds.freq_full[0], ds.state.sel(detector_pre_state=1)[0], label='with pi pulse')
+    plt.plot(ds.freq_full[0], ds.state.sel(detector_pre_state=0)[0], label='without pi pulse')
+    plt.xlabel("Frequency (GHz)")
+    plt.ylabel("Measured state")  
+    plt.legend() 
+    plt.show()                 
 
     # %% {Data_analysis}
     # search for frequency for which the amplitude the farthest from the mean to indicate the approximate location of the peak
@@ -294,31 +304,23 @@ if not node.parameters.simulate:
                 ".r",
             )
             # # Identify the width
-            if np.average(approx_peak.assign_coords(freq_GHz=ds.freq_full / 1e9).loc[qubit].values) > 0:
-                (approx_peak.assign_coords(freq_GHz=ds.freq_full / 1e9).loc[qubit]).plot(
-                    ax=ax, x="freq_GHz", linewidth=0.5, linestyle="--"
-                )
+            (approx_peak.assign_coords(freq_GHz=ds.freq_full / 1e9).loc[qubit]).plot(
+                ax=ax, x="freq_GHz", linewidth=0.5, linestyle="--"
+            )
         ax.set_xlabel("Driving freq [GHz]")
         ax.set_ylabel("State Porbability")
         ax.set_title(node.parameters.couplers)
-    
     grid.fig.suptitle("Coupler spectroscopy (amplitude)")
     plt.tight_layout()
     plt.show()
     node.results["figure"] = grid.fig
-
 
     # %% {Update_state}
     if node.parameters.load_data_id is None:
         node.machine = machine
         with node.record_state_updates():
             for q in drive_q:
-                if node.parameters.Driving_LO_GHz is None:
-                    q.xy.opx_output.upconverter_frequency = drive_LO_original[q.name] # revert the driving LO
-                else:
-                    q.xy.opx_output.upconverter_frequency = node.parameters.Driving_LO_GHz * 1e9
-                x180_length = q.xy.operations["x180"].length
-                x180_amp = q.xy.operations["x180"].amplitude
+                print(q.name)
                 if not np.isnan(result.sel(qubit=q.name).position.values):
                     if flux_point == "arbitrary":
                         q.arbitrary_intermediate_frequency = float(
@@ -326,25 +328,23 @@ if not node.parameters.simulate:
                         )
                         q.z.arbitrary_offset = arb_flux_bias_offset[q.name]
                     else:
-                        coupler[0].extras["RD"]["IF"] += float(result.sel(qubit=q.name).position.values)
-                        q.xy.operations["x180_cp"] = pulses.DragCosinePulse(
-                            amplitude=0.3,
-                            alpha=0.0,
-                            anharmonicity=f"#/qubits/{q.name}/anharmonicity",
-                            length=x180_length,
-                            axis_angle=0,
-                            detuning=0,
-                            digital_marker="ON",
-                        )
-                        q.xy.operations["x90_cp"] = pulses.DragCosinePulse(
-                            amplitude=0.15,
-                            alpha=0.0,
-                            anharmonicity=f"#/qubits/{q.name}/anharmonicity",
-                            length=x180_length,
-                            axis_angle=0,
-                            detuning=0,
-                            digital_marker="ON",
-                        )
+                        q.xy.intermediate_frequency += float(result.sel(qubit=q.name).position.values)
+                        q.xy.operations["x180_cp"] = {
+                            "length": 100,
+                            "digital_marker": "ON",
+                            "axis_angle": 0,
+                            "amplitude": 0.2,
+                            "alpha": -0.7601,
+                            "anharmonicity": f"#/qubits/{q.name}/anharmonicity",
+                            "__class__": "quam.components.pulses.DragCosinePulse"}
+                        q.xy.operations["x90_cp"] = {
+                            "length": 100,
+                            "digital_marker": "ON",
+                            "axis_angle": 0,
+                            "amplitude": 0.1,
+                            "alpha": -0.7601,
+                            "anharmonicity": f"#/qubits/{q.name}/anharmonicity",
+                            "__class__": "quam.components.pulses.DragCosinePulse"}
         node.results["ds"] = ds
 
         # %% {Save_results}

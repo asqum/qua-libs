@@ -34,11 +34,9 @@ import numpy as np
 
 # %% {Node_parameters}
 class Parameters(NodeParameters):
-    coupler: str = 'coupler_q3_q4'
+    coupler: str = 'coupler_q4_q5'
     coupler_flux_amp:float = -0.235
-    detector_qb:str = 'q4'
-    driver_qb:str = 'q3'
-    num_averages: int = 3000
+    num_averages: int = 2000
     min_wait_time_in_ns: int = 16
     max_wait_time_in_ns: int = 150016
     wait_time_step_in_ns: int = 1500
@@ -58,16 +56,23 @@ node = QualibrationNode(name="05x_coupler_T1", parameters=Parameters())
 u = unit(coerce_to_integer=True)
 # Instantiate the QuAM class from the state file
 machine = QuAM.load()
+
+# Get the relevant QuAM components
+
+coupler = [machine.qubit_pairs[node.parameters.coupler]] # currently supports 1 coupler a time only.
+drive_q = [machine.qubits[coupler[0].extras["RD"]["driven_q"]]]
+detector_q = [machine.qubits[coupler[0].extras["RD"]["readout_q"]]]
+# Change driving LO
+drive_LO_original = {drive_q[0].name: drive_q[0].xy.opx_output.upconverter_frequency}
+drive_q[0].xy.opx_output.upconverter_frequency = coupler[0].extras["RD"]["LO"]
+
 # Generate the OPX and Octave configurations
 config = machine.generate_config()
 # Open Communication with the QOP
 if node.parameters.load_data_id is None:
     qmm = machine.connect()
     
-# Get the relevant QuAM components
-drive_q = [machine.qubits[node.parameters.driver_qb]]
-detector_q = [machine.qubits[node.parameters.detector_qb]]
-coupler = [machine.qubit_pairs[node.parameters.coupler]] # currently supports 1 coupler a time only.
+
 
 # 
 detuned_qs = [machine.qubits[q] for q in node.parameters.coupler.split("_")[1:]]
@@ -106,6 +111,7 @@ with program() as t1:
             machine.set_all_fluxes(flux_point=flux_point, target=qubit)
             if "c" in qubit.id: qubit.z.set_dc_offset(qubit.z.joint_offset) # for coupler-test case
             qubit.z.settle()
+        qubit.xy.update_frequency(coupler[0].extras["RD"]["IF"])
         qubit.align()
 
         with for_(n, 0, n < n_avg, n + 1):
@@ -116,26 +122,20 @@ with program() as t1:
                 #     active_reset_simple(qubit, "readout")
                 # else:
                 if not node.parameters.simulate:
-                    qubit.resonator.wait(qubit.thermalization_time * u.ns)
-                else:
-                    qubit.resonator.wait(16 * u.ns)
-                qubit.align()
+                    if qubit.thermalization_time//5 > coupler[0].extras['T1']*1e9:
+                        wait(qubit.thermalization_time * u.ns)
+                    else:
+                        wait(5*coupler[0].extras['T1']*1e9 * u.ns)
+                align()
                 if not node.parameters.debug:
                     qubit.xy.play("x180_cp")
                 align()
                 coupler[0].coupler.play("const", amplitude_scale=node.parameters.coupler_flux_amp/coupler[0].coupler.operations["const"].amplitude, duration=t)
                 for q in detuned_qs:
-                    q.z.play("const", amplitude_scale=0.15 / q.z.operations["const"].amplitude, duration=t)
-                # # qubit.z.wait(20)
-                # # qubit.z.play(
-                # #     "const",
-                # #     amplitude_scale=arb_flux_bias_offset[qubit.name] / qubit.z.operations["const"].amplitude,
-                # #     duration=t,
-                # # )
-                # # qubit.z.wait(20)
-                # # qubit.align()
+                    q.z.play("const", amplitude_scale=0.25 / q.z.operations["const"].amplitude, duration=t)
+                
                 align()
-                wait(500) # 2µs settle down time after the flux pulse, please increase the shots
+                wait(25) # 100 ns flux settle down time.
                 
 
                 # Measure the state of the resonators
@@ -240,7 +240,10 @@ if not node.parameters.simulate:
 
     # %% {Save_results}
     if node.parameters.load_data_id is None:
-    
+        with node.record_state_updates():
+            if node.parameters.load_data_id is None:
+                for q in drive_q:
+                    q.xy.opx_output.upconverter_frequency = drive_LO_original[q.name] # revert the driving LO
         node.results["initial_parameters"] = node.parameters.model_dump()
         node.machine = machine
         node.save()

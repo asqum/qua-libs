@@ -69,15 +69,14 @@ def plot_ramsey_fit(ds: xr.Dataset, qubits: List[Transmon], fits: Dict[str, Rams
 
 # %% {Node_parameters}
 class Parameters(NodeParameters):
-    coupler: str = 'coupler_q3_q4'
-    detector_qb:str = 'q4'
-    driver_qb:str = 'q3'
+    coupler: str = 'coupler_q4_q5'
+
     num_averages: int = 1000
     min_wait_time_in_ns: int = 16
-    max_wait_time_in_ns: int = 5008
-    wait_time_step_in_ns: int = 100
+    max_wait_time_in_ns: int = 3008
+    wait_time_step_in_ns: int = 30
     flux_point_joint_or_independent_or_arbitrary: Literal['joint', 'independent'] = 'independent'   
-    simulate: bool = True
+    simulate: bool = False
     timeout: int = 100
     debug: bool = False
 
@@ -91,15 +90,22 @@ node = QualibrationNode(
 u = unit(coerce_to_integer=True)
 # Instantiate the QuAM class from the state file
 machine = QuAM.load()
+
+# Get the relevant QuAM components
+coupler = [machine.qubit_pairs[node.parameters.coupler]] # currently supports 1 coupler a time only.
+drive_q = [machine.qubits[coupler[0].extras["RD"]["driven_q"]]]
+detector_q = [machine.qubits[coupler[0].extras["RD"]["readout_q"]]]
+
+# Change driving LO
+drive_LO_original = {drive_q[0].name: drive_q[0].xy.opx_output.upconverter_frequency}
+drive_q[0].xy.opx_output.upconverter_frequency = coupler[0].extras["RD"]["LO"]
+
 # Generate the OPX and Octave configurations
 config = machine.generate_config()
 # Open Communication with the QOP
 qmm = machine.connect()
 
-# Get the relevant QuAM components
-drive_q = [machine.qubits[node.parameters.driver_qb]]
-detector_q = [machine.qubits[node.parameters.detector_qb]]
-coupler = [machine.qubit_pairs[node.parameters.coupler]] # currently supports 1 coupler a time only.
+
 
 # pi pulse duration check
 if not node.parameters.simulate:
@@ -146,7 +152,7 @@ with program() as t2echo:
             # Wait for the flux bias to settle
             
             qubit.z.settle()
-
+        drive_q[0].xy.update_frequency(coupler[0].extras["RD"]["IF"])
         align()
         
 
@@ -155,7 +161,10 @@ with program() as t2echo:
             with for_(*from_array(t, idle_times)):
                 
                 if not node.parameters.simulate:
-                    qubit.resonator.wait(qubit.thermalization_time * u.ns)
+                    if qubit.thermalization_time//5 > coupler[0].extras['T1']*1e9:
+                        wait(qubit.thermalization_time * u.ns)
+                    else:
+                        wait(5*coupler[0].extras['T1']*1e9 * u.ns)
                 align()
                 
                     
@@ -291,6 +300,9 @@ if not node.parameters.simulate:
 
 
 # %%
+with node.record_state_updates():
+    for q in drive_q:
+        q.xy.opx_output.upconverter_frequency = drive_LO_original[q.name] # revert the driving LO
 node.results['initial_parameters'] = node.parameters.model_dump()
 node.machine = machine
 node.save()
