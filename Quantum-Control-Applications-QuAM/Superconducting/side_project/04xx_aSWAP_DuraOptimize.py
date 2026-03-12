@@ -28,6 +28,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from time import time
 import xarray as xr
+from time import sleep
 
 # %% {Node_parameters}
 class Parameters(NodeParameters):
@@ -40,7 +41,7 @@ class Parameters(NodeParameters):
     min_amp_factor: float = 0.0 #0.001
     max_amp_factor: float = 1.79 #2.0
     amp_factor_step: float = 1.79/100 
-    debug:bool = False
+    debug:bool = True
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
     simulate: bool = False
     simulation_duration_ns: int = 500
@@ -65,9 +66,10 @@ detector_q = [machine.qubits[coupler[0].extras["RD"]["readout_q"]]]
 max_length_ns = detector_q[0].z.operations["aSWAP"].length if node.parameters.max_length_ns > detector_q[0].z.operations["aSWAP"].length else node.parameters.max_length_ns
 
 # Change driving LO
-drive_LO_original = {drive_q[0].name: drive_q[0].xy.opx_output.upconverter_frequency}
-original_truncate_len = {detector_q[0].name: detector_q[0].z.operations['aSWAP'].truncate_len}
-drive_q[0].xy.opx_output.upconverter_frequency = coupler[0].extras["RD"]["LO"]
+if node.parameters.load_data_id is None and not node.parameters.simulate:
+    drive_LO_original = {drive_q[0].name: drive_q[0].xy.opx_output.upconverter_frequency}
+    original_truncate_len = {detector_q[0].name: detector_q[0].z.operations['aSWAP'].truncate_len}
+    drive_q[0].xy.opx_output.upconverter_frequency = coupler[0].extras["RD"]["LO"]
 
 # %% {QUA_program}
 n_avg = node.parameters.num_averages  # The number of averages
@@ -83,14 +85,15 @@ amps = np.arange(
     node.parameters.amp_factor_step,
 )
 
-duras = np.arange(
-    4*(node.parameters.min_length_ns//4),
-    4*(max_length_ns//4),
-    4*(node.parameters.length_step_ns//4),
-)
+if not node.parameters.debug:
+    duras = np.arange(
+        4*(node.parameters.min_length_ns//4),
+        4*(max_length_ns//4),
+        4*(node.parameters.length_step_ns//4),
+    )
+else:
+    duras = np.arange(10)
 
-if node.parameters.debug:
-    duras = np.array([200]*10)
 
 # Number of applied Rabi pulses sweep
 if N_pi > 1:
@@ -123,7 +126,7 @@ with program() as power_rabi:
             qubit.z.settle()
         qubit.xy.update_frequency(coupler[0].extras["RD"]["IF"])
         qubit.align()
-        print(detector_q[0].z.operations['aSWAP'].truncate_len)
+
 
         with for_(n, 0, n < n_avg, n + 1):
             save(n, n_st)
@@ -159,8 +162,9 @@ if not node.parameters.load_data_id:
     dss = []
     start = time()
     for i, truncate_dura in enumerate(duras):
-        
-        # detector_q[0].z.operations['aSWAP'].truncate_len = truncate_dura
+        if not node.parameters.debug:
+            detector_q[0].z.operations['aSWAP'].truncate_len = truncate_dura
+
         # Generate the OPX and Octave configurations
         config = machine.generate_config()
         
@@ -200,7 +204,10 @@ if not node.parameters.load_data_id:
                 d = d.drop_vars('qubit')
 
             # 2. 強制建立 duration 維度
-            d = d.expand_dims(duration=[i])
+            if node.parameters.debug:
+                d = d.expand_dims(duration=[i])
+            else:
+                d = d.expand_dims(duration=[truncate_dura])
 
             # 3. 重新建立 qubit 維度座標 (確保它是 array 而不是 scalar)
             # 假設 drive_q 裡面有多個 qubit 名稱
@@ -213,6 +220,11 @@ if not node.parameters.load_data_id:
                 abs_amp=(["qubit", "amp"], abs_amp_data)
             )
             dss.append(d)
+            for click in range(10):
+                print(".",end=' ')
+                sleep(1)
+
+
     ds = xr.concat(dss, dim='duration')
     node.results = {"ds": ds}
     end = time()
@@ -222,14 +234,10 @@ else:
     # 
 # %%
 print(f"{round(end-start,1)} sec.")
-# 隨機挑兩個 duration，檢查它們的內容是否真的不同
-print(ds.state.sel(duration=0).values[:5])
-print(ds.state.sel(duration=1).values[:5])
-
 
 # %%
 fit_res = fit_oscillation(ds.state, dim="amp")
-def plot_fitting_verification(ds, fit_res, q_name):
+def plot_fitting_verification(ds, fit_res, q_name, debug_mode:bool):
     # --- 關鍵修正 1: 強制將 fit_res 的座標順序對齊 ds ---
     # 這樣可以確保兩者的 duration 順序完全一致
     fit_res = fit_res.reindex_like(ds.state, method=None)
@@ -275,18 +283,22 @@ def plot_fitting_verification(ds, fit_res, q_name):
             ax.scatter(x_amp, y_data, s=10, color="gray", alpha=0.3)
             ax.set_facecolor('#fff0f0') # 失敗的格線塗成淡紅色
 
-        ax.set_title(f"Dur: {d:.2f}")
+        if debug_mode:
+            ax.set_title(f"Repeat #{int(d)}")
+        else:
+            ax.set_title(f"Dur: {d:.2f}")
         if i == 0: ax.legend()
         
     for j in range(i + 1, len(axes)):
         fig.delaxes(axes[j])
         
     plt.suptitle(f"Fitting Verification for Qubit: {q_name}", fontsize=16)
-    plt.show()
+    return fig
 
 # 使用範例
 # 假設你的擬合結果儲存在 fit_res
-plot_fitting_verification(ds, fit_res, ds.qubit.values[0])
+fig = plot_fitting_verification(ds, fit_res, ds.qubit.values[0], node.parameters.debug)
+node.results["slices"] = fig
 
 
 # %% {Data_analysis & plot
@@ -303,7 +315,7 @@ if not node.parameters.simulate:
     
     fit_results[coupler[0].name] = fit_res
 
-    def plot_heatmap_with_snr(ds, fit_res, q_name):
+    def plot_heatmap_with_snr(ds, fit_res, q_name, debug_mode:bool):
         da_q = ds.state.sel(qubit=q_name)
         durations = ds.duration.values
         amps = ds.amp.values
@@ -339,7 +351,10 @@ if not node.parameters.simulate:
         # 繪製 Heatmap
         im = ax1.pcolormesh(amps, durations, da_q.values, cmap="RdBu_r", shading='auto', alpha=0.9)
         ax1.set_xlabel("pi Amplitude (amp)", color="black")
-        ax1.set_ylabel("Truncated duration (ns)") # 修正標籤名稱
+        if debug_mode:
+            ax1.set_ylabel("Repeat index") # 修正標籤名稱
+        else:
+            ax1.set_ylabel("Truncated duration (ns)") # 修正標籤名稱
         
         ax1.yaxis.set_minor_locator(AutoMinorLocator(n=5))
         # 將 Grid 設淡一點，不然會遮住數據
@@ -362,16 +377,18 @@ if not node.parameters.simulate:
         return fig
 
     # 呼叫函式
-    fig = plot_heatmap_with_snr(ds, fit_res, ds.qubit.values[0])
-    node.results["figure"] = fig
+    fig = plot_heatmap_with_snr(ds, fit_res, ds.qubit.values[0], node.parameters.debug)
+    node.results["heatmap"] = fig
     plt.show()
-    # %% {Save_results}
-    
-    if node.parameters.load_data_id is None:
 
-        with node.record_state_updates():
-            for q in drive_q:
-                q.xy.opx_output.upconverter_frequency = drive_LO_original[q.name] # revert the driving LO
+
+
+
+    # %% {Save_results}
+    if node.parameters.load_data_id is None and not node.parameters.simulate:
+        for q in drive_q:
+            q.xy.opx_output.upconverter_frequency = drive_LO_original[q.name] # revert the driving LO
+        if not node.parameters.debug:
             for q in detector_q:
                 q.z.operations['aSWAP'].truncate_len = original_truncate_len[q.name]
         
@@ -381,9 +398,4 @@ if not node.parameters.simulate:
         node.save()
 
 # %%
-print(dss)
-# %%
-for ds in dss:
-    plt.plot(ds.state.values[0][0])
-    plt.show()
-# %%
+

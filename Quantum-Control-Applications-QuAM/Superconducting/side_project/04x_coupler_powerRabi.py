@@ -5,6 +5,9 @@ The Power Rabi for the target coupler.
 Prerequisites:
     - the driving frequency for the target coupler.
 
+Updates:
+    - the pi pulse amplitude for this coupler.
+
 """
 
 
@@ -32,7 +35,7 @@ import numpy as np
 class Parameters(NodeParameters):
 
     coupler: str = 'coupler_q4_q5'
-    num_averages: int = 2000
+    num_averages: int = 500
     operation_x180_or_any_90: Literal["x180_cp", "x90_cp"] = "x180_cp"
     min_amp_factor: float = 0.0 #0.001
     max_amp_factor: float = 1.79 #2.0
@@ -61,8 +64,9 @@ drive_q = [machine.qubits[coupler[0].extras["RD"]["driven_q"]]]
 detector_q = [machine.qubits[coupler[0].extras["RD"]["readout_q"]]]
 
 # Change driving LO
-drive_LO_original = {drive_q[0].name: drive_q[0].xy.opx_output.upconverter_frequency}
-drive_q[0].xy.opx_output.upconverter_frequency = coupler[0].extras["RD"]["LO"]
+if not node.parameters.simulate and node.parameters.load_data_id is None:
+    drive_LO_original = {drive_q[0].name: drive_q[0].xy.opx_output.upconverter_frequency}
+    drive_q[0].xy.opx_output.upconverter_frequency = coupler[0].extras["RD"]["LO"]
 
 # Generate the OPX and Octave configurations
 config = machine.generate_config()
@@ -285,16 +289,16 @@ if not node.parameters.simulate:
     node.results["figure"] = grid.fig
 
     # %% {Update_state}
-    
-    if node.parameters.load_data_id is None:
+    if node.parameters.load_data_id is None and not node.parameters.simulate:
         with node.record_state_updates():
             for q in drive_q:
-                q.xy.opx_output.upconverter_frequency = drive_LO_original[q.name] # revert the driving LO
                 q.xy.operations[operation].amplitude = fit_results[q.name]["Pi_amplitude"]
                 if operation == "x180_cp" and node.parameters.update_x90:
                     q.xy.operations["x90_cp"].amplitude = fit_results[q.name]["Pi_amplitude"] / 2
 
         # %% {Save_results}
+        for q in drive_q:
+            q.xy.opx_output.upconverter_frequency = drive_LO_original[q.name] # revert the driving LO
         node.outcomes = {q.name: "successful" for q in drive_q}
         node.results["initial_parameters"] = node.parameters.model_dump()
         node.machine = machine

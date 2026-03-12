@@ -37,18 +37,19 @@ from typing import Literal, Optional, List
 import matplotlib.pyplot as plt
 import numpy as np
 import warnings
+from quam_libs.lib.pulses import aSWAPPulse
 
 
 # %% {Node_parameters}
 class Parameters(NodeParameters):
 
     qubits: Optional[List[str]] = None #["q3"] #["q1"]
-    num_averages: int = 50
-    min_flux_offset_in_v: float = -0.5
-    max_flux_offset_in_v: float = 0.5
-    num_flux_points: int = 201
+    num_averages: int = 300
+    min_flux_offset_in_v: float = -0.9
+    max_flux_offset_in_v: float = 0.9
+    num_flux_points: int = 75
     frequency_span_in_mhz: float = 7.5 #15
-    frequency_step_in_mhz: float = 0.05 #0.1
+    frequency_step_in_mhz: float = 0.1 #0.1
     flux_point_joint_or_independent: Literal["joint", "independent", ""] = "independent"
     input_line_impedance_in_ohm: float = 50
     line_attenuation_in_db: float = 0
@@ -101,7 +102,6 @@ dcs = np.linspace(
 span = node.parameters.frequency_span_in_mhz * u.MHz
 step = node.parameters.frequency_step_in_mhz * u.MHz
 dfs = np.arange(-span / 2, +span / 2, step)
-
 flux_point = node.parameters.flux_point_joint_or_independent  # 'independent' or 'joint'
 update_flux_min = node.parameters.update_flux_min  # Update the min flux point
 
@@ -320,6 +320,13 @@ if not node.parameters.simulate:
                 q.phi0_current = (
                     fit_results[q.name]["dv_phi0"] * node.parameters.input_line_impedance_in_ohm * attenuation_factor
                 )
+                q.z.operations["aSWAP"] = aSWAPPulse(
+                    truncate_len=400,
+                    slope_direction=-1,
+                    amplitude=abs(fit_results[q.name]['min_offset']-fit_results[q.name]['offset']),
+                    length=400,
+                )
+                
 
         # %% {Save_results}
         node.outcomes = {q.name: "successful" for q in qubits}

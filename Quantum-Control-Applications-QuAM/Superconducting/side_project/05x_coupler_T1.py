@@ -56,8 +56,9 @@ drive_q = [machine.qubits[coupler[0].extras["RD"]["driven_q"]]]
 detector_q = [machine.qubits[coupler[0].extras["RD"]["readout_q"]]]
 
 # Change driving LO
-drive_LO_original = {drive_q[0].name: drive_q[0].xy.opx_output.upconverter_frequency}
-drive_q[0].xy.opx_output.upconverter_frequency = coupler[0].extras["RD"]["LO"]
+if not node.parameters.simulate and node.parameters.load_data_id is None:
+    drive_LO_original = {drive_q[0].name: drive_q[0].xy.opx_output.upconverter_frequency}
+    drive_q[0].xy.opx_output.upconverter_frequency = coupler[0].extras["RD"]["LO"]
 
 # Generate the OPX and Octave configurations
 config = machine.generate_config()
@@ -233,18 +234,20 @@ if not node.parameters.simulate:
     plt.show()
     node.results["figure_raw"] = grid.fig
 
-    # %% {Save_results}
-    if node.parameters.load_data_id is None:
+    # %% {update state}
+    if not node.parameters.simulate and node.parameters.load_data_id is None:
         with node.record_state_updates():
-            if node.parameters.load_data_id is None:
+            if not node.parameters.simulate:
                 for q in drive_q:
-                    q.xy.opx_output.upconverter_frequency = drive_LO_original[q.name] # revert the driving LO
                     if (
                     float(tau.sel(qubit=q.name).values) > 0
                     and tau_error.sel(qubit=q.name).values / float(tau.sel(qubit=q.name).values) < 1
                     ):
                         coupler[0].extras['T1'] = float(tau.sel(qubit=q.name).values) * 1e-6
-    
+
+        #%% {save data}
+        for q in drive_q:
+            q.xy.opx_output.upconverter_frequency = drive_LO_original[q.name] # revert the driving LO
         node.results["initial_parameters"] = node.parameters.model_dump()
         node.machine = machine
         node.save()

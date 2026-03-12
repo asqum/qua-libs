@@ -33,9 +33,9 @@ import numpy as np
 class Parameters(NodeParameters):
 
     couplers: str = 'coupler_q4_q5'
-    num_averages: int = 1000
+    num_averages: int = 500
     operation: str = "saturation"
-    operation_amplitude_factor: Optional[float] = 0.03    # 0.05 , 0.1 good
+    operation_amplitude_factor: Optional[float] = 0.05    # 0.05 , 0.1 good
     operation_len_in_ns: Optional[int] = None
     Driving_LO_GHz:float|None = None      # None use state recorded. Otherwise, use this value as the new LO (and will be updated into state)
     frequency_span_in_mhz: float = 300 #200, 4, 800
@@ -65,13 +65,19 @@ coupler = [machine.qubit_pairs[node.parameters.couplers]] # currently supports 1
 drive_q = [machine.qubits[coupler[0].extras["RD"]["driven_q"]]]
 detector_q = [machine.qubits[coupler[0].extras["RD"]["readout_q"]]]
 # Change driving LO
-drive_LO_original = {drive_q[0].name: drive_q[0].xy.opx_output.upconverter_frequency}
-if node.parameters.Driving_LO_GHz is None:
-    drive_q[0].xy.opx_output.upconverter_frequency = coupler[0].extras["RD"]["LO"]
-else:
-    drive_q[0].xy.opx_output.upconverter_frequency = node.parameters.Driving_LO_GHz*1e9
+if node.parameters.load_data_id is None and not node.parameters.simulate:
+    drive_LO_original = {drive_q[0].name: drive_q[0].xy.opx_output.upconverter_frequency}
+    if node.parameters.Driving_LO_GHz is None:
+        LO_to_plot = coupler[0].extras["RD"]["LO"]
+        drive_q[0].xy.opx_output.upconverter_frequency = coupler[0].extras["RD"]["LO"]
+    else:
+        LO_to_plot = node.parameters.Driving_LO_GHz*1e9
+        drive_q[0].xy.opx_output.upconverter_frequency = node.parameters.Driving_LO_GHz*1e9
 
 config = machine.generate_config()
+
+print(config['elements']['q3.xy'].keys())
+
 # Open Communication with the QOP
 if node.parameters.load_data_id is None:
     qmm = machine.connect()
@@ -213,7 +219,7 @@ if not node.parameters.simulate:
             {
                 "freq_full": (
                     ["qubit", "freq"],
-                    np.array([dfs + qubit_freqs[q.name] + detunings[q.name] for q in drive_q]),
+                    np.array([dfs + coupler[0].extras["RD"]["IF"] + LO_to_plot + detunings[q.name] for q in drive_q]),
                 )
             }
         )
@@ -257,9 +263,9 @@ if not node.parameters.simulate:
             used_amp = q.xy.operations["saturation"].amplitude * operation_amp
             print(
                 f"Drive frequency for {q.name} is "
-                f"{(result.sel(qubit = q.name).position.values + q.xy.RF_frequency) / 1e9:.6f} GHz"
+                f"{(result.sel(qubit = q.name).position.values +  coupler[0].extras['RD']['IF'] + LO_to_plot) / 1e9:.6f} GHz"
             )
-            fit_results[q.name]["drive_freq"] = result.sel(qubit=q.name).position.values + q.xy.RF_frequency
+            fit_results[q.name]["drive_freq"] = result.sel(qubit=q.name).position.values +  coupler[0].extras["RD"]["IF"] + LO_to_plot
             print(f"(shift of {result.sel(qubit = q.name).position.values/1e6:.3f} MHz)")
             factor_cw = float(target_peak_width / result.sel(qubit=q.name).width.values)
             factor_pi = np.pi / (result.sel(qubit=q.name).width.values * Pi_length * 1e-9)
@@ -309,14 +315,10 @@ if not node.parameters.simulate:
 
 
     # %% {Update_state}
-    if node.parameters.load_data_id is None:
+    if node.parameters.load_data_id is None and not node.parameters.simulate:
         node.machine = machine
         with node.record_state_updates():
             for q in drive_q:
-                if node.parameters.Driving_LO_GHz is None:
-                    q.xy.opx_output.upconverter_frequency = drive_LO_original[q.name] # revert the driving LO
-                else:
-                    q.xy.opx_output.upconverter_frequency = node.parameters.Driving_LO_GHz * 1e9
                 x180_length = q.xy.operations["x180"].length
                 x180_amp = q.xy.operations["x180"].amplitude
                 if not np.isnan(result.sel(qubit=q.name).position.values):
@@ -327,6 +329,8 @@ if not node.parameters.simulate:
                         q.z.arbitrary_offset = arb_flux_bias_offset[q.name]
                     else:
                         coupler[0].extras["RD"]["IF"] += float(result.sel(qubit=q.name).position.values)
+                        if node.parameters.Driving_LO_GHz is not None:
+                            coupler[0].extras["RD"]["LO"] = node.parameters.Driving_LO_GHz * 1e9
                         q.xy.operations["x180_cp"] = pulses.DragCosinePulse(
                             amplitude=0.3,
                             alpha=0.0,
@@ -348,6 +352,8 @@ if not node.parameters.simulate:
         node.results["ds"] = ds
 
         # %% {Save_results}
+        for q in drive_q:
+            q.xy.opx_output.upconverter_frequency = drive_LO_original[q.name] # revert the driving LO
         node.outcomes = {q.name: "successful" for q in coupler}
         node.results["initial_parameters"] = node.parameters.model_dump()
         

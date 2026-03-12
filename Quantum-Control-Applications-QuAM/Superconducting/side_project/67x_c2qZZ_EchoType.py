@@ -97,8 +97,9 @@ drive_q = [machine.qubits[coupler[0].extras["RD"]["driven_q"]]]
 detector_q = [machine.qubits[coupler[0].extras["RD"]["readout_q"]]]
 
 # Change driving LO
-drive_LO_original = {drive_q[0].name: drive_q[0].xy.opx_output.upconverter_frequency}
-drive_q[0].xy.opx_output.upconverter_frequency = coupler[0].extras["RD"]["LO"]
+if not node.parameters.simulate:
+    drive_LO_original = {drive_q[0].name: drive_q[0].xy.opx_output.upconverter_frequency}
+    drive_q[0].xy.opx_output.upconverter_frequency = coupler[0].extras["RD"]["LO"]
 
 # Generate the OPX and Octave configurations
 config = machine.generate_config()
@@ -299,11 +300,12 @@ if not node.parameters.simulate:
     
 
 
-# %%
-with node.record_state_updates():
+# %% {save data}
+if not node.parameters.simulate:
+    
     for q in drive_q:
         q.xy.opx_output.upconverter_frequency = drive_LO_original[q.name] # revert the driving LO
-node.results['initial_parameters'] = node.parameters.model_dump()
-node.machine = machine
-node.save()
+    node.results['initial_parameters'] = node.parameters.model_dump()
+    node.machine = machine
+    node.save()
 # %%

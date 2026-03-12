@@ -102,7 +102,7 @@
     },
     "network": {
         "host": "10.21.19.201",
-        "port": 9514,
+        "port": 9554,
         "cluster_name": "QPX1000_4",
         "octave_ips": [],
         "octave_ports": []
