@@ -16,7 +16,8 @@ Result:
 
 # %% Imports
 from qualibrate import QualibrationNode, NodeParameters
-from quam_libs.components import QuAM
+from quam_libs.components import QuAM, Transmon, TransmonPair
+
 from quam_libs.macros import qua_declaration, active_reset, readout_state, active_reset_simple
 from quam_libs.lib.qua_datasets import convert_IQ_to_V
 from quam_libs.lib.plot_utils import QubitGrid, grid_iter
@@ -40,7 +41,7 @@ from typing import Literal, Optional, List
 class Parameters(NodeParameters):
 
     qubits: Optional[List[str]] = None
-    source: str = "q5"
+    source: str = "coupler_q1_q2"
 
     num_averages: int = 50
 
@@ -48,12 +49,12 @@ class Parameters(NodeParameters):
     operation_amplitude_factor: Optional[float] = 0.1 #0.004, 0.02
     operation_len_in_ns: float = 100
 
-    source_flux_span: float = 0.4
+    source_flux_span: float = 1
     num_flux_points: int = 51
 
-    expect_crosstalk: float = 0.1
-    qubits_bias: float = 0.04
-    qubits_freq_shift: float = -15  #MHz
+    expect_crosstalk: float = 0.05
+    qubits_bias: float = 0
+    qubits_freq_shift: float = 0  #MHz
 
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
     reset_type: Literal["active", "thermal"] = "thermal"
@@ -93,10 +94,13 @@ for qubit in qubits[:]:  # iterate over a copy to safely remove
     if qubit.id == node.parameters.source:
         print(f"Removing qubit '{qubit.id}' because it matches the source '{node.parameters.source}'")
         qubits.remove(qubit)
-if node.parameters.source is None or node.parameters.source == "":
-    raise ValueError("node.parameters.source cannot be None or an empty string")
-else:
+try:
     source = machine.qubits[node.parameters.source]
+except:
+    try:
+        source = machine.qubit_pairs[node.parameters.source]
+    except:
+        raise ValueError("node.parameters.source is not a qubit or a coupler")
 
 num_qubits = len(qubits)
 # %% QUA program
@@ -130,38 +134,47 @@ with program() as flux_xtalk:
     machine.apply_all_couplers_to_min()
 
     for i, qubit in enumerate(qubits):
-        machine.set_all_fluxes(flux_point=flux_point, target=qubit)
-        qubit.z.settle()
-        source.z.settle()
-        qubit.align()
-        source.align()
+        if not node.parameters.simulate:
+            machine.set_all_fluxes(flux_point=flux_point, target=qubit)
+            qubit.z.settle()
+            # if isinstance(source, TransmonPair):
+            #     source.coupler.settle()
+            # else:
+            #     source.z.settle()
+            align()
+
 
         with for_(n, 0, n < n_avg, n + 1):
             save(n, n_st)
             with for_(*from_array(s_dz, source_dzs)):
-
                 with for_(*from_array(q_dz, qubits_dzs)):
-                    if node.parameters.reset_type == "active":
-                        active_reset(qubit, "readout")
-                    else:
-                        qubit.resonator.wait(qubit.thermalization_time * u.ns)
-                        qubit.align()
+                    if not node.parameters.simulate:
+                        if node.parameters.reset_type == "active":
+                            active_reset(qubit, "readout")
+                        else:
+                            qubit.resonator.wait(qubit.thermalization_time * u.ns)
+                            qubit.align()
                     # Update the qubit frequency
                     qubit.xy.update_frequency(qubit.xy.intermediate_frequency + qubits_f_shift, keep_phase=True)
                     duration = operation_len * u.ns if operation_len is not None else qubit.xy.operations[operation].length * u.ns
                     
-                    source.z.play("const", amplitude_scale=s_dz / source.z.operations["const"].amplitude, duration=duration)
+                    align()
+                    if isinstance(source, TransmonPair):
+                        source.coupler.play("const", amplitude_scale=s_dz / source.coupler.operations["const"].amplitude, duration=duration)
+                    else:
+                        source.z.play("const", amplitude_scale=s_dz / source.z.operations["const"].amplitude, duration=duration)
                     qubit.z.play("const", amplitude_scale=q_dz / qubit.z.operations["const"].amplitude, duration=duration)
                     qubit.xy.play(operation,amplitude_scale=operation_amp,duration=duration,)
-                    source.align()
-                    qubit.align()
+                    align()
+                    qubit.xy.update_frequency(qubit.xy.intermediate_frequency, keep_phase=True)
+                    align()
+
                     # Measure the state of the resonators
                     qubit.resonator.measure("readout", qua_vars=(I[i], Q[i]))
                     # save data
                     save(I[i], I_st[i])
                     save(Q[i], Q_st[i])
                     # Update the qubit frequency
-                    qubit.xy.update_frequency(qubit.xy.intermediate_frequency, keep_phase=True)
 
 
     with stream_processing():
@@ -268,7 +281,7 @@ if not node.parameters.simulate:
         fitted.loc[qubit].plot(ax=ax, linewidth=0.5, ls="--", color="r")
         peaks.position.loc[qubit].plot(ax=ax, ls="", marker=".", color="g", ms=0.5)
         ax.set_ylabel("qubit z bias (V)")
-        ax.set_title(f"{qubit['qubit']}:{xtalk.sel(qubit=qubit['qubit']).values:.2f}")
+        ax.set_title(f"{qubit['qubit']}:{xtalk.sel(qubit=qubit['qubit']).values:.4f}")
         ax.set_xlabel("source z bias (V)")
 
     grid.fig.suptitle(f"crosstalk from {source.name}")
@@ -281,7 +294,6 @@ if not node.parameters.simulate:
     #     with node.record_state_updates():
     #         for q in qubits:
     #             if not np.isnan(xtalk.sel(qubit=q.name).values):
-
     #                 q.xy.intermediate_frequency += fit_results[q.name]["drive_freq"]
     #                 q.freq_vs_flux_01_quad_term = fit_results[q.name]["quad_term"]
 
