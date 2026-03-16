@@ -20,7 +20,9 @@ from quam_libs.macros import qua_declaration, readout_state_coupler, active_rese
 
 import matplotlib.pyplot as plt
 import numpy as np
-
+from time import time
+import xarray as xr
+from scipy.stats import norm
 import matplotlib
 from quam_libs.lib.plot_utils import QubitGrid, grid_iter
 from quam_libs.lib.save_utils import fetch_results_as_xarray
@@ -37,6 +39,7 @@ class Parameters(NodeParameters):
     flux_point_joint_or_independent_or_arbitrary: Literal['joint', 'independent'] = 'independent'   
     simulate: bool = False
     timeout: int = 100
+    histo_num:int = 5
 
 node = QualibrationNode(
     name="06x_coupler_T2echo",
@@ -164,87 +167,146 @@ if node.parameters.simulate:
     node.save()
 
 else:
-    with qm_session(qmm, config, timeout=node.parameters.timeout) as qm:
-        job = qm.execute(t2echo)
-        # Get results from QUA program
-        for i in range(len(drive_q)):
-            print(f"Fetching results for qubit {drive_q[i].name}")
-            data_list = ["n"]
-            results = fetching_tool(job, data_list, mode="live")
-        # Live plotting
-        # fig, axes = plt.subplots(2, num_qubits, figsize=(4 * num_qubits, 8))
-        # interrupt_on_close(fig, job)  # Interrupts the job when closing the figure
-            while results.is_processing():
-            # Fetch results
-                fetched_data = results.fetch_all()
-                n = fetched_data[0]
+    dss = []
+    start = time()
+    for jj in range(node.parameters.histo_num):
+        try:
+            with qm_session(qmm, config, timeout=node.parameters.timeout) as qm:
+                job = qm.execute(t2echo)
+                # Get results from QUA program
+                for i in range(len(drive_q)):
+                    print(f"Fetching results for qubit {drive_q[i].name}")
+                    data_list = ["n"]
+                    results = fetching_tool(job, data_list, mode="live")
+                # Live plotting
+                # fig, axes = plt.subplots(2, num_qubits, figsize=(4 * num_qubits, 8))
+                # interrupt_on_close(fig, job)  # Interrupts the job when closing the figure
+                    while results.is_processing():
+                    # Fetch results
+                        fetched_data = results.fetch_all()
+                        n = fetched_data[0]
 
-                progress_counter(n, n_avg, start_time=results.start_time)
-
-
-# %%
-if not node.parameters.simulate:
-    # {Data_fetching_and_dataset_creation}
-    # Fetch the data from the OPX and convert it into a xarray with corresponding axes (from most inner to outer loop)
-    ds = fetch_results_as_xarray(job.result_handles, drive_q, {"idle_time": idle_times})
-
+                        progress_counter(n, n_avg, start_time=results.start_time)
+            ds = fetch_results_as_xarray(job.result_handles, coupler, {"idle_time": idle_times})
+            dss.append(ds)
+        except:
+            print("Error got, break the loop and step into analysis.")
+            break
+    end = time()
+    print(f"Total {round(end-start,1)} sec for {node.parameters.histo_num} counts")
+    ds = xr.concat(dss, dim='iteration')
     ds = ds.assign_coords(idle_time=8*ds.idle_time/1e3)  # convert to usec
     ds.idle_time.attrs = {'long_name': 'idle time', 'units': 'usec'}
+    node.results = {"ds": ds}
+        
 
-# %%
+# %% {Analysis}
 if not node.parameters.simulate:
     
-    fit_data = fit_decay_exp(ds.state, 'idle_time')
-    fit_data.attrs = {'long_name' : 'time', 'units' : 'usec'}
-    fitted =  decay_exp(ds.idle_time,
-                        fit_data.sel(
-                            fit_vals="a"),
-                        fit_data.sel(
-                            fit_vals="offset"),
-                        fit_data.sel(fit_vals="decay"))
+    qbs = ds.qubit.values
+    iterations = ds.iteration.values
 
-
-    decay = fit_data.sel(fit_vals = 'decay')
-    decay.attrs = {'long_name' : 'decay', 'units' : 'nSec'}
-
-    decay_res = fit_data.sel(fit_vals = 'decay_decay')
-    decay_res.attrs = {'long_name' : 'decay', 'units' : 'nSec'}
     
-    tau = -1/fit_data.sel(fit_vals='decay')
-    tau.attrs = {'long_name' : 'T2*', 'units' : 'uSec'}
+    t2_collection = {q: [] for q in qbs}
+    fit_collection = {q: [] for q in qbs}
 
-    tau_error = -tau * (np.sqrt(decay_res)/decay)
-    tau_error.attrs = {'long_name' : 'T2* error', 'units' : 'uSec'}
+    for q_name in qbs:
+        for iter_val in iterations:
+            
+            ds_sub = ds.sel(qubit=q_name, iteration=iter_val)
+            
+            
+            
+            fit_data = fit_decay_exp(ds_sub.state, "idle_time")
+            
 
-node.results = {"ds": ds}
-# %%
-if not node.parameters.simulate:
+            fit_collection[q_name] = fit_data
+            
+            
+            decay_val = fit_data.sel(fit_vals="decay").values
+            tau_val = -1 / decay_val
+            t2_collection[q_name].append(tau_val)
+
+
+    # %% {Plot}
     grid_names = [q.grid_location for q in drive_q]
     grid = QubitGrid(ds, grid_names)
+    mu_collection, sig_collection = {}, {}
     for ax, qubit in grid_iter(grid):
+        ## HARDcoded:
+        qubit['qubit'] = coupler[0].name
+        if node.parameters.histo_num > 1:
+            data = np.array(t2_collection[qubit['qubit']])
+            counts, bins, _ = ax.hist(data, bins=15, alpha=0.7, color='skyblue', edgecolor='white', label='Counts')
+            ### Normal distribution
+            mu, sigma = norm.fit(data)
+            bin_width = bins[1] - bins[0]
+            scaling_factor = len(data) * bin_width
+            x = np.linspace(min(data), max(data), 100)
+            p = norm.pdf(x, mu, sigma) * scaling_factor  
+            mu_collection[qubit['qubit']], sig_collection[qubit['qubit']] = mu, sigma
         
-        ds.sel(qubit = qubit['qubit']).state.plot(ax = ax)
-        ax.set_ylabel('State')
-        
-        ax.plot(ds.idle_time, fitted.loc[qubit], 'r--')
-        ax.set_title(node.parameters.coupler)
-        ax.set_xlabel('Idle_time (uS)')
-        ax.text(0.1, 0.9, f'T2e = {tau.sel(qubit = qubit["qubit"]).values:.1f} + {tau_error.sel(qubit = qubit["qubit"]).values:.1f} usec', transform=ax.transAxes, fontsize=10,
-        verticalalignment='top', bbox=dict(facecolor='white', alpha=0.5))
-    grid.fig.suptitle('T2 echo')
+            ### Plot
+            ax.plot(x, p, 'r-', lw=2, label='Normal Fit')
+            ax.set_title(f"Qubit {qubit['qubit']} T2 Statistics")
+            ax.set_xlabel("T2 (µs)")
+            ax.set_ylabel("Counts")
+            ax.grid(axis='y', alpha=0.3)
+            
+            stats_text = (
+                f"$\mu = {mu:.2f}$ µs\n"
+                f"$\sigma = {sigma:.2f}$ µs\n"
+                f"Total # = {len(data)}"
+            )
+            ax.text(
+                0.05, 0.95, stats_text,
+                transform=ax.transAxes,
+                fontsize=11,
+                verticalalignment="top",
+                bbox=dict(boxstyle="round", facecolor="white", alpha=0.7)
+            )
+        else:
+            fitted = decay_exp(
+                ds.idle_time,
+                fit_collection[qubit['qubit']].sel(fit_vals="a"),
+                fit_collection[qubit['qubit']].sel(fit_vals="offset"),
+                fit_collection[qubit['qubit']].sel(fit_vals="decay"),
+            )
+            decay = fit_collection[qubit['qubit']].sel(fit_vals="decay")
+            decay_res = fit_collection[qubit['qubit']].sel(fit_vals="decay_decay")
+            tau = -1 / fit_collection[qubit['qubit']].sel(fit_vals="decay")
+            tau_error = -tau * (np.sqrt(decay_res) / decay)
+            
+            ds.sel(qubit=qubit["qubit"]).state.plot(ax=ax, marker='o', linestyle='', alpha=0.5)
+            ax.set_ylabel("State")
+            
+            ax.plot(ds.idle_time, fitted, "r--")
+            ax.set_title(qubit["qubit"])
+            ax.set_xlabel("Idle_time (uS)")
+            ax.text(
+                0.1,
+                0.9,
+                f'T2 = {tau.values:.1f} ± {tau_error.values:.1f} µs',
+                transform=ax.transAxes,
+                fontsize=10,
+                verticalalignment="top",
+                bbox=dict(facecolor="white", alpha=0.5),
+            )
+            mu_collection[qubit['qubit']], sig_collection[qubit['qubit']] = float(tau.values), float(tau_error.values)
+
+
     plt.tight_layout()
     plt.show()
-    node.results['figure_raw'] = grid.fig
+
+    node.results["t2_stats"] = {q: {"mu_us": mu_collection[q], "sigma_us": sig_collection[q]} for q in qbs}
+    node.results["figure_histogram"] = grid.fig
+
 
 # %% {update state}
 if not node.parameters.simulate:
     with node.record_state_updates():
-        for q in drive_q:
-            if (
-            float(tau.sel(qubit=q.name).values) > 0
-            and tau_error.sel(qubit=q.name).values / float(tau.sel(qubit=q.name).values) < 1
-            ):
-                coupler[0].extras['T2'] = float(tau.sel(qubit=q.name).values) * 1e-6
+        for c in coupler:
+            c.extras['T2'] = float(mu_collection[c.name]) * 1e-6
 
     # %% {save data}
     for q in drive_q:

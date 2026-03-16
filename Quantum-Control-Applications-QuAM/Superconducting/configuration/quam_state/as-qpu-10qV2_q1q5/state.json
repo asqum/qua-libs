@@ -1391,7 +1391,7 @@
                     "readout_q": "q4",
                     "driven_q": "q3"
                 },
-                "T1": 2e-05,
+                "T1": 3.1567325983867685e-05,
                 "T2": 3e-06
             },
             "__class__": "quam_libs.components.transmon_pair.TransmonPair"
