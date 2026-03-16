@@ -33,7 +33,7 @@
                         "length": 16,
                         "digital_marker": "ON",
                         "axis_angle": 0,
-                        "amplitude": 0.2602086305215501,
+                        "amplitude": 0.26643156899571513,
                         "alpha": -0.6201,
                         "anharmonicity": "#/qubits/q1/anharmonicity",
                         "__class__": "quam.components.pulses.DragCosinePulse"
@@ -42,7 +42,7 @@
                         "length": "#../x180_DragCosine/length",
                         "digital_marker": "ON",
                         "axis_angle": 0,
-                        "amplitude": 0.13010431526077504,
+                        "amplitude": 0.13321578449785756,
                         "alpha": -0.9999999999999991,
                         "anharmonicity": "#../x180_DragCosine/anharmonicity",
                         "__class__": "quam.components.pulses.DragCosinePulse"
@@ -161,7 +161,7 @@
                         "__class__": "quam.components.pulses.DragCosinePulse"
                     }
                 },
-                "intermediate_frequency": 227654734.02779582,
+                "intermediate_frequency": 227076687.46820593,
                 "core": "a",
                 "opx_output": "#/wiring/qubits/q1/xy/opx_output",
                 "__class__": "quam.components.channels.MWChannel"
@@ -197,7 +197,7 @@
                     }
                 },
                 "opx_output": "#/wiring/qubits/q1/z/opx_output",
-                "independent_offset": 0.05702094744085756,
+                "independent_offset": 0.05933523497561455,
                 "joint_offset": "#./independent_offset",
                 "min_offset": "#./independent_offset",
                 "__class__": "quam_libs.components.flux_line.FluxLine"
@@ -206,53 +206,53 @@
                 "depletion_time": 1000,
                 "confusion_matrix": [
                     [
-                        0.9865,
-                        0.0135
+                        0.9766,
+                        0.0234
                     ],
                     [
-                        0.102,
-                        0.898
+                        0.1246,
+                        0.8754
                     ]
                 ],
                 "GEF_frequency_shift": -1800000,
                 "gef_centers": [
                     [
-                        0.00011425280478489975,
-                        0.0002782866601692163
+                        0.00012834884063451848,
+                        0.00029969453439823414
                     ],
                     [
-                        0.00021220467772776222,
-                        0.0001584842602169443
+                        0.00022277736392923808,
+                        0.00019104391429477266
                     ],
                     [
-                        -3.40313546967869e-05,
-                        0.00020820060962421102
+                        -3.081417707874558e-05,
+                        0.00022904198194215086
                     ]
                 ],
                 "gef_confusion_matrix": [
                     [
-                        0.88,
-                        0.0735,
-                        0.0465
+                        0.8885,
+                        0.0745,
+                        0.037
                     ],
                     [
-                        0.124,
-                        0.8695,
-                        0.0065
+                        0.179,
+                        0.81,
+                        0.011
                     ],
                     [
-                        0.093,
-                        0.064,
-                        0.843
+                        0.0845,
+                        0.073,
+                        0.8425
                     ]
                 ],
                 "operations": {
                     "readout": {
                         "length": 1200,
                         "amplitude": 0.03922213416913059,
-                        "threshold": -0.00019458680487073574,
-                        "rus_exit_threshold": -0.00031538166836877005,
-                        "integration_weights_angle": -219.8056529881981,
+                        "threshold": -0.0001971688800481817,
+                        "rus_exit_threshold": -0.0003158309256404203,
+                        "integration_weights_angle": -219.87405110455668,
                         "__class__": "quam.components.pulses.SquareReadoutPulse"
                     },
                     "const": {
@@ -269,8 +269,8 @@
                 "__class__": "quam_libs.components.readout_resonator.ReadoutResonatorMW"
             },
             "anharmonicity": 205200000,
-            "freq_vs_flux_01_quad_term": -15377053216.557064,
-            "T1": 2.8403087315146205e-05,
+            "freq_vs_flux_01_quad_term": -15320957230.149874,
+            "T1": 2.9500061146920642e-05,
             "T2ramsey": 6.806131163809023e-07,
             "thermalization_time_factor": 10,
             "phi0_current": 34.1749367502789,
@@ -313,7 +313,7 @@
                         "length": 16,
                         "digital_marker": "ON",
                         "axis_angle": 0,
-                        "amplitude": 0.21995371467176095,
+                        "amplitude": 0.22113492002703358,
                         "alpha": -1.1201,
                         "anharmonicity": "#/qubits/q2/anharmonicity",
                         "__class__": "quam.components.pulses.DragCosinePulse"
@@ -322,7 +322,7 @@
                         "length": "#../x180_DragCosine/length",
                         "digital_marker": "ON",
                         "axis_angle": 0,
-                        "amplitude": 0.10997685733588047,
+                        "amplitude": 0.11056746001351679,
                         "alpha": -0.9999999999999991,
                         "anharmonicity": "#../x180_DragCosine/anharmonicity",
                         "__class__": "quam.components.pulses.DragCosinePulse"
@@ -450,7 +450,7 @@
                         "__class__": "quam.components.pulses.DragCosinePulse"
                     }
                 },
-                "intermediate_frequency": -61606056.90799348,
+                "intermediate_frequency": -61941461.67250657,
                 "core": "b",
                 "opx_output": "#/wiring/qubits/q2/xy/opx_output",
                 "__class__": "quam.components.channels.MWChannel"
@@ -474,7 +474,7 @@
                     }
                 },
                 "opx_output": "#/wiring/qubits/q2/z/opx_output",
-                "independent_offset": 0.07369457452371357,
+                "independent_offset": 0.0762162803751005,
                 "joint_offset": "#./independent_offset",
                 "min_offset": "#./independent_offset",
                 "__class__": "quam_libs.components.flux_line.FluxLine"
@@ -483,53 +483,53 @@
                 "depletion_time": 1000,
                 "confusion_matrix": [
                     [
-                        0.90225,
-                        0.09775
+                        0.9052,
+                        0.0948
                     ],
                     [
-                        0.14375,
-                        0.85625
+                        0.1186,
+                        0.8814
                     ]
                 ],
                 "GEF_frequency_shift": -1400000,
                 "gef_centers": [
                     [
-                        0.00016939120257351882,
-                        0.00034413537757934515
+                        -1.9423073736098695e-05,
+                        0.0002073840124330408
                     ],
                     [
-                        3.6349172925729095e-05,
-                        4.219775858239013e-05
+                        -0.00010154147632279719,
+                        6.628278713617793e-06
                     ],
                     [
-                        -0.00015481848971886014,
-                        0.0002338931743212681
+                        -0.00018945635408794737,
+                        6.938632018078491e-05
                     ]
                 ],
                 "gef_confusion_matrix": [
                     [
-                        0.9465,
-                        0.0445,
-                        0.009
+                        0.9205,
+                        0.048,
+                        0.0315
                     ],
                     [
-                        0.177,
-                        0.7955,
-                        0.0275
+                        0.1365,
+                        0.699,
+                        0.1645
                     ],
                     [
-                        0.072,
-                        0.057,
-                        0.871
+                        0.073,
+                        0.1735,
+                        0.7535
                     ]
                 ],
                 "operations": {
                     "readout": {
                         "length": 1200,
                         "amplitude": 0.01958550226178202,
-                        "threshold": 1.1637262440111371e-05,
-                        "rus_exit_threshold": -8.605179766879871e-05,
-                        "integration_weights_angle": -219.80316377138286,
+                        "threshold": 4.835824398286852e-05,
+                        "rus_exit_threshold": -5.9409840667982e-05,
+                        "integration_weights_angle": -220.0193286466123,
                         "__class__": "quam.components.pulses.SquareReadoutPulse"
                     },
                     "const": {
@@ -546,8 +546,8 @@
                 "__class__": "quam_libs.components.readout_resonator.ReadoutResonatorMW"
             },
             "anharmonicity": 212150000,
-            "freq_vs_flux_01_quad_term": -15280300593.07657,
-            "T1": 1.9506502628839295e-05,
+            "freq_vs_flux_01_quad_term": -15247251120.24195,
+            "T1": 2.6306989410795652e-05,
             "T2ramsey": 2.632622433111449e-07,
             "thermalization_time_factor": 10,
             "phi0_current": 21.9326043888971,
@@ -590,7 +590,7 @@
                         "length": 16,
                         "digital_marker": "ON",
                         "axis_angle": 0,
-                        "amplitude": 0.2721961124897277,
+                        "amplitude": 0.2735038082615082,
                         "alpha": -1.3201,
                         "anharmonicity": "#/qubits/q3/anharmonicity",
                         "__class__": "quam.components.pulses.DragCosinePulse"
@@ -599,7 +599,7 @@
                         "length": "#../x180_DragCosine/length",
                         "digital_marker": "ON",
                         "axis_angle": 0,
-                        "amplitude": 0.13609805624486385,
+                        "amplitude": 0.1367519041307541,
                         "alpha": -1.3399999999999994,
                         "anharmonicity": "#../x180_DragCosine/anharmonicity",
                         "__class__": "quam.components.pulses.DragCosinePulse"
@@ -727,7 +727,7 @@
                         "__class__": "quam.components.pulses.DragCosinePulse"
                     }
                 },
-                "intermediate_frequency": 187540587.90688795,
+                "intermediate_frequency": 187322248.46044597,
                 "core": "c",
                 "opx_output": "#/wiring/qubits/q3/xy/opx_output",
                 "__class__": "quam.components.channels.MWChannel"
@@ -804,7 +804,7 @@
                     0.9849210159501035,
                     0.9164212237244408
                 ],
-                "independent_offset": 0.07089171269074679,
+                "independent_offset": 0.07293528426336106,
                 "joint_offset": "#./independent_offset",
                 "min_offset": "#./independent_offset",
                 "__class__": "quam_libs.components.flux_line.FluxLine"
@@ -813,53 +813,53 @@
                 "depletion_time": 1000,
                 "confusion_matrix": [
                     [
-                        0.94975,
-                        0.05025
+                        0.9516,
+                        0.0484
                     ],
                     [
-                        0.15225,
-                        0.84775
+                        0.1428,
+                        0.8572
                     ]
                 ],
                 "GEF_frequency_shift": 400000,
                 "gef_centers": [
                     [
-                        -4.208864382024927e-05,
-                        0.00029595672133592334
+                        -1.5800597026731153e-06,
+                        0.00033697849296726416
                     ],
                     [
-                        3.23499194403502e-05,
-                        6.400834825092733e-06
+                        8.184725148539802e-05,
+                        -1.4520952755363089e-05
                     ],
                     [
-                        -6.158869445072983e-05,
-                        0.0001855158796669086
+                        -3.414847145131612e-05,
+                        0.00022947215411637907
                     ]
                 ],
                 "gef_confusion_matrix": [
                     [
-                        0.83,
-                        0.0175,
-                        0.1525
+                        0.8155,
+                        0.0215,
+                        0.163
                     ],
                     [
-                        0.067,
-                        0.8665,
-                        0.0665
+                        0.1305,
+                        0.7375,
+                        0.132
                     ],
                     [
-                        0.1275,
-                        0.178,
-                        0.6945
+                        0.154,
+                        0.139,
+                        0.707
                     ]
                 ],
                 "operations": {
                     "readout": {
                         "length": 1200,
                         "amplitude": 0.049572609372878995,
-                        "threshold": -0.00016432589050871982,
-                        "rus_exit_threshold": -0.00023822491683037807,
-                        "integration_weights_angle": -198.23341106374065,
+                        "threshold": -0.00016556904321956049,
+                        "rus_exit_threshold": -0.00026718496761347373,
+                        "integration_weights_angle": -198.24989407450235,
                         "__class__": "quam.components.pulses.SquareReadoutPulse"
                     },
                     "const": {
@@ -876,8 +876,8 @@
                 "__class__": "quam_libs.components.readout_resonator.ReadoutResonatorMW"
             },
             "anharmonicity": 200900000,
-            "freq_vs_flux_01_quad_term": -17057096535.575882,
-            "T1": 1.855194902346259e-05,
+            "freq_vs_flux_01_quad_term": -17062493352.466816,
+            "T1": 2.161904207865962e-05,
             "T2ramsey": 7.111320483430636e-07,
             "thermalization_time_factor": 10,
             "phi0_current": 29.94286691088619,
@@ -920,7 +920,7 @@
                         "length": 16,
                         "digital_marker": "ON",
                         "axis_angle": 0,
-                        "amplitude": 0.20068021486997123,
+                        "amplitude": 0.20063621367708065,
                         "alpha": -0.5801000000000001,
                         "anharmonicity": "#/qubits/q4/anharmonicity",
                         "__class__": "quam.components.pulses.DragCosinePulse"
@@ -929,7 +929,7 @@
                         "length": "#../x180_DragCosine/length",
                         "digital_marker": "ON",
                         "axis_angle": 0,
-                        "amplitude": 0.10034010743498561,
+                        "amplitude": 0.10031810683854032,
                         "alpha": -0.37999999999999856,
                         "anharmonicity": "#../x180_DragCosine/anharmonicity",
                         "__class__": "quam.components.pulses.DragCosinePulse"
@@ -1048,7 +1048,7 @@
                         "__class__": "quam.components.pulses.DragCosinePulse"
                     }
                 },
-                "intermediate_frequency": -107023500.01543766,
+                "intermediate_frequency": -107305127.06346785,
                 "core": "d",
                 "opx_output": "#/wiring/qubits/q4/xy/opx_output",
                 "__class__": "quam.components.channels.MWChannel"
@@ -1108,7 +1108,7 @@
                     0.9641771466198341,
                     0.6358812261161768
                 ],
-                "independent_offset": 0.06572515328494893,
+                "independent_offset": 0.06987663087845618,
                 "joint_offset": "#./independent_offset",
                 "min_offset": "#./independent_offset",
                 "__class__": "quam_libs.components.flux_line.FluxLine"
@@ -1117,53 +1117,53 @@
                 "depletion_time": 1000,
                 "confusion_matrix": [
                     [
-                        0.889,
-                        0.111
+                        0.886,
+                        0.114
                     ],
                     [
-                        0.16725,
-                        0.83275
+                        0.1398,
+                        0.8602
                     ]
                 ],
                 "GEF_frequency_shift": -1750000,
                 "gef_centers": [
                     [
-                        -8.121120421301341e-05,
-                        -5.376063639153105e-05
+                        -6.846844284478884e-05,
+                        -1.8463823913644608e-05
                     ],
                     [
-                        0.00012764941614379786,
-                        -9.230983593090005e-05
+                        9.022330890097231e-05,
+                        -0.000184026506253166
                     ],
                     [
-                        3.5363397425833074e-05,
-                        -0.0002584986876545217
+                        -6.071938478494901e-05,
+                        -0.0002552896307615199
                     ]
                 ],
                 "gef_confusion_matrix": [
                     [
-                        0.8816666666666667,
-                        0.094,
-                        0.024333333333333332
+                        0.8945,
+                        0.087,
+                        0.0185
                     ],
                     [
-                        0.157,
-                        0.8043333333333333,
-                        0.03866666666666667
+                        0.1175,
+                        0.829,
+                        0.0535
                     ],
                     [
-                        0.095,
-                        0.10666666666666667,
-                        0.7983333333333333
+                        0.0835,
+                        0.108,
+                        0.8085
                     ]
                 ],
                 "operations": {
                     "readout": {
                         "length": 1200,
                         "amplitude": 0.03402863133224385,
-                        "threshold": 0.00012388763668907813,
-                        "rus_exit_threshold": 3.390882601070991e-05,
-                        "integration_weights_angle": -246.91225503842458,
+                        "threshold": 0.00013329059306970228,
+                        "rus_exit_threshold": 3.020055170741981e-05,
+                        "integration_weights_angle": -252.91874419302323,
                         "__class__": "quam.components.pulses.SquareReadoutPulse"
                     },
                     "const": {
@@ -1180,8 +1180,8 @@
                 "__class__": "quam_libs.components.readout_resonator.ReadoutResonatorMW"
             },
             "anharmonicity": 215200000,
-            "freq_vs_flux_01_quad_term": -10598366962.840965,
-            "T1": 2.4233951808332843e-05,
+            "freq_vs_flux_01_quad_term": -10595265155.368896,
+            "T1": 2.240017056779033e-05,
             "T2ramsey": 5.705009459313806e-07,
             "thermalization_time_factor": 10,
             "phi0_current": 35.405591545431164,
@@ -1224,7 +1224,7 @@
                         "length": 16,
                         "digital_marker": "ON",
                         "axis_angle": 0,
-                        "amplitude": 0.24371330698434032,
+                        "amplitude": 0.22253695010598834,
                         "alpha": -0.8401000000000001,
                         "anharmonicity": "#/qubits/q5/anharmonicity",
                         "__class__": "quam.components.pulses.DragCosinePulse"
@@ -1233,7 +1233,7 @@
                         "length": "#../x180_DragCosine/length",
                         "digital_marker": "ON",
                         "axis_angle": 0,
-                        "amplitude": 0.12185665349217016,
+                        "amplitude": 0.11126847505299417,
                         "alpha": -0.6399999999999988,
                         "anharmonicity": "#../x180_DragCosine/anharmonicity",
                         "__class__": "quam.components.pulses.DragCosinePulse"
@@ -1352,7 +1352,7 @@
                         "__class__": "quam.components.pulses.DragCosinePulse"
                     }
                 },
-                "intermediate_frequency": -11853611.564488184,
+                "intermediate_frequency": -44853611.56448819,
                 "core": "e",
                 "opx_output": "#/wiring/qubits/q5/xy/opx_output",
                 "__class__": "quam.components.channels.MWChannel"
@@ -1424,7 +1424,7 @@
                     0.9484243325875331,
                     0.612913162039642
                 ],
-                "independent_offset": 0.0692907920889374,
+                "independent_offset": 0.115,
                 "joint_offset": "#./independent_offset",
                 "min_offset": "#./independent_offset",
                 "__class__": "quam_libs.components.flux_line.FluxLine"
@@ -1433,53 +1433,53 @@
                 "depletion_time": 1000,
                 "confusion_matrix": [
                     [
-                        0.93125,
-                        0.06875
+                        0.9376,
+                        0.0624
                     ],
                     [
-                        0.10825,
-                        0.89175
+                        0.0848,
+                        0.9152
                     ]
                 ],
                 "GEF_frequency_shift": -1100000,
                 "gef_centers": [
                     [
-                        0.00033042746287757275,
-                        3.860986214774067e-06
+                        0.00033788853742025327,
+                        -2.5694904938523088e-05
                     ],
                     [
-                        0.00021933739663035373,
-                        -0.00017950779699330057
+                        5.465064417425087e-05,
+                        -0.00012187568843890078
                     ],
                     [
-                        0.00018325972085510078,
-                        8.071430284459187e-05
+                        0.0002050330466699908,
+                        8.407971732204495e-05
                     ]
                 ],
                 "gef_confusion_matrix": [
                     [
-                        0.902,
-                        0.04033333333333333,
-                        0.057666666666666665
+                        0.9005,
+                        0.0445,
+                        0.055
                     ],
                     [
-                        0.08666666666666667,
-                        0.7413333333333333,
-                        0.172
+                        0.093,
+                        0.876,
+                        0.031
                     ],
                     [
-                        0.08333333333333333,
-                        0.103,
-                        0.8136666666666666
+                        0.0995,
+                        0.0615,
+                        0.839
                     ]
                 ],
                 "operations": {
                     "readout": {
                         "length": 1200,
                         "amplitude": 0.037505623353487005,
-                        "threshold": -0.0002432151911298549,
-                        "rus_exit_threshold": -0.00034679826555466235,
-                        "integration_weights_angle": -219.5639288767312,
+                        "threshold": -0.00021622533390034922,
+                        "rus_exit_threshold": -0.0003165887535336064,
+                        "integration_weights_angle": -225.8234537118245,
                         "__class__": "quam.components.pulses.SquareReadoutPulse"
                     },
                     "const": {
@@ -1497,7 +1497,7 @@
             },
             "anharmonicity": 210000000,
             "freq_vs_flux_01_quad_term": -16124377345.257198,
-            "T1": 3.0332036176194605e-05,
+            "T1": 3.274082730312155e-05,
             "T2ramsey": 9.457178097493311e-07,
             "thermalization_time_factor": 10,
             "phi0_current": 30.483396274508934,
@@ -1568,7 +1568,7 @@
                     "flux_pulse_control": {
                         "length": 88,
                         "id": "flux_pulse_control_q2_q1",
-                        "amplitude": -0.07760041903907429,
+                        "amplitude": -0.07632470997594407,
                         "zero_padding": 4,
                         "__class__": "quam_libs.lib.pulses.FluxPulse"
                     },
@@ -1579,8 +1579,8 @@
                         "zero_padding": 4,
                         "__class__": "quam_libs.lib.pulses.FluxPulse"
                     },
-                    "phase_shift_control": 0.07353079319000244,
-                    "phase_shift_target": -0.24204552173614502,
+                    "phase_shift_control": 0.25396817829612706,
+                    "phase_shift_target": 0.779571786967926,
                     "__class__": "quam_libs.components.gates.two_qubit_gates.CZGate"
                 },
                 "Cz": "#./Cz_unipolar",
@@ -1621,28 +1621,28 @@
             "detuning": -0.099,
             "confusion": [
                 [
-                    0.887,
-                    0.118,
+                    0.901,
+                    0.1255,
+                    0.1325,
+                    0.021
+                ],
+                [
                     0.076,
-                    0.012
+                    0.845,
+                    0.0145,
+                    0.138
                 ],
                 [
-                    0.0905,
-                    0.8565,
-                    0.0095,
-                    0.0645
+                    0.0205,
+                    0.005,
+                    0.782,
+                    0.1115
                 ],
                 [
-                    0.0185,
-                    0.0045,
-                    0.813,
-                    0.116
-                ],
-                [
-                    0.004,
-                    0.021,
-                    0.1015,
-                    0.8075
+                    0.0025,
+                    0.0245,
+                    0.071,
+                    0.7295
                 ]
             ],
             "extras": {
@@ -2174,6 +2174,1098 @@
                             0.595
                         ]
                     ]
+                },
+                "q1-q2-q3-q4-q5": {
+                    "confusion_5q": [
+                        [
+                            0.8045,
+                            0.015,
+                            0.0475,
+                            0.001,
+                            0.049,
+                            0.0005,
+                            0.002,
+                            0.0005,
+                            0.052,
+                            0.001,
+                            0.0025,
+                            0.0,
+                            0.004,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0175,
+                            0.0,
+                            0.001,
+                            0.0,
+                            0.001,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0005,
+                            0.0005,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            0.049,
+                            0.7985,
+                            0.0015,
+                            0.0395,
+                            0.002,
+                            0.023,
+                            0.0,
+                            0.002,
+                            0.0055,
+                            0.054,
+                            0.0,
+                            0.002,
+                            0.0,
+                            0.0015,
+                            0.0,
+                            0.0,
+                            0.001,
+                            0.017,
+                            0.0,
+                            0.0005,
+                            0.0005,
+                            0.001,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0015,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            0.073,
+                            0.003,
+                            0.801,
+                            0.0185,
+                            0.0055,
+                            0.0,
+                            0.025,
+                            0.0,
+                            0.005,
+                            0.0005,
+                            0.049,
+                            0.0005,
+                            0.0,
+                            0.0,
+                            0.0025,
+                            0.0,
+                            0.001,
+                            0.0,
+                            0.015,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0005,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            0.006,
+                            0.0775,
+                            0.044,
+                            0.767,
+                            0.0,
+                            0.0015,
+                            0.002,
+                            0.024,
+                            0.001,
+                            0.002,
+                            0.003,
+                            0.0495,
+                            0.0,
+                            0.0005,
+                            0.0,
+                            0.0025,
+                            0.0,
+                            0.003,
+                            0.0015,
+                            0.0125,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.001,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0015,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            0.131,
+                            0.0045,
+                            0.0095,
+                            0.0005,
+                            0.649,
+                            0.009,
+                            0.0345,
+                            0.0015,
+                            0.0245,
+                            0.0005,
+                            0.0005,
+                            0.0,
+                            0.085,
+                            0.001,
+                            0.0055,
+                            0.0,
+                            0.015,
+                            0.0,
+                            0.001,
+                            0.0,
+                            0.021,
+                            0.0,
+                            0.0005,
+                            0.0005,
+                            0.002,
+                            0.0005,
+                            0.0,
+                            0.0,
+                            0.003,
+                            0.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            0.012,
+                            0.1165,
+                            0.001,
+                            0.0045,
+                            0.064,
+                            0.6115,
+                            0.0025,
+                            0.0275,
+                            0.0015,
+                            0.027,
+                            0.0,
+                            0.0015,
+                            0.0095,
+                            0.0755,
+                            0.0005,
+                            0.005,
+                            0.0005,
+                            0.017,
+                            0.0,
+                            0.0005,
+                            0.002,
+                            0.0135,
+                            0.0,
+                            0.0,
+                            0.001,
+                            0.002,
+                            0.0,
+                            0.0,
+                            0.0005,
+                            0.003,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            0.011,
+                            0.0005,
+                            0.144,
+                            0.002,
+                            0.07,
+                            0.003,
+                            0.593,
+                            0.0115,
+                            0.0035,
+                            0.0,
+                            0.0285,
+                            0.0,
+                            0.01,
+                            0.0,
+                            0.0755,
+                            0.0025,
+                            0.002,
+                            0.0,
+                            0.011,
+                            0.0005,
+                            0.0015,
+                            0.0,
+                            0.0225,
+                            0.0005,
+                            0.0,
+                            0.0,
+                            0.0035,
+                            0.0,
+                            0.0005,
+                            0.0,
+                            0.003,
+                            0.0
+                        ],
+                        [
+                            0.001,
+                            0.0125,
+                            0.0105,
+                            0.1275,
+                            0.011,
+                            0.0565,
+                            0.061,
+                            0.554,
+                            0.0,
+                            0.0035,
+                            0.0025,
+                            0.029,
+                            0.0015,
+                            0.0055,
+                            0.009,
+                            0.0765,
+                            0.0,
+                            0.001,
+                            0.0,
+                            0.011,
+                            0.0,
+                            0.0015,
+                            0.0015,
+                            0.015,
+                            0.0,
+                            0.0005,
+                            0.001,
+                            0.0015,
+                            0.0,
+                            0.0005,
+                            0.0005,
+                            0.0045
+                        ],
+                        [
+                            0.096,
+                            0.002,
+                            0.003,
+                            0.0,
+                            0.0075,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.759,
+                            0.0155,
+                            0.0425,
+                            0.0015,
+                            0.0445,
+                            0.0,
+                            0.0045,
+                            0.0,
+                            0.002,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0005,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.018,
+                            0.0,
+                            0.0015,
+                            0.0005,
+                            0.0015,
+                            0.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            0.0055,
+                            0.098,
+                            0.0,
+                            0.006,
+                            0.0,
+                            0.006,
+                            0.0,
+                            0.0,
+                            0.0475,
+                            0.726,
+                            0.0025,
+                            0.047,
+                            0.0045,
+                            0.0305,
+                            0.0005,
+                            0.0005,
+                            0.0,
+                            0.0065,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.001,
+                            0.015,
+                            0.0,
+                            0.001,
+                            0.0005,
+                            0.0015,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            0.0065,
+                            0.0015,
+                            0.0905,
+                            0.003,
+                            0.0,
+                            0.0,
+                            0.0015,
+                            0.0005,
+                            0.0735,
+                            0.006,
+                            0.7445,
+                            0.0185,
+                            0.0025,
+                            0.0,
+                            0.032,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.002,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0005,
+                            0.016,
+                            0.001,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            0.0,
+                            0.0095,
+                            0.0045,
+                            0.0955,
+                            0.0,
+                            0.0025,
+                            0.0,
+                            0.003,
+                            0.009,
+                            0.0625,
+                            0.0475,
+                            0.709,
+                            0.0,
+                            0.0015,
+                            0.0035,
+                            0.0225,
+                            0.0,
+                            0.003,
+                            0.0,
+                            0.0065,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0005,
+                            0.0015,
+                            0.0015,
+                            0.015,
+                            0.0,
+                            0.0005,
+                            0.0,
+                            0.001
+                        ],
+                        [
+                            0.0165,
+                            0.0025,
+                            0.0015,
+                            0.0,
+                            0.094,
+                            0.003,
+                            0.004,
+                            0.0005,
+                            0.0945,
+                            0.003,
+                            0.0055,
+                            0.0,
+                            0.686,
+                            0.013,
+                            0.041,
+                            0.0005,
+                            0.0015,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.004,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.009,
+                            0.0,
+                            0.0005,
+                            0.0,
+                            0.018,
+                            0.0005,
+                            0.0005,
+                            0.0005
+                        ],
+                        [
+                            0.0015,
+                            0.02,
+                            0.0005,
+                            0.002,
+                            0.011,
+                            0.093,
+                            0.0005,
+                            0.0025,
+                            0.009,
+                            0.1175,
+                            0.0005,
+                            0.0055,
+                            0.074,
+                            0.594,
+                            0.003,
+                            0.025,
+                            0.0,
+                            0.0035,
+                            0.0,
+                            0.0,
+                            0.0015,
+                            0.004,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.008,
+                            0.0,
+                            0.0005,
+                            0.0005,
+                            0.0205,
+                            0.0,
+                            0.002
+                        ],
+                        [
+                            0.004,
+                            0.0,
+                            0.0145,
+                            0.0005,
+                            0.0095,
+                            0.0,
+                            0.083,
+                            0.002,
+                            0.011,
+                            0.0005,
+                            0.115,
+                            0.0035,
+                            0.062,
+                            0.002,
+                            0.6395,
+                            0.0135,
+                            0.0,
+                            0.0,
+                            0.001,
+                            0.0,
+                            0.0,
+                            0.0005,
+                            0.004,
+                            0.0005,
+                            0.002,
+                            0.0,
+                            0.009,
+                            0.0,
+                            0.002,
+                            0.0,
+                            0.02,
+                            0.0005
+                        ],
+                        [
+                            0.001,
+                            0.0015,
+                            0.0005,
+                            0.0245,
+                            0.001,
+                            0.013,
+                            0.011,
+                            0.081,
+                            0.002,
+                            0.007,
+                            0.008,
+                            0.1015,
+                            0.0085,
+                            0.0615,
+                            0.0615,
+                            0.5795,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0015,
+                            0.0,
+                            0.0,
+                            0.0005,
+                            0.002,
+                            0.0,
+                            0.0015,
+                            0.0,
+                            0.006,
+                            0.001,
+                            0.0025,
+                            0.003,
+                            0.019
+                        ],
+                        [
+                            0.126,
+                            0.001,
+                            0.005,
+                            0.0,
+                            0.006,
+                            0.0005,
+                            0.0,
+                            0.0,
+                            0.012,
+                            0.0005,
+                            0.0005,
+                            0.0,
+                            0.0005,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.67,
+                            0.017,
+                            0.041,
+                            0.0,
+                            0.044,
+                            0.0015,
+                            0.004,
+                            0.0,
+                            0.0625,
+                            0.0005,
+                            0.0025,
+                            0.0,
+                            0.0045,
+                            0.0,
+                            0.0005,
+                            0.0
+                        ],
+                        [
+                            0.0075,
+                            0.117,
+                            0.0005,
+                            0.008,
+                            0.0005,
+                            0.004,
+                            0.0,
+                            0.0,
+                            0.0005,
+                            0.01,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0415,
+                            0.6895,
+                            0.001,
+                            0.032,
+                            0.0005,
+                            0.021,
+                            0.0,
+                            0.003,
+                            0.0045,
+                            0.0515,
+                            0.0005,
+                            0.0055,
+                            0.0,
+                            0.0015,
+                            0.0,
+                            0.0
+                        ],
+                        [
+                            0.0125,
+                            0.0005,
+                            0.121,
+                            0.003,
+                            0.0,
+                            0.0,
+                            0.0055,
+                            0.0,
+                            0.002,
+                            0.0,
+                            0.008,
+                            0.0005,
+                            0.0,
+                            0.0,
+                            0.0005,
+                            0.0,
+                            0.0655,
+                            0.0025,
+                            0.6875,
+                            0.013,
+                            0.0015,
+                            0.0005,
+                            0.0275,
+                            0.0005,
+                            0.004,
+                            0.0005,
+                            0.041,
+                            0.002,
+                            0.0,
+                            0.0,
+                            0.0005,
+                            0.0
+                        ],
+                        [
+                            0.0,
+                            0.011,
+                            0.01,
+                            0.1175,
+                            0.0,
+                            0.001,
+                            0.0,
+                            0.003,
+                            0.0005,
+                            0.0,
+                            0.001,
+                            0.0095,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0005,
+                            0.006,
+                            0.06,
+                            0.05,
+                            0.649,
+                            0.0005,
+                            0.002,
+                            0.001,
+                            0.0195,
+                            0.0005,
+                            0.0025,
+                            0.005,
+                            0.0475,
+                            0.0,
+                            0.0,
+                            0.001,
+                            0.0015
+                        ],
+                        [
+                            0.022,
+                            0.0005,
+                            0.002,
+                            0.0,
+                            0.108,
+                            0.0035,
+                            0.0065,
+                            0.0,
+                            0.006,
+                            0.001,
+                            0.0005,
+                            0.0,
+                            0.02,
+                            0.0005,
+                            0.001,
+                            0.0,
+                            0.0915,
+                            0.0035,
+                            0.009,
+                            0.0,
+                            0.566,
+                            0.0075,
+                            0.0255,
+                            0.0,
+                            0.0265,
+                            0.0005,
+                            0.002,
+                            0.0,
+                            0.089,
+                            0.0015,
+                            0.006,
+                            0.0
+                        ],
+                        [
+                            0.003,
+                            0.0215,
+                            0.0,
+                            0.002,
+                            0.013,
+                            0.101,
+                            0.0,
+                            0.005,
+                            0.001,
+                            0.0065,
+                            0.0,
+                            0.0005,
+                            0.0025,
+                            0.0185,
+                            0.0,
+                            0.001,
+                            0.011,
+                            0.103,
+                            0.0005,
+                            0.005,
+                            0.0535,
+                            0.517,
+                            0.003,
+                            0.0305,
+                            0.0015,
+                            0.0235,
+                            0.0,
+                            0.0015,
+                            0.009,
+                            0.062,
+                            0.0005,
+                            0.003
+                        ],
+                        [
+                            0.003,
+                            0.0,
+                            0.028,
+                            0.0005,
+                            0.0085,
+                            0.001,
+                            0.0985,
+                            0.0005,
+                            0.002,
+                            0.0,
+                            0.009,
+                            0.0005,
+                            0.003,
+                            0.0,
+                            0.0145,
+                            0.001,
+                            0.0115,
+                            0.001,
+                            0.118,
+                            0.001,
+                            0.05,
+                            0.004,
+                            0.521,
+                            0.007,
+                            0.003,
+                            0.0,
+                            0.023,
+                            0.0005,
+                            0.0065,
+                            0.0005,
+                            0.082,
+                            0.001
+                        ],
+                        [
+                            0.0005,
+                            0.004,
+                            0.0015,
+                            0.02,
+                            0.0015,
+                            0.0085,
+                            0.013,
+                            0.0895,
+                            0.0005,
+                            0.0015,
+                            0.0,
+                            0.007,
+                            0.0005,
+                            0.001,
+                            0.001,
+                            0.02,
+                            0.001,
+                            0.009,
+                            0.0105,
+                            0.116,
+                            0.009,
+                            0.0485,
+                            0.052,
+                            0.4645,
+                            0.0,
+                            0.002,
+                            0.0025,
+                            0.0305,
+                            0.002,
+                            0.0065,
+                            0.0075,
+                            0.0685
+                        ],
+                        [
+                            0.018,
+                            0.001,
+                            0.0005,
+                            0.0,
+                            0.0005,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.113,
+                            0.003,
+                            0.005,
+                            0.0005,
+                            0.007,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0805,
+                            0.0035,
+                            0.0055,
+                            0.0005,
+                            0.0025,
+                            0.0005,
+                            0.0,
+                            0.0,
+                            0.6575,
+                            0.0115,
+                            0.045,
+                            0.001,
+                            0.04,
+                            0.0005,
+                            0.003,
+                            0.0
+                        ],
+                        [
+                            0.0,
+                            0.022,
+                            0.0,
+                            0.0025,
+                            0.0,
+                            0.0015,
+                            0.0,
+                            0.0,
+                            0.009,
+                            0.1125,
+                            0.0005,
+                            0.006,
+                            0.0005,
+                            0.004,
+                            0.0,
+                            0.0,
+                            0.007,
+                            0.1,
+                            0.0,
+                            0.002,
+                            0.0,
+                            0.0025,
+                            0.0,
+                            0.0,
+                            0.0365,
+                            0.6315,
+                            0.0005,
+                            0.029,
+                            0.0025,
+                            0.0295,
+                            0.0,
+                            0.0005
+                        ],
+                        [
+                            0.0,
+                            0.0,
+                            0.011,
+                            0.0005,
+                            0.0,
+                            0.0,
+                            0.001,
+                            0.0005,
+                            0.0095,
+                            0.0005,
+                            0.12,
+                            0.003,
+                            0.0,
+                            0.0,
+                            0.003,
+                            0.0,
+                            0.008,
+                            0.0,
+                            0.094,
+                            0.0025,
+                            0.0,
+                            0.0,
+                            0.004,
+                            0.0,
+                            0.0555,
+                            0.002,
+                            0.646,
+                            0.014,
+                            0.0015,
+                            0.0,
+                            0.023,
+                            0.0005
+                        ],
+                        [
+                            0.0,
+                            0.0005,
+                            0.0,
+                            0.015,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.001,
+                            0.001,
+                            0.0155,
+                            0.003,
+                            0.105,
+                            0.0,
+                            0.0,
+                            0.0,
+                            0.0025,
+                            0.0005,
+                            0.007,
+                            0.0075,
+                            0.096,
+                            0.0,
+                            0.0,
+                            0.0005,
+                            0.003,
+                            0.004,
+                            0.0545,
+                            0.0395,
+                            0.6085,
+                            0.0,
+                            0.005,
+                            0.0025,
+                            0.028
+                        ],
+                        [
+                            0.004,
+                            0.0005,
+                            0.001,
+                            0.0005,
+                            0.015,
+                            0.0015,
+                            0.0005,
+                            0.0005,
+                            0.0165,
+                            0.001,
+                            0.0025,
+                            0.0,
+                            0.105,
+                            0.004,
+                            0.006,
+                            0.0,
+                            0.0095,
+                            0.0,
+                            0.0015,
+                            0.0,
+                            0.079,
+                            0.0025,
+                            0.005,
+                            0.0015,
+                            0.0925,
+                            0.0,
+                            0.0045,
+                            0.0,
+                            0.5965,
+                            0.013,
+                            0.035,
+                            0.001
+                        ],
+                        [
+                            0.0005,
+                            0.006,
+                            0.0,
+                            0.0,
+                            0.0005,
+                            0.017,
+                            0.0,
+                            0.0,
+                            0.002,
+                            0.0235,
+                            0.0,
+                            0.001,
+                            0.0125,
+                            0.091,
+                            0.0005,
+                            0.002,
+                            0.001,
+                            0.0135,
+                            0.0,
+                            0.001,
+                            0.009,
+                            0.0785,
+                            0.0,
+                            0.005,
+                            0.011,
+                            0.0895,
+                            0.0,
+                            0.006,
+                            0.0665,
+                            0.542,
+                            0.0025,
+                            0.018
+                        ],
+                        [
+                            0.001,
+                            0.0,
+                            0.0015,
+                            0.0,
+                            0.0005,
+                            0.0,
+                            0.016,
+                            0.0005,
+                            0.002,
+                            0.0,
+                            0.0175,
+                            0.001,
+                            0.011,
+                            0.002,
+                            0.107,
+                            0.004,
+                            0.0025,
+                            0.001,
+                            0.0165,
+                            0.001,
+                            0.0075,
+                            0.002,
+                            0.0575,
+                            0.0035,
+                            0.0065,
+                            0.001,
+                            0.0925,
+                            0.002,
+                            0.061,
+                            0.0035,
+                            0.5645,
+                            0.0135
+                        ],
+                        [
+                            0.0,
+                            0.0005,
+                            0.0005,
+                            0.002,
+                            0.0,
+                            0.003,
+                            0.001,
+                            0.0175,
+                            0.0005,
+                            0.0015,
+                            0.0015,
+                            0.018,
+                            0.002,
+                            0.011,
+                            0.008,
+                            0.0995,
+                            0.0,
+                            0.001,
+                            0.002,
+                            0.017,
+                            0.0,
+                            0.0085,
+                            0.008,
+                            0.064,
+                            0.0015,
+                            0.01,
+                            0.006,
+                            0.0905,
+                            0.0105,
+                            0.0515,
+                            0.0615,
+                            0.5015
+                        ]
+                    ]
                 }
             },
             "__class__": "quam_libs.components.transmon_pair.TransmonPair"
@@ -2233,7 +3325,7 @@
                     "flux_pulse_control": {
                         "length": 88,
                         "id": "flux_pulse_control_q2_q3",
-                        "amplitude": -0.09222004844932861,
+                        "amplitude": -0.09233596585090059,
                         "__class__": "quam_libs.lib.pulses.FluxPulse"
                     },
                     "coupler_flux_pulse": {
@@ -2242,8 +3334,8 @@
                         "amplitude": -0.044254691025610214,
                         "__class__": "quam_libs.lib.pulses.FluxPulse"
                     },
-                    "phase_shift_control": 0.3719055652618408,
-                    "phase_shift_target": -0.3631300628185272,
+                    "phase_shift_control": 0.2506359609539377,
+                    "phase_shift_target": 0.560613627770207,
                     "__class__": "quam_libs.components.gates.two_qubit_gates.CZGate"
                 },
                 "Cz": "#./Cz_unipolar",
@@ -2286,28 +3378,28 @@
             "detuning": 0.097,
             "confusion": [
                 [
-                    0.881,
-                    0.1045,
-                    0.126,
-                    0.021
+                    0.8815,
+                    0.134,
+                    0.1415,
+                    0.0205
                 ],
                 [
-                    0.0875,
-                    0.8535,
-                    0.032,
-                    0.1175
+                    0.07,
+                    0.8265,
+                    0.0395,
+                    0.13
                 ],
                 [
-                    0.0265,
-                    0.004,
-                    0.717,
-                    0.1005
+                    0.044,
+                    0.0065,
+                    0.7235,
+                    0.113
                 ],
                 [
-                    0.005,
-                    0.038,
-                    0.125,
-                    0.761
+                    0.0045,
+                    0.033,
+                    0.0955,
+                    0.7365
                 ]
             ],
             "extras": {
@@ -2868,7 +3960,7 @@
                     "flux_pulse_control": {
                         "length": 200,
                         "id": "flux_pulse_control_q4_q3",
-                        "amplitude": -0.13668604398110332,
+                        "amplitude": -0.13641731872361348,
                         "__class__": "quam_libs.lib.pulses.FluxPulse"
                     },
                     "coupler_flux_pulse": {
@@ -2877,8 +3969,8 @@
                         "amplitude": -0.08077387259581742,
                         "__class__": "quam_libs.lib.pulses.FluxPulse"
                     },
-                    "phase_shift_control": -0.18967688083648682,
-                    "phase_shift_target": 0.15710145235061646,
+                    "phase_shift_control": 0.8096221067187217,
+                    "phase_shift_target": 0.06459760698370542,
                     "__class__": "quam_libs.components.gates.two_qubit_gates.CZGate"
                 },
                 "Cz": "#./Cz_unipolar",
@@ -2919,28 +4011,28 @@
             "detuning": -0.133,
             "confusion": [
                 [
-                    0.848,
-                    0.1395,
-                    0.1045,
-                    0.0225
+                    0.8515,
+                    0.121,
+                    0.13,
+                    0.015
                 ],
                 [
-                    0.117,
-                    0.8235,
-                    0.0255,
-                    0.113
-                ],
-                [
-                    0.0295,
-                    0.0045,
-                    0.741,
+                    0.1025,
+                    0.835,
+                    0.0125,
                     0.125
                 ],
                 [
-                    0.0055,
-                    0.0325,
-                    0.129,
-                    0.7395
+                    0.042,
+                    0.009,
+                    0.762,
+                    0.11
+                ],
+                [
+                    0.004,
+                    0.035,
+                    0.0955,
+                    0.75
                 ]
             ],
             "extras": {
@@ -4002,21 +5094,21 @@
             "gates": {
                 "Cz_unipolar": {
                     "flux_pulse_control": {
-                        "length": 88,
+                        "length": 200,
                         "id": "flux_pulse_control_q4_q5",
-                        "amplitude": 0.17029809809675608,
-                        "zero_padding": 16,
+                        "amplitude": -0.059433097865663344,
+                        "zero_padding": 2,
                         "__class__": "quam_libs.lib.pulses.FluxPulse"
                     },
                     "coupler_flux_pulse": {
-                        "length": 88,
+                        "length": 200,
                         "id": "coupler_flux_pulse_q4_q5",
-                        "amplitude": -0.031140000000000008,
-                        "zero_padding": 16,
+                        "amplitude": -0.026,
+                        "zero_padding": 2,
                         "__class__": "quam_libs.lib.pulses.FluxPulse"
                     },
-                    "phase_shift_control": 0.9814286020072341,
-                    "phase_shift_target": 0.24039140591337804,
+                    "phase_shift_control": 0.20995478908156262,
+                    "phase_shift_target": 0.12273421522873129,
                     "__class__": "quam_libs.components.gates.two_qubit_gates.CZGate"
                 },
                 "Cz": "#./Cz_unipolar",
@@ -4057,28 +5149,28 @@
             "detuning": 0.18149999999999986,
             "confusion": [
                 [
-                    0.7864,
-                    0.1524,
-                    0.0514,
-                    0.009
+                    0.8485,
+                    0.1265,
+                    0.084,
+                    0.0105
                 ],
                 [
-                    0.1034,
-                    0.7386,
-                    0.0086,
-                    0.0532
+                    0.108,
+                    0.821,
+                    0.0065,
+                    0.071
                 ],
                 [
-                    0.098,
-                    0.0196,
-                    0.8324,
-                    0.1548
+                    0.0385,
+                    0.009,
+                    0.808,
+                    0.127
                 ],
                 [
-                    0.0122,
-                    0.0894,
-                    0.1076,
-                    0.783
+                    0.005,
+                    0.0435,
+                    0.1015,
+                    0.7915
                 ]
             ],
             "extras": {
