@@ -34,15 +34,15 @@ class Parameters(NodeParameters):
     readout_strategy: Literal['zz-pi', 'aswap'] = 'aswap'
     num_averages: int = 500
     operation: str = "saturation"
-    operation_amplitude_factor: Optional[float] = 0.02 #0.004, 0.02 # q6:3e-3, q7:1e-2, q8:3e-3, q9:***,
+    operation_amplitude_factor: Optional[float] = 0.1 #0.004, 0.02 # q6:3e-3, q7:1e-2, q8:3e-3, q9:***,
     operation_len_in_ns: Optional[int] = None
-    Driving_LO_GHz: float|None = None # 3.18
-    frequency_span_in_mhz: float = 100 #12, 120
+    Driving_LO_GHz: float|None = 4.0 # 3.18
+    frequency_span_in_mhz: float = 200 #12, 120
     frequency_step_in_mhz: float = 2 #0.1, 1
     frequency_shift_in_mhz: float = 0 #0  
-    min_flux_offset_in_v: float = -0.025 ##-0.042
-    max_flux_offset_in_v: float = 0.025 #0.042
-    num_flux_points: int = 51
+    min_flux_offset_in_v: float = -0.4 ##-0.042
+    max_flux_offset_in_v: float = -0.1 #0.042
+    num_flux_points: int = 151
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
     simulate: bool = False
     simulation_duration_ns: int = 2500
@@ -74,6 +74,8 @@ if node.parameters.load_data_id is None and not node.parameters.simulate:
     else:
         LO_to_plot = node.parameters.Driving_LO_GHz * 1e9
         drive_q[0].xy.opx_output.upconverter_frequency = node.parameters.Driving_LO_GHz * 1e9
+    if "swap_direction" in coupler[0].extras["RD"]:
+        detector_q[0].z.operations['aSWAP'].slope_direction = coupler[0].extras["RD"]["swap_direction"]
 
 # Generate the OPX and Octave configurations
 config = machine.generate_config()
@@ -236,6 +238,7 @@ if not node.parameters.simulate:
 
     # Save fitting results
     fit_results = {}
+    
     for q in drive_q:
         fit_results[q.name] = {}
         if not np.isnan(flux_shift.sel(qubit=q.name).values):
@@ -264,7 +267,7 @@ if not node.parameters.simulate:
 
     # %% {Plotting}
     grid = QubitGrid(ds, [q.grid_location for q in drive_q])
-
+    info_to_keep = {}
     for ax, qubit in grid_iter(grid):
         freq_ref = coupler[0].extras["RD"]["IF"] + LO_to_plot #machine.qubits[qubit["qubit"]].xy.RF_frequency
         ds.assign_coords(freq_GHz=ds.freq_full / 1e9).loc[qubit].state.plot(
@@ -272,26 +275,32 @@ if not node.parameters.simulate:
         )
         ((fitted + freq_ref) / 1e9).loc[qubit].plot(ax=ax, linewidth=0.5, ls="--", color="r")
         ax.plot(flux_shift.loc[qubit], ((freq_shift.loc[qubit] + freq_ref) / 1e9), "r*")
+        info_to_keep["f_max"] = freq_shift.loc[qubit].values + freq_ref
+        info_to_keep["sweet_offset"] = float(flux_shift.loc[qubit].values)+coupler[0].coupler.decouple_offset
+        info_to_keep["freq_vs_flux_01_quad_term"] = fit_results[qubit['qubit']]["quad_term"]
         ((peaks.position.loc[qubit] + freq_ref) / 1e9).plot(ax=ax, ls="", marker=".", color="g", ms=0.5)
         ax.set_ylabel("Freq (GHz)")
         ax.set_xlabel("Flux (V)")
         ax.set_title(node.parameters.couplers)
+        
     grid.fig.suptitle("coupler spectroscopy vs flux ")
-
+    
     plt.tight_layout()
     plt.show()
     node.results["figure"] = grid.fig
 
+
     # %% {Update_state}
     if node.parameters.load_data_id is None and not node.parameters.simulate:
         with node.record_state_updates():
-            for q in drive_q:
-                if node.parameters.Driving_LO_GHz is not None:
-                    coupler[0].extras["RD"]["LO"] = node.parameters.Driving_LO_GHz * 1e9
+            for c in coupler:
+                c.extras["Fx"] = info_to_keep
 
         # %% {Save_results}
         for q in drive_q:
             q.xy.opx_output.upconverter_frequency = drive_LO_original[q.name] # revert the driving LO
+        for q in detector_q:
+            q.z.operations['aSWAP'].slope_direction = -1
         node.results["ds"] = ds
         node.outcomes = {q.name: "successful" for q in drive_q}
         node.results["initial_parameters"] = node.parameters.model_dump()

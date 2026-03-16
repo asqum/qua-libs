@@ -30,7 +30,7 @@ from quam_libs.lib.fit import fit_decay_exp, decay_exp
 # %% {Node_parameters}
 class Parameters(NodeParameters):
     coupler: str = 'coupler_q4_q5'
-    num_averages: int = 2000
+    num_averages: int = 500
     min_wait_time_in_ns: int = 16
     max_wait_time_in_ns: int = 2508
     wait_time_step_in_ns: int = 24
@@ -58,6 +58,8 @@ detector_q = [machine.qubits[coupler[0].extras["RD"]["readout_q"]]]
 if not node.parameters.simulate:
     drive_LO_original = {drive_q[0].name: drive_q[0].xy.opx_output.upconverter_frequency}
     drive_q[0].xy.opx_output.upconverter_frequency = coupler[0].extras["RD"]["LO"]
+    if "swap_direction" in coupler[0].extras["RD"]:
+        detector_q[0].z.operations['aSWAP'].slope_direction = coupler[0].extras["RD"]["swap_direction"]
 
 # Generate the OPX and Octave configurations
 config = machine.generate_config()
@@ -247,6 +249,8 @@ if not node.parameters.simulate:
     # %% {save data}
     for q in drive_q:
         q.xy.opx_output.upconverter_frequency = drive_LO_original[q.name] # revert the driving LO
+    for q in detector_q:
+        q.z.operations['aSWAP'].slope_direction = -1
     node.results['initial_parameters'] = node.parameters.model_dump()
     node.machine = machine
     node.save()
