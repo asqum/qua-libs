@@ -20,8 +20,8 @@ from quam_libs.components.quam_root import BatchableList
 from qm.qua import *
 
 
-names:List[str] = ["Cafish", "Ratis", "WeiEnChiu", "013", "KaoHY", "HCC", "KKC", "WYS", "PoAn"]
-need_number:int = 2
+names:List[str] = ["Cafish", "Ratis", "WeiEnChiu", "013", "KaoHY", "HCC", "KKC", "WYS", "PoAn", ]
+need_number:int = 3
 
 # %% {Node_parameters}
 class Parameters(NodeParameters):
@@ -113,49 +113,44 @@ with qm_session(qmm, config, timeout=node.parameters.timeout) as qm:
 
 
 # %%
-print(ds)
-
-# %%
 
 def get_random_binary_string(name_list)->Dict:
     encoded = {}
     n = len(name_list)
-    # 計算需要的最小位元長度 (例如 8人需 3 bits)
+    
     bit_length:int = (n - 1).bit_length() if n > 1 else 1
     
-    # 1. 建立一個 0 到 n-1 的索引清單
+    
     indices = list(range(n))
     
-    # 2. 隨機打亂這些索引 (Shuffle)
+    
     random.shuffle(indices)
     
-    # 3. 轉換為補零後的二進位字串
+    
     binary_results = [bin(i)[2:].zfill(bit_length) for i in indices]
-    print(binary_results)
+    
 
     for idx, name in enumerate(name_list):
         encoded[binary_results[idx]] = name
 
-    # 4. 輸出成單一字串
+    
     return encoded
 
 def pick_full_binary_range(data_array, bit_length):
     i_size, j_size = data_array.shape
     total_elements = i_size * j_size
     
-    # 安全檢查：確保陣列總點數夠抽
+    
     if total_elements < bit_length:
         raise ValueError("陣列總元素量小於所需的 bit_length 數量")
 
-    # 1. 在整個陣列的扁平化索引中，隨機抽取 bit_length 個「不重複」的位置
-    # 例如：(3, 10) 陣列有 30 個點，我們從 0~29 中抽 4 個
+    
     random_flat_indices = random.sample(range(total_elements), bit_length)
     
-    # 2. 將扁平索引轉回二維座標 (row_idx, col_idx)
-    # np.unravel_index 會把 15 轉成 (1, 5) 這樣的座標
+    
     rows, cols = np.unravel_index(random_flat_indices, (i_size, j_size))
     
-    # 3. 取得數值
+    
     picked_values = data_array[rows, cols]
 
     lottery = ""
@@ -167,21 +162,17 @@ def pick_full_binary_range(data_array, bit_length):
 
 # %%
 lucky_ppl = []
-from time import sleep
 while True:
 
     random_output = get_random_binary_string(names)
     bit_N = len(list(random_output.keys())[0])
     lottery = pick_full_binary_range(ds.state.values, bit_N)
 
-    print(lottery)
-
     if len(lottery) != bit_N:
         print(f"{bit_N} bits mismatched with {lottery} !")
         break
 
     if lottery in random_output.keys():
-        print("Y")
         lucky_ppl.append(random_output[lottery])
         names.remove(random_output[lottery])
     

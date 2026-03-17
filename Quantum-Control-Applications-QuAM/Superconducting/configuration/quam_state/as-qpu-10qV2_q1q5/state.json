@@ -568,7 +568,7 @@
                 },
                 "opx_output": "#/wiring/qubits/q3/z/opx_output",
                 "independent_offset": 0.17111174398204598,
-                "joint_offset": 0.13193796426946014,
+                "joint_offset": "#./independent_offset",
                 "min_offset": "#./independent_offset",
                 "__class__": "quam_libs.components.flux_line.FluxLine"
             },
@@ -833,7 +833,7 @@
                 },
                 "opx_output": "#/wiring/qubits/q4/z/opx_output",
                 "independent_offset": 0.17941439205673007,
-                "joint_offset": 0.294,
+                "joint_offset": "#./independent_offset",
                 "min_offset": "#./independent_offset",
                 "__class__": "quam_libs.components.flux_line.FluxLine"
             },
@@ -1090,7 +1090,7 @@
                 },
                 "opx_output": "#/wiring/qubits/q5/z/opx_output",
                 "independent_offset": 0.18773269225475306,
-                "joint_offset": 0.13515307822762382,
+                "joint_offset": "#./independent_offset",
                 "min_offset": "#./independent_offset",
                 "__class__": "quam_libs.components.flux_line.FluxLine"
             },
@@ -1419,13 +1419,13 @@
                     "flux_pulse_control": {
                         "length": 88,
                         "id": "flux_pulse_control_q5_q4",
-                        "amplitude": 0.09,
+                        "amplitude": 0.12151200000000002,
                         "__class__": "quam.components.pulses.SquarePulse"
                     },
                     "coupler_flux_pulse": {
                         "length": 88,
                         "id": "coupler_flux_pulse_q5_q4",
-                        "amplitude": -0.04500000000000001,
+                        "amplitude": -0.08200000000000002,
                         "__class__": "quam.components.pulses.SquarePulse"
                     },
                     "__class__": "quam_libs.components.gates.two_qubit_gates.CZGate"
@@ -1434,14 +1434,14 @@
                     "flux_pulse_control": {
                         "length": 88,
                         "id": "flux_pulse_control_q5_q4",
-                        "amplitude": 0.09,
+                        "amplitude": 0.12151200000000002,
                         "flat_length": 68,
                         "__class__": "quam_libs.lib.pulses.CosineFlatTopPulse"
                     },
                     "coupler_flux_pulse": {
                         "length": 88,
                         "id": "coupler_flux_pulse_q5_q4",
-                        "amplitude": -0.04500000000000001,
+                        "amplitude": -0.08200000000000002,
                         "__class__": "quam.components.pulses.SquarePulse"
                     },
                     "__class__": "quam_libs.components.gates.two_qubit_gates.CZGate"
@@ -1450,28 +1450,29 @@
                     "flux_pulse_control": {
                         "length": 88,
                         "id": "flux_pulse_control_q5_q4",
-                        "amplitude": 0.09,
+                        "amplitude": 0.12151200000000002,
                         "flat_length": 68,
                         "__class__": "quam_libs.lib.pulses.CosineBipolarPulse"
                     },
                     "coupler_flux_pulse": {
                         "length": 88,
                         "id": "coupler_flux_pulse_q5_q4",
-                        "amplitude": -0.04500000000000001,
+                        "amplitude": -0.08200000000000002,
                         "__class__": "quam.components.pulses.SquarePulse"
                     },
                     "__class__": "quam_libs.components.gates.two_qubit_gates.CZGate"
                 },
                 "Cz": "#./Cz_unipolar"
             },
-            "detuning": 0.09,
+            "J2": 12293300.781805396,
+            "detuning": 0.122,
             "extras": {
                 "FCC": {
                     "q4": 0.02735816045988581
                 },
                 "Cz_time": 88,
-                "Cz_qubit_flux": 0.09,
-                "Cz_coupler_flux": -0.04500000000000001,
+                "Cz_qubit_flux": 0.122,
+                "Cz_coupler_flux": -0.08200000000000002,
                 "CZ_coupler_flux": -0.066,
                 "CZ_qubit_flux": -0.124,
                 "CZ_time": 88,

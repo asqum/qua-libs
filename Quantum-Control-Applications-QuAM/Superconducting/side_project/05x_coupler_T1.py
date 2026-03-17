@@ -29,7 +29,7 @@ from scipy.stats import norm
 
 # %% {Node_parameters}
 class Parameters(NodeParameters):
-    coupler: str = 'coupler_q3_q4'
+    coupler: str = 'coupler_q4_q5'
     readout_strategy: Literal['zz-pi', 'aswap'] = 'aswap'
     num_averages: int = 500
     min_wait_time_in_ns: int = 16
@@ -41,7 +41,7 @@ class Parameters(NodeParameters):
     timeout: int = 100
     load_data_id: Optional[int] = None
     debug: bool = False
-    histo_num:int = 5
+    histo_num:int = 1
 
 
 node = QualibrationNode(name="05x_coupler_T1", parameters=Parameters())

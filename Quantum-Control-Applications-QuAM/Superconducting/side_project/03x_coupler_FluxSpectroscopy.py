@@ -36,13 +36,13 @@ class Parameters(NodeParameters):
     operation: str = "saturation"
     operation_amplitude_factor: Optional[float] = 0.1 #0.004, 0.02 # q6:3e-3, q7:1e-2, q8:3e-3, q9:***,
     operation_len_in_ns: Optional[int] = None
-    Driving_LO_GHz: float|None = 4.0 # 3.18
+    Driving_LO_GHz: float|None = 3.6 # 3.18
     frequency_span_in_mhz: float = 200 #12, 120
     frequency_step_in_mhz: float = 2 #0.1, 1
     frequency_shift_in_mhz: float = 0 #0  
-    min_flux_offset_in_v: float = -0.4 ##-0.042
-    max_flux_offset_in_v: float = -0.1 #0.042
-    num_flux_points: int = 151
+    min_flux_offset_in_v: float = -0.1 ##-0.042
+    max_flux_offset_in_v: float = -0.06 #0.042
+    num_flux_points: int = 101
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
     simulate: bool = False
     simulation_duration_ns: int = 2500
@@ -282,7 +282,7 @@ if not node.parameters.simulate:
         ax.set_ylabel("Freq (GHz)")
         ax.set_xlabel("Flux (V)")
         ax.set_title(node.parameters.couplers)
-        
+        ax.grid()
     grid.fig.suptitle("coupler spectroscopy vs flux ")
     
     plt.tight_layout()

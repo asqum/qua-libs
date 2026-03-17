@@ -30,13 +30,15 @@ from qm.qua import *
 from typing import Literal, Optional, List
 import matplotlib.pyplot as plt
 import numpy as np
+from time import time 
+import xarray as xr
 
 
 # %% {Node_parameters}
 class Parameters(NodeParameters):
     coupler: str = 'coupler_q4_q5'
-    coupler_flux_amp:float = -0.235
-    num_averages: int = 2000
+    coupler_flux_amp:float = -0.08
+    num_averages: int = 500
     min_wait_time_in_ns: int = 16
     max_wait_time_in_ns: int = 150016
     wait_time_step_in_ns: int = 1500
@@ -45,10 +47,10 @@ class Parameters(NodeParameters):
     simulation_duration_ns: int = 5000
     timeout: int = 100
     load_data_id: Optional[int] = None
-    debug: bool = False
+    histo_num:int = 50
 
 
-node = QualibrationNode(name="05x_coupler_T1", parameters=Parameters())
+node = QualibrationNode(name="05x_coupler_FluxTuning_T1", parameters=Parameters())
 
 
 # %% {Initialize_QuAM_and_QOP}
@@ -63,8 +65,11 @@ coupler = [machine.qubit_pairs[node.parameters.coupler]] # currently supports 1 
 drive_q = [machine.qubits[coupler[0].extras["RD"]["driven_q"]]]
 detector_q = [machine.qubits[coupler[0].extras["RD"]["readout_q"]]]
 # Change driving LO
-drive_LO_original = {drive_q[0].name: drive_q[0].xy.opx_output.upconverter_frequency}
-drive_q[0].xy.opx_output.upconverter_frequency = coupler[0].extras["RD"]["LO"]
+if not node.parameters.simulate and node.parameters.load_data_id is None:
+    drive_LO_original = {drive_q[0].name: drive_q[0].xy.opx_output.upconverter_frequency}
+    drive_q[0].xy.opx_output.upconverter_frequency = coupler[0].extras["RD"]["LO"]
+    if "swap_direction" in coupler[0].extras["RD"]:
+        detector_q[0].z.operations['aSWAP'].slope_direction = coupler[0].extras["RD"]["swap_direction"]
 
 # Generate the OPX and Octave configurations
 config = machine.generate_config()
@@ -127,15 +132,15 @@ with program() as t1:
                     else:
                         wait(5*coupler[0].extras['T1']*1e9 * u.ns)
                 align()
-                if not node.parameters.debug:
-                    qubit.xy.play("x180_cp")
+                
+                qubit.xy.play("x180_cp")
                 align()
                 coupler[0].coupler.play("const", amplitude_scale=node.parameters.coupler_flux_amp/coupler[0].coupler.operations["const"].amplitude, duration=t)
-                for q in detuned_qs:
-                    q.z.play("const", amplitude_scale=0.25 / q.z.operations["const"].amplitude, duration=t)
+                # for q in detuned_qs:
+                #     q.z.play("const", amplitude_scale=0.25 / q.z.operations["const"].amplitude, duration=t)
                 
                 align()
-                wait(25) # 100 ns flux settle down time.
+                wait(100) # 400 ns flux settle down time.
                 
 
                 # Measure the state of the resonators
@@ -166,87 +171,145 @@ if node.parameters.simulate:
     wf_report = job.get_simulated_waveform_report()
     wf_report.create_plot(samples, plot=True, save_path=None)
     node.save()
-elif node.parameters.load_data_id is None:
-    with qm_session(qmm, config, timeout=node.parameters.timeout) as qm:
-        job = qm.execute(t1)
-        results = fetching_tool(job, ["n"], mode="live")
-        while results.is_processing():
-            # Fetch results
-            n = results.fetch_all()[0]
-            # Progress bar
-            progress_counter(n, n_avg, start_time=results.start_time)
+else:
+    if node.parameters.load_data_id is None:
+        dss = []
+        start = time()
+        for jj in range(node.parameters.histo_num):
+            try:
+                with qm_session(qmm, config, timeout=node.parameters.timeout) as qm:
+                    job = qm.execute(t1)
+                    results = fetching_tool(job, ["n"], mode="live")
+                    while results.is_processing():
+                        # Fetch results
+                        n = results.fetch_all()[0]
+                        # Progress bar
+                        progress_counter(n, n_avg, start_time=results.start_time)
+                ds = fetch_results_as_xarray(job.result_handles, coupler, {"idle_time": idle_times})
+                print(f"Counts: {jj+1}\n")
+                dss.append(ds)
+            except:
+                print("Error got, break the loop and step into analysis.")
+                break
+        
+        end = time()
+        print(f"Total {round(end-start,1)} sec for {node.parameters.histo_num} counts")
+        ds = xr.concat(dss, dim='iteration')
+        ds = ds.assign_coords(idle_time=4 * ds.idle_time / u.us)  # convert to µs
+        ds.idle_time.attrs = {"long_name": "idle time", "units": "µs"}
+        node.results = {"ds": ds}
+
+    else:
+        ds, machine, json_data, qubits, node.parameters = load_dataset(node.parameters.load_data_id, parameters = node.parameters)
 
 # %% {Data_fetching_and_dataset_creation}
 if not node.parameters.simulate:
-    if node.parameters.load_data_id is None:
-        # Fetch the data from the OPX and convert it into a xarray with corresponding axes (from most inner to outer loop)
-        ds = fetch_results_as_xarray(job.result_handles, drive_q, {"idle_time": idle_times})
 
-        # Convert time into µs
-        ds = ds.assign_coords(idle_time=4 * ds.idle_time / u.us)  # convert to µs
-        ds.idle_time.attrs = {"long_name": "idle time", "units": "µs"}
-    else:
-        ds, machine, json_data, qubits, node.parameters = load_dataset(node.parameters.load_data_id, parameters = node.parameters)
-    # Add the dataset to the node
-    node.results = {"ds": ds}
+    qbs = ds.qubit.values
+    iterations = ds.iteration.values
 
-    # %% {Data_analysis}
-    # Fit the exponential decay
     
-    fit_data = fit_decay_exp(ds.state, "idle_time")
-    
-    fit_data.attrs = {"long_name": "time", "units": "µs"}
-    # Fitted decay
-    fitted = decay_exp(
-        ds.idle_time,
-        fit_data.sel(fit_vals="a"),
-        fit_data.sel(fit_vals="offset"),
-        fit_data.sel(fit_vals="decay"),
-    )
-    # Decay rate and its uncertainty
-    decay = fit_data.sel(fit_vals="decay")
-    decay.attrs = {"long_name": "decay", "units": "ns"}
-    decay_res = fit_data.sel(fit_vals="decay_decay")
-    decay_res.attrs = {"long_name": "decay", "units": "ns"}
-    # T1 and its uncertainty
-    tau = -1 / fit_data.sel(fit_vals="decay")
-    tau.attrs = {"long_name": "T1", "units": "µs"}
-    tau_error = -tau * (np.sqrt(decay_res) / decay)
-    tau_error.attrs = {"long_name": "T1 error", "units": "µs"}
+    t1_collection = {q: [] for q in qbs}
+    fit_collection = {q: [] for q in qbs}
+
+    for q_name in qbs:
+        for iter_val in iterations:
+            
+            ds_sub = ds.sel(qubit=q_name, iteration=iter_val)
+            
+            fit_data = fit_decay_exp(ds_sub.state, "idle_time")
+
+            fit_collection[q_name] = fit_data
+            
+            
+            decay_val = fit_data.sel(fit_vals="decay").values
+            tau_val = -1 / decay_val
+            t1_collection[q_name].append(tau_val)
 
     # %% {Plotting}
     grid = QubitGrid(ds, [q.grid_location for q in drive_q])
+    mu_collection, sig_collection = {}, {}
     for ax, qubit in grid_iter(grid):
+        ## HARDcoded:
+        qubit['qubit'] = coupler[0].name
+        if node.parameters.histo_num > 1:
+            data = np.array(t1_collection[qubit['qubit']])
+            counts, bins, _ = ax.hist(data, bins=15, alpha=0.7, color='skyblue', edgecolor='white', label='Counts')
+            ### Normal distribution
+            mu, sigma = norm.fit(data)
+            bin_width = bins[1] - bins[0]
+            scaling_factor = len(data) * bin_width
+            x = np.linspace(min(data), max(data), 100)
+            p = norm.pdf(x, mu, sigma) * scaling_factor  
+            mu_collection[qubit['qubit']], sig_collection[qubit['qubit']] = mu, sigma
         
-        ds.sel(qubit=qubit["qubit"]).state.plot(ax=ax)
-        ax.set_ylabel("State")
-        
-        ax.plot(ds.idle_time, fitted.loc[qubit], "r--")
-        ax.set_title(f"prepare {node.parameters.coupler} at {'|1>' if not node.parameters.debug else '|0>'}")
-        ax.set_xlabel("Idle_time (uS)")
-        ax.text(
-            0.1,
-            0.9,
-            f'T1 = {tau.sel(qubit = qubit["qubit"]).values:.1f} ± {tau_error.sel(qubit = qubit["qubit"]).values:.1f} µs',
-            transform=ax.transAxes,
-            fontsize=10,
-            verticalalignment="top",
-            bbox=dict(facecolor="white", alpha=0.5),
-        )
-    grid.fig.suptitle("T1")
+            ### Plot
+            ax.plot(x, p, 'r-', lw=2, label='Normal Fit')
+            ax.set_title(f"{qubit['qubit']} at additional offset {node.parameters.coupler_flux_amp} V")
+            ax.set_xlabel("T1 (µs)")
+            ax.set_ylabel("Counts")
+            ax.grid(axis='y', alpha=0.3)
+            
+            stats_text = (
+                f"$\mu = {mu:.2f}$ µs\n"
+                f"$\sigma = {sigma:.2f}$ µs\n"
+                f"Total # = {len(data)}"
+            )
+            ax.text(
+                0.05, 0.95, stats_text,
+                transform=ax.transAxes,
+                fontsize=11,
+                verticalalignment="top",
+                bbox=dict(boxstyle="round", facecolor="white", alpha=0.7)
+            )
+        else:
+            fitted = decay_exp(
+                ds.idle_time,
+                fit_collection[qubit['qubit']].sel(fit_vals="a"),
+                fit_collection[qubit['qubit']].sel(fit_vals="offset"),
+                fit_collection[qubit['qubit']].sel(fit_vals="decay"),
+            )
+            decay = fit_collection[qubit['qubit']].sel(fit_vals="decay")
+            decay_res = fit_collection[qubit['qubit']].sel(fit_vals="decay_decay")
+            tau = -1 / fit_collection[qubit['qubit']].sel(fit_vals="decay")
+            tau_error = -tau * (np.sqrt(decay_res) / decay)
+            
+            ds.sel(qubit=qubit["qubit"]).state.plot(ax=ax)
+            ax.set_ylabel("State")
+            
+            ax.plot(ds.idle_time, fitted, "r--")
+            ax.set_title(qubit["qubit"]+f" at additional offset {node.parameters.coupler_flux_amp} V")
+            ax.set_xlabel("Idle_time (uS)")
+            ax.text(
+                0.1,
+                0.9,
+                f'T1 = {tau.values:.1f} ± {tau_error.values:.1f} µs',
+                transform=ax.transAxes,
+                fontsize=10,
+                verticalalignment="top",
+                bbox=dict(facecolor="white", alpha=0.5),
+            )
+            mu_collection[qubit['qubit']], sig_collection[qubit['qubit']] = float(tau.values), float(tau_error.values)
+
+
     plt.tight_layout()
     plt.show()
-    node.results["figure_raw"] = grid.fig
 
-    # %% {Save_results}
+    node.results["t1_stats"] = {q: {"mu_us": mu_collection[q], "sigma_us": sig_collection[q]} for q in qbs}
+    node.results["figure_histogram"] = grid.fig
+
+    #%% {save data}
     if node.parameters.load_data_id is None:
-        with node.record_state_updates():
-            if node.parameters.load_data_id is None:
-                for q in drive_q:
-                    q.xy.opx_output.upconverter_frequency = drive_LO_original[q.name] # revert the driving LO
+        
+        for q in drive_q:
+            q.xy.opx_output.upconverter_frequency = drive_LO_original[q.name] # revert the driving LO
+        for q in detector_q:
+            q.z.operations['aSWAP'].slope_direction = -1
         node.results["initial_parameters"] = node.parameters.model_dump()
         node.machine = machine
         node.save()
+        
+
 
 
 # %%
