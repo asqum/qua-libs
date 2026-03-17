@@ -41,7 +41,7 @@ class Parameters(NodeParameters):
     num_averages: int = 600
     frequency_span_in_mhz: float = 5
     frequency_step_in_mhz: float = 0.05
-    EF_x180_dura_scaling:List[int] = [200, 500]
+    EF_x180_dura_scaling:List[int] = [200, 500] # len must >2, [100, 300] is recommended  
     reset_type: Literal["active", "thermal"] = "active"
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
     simulate: bool = False
