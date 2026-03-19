@@ -25,13 +25,13 @@ class Parameters(NodeParameters):
     qubits: Optional[List[str]] = None #The qubit to be measured. If None, all active qubits will be measured
     num_averages: int = 300
     min_wait_time_in_ns: int = 16
-    max_wait_time_in_ns: int = 5000
-    wait_time_step_in_ns: int = 50
+    max_wait_time_in_ns: int = 50008
+    wait_time_step_in_ns: int = 500
     flux_point_joint_or_independent_or_arbitrary: Literal['joint', 'independent'] = 'independent'   
     simulate: bool = False
     timeout: int = 100
     use_state_discrimination: bool = True
-    reset_type: Literal['active', 'thermal'] = "thermal"
+    reset_type: Literal['active', 'thermal'] = "active"
 
 node = QualibrationNode(
     name="06b_T2_echo",
@@ -237,7 +237,11 @@ if not node.parameters.simulate:
     node.results['figure_raw'] = grid.fig
 
 # %%
+if not node.parameters.simulate:
+    with node.record_state_updates():
+        for q in qubits:
+            q.T2echo = float(tau.sel(qubit = q.name).values)*1e-6
 node.results['initial_parameters'] = node.parameters.model_dump()
 node.machine = machine
 node.save()
-# %%
+# %%T2echo

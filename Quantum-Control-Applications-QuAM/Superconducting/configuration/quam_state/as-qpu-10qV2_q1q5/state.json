@@ -576,12 +576,12 @@
                 "depletion_time": 1200,
                 "confusion_matrix": [
                     [
-                        0.954833984375,
-                        0.045166015625
+                        0.965087890625,
+                        0.034912109375
                     ],
                     [
-                        0.039306640625,
-                        0.960693359375
+                        0.044189453125,
+                        0.955810546875
                     ]
                 ],
                 "GEF_frequency_shift": -500000,
@@ -620,9 +620,9 @@
                     "readout": {
                         "length": 1500,
                         "amplitude": 0.007525252525252526,
-                        "threshold": -0.0003304818828659348,
-                        "rus_exit_threshold": -0.0004710281470298231,
-                        "integration_weights_angle": -182.5019527090943,
+                        "threshold": -0.0002974263840293654,
+                        "rus_exit_threshold": -0.00045636010263418327,
+                        "integration_weights_angle": -188.78127965300348,
                         "__class__": "quam.components.pulses.SquareReadoutPulse"
                     },
                     "const": {
@@ -642,6 +642,7 @@
             "freq_vs_flux_01_quad_term": -8959756239.740816,
             "T1": 3.441149541264196e-05,
             "T2ramsey": 5.041434111453942e-07,
+            "T2echo": 1.3465564079572076e-05,
             "phi0_current": 45.58653156790658,
             "phi0_voltage": 0.9117306313581317,
             "chi": -300000.0,
@@ -829,6 +830,14 @@
                         "slope_direction": -1,
                         "truncate_len": 400,
                         "__class__": "quam_libs.lib.pulses.aSWAPPulse"
+                    },
+                    "free_bipolar": {
+                        "length": 100,
+                        "amplitude": 0.2,
+                        "flat_length_ratio": 0.85,
+                        "neg_amp_scal": 1.0,
+                        "pos_len_ratio": 1.0,
+                        "__class__": "quam_libs.lib.pulses.FreeCosineBipolarPulse"
                     }
                 },
                 "opx_output": "#/wiring/qubits/q4/z/opx_output",
@@ -841,12 +850,12 @@
                 "depletion_time": 1200,
                 "confusion_matrix": [
                     [
-                        0.972412109375,
-                        0.027587890625
+                        0.95556640625,
+                        0.04443359375
                     ],
                     [
-                        0.043212890625,
-                        0.956787109375
+                        0.0546875,
+                        0.9453125
                     ]
                 ],
                 "GEF_frequency_shift": -950000,
@@ -885,9 +894,9 @@
                     "readout": {
                         "length": 1500,
                         "amplitude": 0.011474747474747474,
-                        "threshold": 0.00027900372642291113,
-                        "rus_exit_threshold": 9.102998259451899e-05,
-                        "integration_weights_angle": -176.10563070495903,
+                        "threshold": 0.0002773344950288137,
+                        "rus_exit_threshold": 9.471595686913302e-05,
+                        "integration_weights_angle": -176.1081431218263,
                         "__class__": "quam.components.pulses.SquareReadoutPulse"
                     },
                     "const": {
@@ -907,6 +916,7 @@
             "freq_vs_flux_01_quad_term": -8979886379.157217,
             "T1": 3.915163570966381e-05,
             "T2ramsey": 1.686700516231744e-06,
+            "T2echo": 2.0390131935707903e-05,
             "phi0_current": 46.651015062778896,
             "phi0_voltage": 0.9330203012555779,
             "chi": -300000.0,
@@ -1098,12 +1108,12 @@
                 "depletion_time": 1200,
                 "confusion_matrix": [
                     [
-                        0.976806640625,
-                        0.023193359375
+                        0.9794921875,
+                        0.0205078125
                     ],
                     [
-                        0.044921875,
-                        0.955078125
+                        0.043701171875,
+                        0.956298828125
                     ]
                 ],
                 "GEF_frequency_shift": -400000,
@@ -1142,9 +1152,9 @@
                     "readout": {
                         "length": 1500,
                         "amplitude": 0.0055,
-                        "threshold": -0.00022017103988717051,
-                        "rus_exit_threshold": -0.00036896275109101,
-                        "integration_weights_angle": -172.99660846704356,
+                        "threshold": -0.00022547507512560348,
+                        "rus_exit_threshold": -0.00036494798224033417,
+                        "integration_weights_angle": -172.9983158269991,
                         "__class__": "quam.components.pulses.SquareReadoutPulse"
                     },
                     "const": {
@@ -1164,6 +1174,7 @@
             "freq_vs_flux_01_quad_term": -9096364821.43542,
             "T1": 3.8276338520243966e-05,
             "T2ramsey": 8.788076732963706e-07,
+            "T2echo": 1.5043358111256974e-05,
             "phi0_current": 47.13128351250144,
             "phi0_voltage": 0.9426256702500287,
             "chi": -450000.0,
@@ -1407,7 +1418,15 @@
                         "amplitude": 1.25,
                         "__class__": "quam.components.pulses.SquarePulse"
                     },
-                    "cardinal": "#./const"
+                    "cardinal": "#./const",
+                    "free_bipolar": {
+                        "length": 100,
+                        "amplitude": 0.1,
+                        "flat_length_ratio": 0.9,
+                        "neg_amp_scal": 1.0,
+                        "pos_len_ratio": 0.9090909090909091,
+                        "__class__": "quam_libs.lib.pulses.FreeCosineBipolarPulse"
+                    }
                 },
                 "id": "coupler_q4_q5",
                 "opx_output": "#/wiring/qubit_pairs/q4-5/c/opx_output",
