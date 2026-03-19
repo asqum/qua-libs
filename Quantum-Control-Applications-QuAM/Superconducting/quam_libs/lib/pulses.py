@@ -290,8 +290,10 @@ class FreeCosineBipolarPulse(Pulse):
     Args:
         length (int): Total length in samples.
         amplitude (float): The amplitude of the pulse (V).
-        switch_point_ratio (float): Ratio of total length allocated to the positive lobe.
+        pos_len_ratio (float): Ratio of total length allocated to the positive lobe.
             Range [0.0, 1.0]. E.g., 0.6 means first 60% is positive.
+        neg_amp_scal (float): Ratio of the amplitude for negative pole, means the amplitude for negative
+            pole will be amp*neg_amp_scal. 
         flat_length_ratio (float): Ratio of length within each lobe that is flat.
             Range [0.0, 1.0]. E.g., 0.9 means 90% of the lobe is flat top.
         axis_angle (float, optional): IQ axis angle in radians.
@@ -301,6 +303,7 @@ class FreeCosineBipolarPulse(Pulse):
     axis_angle: float = None
     flat_length_ratio: float
     neg_amp_scal:float
+    pos_len_ratio:float
 
     def waveform_function(self):
         # --- Helper functions ---
@@ -322,7 +325,7 @@ class FreeCosineBipolarPulse(Pulse):
         # 1. calc the length of postive pole and negative pole
         # flip_point_ratio = 0.6  --> pos_total_len = 0.6 * L
         
-        pos_total_len = int(np.round(L * 0.5))
+        pos_total_len = int(np.round(L * self.pos_len_ratio))
         neg_total_len = L - pos_total_len
 
         # 2. calc flat length

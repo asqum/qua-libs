@@ -2,6 +2,7 @@ from quam.components import pulses
 from qualang_tools.units import unit
 from quam_libs.components import Transmon
 import numpy as np
+from quam_libs.lib.pulses import aSWAPPulse, FreeCosineBipolarPulse
 
 # Class containing tools to help handling units and conversions.
 u = unit(coerce_to_integer=True)
@@ -90,6 +91,7 @@ def add_default_transmon_pulses(transmon: Transmon):
 
     if transmon.z is not None:
         transmon.z.operations["const"] = pulses.SquarePulse(amplitude=0.1, length=100)
+        transmon.z.operations["aSWAP"] = aSWAPPulse(amplitude=0.2, length=400, truncate_len=400, slope_direction=-1)
 
     if transmon.resonator is not None:
         transmon.resonator.operations["readout"] = pulses.SquareReadoutPulse(
@@ -100,3 +102,4 @@ def add_default_transmon_pulses(transmon: Transmon):
 
 def add_default_transmon_pair_pulses(transmon_pair):
     transmon_pair.coupler.operations["const"] = pulses.SquarePulse(amplitude=0.1, length=100)
+    transmon_pair.coupler.operations['free_bipolar'] = FreeCosineBipolarPulse(length=100, amplitude=0.2, flat_length_ratio=0.9, neg_amp_scal=1.0, pos_len_ratio=0.5)
