@@ -300,6 +300,7 @@ if not node.parameters.simulate:
     plt.show()
     node.results["figure"] = grid.fig
 
+
     # %% {Update_state}
     if not node.parameters.load_data_id:
         with node.record_state_updates():
@@ -320,12 +321,10 @@ if not node.parameters.simulate:
                 q.phi0_current = (
                     fit_results[q.name]["dv_phi0"] * node.parameters.input_line_impedance_in_ohm * attenuation_factor
                 )
-                q.z.operations["aSWAP"] = aSWAPPulse(
-                    truncate_len=400,
-                    slope_direction=-1,
-                    amplitude=abs(fit_results[q.name]['min_offset']-fit_results[q.name]['offset']),
-                    length=400,
-                )
+                if hasattr(q.z.operations, "aSWAP"):
+                    q.z.operations["aSWAP"].amplitude = abs(fit_results[q.name]['min_offset']-fit_results[q.name]['offset'])
+                else:
+                    print(f"aSWAP now is not in {q.name}.z.operation, please update it to unlock the ability for coupler's measurement!")
                 
 
         # %% {Save_results}
