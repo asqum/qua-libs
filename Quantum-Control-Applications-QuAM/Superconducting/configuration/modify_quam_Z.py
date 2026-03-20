@@ -20,7 +20,7 @@ for i, c in enumerate(machine.qubit_pairs):
 
 
 # %% {modify offsets}
-inde_or_decouple_offset_scenarios:dict = {"coupler_q2_q3":-0.4,"coupler_q3_q4":-0.4,"coupler_q4_q5":0.2,"coupler_q5_q6":-0.6,}
+inde_or_decouple_offset_scenarios:dict = {"coupler_q2_q3":-0.4,"coupler_q3_q4":-0.5,"coupler_q4_q5":0.275,"coupler_q5_q6":-0.6,}
 for i, ele in enumerate(inde_or_decouple_offset_scenarios):
     if ele in machine.qubits:
         print(f"{ele}'s independent offset -> {inde_or_decouple_offset_scenarios[ele]} V")
