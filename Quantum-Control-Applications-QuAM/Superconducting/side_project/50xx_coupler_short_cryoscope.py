@@ -4,10 +4,8 @@ from dataclasses import asdict
 import numpy as np
 import matplotlib.pyplot as plt
 from calibration_utils.cryoscope import (
-    fit_raw_data,
     log_fitted_results,
     plot_fit,
-    process_raw_dataset,
 )
 from calibration_utils.cryoscope.analysis import unwrap_phase, fit_oscillation, optimize_start_fractions, _extract_relevant_fit_parameters, diff_savgol
 from qualang_tools.results import fetching_tool, progress_counter
@@ -75,14 +73,14 @@ Next steps before going to the next node:
 # Be sure to include [Parameters, Quam] so the node has proper type hinting
 
 class Parameters(NodeParameters):
-    qubits:List[str] = ['coupler_q4_q5'] # A coupler only
-    num_shots: int = 300
+    coupler:str = 'coupler_q4_q5' # A coupler only
+    num_shots: int = 500
     """Number of averages to perform. Default is 50."""
-    flux_amplitude: float = 0.05
-    """Target detuning from sweetspot for the cryoscope pulse in MHz. Default is 350."""
+    freq_detuning_MHz: float = 10
+    """Since now coupler is away from sweet spot, very sensitive to flux. 10 MHz"""
     cryoscope_len: int = 200
     """Length of the cryoscope operation in microseconds. Default is 240."""
-    num_frames: int = 17
+    num_frames: int = 17*3
     """Number of frames to use in the cryoscope experiment. Default is 17."""
     exponential_fit_time_fractions: List[float] = [0.5, 0.01]
     """List of time fractions for the exponential fit. Default is [0.5, 0.01]."""
@@ -94,7 +92,7 @@ class Parameters(NodeParameters):
     """ID of the data to be loaded"""
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
     """Flux point configurations"""
-    t_guard: int = 100
+    t_guard: int = 60
     """A gaurd time (ns) to make sure second xy pulse play after the flux pulse has ended. Dont exeed ~20% of T2*"""
     timeout: int = 100
     """Mesurement timeout"""
@@ -103,7 +101,8 @@ class Parameters(NodeParameters):
     simulation_duration_ns:int = 5_000
     """ Simulation time"""
     
-    
+
+# %% 
 def baked_waveform(config, waveform_amp: float, qubit, max_length: int = 16):
     """Create baked pulse segments with 1ns granularity up to ``max_length`` ns.
 
@@ -167,20 +166,20 @@ def fit_raw_data(ds: xr.Dataset, node: QualibrationNode):
         (fitted_dataset, fit_results_dict)
     """
 
-    def _cryoscope_frequency(ds, stable_time_indices, slope, sg_range=3, sg_order=2):
+    def _cryoscope_frequency(ds, stable_time_indices, slope, intercept, sg_range=3, sg_order=2):
         ds = ds.copy()
 
         freq_cryoscope = diff_savgol(ds, "time", range=sg_range, order=sg_order)
 
         ds["freq"] = freq_cryoscope
 
-        flux_cryoscope = freq_cryoscope / slope
+        flux_cryoscope = (1e9 * freq_cryoscope - intercept ) / slope
 
         baseline = flux_cryoscope.sel(
             time=slice(stable_time_indices[0], stable_time_indices[1])
         ).mean(dim="time")
 
-        ds["flux"] = flux_cryoscope - baseline
+        ds["flux"] = flux_cryoscope 
 
         return ds
 
@@ -203,6 +202,7 @@ def fit_raw_data(ds: xr.Dataset, node: QualibrationNode):
     ds_fit = _cryoscope_frequency(
         daphi,
         slope=float(qp.extras["Fx"]["linear_fit_coef"][0]),
+        intercept = float(qp.extras["Fx"]["linear_fit_coef"][1]),
         stable_time_indices=(node.parameters.cryoscope_len - 20, node.parameters.cryoscope_len),
         sg_order=sg_order,
         sg_range=sg_range,
@@ -257,8 +257,8 @@ machine  = QuAM.load()
 node.machine = machine
 
 # Get the relevant QuAM components
-assert len(node.parameters.qubits) == 1, "Currently only supports 1 coupler at the same time."
-coupler = [machine.qubit_pairs[node.parameters.qubits[0]]] # currently supports 1 coupler a time only.
+
+coupler = [machine.qubit_pairs[node.parameters.coupler]] # currently supports 1 coupler a time only.
 drive_q = [machine.qubits[coupler[0].extras["RD"]["driven_q"]]]
 detector_q = [machine.qubits[coupler[0].extras["RD"]["readout_q"]]]
 
@@ -279,11 +279,14 @@ if node.parameters.load_data_id is None:
 
 num_qubits = len(coupler)
 
-# node.namespace["qubits"] = qubits
+node.namespace["qubits"] = coupler
 
 loaded_fractions = node.parameters.exponential_fit_time_fractions
 
 
+amplitude = ((u.MHz*node.parameters.freq_detuning_MHz) - float(coupler[0].extras["Fx"]["linear_fit_coef"][1])) / float(coupler[0].extras["Fx"]["linear_fit_coef"][0])
+
+print(amplitude)
 
 
 # %% {Create_QUA_program}
@@ -291,9 +294,6 @@ loaded_fractions = node.parameters.exponential_fit_time_fractions
 
 n_avg = node.parameters.num_shots  # The number of averages
 cryoscope_len = node.parameters.cryoscope_len  # The length of the cryoscope in nanoseconds
-
-# Absolute amplitude of the Cryoscope pulse
-amplitude = node.parameters.flux_amplitude #float(np.sqrt(-node.parameters.detuning_target_in_MHz * 1e6 / qubits[0].freq_vs_flux_01_quad_term))
 
 cryoscope_time = np.arange(1, cryoscope_len + 1, 1)  # x-axis for plotting - must be in ns
 
@@ -326,7 +326,7 @@ with program() as qua_prog:
 
     qd = drive_q[0]
     c = coupler[0]
-
+    qd.xy.update_frequency(c.extras["RD"]["IF"])
     # Outer loop for averaging
     with for_(n, 0, n < n_avg, n + 1):
         save(n, n_st)
@@ -382,7 +382,7 @@ with program() as qua_prog:
                             )
                             qd.xy.wait((cryoscope_len + node.parameters.t_guard) // 4)
                             qd.xy.frame_rotation_2pi(frame)
-                            qd.xy.play("x90")
+                            qd.xy.play("x90_cp")
                         # Play the pulse multiple of 4 followed by the baked pulse of the missing duration
                         for j in range(1, 4):
                             with case_(j):
@@ -454,6 +454,7 @@ else:
 
 
 # %% {Analyse_data}
+node.parameters.exponential_fit_time_fractions = [0.5, 0.02]
 node.results["ds_raw"] = node.results["ds_raw"]
 node.results["ds_fit"], fit_results = fit_raw_data(node.results["ds_raw"], node)
 
@@ -486,6 +487,10 @@ if not node.parameters.simulate:
 
 
 # %% {Save_results}
+for q in drive_q:
+    q.xy.opx_output.upconverter_frequency = drive_LO_original[q.name] # revert the driving LO
+for q in detector_q:
+    q.z.operations['aSWAP'].slope_direction = -1 # always at -1
 node.outcomes = {q.name: "successful" for q in qubits}
 node.results["initial_parameters"] = node.parameters.model_dump()
 node.machine = machine

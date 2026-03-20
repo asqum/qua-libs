@@ -267,7 +267,7 @@ if  node.parameters.load_data_id is None and not node.parameters.simulate:
 
     from calibration_utils.pi_flux.analysis import fit_gaussian, PiFluxParameters, optimize_start_fractions
     
-    node.parameters.fitting_base_fractions = [0.04, 0.1, 0.001]
+    node.parameters.fitting_base_fractions = [0.01, 0.01, 0.0004]
     if "state_target" in ds.data_vars:
         state_da = ds["state_target"].transpose("qubit", "time", "detuning")
         center_freqs = xr.apply_ufunc(

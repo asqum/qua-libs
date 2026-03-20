@@ -22,8 +22,8 @@ Next steps before going to the next node:
 # %% {Imports}
 from qualibrate import QualibrationNode, NodeParameters
 from quam_libs.components import QuAM
-from quam_libs.macros import qua_declaration, active_reset, active_reset_simple
-from quam_libs.lib.plot_utils import QubitGrid, grid_iter
+from quam_libs.macros import qua_declaration, readout_state_coupler
+from quam_libs.lib.plot_utils import QubitPairGrid, grid_iter, grid_pair_names
 from quam_libs.lib.save_utils import fetch_results_as_xarray
 from quam_libs.lib.fit import fit_oscillation, oscillation
 from qualang_tools.results import progress_counter, fetching_tool
@@ -40,20 +40,21 @@ import numpy as np
 # %% {Node_parameters}
 class Parameters(NodeParameters):
 
-    qubits: Optional[List[str]] = None
-    num_averages: int = 60 #10
-    operation_x180_or_any_90: Literal["x180", "x90", "-x90", "y90", "-y90"] = "x180"
+    coupler: str = 'coupler_q4_q5'
+    num_averages: int = 500 #10
+    operation_x180_or_any_90: Literal["x180_cp", "x90_cp"] = "x180_cp"
+    update_x90:bool = True
     min_amp_factor: float = 0.8
     max_amp_factor: float = 1.2
     amp_factor_step: float = 0.004
-    max_number_rabi_pulses_per_sweep: int = 88
+    max_number_rabi_pulses_per_sweep: int = 32
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
-    reset_type_thermal_or_active: Literal["thermal", "active"] = "thermal"
     simulate: bool = False
     timeout: int = 100
+    load_data_id:int|None = None
 
 
-node = QualibrationNode(name="09_Power_Rabi_State", parameters=Parameters())
+node = QualibrationNode(name="04xx_coupler_Power_Rabi_State", parameters=Parameters())
 
 
 # %% {Initialize_QuAM_and_QOP}
@@ -61,17 +62,26 @@ node = QualibrationNode(name="09_Power_Rabi_State", parameters=Parameters())
 u = unit(coerce_to_integer=True)
 # Instantiate the QuAM class from the state file
 machine = QuAM.load()
+
+# Get the relevant QuAM components
+coupler = [machine.qubit_pairs[node.parameters.coupler]] # currently supports 1 coupler a time only.
+drive_q = [machine.qubits[coupler[0].extras["RD"]["driven_q"]]]
+detector_q = [machine.qubits[coupler[0].extras["RD"]["readout_q"]]]
+
+# Change driving LO
+if not node.parameters.simulate and node.parameters.load_data_id is None:
+    drive_LO_original = {drive_q[0].name: drive_q[0].xy.opx_output.upconverter_frequency}
+    drive_q[0].xy.opx_output.upconverter_frequency = coupler[0].extras["RD"]["LO"]
+    if "swap_direction" in coupler[0].extras["RD"]:
+        detector_q[0].z.operations['aSWAP'].slope_direction = coupler[0].extras["RD"]["swap_direction"]
+
+
 # Generate the OPX and Octave configurations
 config = machine.generate_config()
 # Open Communication with the QOP
 qmm = machine.connect()
 
-# Get the relevant QuAM components
-if node.parameters.qubits is None or node.parameters.qubits == "":
-    qubits = machine.active_qubits
-else:
-    qubits = [machine.qubits[q] for q in node.parameters.qubits]
-num_qubits = len(qubits)
+num_qubits = len(drive_q)
 
 
 # %% {QUA_program}
@@ -80,7 +90,7 @@ N_pi = (
     node.parameters.max_number_rabi_pulses_per_sweep
 )  # Number of applied Rabi pulses sweep
 flux_point = node.parameters.flux_point_joint_or_independent  # 'independent' or 'joint'
-reset_type = node.parameters.reset_type_thermal_or_active  # "active" or "thermal"
+reset_type = 'thermal' #node.parameters.reset_type_thermal_or_active  # "active" or "thermal"
 operation = node.parameters.operation_x180_or_any_90  # The qubit operation to play
 # Pulse amplitude sweep (as a pre-factor of the qubit pulse amplitude) - must be within [-2; 2)
 amps = np.arange(
@@ -89,9 +99,9 @@ amps = np.arange(
     node.parameters.amp_factor_step,
 )
 
-if operation == "x180":
+if operation == "x180_cp":
     N_pi_vec = np.arange(1, N_pi, 2).astype("int")
-elif operation in ["x90", "-x90", "y90", "-y90"]:
+elif operation in ["x90_cp"]:
     N_pi_vec = np.arange(2, N_pi, 4).astype("int")
 else:
     raise ValueError(f"Unrecognized operation {operation}.")
@@ -99,13 +109,15 @@ else:
 
 with program() as power_rabi:
     I, _, Q, _, n, n_st = qua_declaration(num_qubits=num_qubits)
-    state = [declare(bool) for _ in range(num_qubits)]
+    state = [declare(int) for _ in range(num_qubits)]
     state_stream = [declare_stream() for _ in range(num_qubits)]
     a = declare(fixed)  # QUA variable for the qubit drive amplitude pre-factor
     npi = declare(int)  # QUA variable for the number of qubit pulses
     count = declare(int)  # QUA variable for counting the qubit pulses
 
-    for i, qubit in enumerate(qubits):
+    if not node.parameters.simulate:
+        machine.apply_all_couplers_to_min()
+    for i, qubit in enumerate(drive_q):
         # Bring the active qubits to the minimum frequency point
         # if flux_point == "independent":
         #     machine.apply_all_flux_to_min()
@@ -115,52 +127,45 @@ with program() as power_rabi:
         #     machine.apply_all_flux_to_joint_idle()
         # else:
         #     machine.apply_all_flux_to_zero()
-        machine.set_all_fluxes(flux_point=flux_point, target=qubit)
-        if "c" in qubit.id: qubit.z.set_dc_offset(qubit.z.joint_offset) # for coupler-test case
-        qubit.z.settle()
-        qubit.align() 
-
-        # Wait for the flux bias to settle
-        for qb in qubits:
-            wait(1000, qb.z.name)
-
-        align(*[q.xy.name for q in qubits] +
-               [q.resonator.name for q in qubits] +
-               [q.z.name for q in qubits])
+        if not node.parameters.simulate:
+            machine.set_all_fluxes(flux_point=flux_point, target=qubit)
+            if "c" in qubit.id: qubit.z.set_dc_offset(qubit.z.joint_offset) # for coupler-test case
+            qubit.z.settle()
+        qubit.align()
+        qubit.xy.update_frequency(coupler[0].extras["RD"]["IF"])
+        align()
 
         with for_(n, 0, n < n_avg, n + 1):
             save(n, n_st)
             with for_(*from_array(npi, N_pi_vec)):
                 with for_(*from_array(a, amps)):
                     # Initialize the qubits
-                    if reset_type == "active":
-                        active_reset(qubit)
-                    else:
-                        qubit.wait(qubit.thermalization_time * u.ns)
+                    if not node.parameters.simulate:
+                        if qubit.thermalization_time//5 > coupler[0].extras['T1']*1e9:
+                            wait(qubit.thermalization_time * u.ns)
+                        else:
+                            wait(5*coupler[0].extras['T1']*1e9 * u.ns)
 
-                    qubit.align()
+                    align()
                     # Loop for error amplification (perform many qubit pulses)
                     with for_(count, 0, count < npi, count + 1):
                         qubit.xy.play(operation, amplitude_scale=a)
-                    align(qubit.xy.name, qubit.resonator.name)
-                    #        [q.z.name for q in qubits]))
-                    qubit.resonator.measure("readout", qua_vars=(I[i], Q[i]))
-                    assign(state[i], I[i] > qubit.resonator.operations["readout"].threshold)
+                    align()
+                    
+                    readout_state_coupler(detector_q[i], state[i], method='aswap')
                     save(state[i], state_stream[i])
 
-        align(*[q.xy.name for q in qubits] +
-               [q.resonator.name for q in qubits] +
-               [q.z.name for q in qubits])
+        align()
 
     with stream_processing():
         n_st.save("n")
-        for i, qubit in enumerate(qubits):
-            if operation == "x180":
-                state_stream[i].boolean_to_int().buffer(len(amps)).buffer(
+        for i, qubit in enumerate(drive_q):
+            if operation == "x180_cp":
+                state_stream[i].buffer(len(amps)).buffer(
                     np.ceil(N_pi / 2)
                 ).average().save(f"state{i + 1}")
-            elif operation in ["x90", "-x90", "y90", "-y90"]:
-                state_stream[i].boolean_to_int().buffer(len(amps)).buffer(
+            elif operation in ["x90_cp"]:
+                state_stream[i].buffer(len(amps)).buffer(
                     np.ceil(N_pi / 4)
                 ).average().save(f"state{i + 1}")
             else:
@@ -172,9 +177,11 @@ if node.parameters.simulate:
     # Simulates the QUA program for the specified duration
     simulation_config = SimulationConfig(duration=10_000)  # In clock cycles = 4ns
     job = qmm.simulate(config, power_rabi, simulation_config)
-    job.get_simulated_samples().con1.plot()
+    samples = job.get_simulated_samples()
+    samples.con1.plot()
     node.results = {"figure": plt.gcf()}
-    node.machine = machine
+    wf_report = job.get_simulated_waveform_report()
+    wf_report.create_plot(samples, plot=True, save_path=None)
     node.save()
 
 else:
@@ -190,14 +197,14 @@ else:
     # %% {Data_fetching_and_dataset_creation}
     # Fetch the data from the OPX and convert it into a xarray with corresponding axes (from most inner to outer loop)
     ds = fetch_results_as_xarray(
-        job.result_handles, qubits, {"amp": amps, "N": N_pi_vec}
+        job.result_handles, coupler, {"amp": amps, "N": N_pi_vec}
     )
     # Add the qubit pulse absolute amplitude to the dataset
     ds = ds.assign_coords(
         {
             "abs_amp": (
                 ["qubit", "amp"],
-                np.array([q.xy.operations[operation].amplitude * amps for q in qubits]),
+                np.array([q.xy.operations[operation].amplitude * amps for q in drive_q]),
             )
         }
     )
@@ -218,13 +225,13 @@ else:
         )
         
     # Save fitting results
-        for q in qubits:
+        for q in coupler:
             fit_results[q.name] = {}
             f_fit = fit.loc[q.name].sel(fit_vals="f")
             phi_fit = fit.loc[q.name].sel(fit_vals="phi")
             phi_fit = phi_fit - np.pi * (phi_fit > np.pi / 2)
             factor = float(1.0 * (np.pi - phi_fit) / (2 * np.pi * f_fit))
-            new_pi_amp = q.xy.operations[operation].amplitude * factor
+            new_pi_amp = drive_q[0].xy.operations[operation].amplitude * factor
             if new_pi_amp < 0.3:  # TODO: 1 for OPX1000 MW
                 print(f"amplitude for Pi pulse is modified by a factor of {factor:.2f}")
                 print(
@@ -242,7 +249,7 @@ else:
         data_max_idx = I_n.argmax(dim="amp")
         
     # Save fitting results
-        for q in qubits:
+        for q in coupler:
             new_pi_amp = ds.abs_amp.sel(qubit=q.name)[data_max_idx.sel(qubit=q.name)]
             fit_results[q.name] = {}
             if new_pi_amp < 1:  # TODO: 1 for OPX1000 MW
@@ -259,8 +266,8 @@ else:
         node.results["fit_results"] = fit_results
 
     # %% {Plotting}
-    grid_names = [q.grid_location for q in qubits]
-    grid = QubitGrid(ds, grid_names)
+    grid_names, qubit_pair_names = grid_pair_names(coupler)
+    grid = QubitPairGrid(grid_names, qubit_pair_names)
     for ax, qubit in grid_iter(grid):
         if N_pi == 1:
             ds.assign_coords(amp_mV=ds.abs_amp * 1e3).loc[qubit].state.plot(
@@ -276,18 +283,24 @@ else:
             ax.set_ylabel("num. of pulses")
         ax.set_xlabel("Amplitude [mV]")
         ax.set_title(qubit["qubit"])
-    grid.fig.suptitle("Rabi : I vs. amplitude")
+    grid.fig.suptitle(f"{operation} Power Rabi State")
     plt.tight_layout()
     plt.show()
     node.results["figure"] = grid.fig
 
     # %% {Update_state}
     with node.record_state_updates():
-        for q in qubits:
-            q.xy.operations[operation].amplitude = fit_results[q.name]["Pi_amplitude"]
+        for q in coupler:
+            drive_q[0].xy.operations[operation].amplitude = fit_results[q.name]["Pi_amplitude"]
+            if operation == 'x180_cp' and node.parameters.update_x90:
+                drive_q[0].xy.operations['x90_cp'].amplitude = fit_results[q.name]["Pi_amplitude"]/2
 
     # %% {Save_results}
-    node.outcomes = {q.name: "successful" for q in qubits}
+    for q in drive_q:
+        q.xy.opx_output.upconverter_frequency = drive_LO_original[q.name] # revert the driving LO
+    for q in detector_q:
+        q.z.operations['aSWAP'].slope_direction = -1
+    node.outcomes = {q.name: "successful" for q in coupler}
     node.results["initial_parameters"] = node.parameters.model_dump()
     node.machine = machine
     node.save()
