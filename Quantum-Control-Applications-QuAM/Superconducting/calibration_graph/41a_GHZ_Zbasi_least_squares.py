@@ -39,23 +39,24 @@ from qualibrate import QualibrationNode, NodeParameters
 from quam_libs.components import QuAM
 from quam_libs.macros import active_reset, readout_state
 from quam_libs.lib.save_utils import fetch_results_as_xarray, load_dataset
-from quam_libs.lib.readout_mitigation import get_nq_confusion_matrix, least_squares_mitigation
 
 from qualang_tools.results import progress_counter, fetching_tool
 from qualang_tools.multi_user import qm_session
 from qualang_tools.units import unit
 from qm import SimulationConfig
 from qm.qua import *
-from typing import Literal, Optional, List
+from typing import Literal, Optional, List, Dict, Any
+from dataclasses import dataclass, field
 import matplotlib.pyplot as plt
 import numpy as np
+from calibration_utils.ghz_zbasis import compute_zbasis_mitigated_results, plot_zbasis_distributions
 
 
 # %% {Node_parameters}
 class Parameters(NodeParameters):
 
-    qubit_groups: List[List[str]] = [["q1","q2","q3"]]  # List of lists, each containing 3, 4, or 5 qubit names
-    num_shots: int = 2000
+    qubit_groups: List[List[str]] = [["q1","q2", "q3"]]  # List of lists, each containing 3, 4, or 5 qubit names
+    num_shots: int = 4000
     flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
     reset_type: Literal['active', 'thermal'] = 'active'
     simulate: bool = False
@@ -98,62 +99,46 @@ num_qubits = len(qubit_objects_raw[0])
 num_states = 2 ** num_qubits
 
 # Validate number of qubits
-if num_qubits < 3 or num_qubits > 5:
+if num_qubits < 2 or num_qubits > 5:
     raise ValueError(f"Number of qubits must be between 3 and 5, got {num_qubits}")
 
+@dataclass
+class QubitGroup:
+    qubits: List
+    num_qubits: int
+    name: str
+    max_thermalization_time: int
+    qubit_pairs: Dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_qubits(cls, qubits, machine):
+        qg = cls(
+            qubits=qubits,
+            num_qubits=len(qubits),
+            name="-".join([q.name for q in qubits]),
+            max_thermalization_time=max(q.thermalization_time for q in qubits),
+        )
+        for i in range(qg.num_qubits - 1):
+            q1 = qubits[i]
+            q2 = qubits[i + 1]
+            pair_key = f"pair_{i}{i+1}"
+            pair_name_1 = f"{q1.name}-{q2.name}"
+            pair_name_2 = f"{q2.name}-{q1.name}"
+
+            if pair_name_1 in machine.qubit_pairs:
+                qg.qubit_pairs[pair_key] = machine.qubit_pairs[pair_name_1]
+            elif pair_name_2 in machine.qubit_pairs:
+                qg.qubit_pairs[pair_key] = machine.qubit_pairs[pair_name_2]
+            else:
+                for qp in machine.qubit_pairs.values():
+                    if qp.qubit_control in [q1, q2] and qp.qubit_target in [q1, q2]:
+                        qg.qubit_pairs[pair_key] = qp
+                        break
+        return qg
+
+
 # Create qubit group structures for QUA program (needed for gate operations)
-qubit_groups_for_qua = []
-for qubits in qubit_objects_raw:
-    # Create a simple object to hold qubit group data
-    qg = type('QubitGroup', (), {})()
-    qg.qubits = qubits
-    qg.num_qubits = len(qubits)
-    qg.name = "-".join([q.name for q in qubits])
-    
-    # Expose individual qubits for backward compatibility
-    qg.qubit_A = qubits[0]
-    qg.qubit_B = qubits[1]
-    qg.qubit_C = qubits[2]
-    if num_qubits >= 4:
-        qg.qubit_D = qubits[3]
-    if num_qubits >= 5:
-        qg.qubit_E = qubits[4]
-    
-    # Find qubit pairs for adjacent qubits
-    # Check both orderings of pair names (e.g., "qD4-qD3" and "qD3-qD4")
-    qg.qubit_pairs = {}
-    for i in range(num_qubits - 1):
-        q1 = qubits[i]
-        q2 = qubits[i + 1]
-        pair_key = f"pair_{i}{i+1}"
-        # Try both orderings of the pair name
-        pair_name_1 = f"{q1.name}-{q2.name}"
-        pair_name_2 = f"{q2.name}-{q1.name}"
-        
-        # Check if either pair name exists in machine.qubit_pairs
-        if pair_name_1 in machine.qubit_pairs:
-            qg.qubit_pairs[pair_key] = machine.qubit_pairs[pair_name_1]
-        elif pair_name_2 in machine.qubit_pairs:
-            qg.qubit_pairs[pair_key] = machine.qubit_pairs[pair_name_2]
-        else:
-            # Fallback: search by qubit objects (in case pair structure is different)
-            for qp_id, qp in machine.qubit_pairs.items():
-                if (qp.qubit_control in [q1, q2] and 
-                    qp.qubit_target in [q1, q2]):
-                    qg.qubit_pairs[pair_key] = qp
-                    break
-    
-    # For backward compatibility
-    if "pair_01" in qg.qubit_pairs:
-        qg.qubit_pair_AB = qg.qubit_pairs["pair_01"]
-    if "pair_12" in qg.qubit_pairs:
-        qg.qubit_pair_BC = qg.qubit_pairs["pair_12"]
-    if "pair_23" in qg.qubit_pairs:
-        qg.qubit_pair_CD = qg.qubit_pairs["pair_23"]
-    if "pair_34" in qg.qubit_pairs:
-        qg.qubit_pair_DE = qg.qubit_pairs["pair_34"]
-    
-    qubit_groups_for_qua.append(qg)
+qubit_groups_for_qua = [QubitGroup.from_qubits(qubits, machine) for qubits in qubit_objects_raw]
 
 # %% {QUA_program}
 n_shots = node.parameters.num_shots  # The number of averages
@@ -161,12 +146,10 @@ n_shots = node.parameters.num_shots  # The number of averages
 flux_point = node.parameters.flux_point_joint_or_independent  # 'independent' or 'joint'
 
 # Declare state variables for up to 5 qubits
-with program() as CPhase_Oscillations:
+with program() as GHZ_Zbasis_least_squares:
     n = declare(int)
     n_st = declare_stream()
-    # State variables for each qubit (support up to 5 qubits)
-    state_vars = [[declare(int) for _ in range(5)] for _ in range(num_qubit_groups)]
-    state_st_vars = [[declare_stream() for _ in range(5)] for _ in range(num_qubit_groups)]
+    state_vars = [declare(int) for _ in range(num_qubits)]
     state = [declare(int) for _ in range(num_qubit_groups)]
     state_st = [declare_stream() for _ in range(num_qubit_groups)]
     
@@ -188,64 +171,31 @@ with program() as CPhase_Oscillations:
                 for q in qg.qubits:
                     active_reset(q)
             else:
-                wait(5*qg.qubit_A.thermalization_time * u.ns)
+                wait(5 * qg.max_thermalization_time * u.ns)
             align()
             
-            # GHZ state preparation - generalized for 3, 4, or 5 qubits
-            if num_qubits == 3:
-                qg.qubit_B.xy.play("y90")
-                qg.qubit_A.xy.play("y90")
-                qg.qubit_pair_AB.macros['cz'].apply()
-                qg.qubit_A.xy.play("-y90")
+            # GHZ chain preparation generalized for 3-5 qubits.
+            qg.qubits[1].xy.play("y90")
+            qg.qubits[0].xy.play("y90")
+            qg.qubit_pairs["pair_01"].macros["cz"].apply()
+            qg.qubits[0].xy.play("-y90")
+            for qubit_idx in range(2, num_qubits):
                 align()
-                qg.qubit_C.xy.play("y90")
-                qg.qubit_pair_BC.macros['cz'].apply()
-                qg.qubit_C.xy.play("-y90")
-            elif num_qubits == 4:
-                qg.qubit_B.xy.play("y90")
-                qg.qubit_A.xy.play("y90")
-                qg.qubit_pair_AB.macros['cz'].apply()
-                qg.qubit_A.xy.play("-y90")
-                align()
-                qg.qubit_C.xy.play("y90")
-                qg.qubit_pair_BC.macros['cz'].apply()
-                qg.qubit_C.xy.play("-y90")
-                align()
-                qg.qubit_D.xy.play("y90")
-                qg.qubit_pair_CD.macros['cz'].apply()
-                qg.qubit_D.xy.play("-y90")
-            elif num_qubits == 5:
-                qg.qubit_B.xy.play("y90")
-                qg.qubit_A.xy.play("y90")
-                qg.qubit_pair_AB.macros['cz'].apply()
-                qg.qubit_A.xy.play("-y90")
-                align()
-                qg.qubit_C.xy.play("y90")
-                qg.qubit_pair_BC.macros['cz'].apply()
-                qg.qubit_C.xy.play("-y90")
-                align()
-                qg.qubit_D.xy.play("y90")
-                qg.qubit_pair_CD.macros['cz'].apply()
-                qg.qubit_D.xy.play("-y90")
-                align()
-                qg.qubit_E.xy.play("y90")
-                qg.qubit_pair_DE.macros['cz'].apply()
-                qg.qubit_E.xy.play("-y90")
+                qg.qubits[qubit_idx].xy.play("y90")
+                qg.qubit_pairs[f"pair_{qubit_idx - 1}{qubit_idx}"].macros["cz"].apply()
+                qg.qubits[qubit_idx].xy.play("-y90")
             
             align()
             
             # Readout all qubits
             for idx, q in enumerate(qg.qubits):
-                readout_state(q, state_vars[i][idx])
-                save(state_vars[i][idx], state_st_vars[i][idx])
+                readout_state(q, state_vars[idx])
             
-            # Compute combined state based on number of qubits
-            if num_qubits == 3:
-                assign(state[i], state_vars[i][0]*4 + state_vars[i][1]*2 + state_vars[i][2])
-            elif num_qubits == 4:
-                assign(state[i], state_vars[i][0]*8 + state_vars[i][1]*4 + state_vars[i][2]*2 + state_vars[i][3])
-            elif num_qubits == 5:
-                assign(state[i], state_vars[i][0]*16 + state_vars[i][1]*8 + state_vars[i][2]*4 + state_vars[i][3]*2 + state_vars[i][4])
+            # Compute combined state value from all readout bits.
+            state_expr = state_vars[0]
+            for idx in range(1, num_qubits):
+                state_expr = state_expr * 2 + state_vars[idx]
+            assign(state[i], state_expr)
             
             save(state[i], state_st[i])
         align()
@@ -259,14 +209,14 @@ with program() as CPhase_Oscillations:
 if node.parameters.simulate:
     # Simulates the QUA program for the specified duration
     simulation_config = SimulationConfig(duration=10_000)  # In clock cycles = 4ns
-    job = qmm.simulate(config, CPhase_Oscillations, simulation_config)
+    job = qmm.simulate(config, GHZ_Zbasis_least_squares, simulation_config)
     job.get_simulated_samples().con1.plot()
     node.results = {"figure": plt.gcf()}
     node.machine = machine
     node.save()
 elif node.parameters.load_data_id is None:
     with qm_session(qmm, config, timeout=node.parameters.timeout ) as qm:
-        job = qm.execute(CPhase_Oscillations)
+        job = qm.execute(GHZ_Zbasis_least_squares)
 
         results = fetching_tool(job, ["n"], mode="live")
         while results.is_processing():
@@ -285,56 +235,42 @@ if not node.parameters.simulate:
         
     node.results = {"ds": ds}
     
-# %%
+# %% Analysis
 if not node.parameters.simulate:
     states = list(range(num_states))
 
-    results = {}
-    corrected_results = {}
-    corrected_results_nq = {}
-    fidelities = {}
-    fidelities_nq = {}
-    fidelity_differences = {}
-    
-    for i, qg in enumerate(qubit_groups_for_qua):
-        results[qg.name] = []
-        for state in states:
-            results[qg.name].append((ds.sel(qubit = qg.name).state == state).sum().values)
-        results[qg.name] = np.array(results[qg.name])/node.parameters.num_shots
-        
-        # Original correction using Kronecker product of single-qubit confusion matrices
-        conf_mat = np.array([[1]])
-        for q in qg.qubits:
-            conf_mat = np.kron(conf_mat, q.resonator.confusion_matrix)
-        
-        # Least-squares mitigation instead of inverse
-        corrected_results[qg.name] = least_squares_mitigation(conf_mat, results[qg.name])
-        # Calculate fidelity as sum of all-0 and all-1 state probabilities
-        fidelities[qg.name] = corrected_results[qg.name][0] + corrected_results[qg.name][num_states - 1]
-        
-        # New correction using NQ confusion matrix if available
-        # Pass qubit names directly from Parameters and machine object
-        conf_mat_nq = get_nq_confusion_matrix(node.parameters.qubit_groups[i], machine)
-        if conf_mat_nq is not None:
-            # Least-squares mitigation instead of inverse
-            corrected_results_nq[qg.name] = least_squares_mitigation(conf_mat_nq, results[qg.name])
-            # Calculate fidelity as sum of all-0 and all-1 state probabilities
-            fidelities_nq[qg.name] = corrected_results_nq[qg.name][0] + corrected_results_nq[qg.name][num_states - 1]
-            # Calculate fidelity difference (NQ - Kronecker)
-            fidelity_differences[qg.name] = fidelities_nq[qg.name] - fidelities[qg.name]
-            all_0_label = '0' * num_qubits
-            all_1_label = '1' * num_qubits
-            print(f"{qg.name} (Kron): Z-basis population fidelity ({all_0_label}+{all_1_label}): {fidelities[qg.name]:.4f}")
-            print(f"{qg.name} ({num_qubits}Q): Z-basis population fidelity ({all_0_label}+{all_1_label}): {fidelities_nq[qg.name]:.4f}, Difference: {fidelity_differences[qg.name]:.4f}")
+    raw_results, corrected_results_by_method, fidelities_by_method, fidelity_differences = compute_zbasis_mitigated_results(
+        ds=ds,
+        qubit_groups_for_qua=qubit_groups_for_qua,
+        qubit_group_names=node.parameters.qubit_groups,
+        machine=machine,
+        num_states=num_states,
+        num_shots=node.parameters.num_shots,
+    )
+
+    all_0_label = "0" * num_qubits
+    all_1_label = "1" * num_qubits
+    for qg in qubit_groups_for_qua:
+        print(
+            f"{qg.name} (Kron): Z-basis population fidelity ({all_0_label}+{all_1_label}): "
+            f"{fidelities_by_method['kron'][qg.name]:.4f}"
+        )
+        if qg.name in fidelities_by_method["nq"]:
+            print(
+                f"{qg.name} ({num_qubits}Q): Z-basis population fidelity ({all_0_label}+{all_1_label}): "
+                f"{fidelities_by_method['nq'][qg.name]:.4f}, Difference: {fidelity_differences[qg.name]:.4f}"
+            )
         else:
-            all_0_label = '0' * num_qubits
-            all_1_label = '1' * num_qubits
-            print(f"{qg.name} (Kron): Z-basis population fidelity ({all_0_label}+{all_1_label}): {fidelities[qg.name]:.4f}")
             print(f"Warning: {num_qubits}Q confusion matrix not found for {qg.name}")
 
+    # Backward-compatible aliases.
+    corrected_results = corrected_results_by_method["kron"]
+    corrected_results_nq = corrected_results_by_method["nq"]
+    fidelities = fidelities_by_method["kron"]
+    fidelities_nq = fidelities_by_method["nq"]
 
 
-# %%
+# %% Plotting
 if not node.parameters.simulate:
     # Generate state labels dynamically
     state_labels = [format(s, f'0{num_qubits}b') for s in states]
@@ -348,88 +284,47 @@ if not node.parameters.simulate:
         fig_width = 10
     else:  # 5 qubits
         fig_width = 12
-    
-    # Plot with Kronecker product correction
-    if num_qubit_groups == 1:
-        f,axs = plt.subplots(1,figsize=(fig_width,3))
-    else:
-        f,axs = plt.subplots(num_qubit_groups,1,figsize=(fig_width,3*num_qubit_groups))
-    
-    for i, qg in enumerate(qubit_groups_for_qua):
-        if num_qubit_groups == 1:
-            ax = axs
-        else:
-            ax = axs[i]
-        ax.bar(state_labels, corrected_results[qg.name], color='skyblue', edgecolor='navy')
-        ax.set_ylim(0, 1)
-        # Only show text labels for significant probabilities to avoid clutter
-        for j, v in enumerate(corrected_results[qg.name]):
-            if v > 0.01:
-                rotation = 90 if num_qubits >= 4 else 0
-                ax.text(j, v, f'{v:.2f}', ha='center', va='bottom', rotation=rotation, fontsize=8 if num_qubits >= 4 else 10)
-        ax.set_ylabel('Probability')
-        # Only add x-axis label to the last subplot
-        if i == num_qubit_groups - 1:
-            ax.set_xlabel('State')
-        if num_qubits >= 4:
-            ax.tick_params(axis='x', rotation=90)
-        fidelity = fidelities[qg.name]
-        ax.set_title(f"{qg.name} (Kronecker correction LS)")
-        # Add fidelity as text annotation inside the plot
-        ax.text(0.02, 0.98, f'Z-basis population fidelity ({all_0_label}+{all_1_label}): {fidelity:.4f}', 
-                transform=ax.transAxes, fontsize=10, verticalalignment='top',
-                bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
-    # Add more space between subplots
-    f.tight_layout(pad=2.0)
-    f.subplots_adjust(hspace=0.4)
+
+    fig_kron = plot_zbasis_distributions(
+        groups=qubit_groups_for_qua,
+        corrected_data=corrected_results_by_method["kron"],
+        fidelities=fidelities_by_method["kron"],
+        state_labels=state_labels,
+        num_qubits=num_qubits,
+        all_0_label=all_0_label,
+        all_1_label=all_1_label,
+        title_fn=lambda qg: f"{qg.name} (Kronecker correction LS)",
+        bar_color="skyblue",
+        edge_color="navy",
+        fidelity_box_facecolor="wheat",
+        fig_width=fig_width,
+    )
     plt.show()
-    node.results["figure"] = f
-    
-    # Plot with NQ confusion matrix correction if available
-    if corrected_results_nq:
-        groups_with_nq = [qg for qg in qubit_groups_for_qua if qg.name in corrected_results_nq]
-        num_groups_nq = len(groups_with_nq)
-        if num_groups_nq == 1:
-            f_nq,axs_nq = plt.subplots(1,figsize=(fig_width,3))
-        else:
-            f_nq,axs_nq = plt.subplots(num_groups_nq,1,figsize=(fig_width,3*num_groups_nq))
-        
-        for i, qg in enumerate(groups_with_nq):
-            if num_groups_nq == 1:
-                ax = axs_nq
-            else:
-                ax = axs_nq[i]
-            ax.bar(state_labels, corrected_results_nq[qg.name], color='moccasin', edgecolor='orange')
-            ax.set_ylim(0, 1)
-            # Only show text labels for significant probabilities to avoid clutter
-            for j, v in enumerate(corrected_results_nq[qg.name]):
-                if v > 0.01:
-                    rotation = 90 if num_qubits >= 4 else 0
-                    ax.text(j, v, f'{v:.2f}', ha='center', va='bottom', rotation=rotation, fontsize=8 if num_qubits >= 4 else 10)
-            ax.set_ylabel('Probability')
-            # Only add x-axis label to the last subplot
-            if i == num_groups_nq - 1:
-                ax.set_xlabel('State')
-            if num_qubits >= 4:
-                ax.tick_params(axis='x', rotation=90)
-            fidelity_nq = fidelities_nq[qg.name]
-            fidelity_diff = fidelity_differences[qg.name]
-            ax.set_title(f"{qg.name} ({num_qubits}Q confusion matrix correction LS)")
-            # Add fidelity as text annotation inside the plot
-            ax.text(0.02, 0.98, f'Z-basis population fidelity ({all_0_label}+{all_1_label}): {fidelity_nq:.4f}', 
-                    transform=ax.transAxes, fontsize=10, verticalalignment='top',
-                    bbox=dict(boxstyle='round', facecolor='moccasin', alpha=0.5))
-            # Add fidelity difference legend
-            diff_color = 'orange' if fidelity_diff > 0 else 'red'
-            diff_sign = '+' if fidelity_diff > 0 else ''
-            ax.text(0.02, 0.88, f'Δ Z-basis population fidelity ({num_qubits}Q - Kron): {diff_sign}{fidelity_diff:.4f}', 
-                    transform=ax.transAxes, fontsize=10, verticalalignment='top',
-                    bbox=dict(boxstyle='round', facecolor='white', alpha=0.7, edgecolor=diff_color, linewidth=2))
-        # Add more space between subplots
-        f_nq.tight_layout(pad=2.0)
-        f_nq.subplots_adjust(hspace=0.4)
+    node.results["figure"] = fig_kron
+
+    groups_with_nq = [qg for qg in qubit_groups_for_qua if qg.name in corrected_results_nq]
+    if groups_with_nq:
+        fig_nq = plot_zbasis_distributions(
+            groups=groups_with_nq,
+            corrected_data=corrected_results_by_method["nq"],
+            fidelities=fidelities_by_method["nq"],
+            state_labels=state_labels,
+            num_qubits=num_qubits,
+            all_0_label=all_0_label,
+            all_1_label=all_1_label,
+            title_fn=lambda qg: f"{qg.name} ({num_qubits}Q confusion matrix correction LS)",
+            bar_color="moccasin",
+            edge_color="orange",
+            fidelity_box_facecolor="moccasin",
+            fig_width=fig_width,
+            fidelity_differences=fidelity_differences,
+            delta_text_fn=lambda diff: (
+                f"Δ Z-basis population fidelity ({num_qubits}Q - Kron): "
+                f"{'+' if diff > 0 else ''}{diff:.4f}"
+            ),
+        )
         plt.show()
-        node.results["figure_nq"] = f_nq
+        node.results["figure_nq"] = fig_nq
     
     # Store results in node.results
     node.results["corrected_results"] = {k: v.tolist() for k, v in corrected_results.items()}
@@ -438,22 +333,6 @@ if not node.parameters.simulate:
         node.results["corrected_results_nq"] = {k: v.tolist() for k, v in corrected_results_nq.items()}
         node.results["fidelities_nq"] = fidelities_nq
         node.results["fidelity_differences"] = fidelity_differences
-    
-    # grid_names, qubit_pair_names = grid_pair_names(qubit_pairs)
-    # grid = QubitPairGrid(grid_names, qubit_pair_names)
-    # for ax, qubit_pair in grid_iter(grid):
-    #     print(qubit_pair['qubit'])
-    #     corrected_res = corrected_results[qubit_pair['qubit']]
-    #     ax.bar(['00', '01', '10', '11'], corrected_res, color='skyblue', edgecolor='navy')
-    #     ax.set_ylim(0, 1)
-    #     for i, v in enumerate(corrected_res):
-    #         ax.text(i, v, f'{v:.2f}', ha='center', va='bottom')
-    #     ax.set_ylabel('Probability')
-    #     ax.set_xlabel('State')
-    #     ax.set_title(qubit_pair['qubit'])
-    # plt.show()
-    # node.results["figure"] = grid.fig
-# %%
 
 # %% {Update_state}
 
@@ -463,5 +342,3 @@ if not node.parameters.simulate:
     node.results["initial_parameters"] = node.parameters.model_dump()
     node.machine = machine
     node.save()
-        
-# %%
