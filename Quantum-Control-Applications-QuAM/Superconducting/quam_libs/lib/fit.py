@@ -420,3 +420,75 @@ def extract_dominant_frequencies(da, dim="idle_time"):
     )
 
     return dominant_frequencies
+
+def crosstalk_fft(da: xr.DataArray, extend_num=1000) -> xr.Dataset:
+    """
+    Analyze crosstalk in a 2D DataArray using FFT in a vectorized manner.
+    
+    Args:
+        da : xarray.DataArray
+            Must have coordinates 'source_z' and 'qubit_z'.
+        extend_num : int
+            Number of points to extend on each axis for better FFT resolution.
+    
+    Returns:
+        xarray.Dataset with:
+            'crosstalk' : crosstalk factor
+            'f_axes_0' : FFT axis 0 (qubit axis)
+            'f_axes_1' : FFT axis 1 (source axis)
+            'magnitude' : magnitude spectrum
+    """
+
+    def _extend(data, axis0, axis1, extend_num):
+        # pad data with zeros
+        extended = np.pad(data, ((extend_num, extend_num), (extend_num, extend_num)), mode='constant')
+        # extend axes
+        d0, d1 = axis0[1]-axis0[0], axis1[1]-axis1[0]
+        ext_axis0 = np.linspace(axis0[0]-extend_num*d0, axis0[-1]+extend_num*d0, len(axis0)+2*extend_num)
+        ext_axis1 = np.linspace(axis1[0]-extend_num*d1, axis1[-1]+2*extend_num, len(axis1)+2*extend_num)
+        return extended, ext_axis0, ext_axis1
+
+    def _fft_axes(axis):
+        n = len(axis)
+        d = np.abs(axis[1]-axis[0])
+        return np.fft.fftshift(np.fft.fftfreq(n, d=d))
+
+    def _fft_mag(data):
+        return np.abs(np.fft.fftshift(np.fft.fft2(data)))
+
+    def _max_pos(data, axis0, axis1):
+        idx = np.unravel_index(np.argmax(data, axis=None), data.shape)
+        return axis0[idx[0]], axis1[idx[1]]
+
+    def _single_fft(data, axis0, axis1):
+        # remove mean
+        data = data - np.mean(data)
+        data_ext, ext0, ext1 = _extend(data, axis0, axis1, extend_num)
+        f_axes0, f_axes1 = _fft_axes(ext0), _fft_axes(ext1)
+        mag = _fft_mag(data_ext)
+        f0, f1 = _max_pos(mag, f_axes0, f_axes1)
+        z_slope = -f0 / f1
+        crosstalk = -1 / z_slope
+        return crosstalk, f_axes0, f_axes1, mag
+
+    # vectorize using xr.apply_ufunc
+    result = xr.apply_ufunc(
+        _single_fft,
+        da,
+        da.coords["source_z"],
+        da.coords["qubit_z"],
+        input_core_dims=[["source_z","qubit_z"], ["source_z"], ["qubit_z"]],
+        output_core_dims=[[], ["source_z_ext"], ["qubit_z_ext"], ["source_z_ext","qubit_z_ext"]],
+        vectorize=True,
+        dask="parallelized",
+        output_dtypes=[float, float, float, float]
+    )
+
+    return xr.Dataset(
+        {
+            "crosstalk": result[0],
+            "f_axes_0": (("source_z_ext",), result[1]),
+            "f_axes_1": (("qubit_z_ext",), result[2]),
+            "magnitude": (("source_z_ext","qubit_z_ext"), result[3])
+        }
+    )
