@@ -253,9 +253,11 @@ if not node.parameters.simulate:
     # %% {Plotting}
     grid = QubitGrid(ds, [q.grid_location for q in qubits])
     mu_collection, sig_collection = {}, {}
+    tot_c = 1
     for ax, qubit in grid_iter(grid):
         if node.parameters.histo_num > 1:
             data = np.array(t2_collection[qubit['qubit']])
+            tot_c = len(data)
             counts, bins, _ = ax.hist(data, bins=15, alpha=0.7, color='skyblue', edgecolor='white', label='Counts')
             ### Normal distribution
             mu, sigma = norm.fit(data)
@@ -267,15 +269,14 @@ if not node.parameters.simulate:
         
             ### Plot
             ax.plot(x, p, 'r-', lw=2, label='Normal Fit')
-            ax.set_title(f"Qubit {qubit['qubit']} T2 Statistics")
+            ax.set_title(f"{qubit['qubit']}")
             ax.set_xlabel("T2 (µs)")
+
             ax.set_ylabel("Counts")
             ax.grid(axis='y', alpha=0.3)
             
             stats_text = (
-                f"$\mu = {mu:.2f}$ µs\n"
-                f"$\sigma = {sigma:.2f}$ µs\n"
-                f"Total # = {len(data)}"
+                f"$\mu = {mu:.1f} \pm {sigma:.2f}$ µs\n"
             )
             ax.text(
                 0.05, 0.95, stats_text,
@@ -314,8 +315,10 @@ if not node.parameters.simulate:
                 bbox=dict(facecolor="white", alpha=0.5),
             )
             mu_collection[qubit['qubit']], sig_collection[qubit['qubit']] = float(tau.values), float(tau_error.values)
-
-
+    if node.parameters.histo_num > 1:
+        plt.suptitle(f" T2 Statistics, #={tot_c}", fontsize=16, y=1.02)
+    else:
+        plt.suptitle("T2")
     plt.tight_layout()
     plt.show()
 
