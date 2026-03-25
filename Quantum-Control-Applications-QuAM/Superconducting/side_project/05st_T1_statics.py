@@ -37,19 +37,20 @@ from time import time
 # %% {Node_parameters}
 class Parameters(NodeParameters):
     qubits: Optional[List[str]] = None
-    num_averages: int = 300
+    num_averages: int = 100
     min_wait_time_in_ns: int = 16
     max_wait_time_in_ns: int = 200016
     wait_time_step_in_ns: int = 1600
     flux_point_joint_or_independent_or_arbitrary: Literal["joint", "independent"] = "independent"
     reset_type: Literal["active", "thermal"] = "active"
+    time_scale:Literal["log", "linear"] = "log" # if log, fixed time points = 100
     use_state_discrimination: bool = True
     simulate: bool = False
     simulation_duration_ns: int = 2500
     timeout: int = 100
     load_data_id: Optional[int] = None
     multiplexed: bool = False
-    histo_num:int = 5 # 
+    histo_num:int = 1 # 
 node = QualibrationNode(name="05st_T1_histogram", parameters=Parameters())
 
 
@@ -75,11 +76,20 @@ num_qubits = len(qubits)
 # %% {QUA_program}
 n_avg = node.parameters.num_averages  # The number of averages
 # Dephasing time sweep (in clock cycles = 4ns) - minimum is 4 clock cycles
-idle_times = np.arange(
-    node.parameters.min_wait_time_in_ns // 4,
-    node.parameters.max_wait_time_in_ns // 4,
-    node.parameters.wait_time_step_in_ns // 4,
-)
+if node.parameters.time_scale.lower() == 'linear':
+    idle_times = np.arange(
+        node.parameters.min_wait_time_in_ns // 4,
+        node.parameters.max_wait_time_in_ns // 4,
+        node.parameters.wait_time_step_in_ns // 4,
+    )
+else:
+    idle_times = np.unique(
+        np.geomspace(
+            node.parameters.min_wait_time_in_ns,
+            node.parameters.max_wait_time_in_ns,
+            100,
+        )//4
+    ).astype(int)
 
 flux_point = node.parameters.flux_point_joint_or_independent_or_arbitrary  # 'independent' or 'joint'
 if flux_point == "arbitrary":
@@ -107,7 +117,7 @@ with program() as t1:
 
         with for_(n, 0, n < n_avg, n + 1):
             save(n, n_st)
-            with for_(*from_array(t, idle_times)):
+            with for_each_(t, idle_times):
                 if node.parameters.reset_type == "active":
                     # active_reset(qubit, "readout")
                     active_reset_simple(qubit, "readout")
@@ -178,7 +188,14 @@ else:
     if node.parameters.load_data_id is None:
         dss = []
         start = time()
-        for jj in range(node.parameters.histo_num):
+        
+        target_counts = node.parameters.histo_num
+        current_success = 0
+        max_retries = target_counts + 5  # 設定一個總嘗試上限，避免無限迴圈
+        attempts = 0
+
+        while current_success < target_counts and attempts < max_retries:
+            attempts += 1
             try: # prevent getting a unpredictable error like connection failed or qmm closed.
                 with qm_session(qmm, config, timeout=node.parameters.timeout) as qm:
                     job = qm.execute(t1)
@@ -193,13 +210,18 @@ else:
                 # Convert IQ data into volts
                 if not node.parameters.use_state_discrimination:
                     ds = convert_IQ_to_V(ds, qubits)
-                print(f"Counts: {jj+1}\n")
+
                 dss.append(ds)
-            except:
-                print("Error got, break the loop and step into analysis.")
-                break
+                current_success += 1
+                print(f"Counts: {current_success} (Total attempts: {attempts})")
+            except Exception as e:
+                print(f"Attempt {attempts} failed: {e}. Skipping...")
+                if (attempts - current_success) > 5:
+                    print("Too many consecutive failures. Stopping experiment.")
+                    break
+             
         end = time()
-        print(f"Total {round(end-start,1)} sec for {node.parameters.histo_num} counts")
+        print(f"Total {round(end-start,1)} sec for {current_success} counts")
         ds = xr.concat(dss, dim='iteration')
         # Convert time into µs
         ds = ds.assign_coords(idle_time=4 * ds.idle_time / u.us)  # convert to µs
@@ -283,10 +305,10 @@ if not node.parameters.simulate:
             tau = -1 / fit_collection[qubit['qubit']].sel(fit_vals="decay")
             tau_error = -tau * (np.sqrt(decay_res) / decay)
             if node.parameters.use_state_discrimination:
-                ds.sel(qubit=qubit["qubit"]).state.plot(ax=ax)
+                ds.sel(qubit=qubit["qubit"]).state.plot(ax=ax, marker='o', linestyle='', alpha=0.5)
                 ax.set_ylabel("State")
             else:
-                ds.sel(qubit=qubit["qubit"]).I.plot(ax=ax)
+                ds.sel(qubit=qubit["qubit"]).I.plot(ax=ax, marker='o', linestyle='', alpha=0.5)
                 ax.set_ylabel("I (V)")
             ax.plot(ds.idle_time, fitted, "r--")
             ax.set_title(qubit["qubit"])
