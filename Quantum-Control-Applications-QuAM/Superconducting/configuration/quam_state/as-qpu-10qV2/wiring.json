@@ -160,8 +160,8 @@
             },
             "q6-7": {
                 "c": {
-                    "control_qubit": "#/qubits/q7",
-                    "target_qubit": "#/qubits/q6",
+                    "control_qubit": "#/qubits/q6",
+                    "target_qubit": "#/qubits/q7",
                     "opx_output": "#/ports/analog_outputs/con1/3/6"
                 }
             },
@@ -181,8 +181,8 @@
             },
             "q9-10": {
                 "c": {
-                    "control_qubit": "#/qubits/q10",
-                    "target_qubit": "#/qubits/q9",
+                    "control_qubit": "#/qubits/q9",
+                    "target_qubit": "#/qubits/q10",
                     "opx_output": "#/ports/analog_outputs/con1/4/4"
                 }
             }

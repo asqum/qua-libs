@@ -26,12 +26,13 @@ class Parameters(NodeParameters):
     qubits: Optional[List[str]] = None #The qubit to be measured. If None, all active qubits will be measured
     num_averages: int = 500
     min_wait_time_in_ns: int = 16
-    max_wait_time_in_ns: int = 50008
-    wait_time_step_in_ns: int = 500
+    max_wait_time_in_ns: int = 40008
+    wait_time_step_in_ns: int = 400
     flux_point_joint_or_independent_or_arbitrary: Literal['joint', 'independent'] = 'independent'   
     simulate: bool = False
     timeout: int = 100
     use_state_discrimination: bool = True
+    time_scale:Literal["log", "linear"] = "log"
     reset_type: Literal['active', 'thermal'] = "active"
     histo_num:int = 100
 
@@ -62,11 +63,22 @@ num_qubits = len(qubits)
 n_avg = node.parameters.num_averages  # The number of averages
 
 # Dephasing time sweep (in clock cycles = 4ns) - minimum is 4 clock cycles
-idle_times = np.arange(
-    node.parameters.min_wait_time_in_ns // 4,
-    node.parameters.max_wait_time_in_ns // 4,
-    node.parameters.wait_time_step_in_ns // 4,
-)
+if node.parameters.time_scale.lower() == 'linear':
+    idle_times = np.arange(
+        node.parameters.min_wait_time_in_ns // 4,
+        node.parameters.max_wait_time_in_ns // 4,
+        node.parameters.wait_time_step_in_ns // 4,
+    )
+else:
+    idle_times = np.unique(
+        np.geomspace(
+            node.parameters.min_wait_time_in_ns,
+            node.parameters.max_wait_time_in_ns,
+            100,
+        )//4
+    ).astype(int)
+
+
 
 flux_point = node.parameters.flux_point_joint_or_independent_or_arbitrary  # 'independent' or 'joint'
 if flux_point == "arbitrary":
@@ -102,7 +114,7 @@ with program() as t1:
 
         with for_(n, 0, n < n_avg, n + 1):
             save(n, n_st)
-            with for_(*from_array(t, idle_times)):
+            with for_each_(t, idle_times):
                 if node.parameters.reset_type == "active":
                     # active_reset(qubit, "readout")
                     active_reset_simple(qubit, "readout")
@@ -164,34 +176,42 @@ if node.parameters.simulate:
 else:
     dss = []
     start = time()
-    for jj in range(node.parameters.histo_num):
+    target_counts = node.parameters.histo_num
+    current_success = 0
+    max_retries = target_counts + 5  # 設定一個總嘗試上限，避免無限迴圈
+    attempts = 0
+
+    while current_success < target_counts and attempts < max_retries:
+        attempts += 1
         try:
             with qm_session(qmm, config, timeout=node.parameters.timeout) as qm:
                 job = qm.execute(t1)
                 # Get results from QUA program
-                for i in range(num_qubits):
-                    print(f"Fetching results for qubit {qubits[i].name}")
-                    data_list = ["n"]
-                    results = fetching_tool(job, data_list, mode="live")
+                data_list = ["n"]
+                results = fetching_tool(job, data_list, mode="live")
                 # Live plotting
                 # fig, axes = plt.subplots(2, num_qubits, figsize=(4 * num_qubits, 8))
                 # interrupt_on_close(fig, job)  # Interrupts the job when closing the figure
-                    while results.is_processing():
-                    # Fetch results
-                        fetched_data = results.fetch_all()
-                        n = fetched_data[0]
+                while results.is_processing():
+                # Fetch results
+                    fetched_data = results.fetch_all()
+                    n = fetched_data[0]
 
-                        progress_counter(n, n_avg, start_time=results.start_time)
+                    progress_counter(n, n_avg, start_time=results.start_time)
             
             ds = fetch_results_as_xarray(job.result_handles, qubits, {"idle_time": idle_times})
 
             if not node.parameters.use_state_discrimination:
                 ds = convert_IQ_to_V(ds, qubits)
-            print(f"Counts: {jj+1}\n")
+            
             dss.append(ds)
-        except:
-            print("Error got, break the loop and step into analysis.")
-            break
+            current_success += 1
+            print(f"Counts: {current_success} (Total attempts: {attempts})")
+        except Exception as e:
+            print(f"Attempt {attempts} failed: {e}. Skipping...")
+            if (attempts - current_success) > 5:
+                print("Too many consecutive failures. Stopping experiment.")
+                break
     
     end = time()
     print(f"Total {round(end-start,1)} sec for {node.parameters.histo_num} counts")
