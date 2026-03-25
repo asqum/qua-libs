@@ -44,13 +44,13 @@ class Parameters(NodeParameters):
 
     qubit_pairs: Optional[List[str]] = ["coupler_q%s_q%s"%(i,i+1) for i in qubit_pair_indexes]
     num_averages: int = 300
-    max_time_in_ns: int = 600 #200
+    max_time_in_ns: int = 416 #200
     flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
     reset_type: Literal['active', 'thermal'] = "active"
     simulate: bool = False
     timeout: int = 100
-    amp_range : float = 0.2 #0.1
-    amp_step : float = 0.004
+    amp_range : float = 0.1 #0.1
+    amp_step : float = 0.001
     load_data_id: Optional[int] = None 
     readout_flip:bool = True
 
@@ -388,11 +388,13 @@ plt.grid(True, alpha=0.3)
 node.results["figure_1Dslice"] = plt.gcf()
 plt.show()
 
+actual_v = 0.95
 grid_names, qubit_pair_names = grid_pair_names(qubit_pairs)
 grid = QubitPairGrid(grid_names, qubit_pair_names)
 for ax, qubit_pair in grid_iter(grid):
     plot = ds.state_control.sel(qubit=qubit_pair['qubit']).plot(ax = ax, x= 'time', y= 'amp', add_colorbar=False)        
     plt.colorbar(plot, ax=ax, orientation='horizontal', pad=0.2, aspect=30, label='Amplitude')
+    ax.hlines(actual_v, np.min(ds.time.values), np.max(ds.time.values), color='red')
     ax.set_title(qubit_pair["qubit"])
     ax.set_ylabel('Detuning [MHz]')
     ax.set_xlabel('time [nS]')

@@ -39,17 +39,17 @@ import numpy as np
 # %% {Node_parameters}
 class Parameters(NodeParameters):
 
-    qubits: Optional[List[str]] = ['q4']
-    num_averages: int = 300
+    qubits: Optional[List[str]] = ['q9']
+    num_averages: int = 1000
     operation: str = "saturation"
-    operation_amplitude_factor: Optional[float] = 0.01 #0.004, 0.02 # q6:3e-3, q7:1e-2, q8:3e-3, q9:***,
+    operation_amplitude_factor: Optional[float] = 0.013 #0.004, 0.02 # q6:3e-3, q7:1e-2, q8:3e-3, q9:***,
     operation_len_in_ns: Optional[int] = None
-    frequency_span_in_mhz: float = 300 #12, 120
+    frequency_span_in_mhz: float = 100 #12, 120
     frequency_step_in_mhz: float = 1 #0.1, 1
     frequency_shift_in_mhz: float = 0 #0  
-    min_flux_offset_in_v: float = 0.3 ##-0.042
-    max_flux_offset_in_v: float = 0.2 #0.042
-    num_flux_points: int = 101
+    min_flux_offset_in_v: float = -0.15 ##-0.042
+    max_flux_offset_in_v: float = 0.1 #0.042
+    num_flux_points: int = 51
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
     simulate: bool = False
     simulation_duration_ns: int = 2500
@@ -97,7 +97,7 @@ else:
 span = node.parameters.frequency_span_in_mhz * u.MHz
 step = node.parameters.frequency_step_in_mhz * u.MHz
 shift = int(node.parameters.frequency_shift_in_mhz * u.MHz)
-dfs = np.arange(-span, 0, step, dtype=np.int32)
+dfs = np.arange(-span//2, span//2, step, dtype=np.int32)
 # Flux bias sweep
 dcs = np.linspace(
     node.parameters.min_flux_offset_in_v,
@@ -220,7 +220,7 @@ if not node.parameters.simulate:
 
     # %% {Data_analysis}
     # Find the resonance dips for each flux point
-    peaks = peaks_dips(ds.I, dim="freq", prominence_factor=6)
+    peaks = peaks_dips(ds.I, dim="freq", prominence_factor=15)
     # Fit the result with a parabola
     parabolic_fit_results = peaks.position.polyfit("flux", 2)
     # Try to fit again with a smaller prominence factor (may need some adjustment)
