@@ -65,7 +65,13 @@ class json_to_csv:
                 T1 = ""
             else:
                 T1 = self.state_data["qubits"][id]["T1"]
-                T1 = round(T1*1e6,1)
+                if 'extras' in  self.state_data["qubits"][id]:
+                    if "T1_dev" in self.state_data["qubits"][id]["extras"]:
+                        T1 = f"{round(T1*1e6,1)} \u00B1 {round(self.state_data['qubits'][id]['extras']['T1_dev']*1e6,2)}"
+                    else:
+                        T1 = str(round(T1*1e6,1))
+                else:
+                    T1 = str(round(T1*1e6,1))
             T1_list.append(T1)
         self.dataset.append(T1_list)
         # T2*
@@ -85,17 +91,57 @@ class json_to_csv:
                 T2 = ""
             else:
                 T2 = self.state_data["qubits"][id]["T2echo"]
-                T2 = round(T2*1e6,1)
+                if 'extras' in  self.state_data["qubits"][id]:
+                    if "T2_dev" in self.state_data["qubits"][id]["extras"]:
+                        T2 = f"{round(T2*1e6,1)} \u00B1 {round(self.state_data['qubits'][id]['extras']['T2_dev']*1e6,2)}"
+                    else:
+                        T2 = str(round(T2*1e6,1))
+                else:
+                    T2 = str(round(T2*1e6,1))
+               
             T2echo_list.append(T2)
         self.dataset.append(T2echo_list)
+        ## Readout fidelity
+        RO_fidelity = ["RO_fidelity"]
+        for id in self.qubit_id[1:]:
+            if 'confusion_matrix' in self.state_data["qubits"][id]["resonator"]:
+                p00 = float(self.state_data["qubits"][id]["resonator"]["confusion_matrix"][0][0])
+                p11 = float(self.state_data["qubits"][id]["resonator"]["confusion_matrix"][1][1])
+                RO_fidelity.append(str(round(0.5*(p00+p11),3)))
+            else:
+                RO_fidelity.append("X")
+        self.dataset.append(RO_fidelity)
+        # effective temperature
+        Teff_list = ['Teff (mK)']
+        for id in self.qubit_id[1:]:
+            if 'extras' in  self.state_data["qubits"][id]:
+                if "Teff_mK" in self.state_data["qubits"][id]["extras"]:
+                    T = self.state_data["qubits"][id]["extras"]["Teff_mK"]
+                    if "Teff_mK_dev" in self.state_data["qubits"][id]["extras"]:
+                        T = f"{round(T,1)} \u00B1 {round(self.state_data['qubits'][id]['extras']['Teff_mK_dev'],1)}"
+                    else:
+                        T = f"{round(T,1)}"
+                else:
+                    T = ""
+            else:
+                T = ""
+               
+            Teff_list.append(T)
+        self.dataset.append(Teff_list)
+
         # flux tunable
         tunable = ["tunable"]
         for id in self.qubit_id[1:]:
-            if "independent_offset" not in self.state_data["qubits"][id]["z"]:
-                tunable.append("X")
+            if "independent_offset" in self.state_data["qubits"][id]["z"] and "freq_vs_flux_01_quad_term" in self.state_data["qubits"][id]:
+                if float(self.state_data["qubits"][id]["freq_vs_flux_01_quad_term"]) != 0 and self.state_data["qubits"][id]["z"]["independent_offset"] != 0:
+                    tunable.append("O")
+                else:
+                    tunable.append("X")
             else:
-                tunable.append("O")
+                tunable.append("X")
         self.dataset.append(tunable)
+        
+        
 
     def add_information(self,additional_information):
         name, title = additional_information[0], additional_information[1]
@@ -114,7 +160,7 @@ class json_to_csv:
 if __name__ == "__main__":
     ########################## Parameters ##########################
     # state and wiring parent directory name
-    parent_dir_name = "as-qpu-10qV2_q1q5"
+    parent_dir_name = "as-qpu-10qV2"
     #extra information need to add into form
     additional_information = [] # fill in the format: [name, title], name: variable in json, ex: ["T1","T1 (us)"]
     ################################################################
@@ -125,3 +171,4 @@ if __name__ == "__main__":
     if additional_information:
         j_to_c.add_information(additional_information)
     j_to_c.write_information()
+    

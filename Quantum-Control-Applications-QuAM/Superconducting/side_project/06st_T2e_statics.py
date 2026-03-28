@@ -26,8 +26,8 @@ class Parameters(NodeParameters):
     qubits: Optional[List[str]] = None #The qubit to be measured. If None, all active qubits will be measured
     num_averages: int = 500
     min_wait_time_in_ns: int = 16
-    max_wait_time_in_ns: int = 40008
-    wait_time_step_in_ns: int = 400
+    max_wait_time_in_ns: int = 25008
+    wait_time_step_in_ns: int = 500
     flux_point_joint_or_independent_or_arbitrary: Literal['joint', 'independent'] = 'independent'   
     simulate: bool = False
     timeout: int = 100
@@ -326,8 +326,16 @@ if not node.parameters.simulate:
     node.results["figure_histogram"] = grid.fig
 
 
-# %%
-node.results['initial_parameters'] = node.parameters.model_dump()
-node.machine = machine
-node.save()
-# %%
+# %% {Update_state}
+if not node.parameters.simulate:
+    with node.record_state_updates():
+        for index, q in enumerate(qubits):
+            if mu_collection[q.name]> 0:
+                q.T2echo = float(mu_collection[q.name]) * 1e-6
+            if sig_collection[q.name]> 0:
+                q.extras["T2_dev"] = float(sig_collection[q.name]) * 1e-6
+
+    # %% {Save_results}
+    node.results["initial_parameters"] = node.parameters.model_dump()
+    node.machine = machine
+    node.save()
