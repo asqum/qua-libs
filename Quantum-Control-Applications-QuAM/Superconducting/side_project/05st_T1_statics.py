@@ -50,7 +50,7 @@ class Parameters(NodeParameters):
     timeout: int = 100
     load_data_id: Optional[int] = None
     multiplexed: bool = False
-    histo_num:int = 5 # 
+    histo_num:int = 100 # 
 node = QualibrationNode(name="05st_T1_histogram", parameters=Parameters())
 
 
@@ -341,6 +341,8 @@ if not node.parameters.simulate:
             for index, q in enumerate(qubits):
                 if mu_collection[q.name]> 0:
                     q.T1 = float(mu_collection[q.name]) * 1e-6
+                if sig_collection[q.name]> 0:
+                    q.extras["T1_dev"] = float(sig_collection[q.name]) * 1e-6
 
         # %% {Save_results}
         node.results["initial_parameters"] = node.parameters.model_dump()
