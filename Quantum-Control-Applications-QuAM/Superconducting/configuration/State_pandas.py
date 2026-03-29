@@ -3,172 +3,147 @@ import json
 import os
 
 class json_to_csv:
-    def __init__(self, state_folder_name:str):
+    def __init__(self, state_folder_name: str):
         self.state_folder = state_folder_name
         self.dataset = []
         self.output_csv_name = ""
+        # 定義符號：尚未測量
+        self.NOT_MEASURED = "---" 
         self._search_state_wiring()
 
     def _search_state_wiring(self):
-        # 獲取絕對路徑
         current_file_path = os.path.abspath(__file__)
-
-        # 獲取資料夾路徑
         current_dir = os.path.dirname(current_file_path)
-
         folder_abs_path = os.path.join(current_dir, "quam_state", self.state_folder)
-        # state.json data
-        self.statefile = open(os.path.join(folder_abs_path, 'state.json'), "r")
-        self.state_data = json.load(self.statefile)
-        # wiring.json data
-        self.wiringfile = open(os.path.join(folder_abs_path, 'wiring.json'),"r")
-        self.wiring_data = json.load(self.wiringfile)
+        
+        # 讀取 JSON 檔案
+        with open(os.path.join(folder_abs_path, 'state.json'), "r", encoding="utf-8") as f:
+            self.state_data = json.load(f)
+        with open(os.path.join(folder_abs_path, 'wiring.json'), "r", encoding="utf-8") as f:
+            self.wiring_data = json.load(f)
 
-        # output csv name definition
         self.output_csv_name = f"{self.state_folder}_QPUinfo.csv"
 
-
-
     def basic_information(self):
-
-        #寫入標題
-        self.qubit_id = [""]
+        # 1. 寫入標題列 (Qubit IDs)
+        self.qubit_id = ["Qubit ID"]
         for i in self.state_data["qubits"]:
             self.qubit_id.append(i)
         self.dataset.append(self.qubit_id)
-        # 寫入資料
-        # resonator frequency
+
+        # 2. Resonator frequency (fr)
         rf = ["fr (GHz)"]
         for id in self.qubit_id[1:]:
-            slot = self.wiring_data["wiring"]["qubits"][id]["rr"]["opx_output"][-3]
-            channel = self.wiring_data["wiring"]["qubits"][id]["rr"]["opx_output"][-1]
-            IF = self.state_data["qubits"][id]["resonator"]["intermediate_frequency"]
-            LO = self.state_data["ports"]["mw_outputs"]["con1"][slot][channel]["upconverter_frequency"]
-            rf.append(round((LO+IF)/1e9,3))
+            try:
+                slot = self.wiring_data["wiring"]["qubits"][id]["rr"]["opx_output"][-3]
+                channel = self.wiring_data["wiring"]["qubits"][id]["rr"]["opx_output"][-1]
+                IF = self.state_data["qubits"][id]["resonator"]["intermediate_frequency"]
+                LO = self.state_data["ports"]["mw_outputs"]["con1"][slot][channel]["upconverter_frequency"]
+                rf.append(round((LO + IF) / 1e9, 3))
+            except:
+                rf.append(self.NOT_MEASURED)
         self.dataset.append(rf)
-        # qubit frequency
+
+        # 3. Qubit frequency (fq)
         qf = ['fq (GHz)']
         for id in self.qubit_id[1:]:
-            slot = self.wiring_data["wiring"]["qubits"][id]["xy"]["opx_output"][-3]
-            channel = self.wiring_data["wiring"]["qubits"][id]["xy"]["opx_output"][-1]
-            IF = self.state_data["qubits"][id]["xy"]["intermediate_frequency"]
-            LO = self.state_data["ports"]["mw_outputs"]["con1"][slot][channel]["upconverter_frequency"]
-            if IF == 0:
-                qf.append("")
-            else:
-                qf.append(round((LO+IF)/1e9,3))
+            try:
+                IF = self.state_data["qubits"][id]["xy"]["intermediate_frequency"]
+                if IF == 0:
+                    qf.append(self.NOT_MEASURED)
+                else:
+                    slot = self.wiring_data["wiring"]["qubits"][id]["xy"]["opx_output"][-3]
+                    channel = self.wiring_data["wiring"]["qubits"][id]["xy"]["opx_output"][-1]
+                    LO = self.state_data["ports"]["mw_outputs"]["con1"][slot][channel]["upconverter_frequency"]
+                    qf.append(round((LO + IF) / 1e9, 3))
+            except:
+                qf.append(self.NOT_MEASURED)
         self.dataset.append(qf)
-        # T1
-        T1_list = ['T1 (us)']
-        for id in self.qubit_id[1:]:
-            if "T1" not in self.state_data["qubits"][id]:
-                T1 = ""
-            else:
-                T1 = self.state_data["qubits"][id]["T1"]
-                if 'extras' in  self.state_data["qubits"][id]:
-                    if "T1_dev" in self.state_data["qubits"][id]["extras"]:
-                        T1 = f"{round(T1*1e6,1)} \u00B1 {round(self.state_data['qubits'][id]['extras']['T1_dev']*1e6,2)}"
-                    else:
-                        T1 = str(round(T1*1e6,1))
-                else:
-                    T1 = str(round(T1*1e6,1))
-            T1_list.append(T1)
-        self.dataset.append(T1_list)
-        # T2*
-        T2ramsey_list = ['T2* (us)']
-        for id in self.qubit_id[1:]:
-            if "T2ramsey" not in self.state_data["qubits"][id]:
-                T2ramsey = ""
-            else:
-                T2ramsey = self.state_data["qubits"][id]["T2ramsey"]
-                T2ramsey = round(T2ramsey*1e6,1)
-            T2ramsey_list.append(T2ramsey)
-        self.dataset.append(T2ramsey_list)
-        # T2
-        T2echo_list = ['T2 (us)']
-        for id in self.qubit_id[1:]:
-            if "T2echo" not in self.state_data["qubits"][id]:
-                T2 = ""
-            else:
-                T2 = self.state_data["qubits"][id]["T2echo"]
-                if 'extras' in  self.state_data["qubits"][id]:
-                    if "T2_dev" in self.state_data["qubits"][id]["extras"]:
-                        T2 = f"{round(T2*1e6,1)} \u00B1 {round(self.state_data['qubits'][id]['extras']['T2_dev']*1e6,2)}"
-                    else:
-                        T2 = str(round(T2*1e6,1))
-                else:
-                    T2 = str(round(T2*1e6,1))
-               
-            T2echo_list.append(T2)
-        self.dataset.append(T2echo_list)
-        ## Readout fidelity
-        RO_fidelity = ["RO_fidelity"]
-        for id in self.qubit_id[1:]:
-            if 'confusion_matrix' in self.state_data["qubits"][id]["resonator"]:
-                p00 = float(self.state_data["qubits"][id]["resonator"]["confusion_matrix"][0][0])
-                p11 = float(self.state_data["qubits"][id]["resonator"]["confusion_matrix"][1][1])
-                RO_fidelity.append(str(round(0.5*(p00+p11),3)))
-            else:
-                RO_fidelity.append("X")
-        self.dataset.append(RO_fidelity)
-        # effective temperature
-        Teff_list = ['Teff (mK)']
-        for id in self.qubit_id[1:]:
-            if 'extras' in  self.state_data["qubits"][id]:
-                if "Teff_mK" in self.state_data["qubits"][id]["extras"]:
-                    T = self.state_data["qubits"][id]["extras"]["Teff_mK"]
-                    if "Teff_mK_dev" in self.state_data["qubits"][id]["extras"]:
-                        T = f"{round(T,1)} \u00B1 {round(self.state_data['qubits'][id]['extras']['Teff_mK_dev'],1)}"
-                    else:
-                        T = f"{round(T,1)}"
-                else:
-                    T = ""
-            else:
-                T = ""
-               
-            Teff_list.append(T)
-        self.dataset.append(Teff_list)
 
-        # flux tunable
+        # 4. T1, T2*, T2 (批次處理相似邏輯)
+        metrics = [
+            ("T1", "T1 (us)", 1e6),
+            ("T2ramsey", "T2* (us)", 1e6),
+            ("T2", "T2 (us)", 1e6)
+        ]
+        for key, title, scale in metrics:
+            row = [title]
+            for id in self.qubit_id[1:]:
+                val = self.NOT_MEASURED
+                extras = self.state_data["qubits"][id].get("extras", {})
+                if key in extras:
+                    main_val = extras[key]
+                    dev_key = f"{key}_dev"
+                    if dev_key in extras:
+                        val = f"{round(main_val*scale, 1)} \u00B1 {round(extras[dev_key]*scale, 2)}"
+                    else:
+                        val = str(round(main_val * scale, 1))
+                row.append(val)
+            self.dataset.append(row)
+
+        # 5. Readout fidelity
+        RO = ["RO_fidelity"]
+        for id in self.qubit_id[1:]:
+            res = self.state_data["qubits"][id].get("resonator", {})
+            if 'confusion_matrix' in res:
+                p00 = float(res["confusion_matrix"][0][0])
+                p11 = float(res["confusion_matrix"][1][1])
+                RO.append(str(round(0.5 * (p00 + p11), 3)))
+            else:
+                RO.append(self.NOT_MEASURED)
+        self.dataset.append(RO)
+
+        # 6. Effective temperature (Teff)
+        Teff = ['Teff (mK)']
+        for id in self.qubit_id[1:]:
+            val = self.NOT_MEASURED
+            extras = self.state_data["qubits"][id].get("extras", {})
+            if "Teff_mK" in extras:
+                t = extras["Teff_mK"]
+                dev = extras.get("Teff_mK_dev")
+                if dev:
+                    val = f"{round(t, 1)} \u00B1 {round(dev, 1)}"
+                else:
+                    val = f"{round(t, 1)}"
+            Teff.append(val)
+        self.dataset.append(Teff)
+
+        # 7. Flux tunable (保持原本的 O/X 邏輯)
         tunable = ["tunable"]
         for id in self.qubit_id[1:]:
-            if "independent_offset" in self.state_data["qubits"][id]["z"] and "freq_vs_flux_01_quad_term" in self.state_data["qubits"][id]:
-                if float(self.state_data["qubits"][id]["freq_vs_flux_01_quad_term"]) != 0 and self.state_data["qubits"][id]["z"]["independent_offset"] != 0:
-                    tunable.append("O")
-                else:
-                    tunable.append("X")
+            val = self.NOT_MEASURED
+            period_V = float(self.state_data["qubits"][id]['phi0_voltage'])
+            if period_V > 0 and period_V<=1.5:
+                tunable.append("O")
             else:
                 tunable.append("X")
         self.dataset.append(tunable)
-        
-        
 
-    def add_information(self,additional_information):
-        name, title = additional_information[0], additional_information[1]
-        list = [f"{title}"]
+    def add_information(self, additional_info):
+        # 處理額外資訊，找不到則填 ---
+        name, title = additional_info[0], additional_info[1]
+        new_row = [title]
         for id in self.qubit_id[1:]:
-            if f"{name}" not in self.state_data["qubits"][id]:
-                list.append("")
-            else:
-                list.append(self.state_data["qubits"][id][name])
-        self.dataset.append(list)
+            val = self.state_data["qubits"][id].get(name, self.NOT_MEASURED)
+            new_row.append(val)
+        self.dataset.append(new_row)
+
     def write_information(self):
+        
         with open(self.output_csv_name, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
             writer.writerows(self.dataset)
 
-if __name__ == "__main__":
-    ########################## Parameters ##########################
-    # state and wiring parent directory name
-    parent_dir_name = "as-qpu-10qV2"
-    #extra information need to add into form
-    additional_information = [] # fill in the format: [name, title], name: variable in json, ex: ["T1","T1 (us)"]
-    ################################################################
+        print(f"--- 報告產生完成 ---")
+        print(f"檔案路徑: {os.path.abspath(self.output_csv_name)}")
 
-    # execution
+if __name__ == "__main__":
+    # 設定資料夾名稱
+    parent_dir_name = "as-qpu-10qV2"
+    
+    # 初始化並執行
     j_to_c = json_to_csv(parent_dir_name)
     j_to_c.basic_information()
-    if additional_information:
-        j_to_c.add_information(additional_information)
-    j_to_c.write_information()
     
+    # 執行寫入
+    j_to_c.write_information()
