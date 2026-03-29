@@ -62,15 +62,13 @@ node = QualibrationNode(
     )
 )
 # statistics number
-histo_num:int = 100
+histo_num:int = 1
 
 # %% {Initialize_QuAM_and_QOP}
 u = unit(coerce_to_integer=True)
 
 machine = QuAM.load()
-# machine.network["port"] = int(access_port)
 
-# print(f"Machine access port :{access_port}")
 if node.parameters.load_data_id is None:
     qmm = machine.connect()
 
@@ -268,7 +266,6 @@ if not node.parameters.simulate:
                 Teff[q.name].append(PetoT(p01, 2*np.pi*q.xy.RF_frequency))
         tot_c = 0
         grid = QubitGrid(ds, [q.grid_location for q in qubits])
-        
         for ax, qubit in grid_iter(grid):
             data = Teff[qubit['qubit']]
             tot_c = len(data)
@@ -303,13 +300,33 @@ if not node.parameters.simulate:
         plt.tight_layout()
         plt.show()
         node.results["Temperature_statistics"] = grid.fig
+        from numpy import random
+        idx = random.randint(tot_c)
+        ## prepare ground 1D histogram
+        grid_3 = QubitGrid(ds, [q.grid_location for q in qubits])
+        for ax, qubit in grid_iter(grid_3):
+            Teff = models[qubit['qubit']][idx].show_thermal_analysis(qubit['qubit'], machine.qubits[qubit['qubit']].xy.RF_frequency*1e-9, ax)
+            node.results["results"][qubit['qubit']]["Teff_mK"] = Teff
+            
+        plt.suptitle("Ground State Preparation")
+        plt.tight_layout()
+        plt.show()
+        node.results[f"Pg_1DHistogran_idx_{idx}"] = grid_3.fig
+        ## raw data plot
+        grid_2 = QubitGrid(ds, [q.grid_location for q in qubits])
+        for ax, qubit in grid_iter(grid_2): 
+            models[qubit['qubit']][idx].show_scatter_analysis(qubit['qubit'], ax)
+        plt.suptitle("IQ Blobs")
+        plt.tight_layout()
+        plt.show()
+        node.results[f"Colored_Scatter_idx_{idx}"] = grid_2.fig
 
     # %% {Update_state}
     if node.parameters.load_data_id is None:
         with node.record_state_updates():
             for qubit in qubits:
-                qubit.extras['Teff_mK'] = mu_collection[qubit.name]
-                if histo_num != 1:
+                if histo_num >= 100:
+                    qubit.extras['Teff_mK'] = mu_collection[qubit.name]
                     qubit.extras['Teff_mK_dev'] = sig_collection[qubit.name]
 
         # %% {Save_results}
