@@ -37,20 +37,19 @@ from time import time
 # %% {Node_parameters}
 class Parameters(NodeParameters):
     qubits: Optional[List[str]] = None
-    num_averages: int = 100
+    num_averages: int = 200
     min_wait_time_in_ns: int = 16
     max_wait_time_in_ns: int = 200016
-    wait_time_step_in_ns: int = 1600
     flux_point_joint_or_independent_or_arbitrary: Literal["joint", "independent"] = "independent"
     reset_type: Literal["active", "thermal"] = "active"
-    time_scale:Literal["log", "linear"] = "log" # if log, fixed time points = 100
+    time_scale:Literal["log"] = "log"
     use_state_discrimination: bool = True
     simulate: bool = False
     simulation_duration_ns: int = 2500
     timeout: int = 100
     load_data_id: Optional[int] = None
     multiplexed: bool = False
-    histo_num:int = 100 # 
+    histo_num:int = 1 # 
 node = QualibrationNode(name="05st_T1_histogram", parameters=Parameters())
 
 
@@ -76,20 +75,14 @@ num_qubits = len(qubits)
 # %% {QUA_program}
 n_avg = node.parameters.num_averages  # The number of averages
 # Dephasing time sweep (in clock cycles = 4ns) - minimum is 4 clock cycles
-if node.parameters.time_scale.lower() == 'linear':
-    idle_times = np.arange(
-        node.parameters.min_wait_time_in_ns // 4,
-        node.parameters.max_wait_time_in_ns // 4,
-        node.parameters.wait_time_step_in_ns // 4,
-    )
-else:
-    idle_times = np.unique(
-        np.geomspace(
-            node.parameters.min_wait_time_in_ns,
-            node.parameters.max_wait_time_in_ns,
-            100,
-        )//4
-    ).astype(int)
+
+idle_times = np.unique(
+    np.geomspace(
+        node.parameters.min_wait_time_in_ns,
+        node.parameters.max_wait_time_in_ns,
+        100,
+    )//4
+).astype(int)
 
 flux_point = node.parameters.flux_point_joint_or_independent_or_arbitrary  # 'independent' or 'joint'
 if flux_point == "arbitrary":
@@ -160,9 +153,7 @@ with program() as t1:
                 I_st[i].buffer(len(idle_times)).average().save(f"I{i + 1}")
                 Q_st[i].buffer(len(idle_times)).average().save(f"Q{i + 1}")
 
-# from qm import generate_qua_script
-# sourceFile = open('T1debug.py', 'w')
-# print(generate_qua_script(t1, config), file=sourceFile)
+
 
 # %%
 # %% {Simulate_or_execute}
@@ -260,11 +251,15 @@ if not node.parameters.simulate:
             t1_collection[q_name].append(tau_val)
 
     # %% {Plotting}
-    grid = QubitGrid(ds, [q.grid_location for q in qubits])
+    
     mu_collection, sig_collection = {}, {}
-    tot_c = 0
-    for ax, qubit in grid_iter(grid):
-        if node.parameters.histo_num > 1:
+    
+
+    if node.parameters.histo_num > 1:
+        grid = QubitGrid(ds, [q.grid_location for q in qubits])
+        tot_c = 0
+        for ax, qubit in grid_iter(grid):
+        
             data = np.array(t1_collection[qubit['qubit']])
             tot_c = len(data)
             counts, bins, _ = ax.hist(data, bins=15, alpha=0.7, color='skyblue', edgecolor='white', label='Counts')
@@ -293,7 +288,53 @@ if not node.parameters.simulate:
                 verticalalignment="top",
                 bbox=dict(boxstyle="round", facecolor="white", alpha=0.7)
             )
-        else:
+        plt.suptitle(f" T1 Statistics, #={tot_c}", fontsize=16, y=1.02)
+        plt.tight_layout()
+        plt.show()
+        node.results["figure_histogram"] = grid.fig
+
+        iterations = ds.iteration.values
+        from numpy.random import randint
+        iter = randint(max(iterations))
+        grid_2 = QubitGrid(ds, [q.grid_location for q in qubits])
+        for ax, qubit in grid_iter(grid_2):
+            sub_ds = ds.sel(iteration=iter)
+            fitted = decay_exp(
+                sub_ds.idle_time,
+                fit_collection[qubit['qubit']].sel(fit_vals="a"),
+                fit_collection[qubit['qubit']].sel(fit_vals="offset"),
+                fit_collection[qubit['qubit']].sel(fit_vals="decay"),
+            )
+            decay = fit_collection[qubit['qubit']].sel(fit_vals="decay")
+            decay_res = fit_collection[qubit['qubit']].sel(fit_vals="decay_decay")
+            tau = -1 / fit_collection[qubit['qubit']].sel(fit_vals="decay")
+            tau_error = -tau * (np.sqrt(decay_res) / decay)
+            if node.parameters.use_state_discrimination:
+                sub_ds.sel(qubit=qubit["qubit"]).state.plot(ax=ax, marker='o', linestyle='', alpha=0.5)
+                ax.set_ylabel("State")
+            else:
+                sub_ds.sel(qubit=qubit["qubit"]).I.plot(ax=ax, marker='o', linestyle='', alpha=0.5)
+                ax.set_ylabel("I (V)")
+            ax.plot(sub_ds.idle_time, fitted, "r--")
+            ax.set_title(qubit["qubit"])
+            ax.set_xlabel("Idle_time (uS)")
+            ax.text(
+                0.1,
+                0.9,
+                f'T1 = {tau.values:.1f} ± {tau_error.values:.1f} µs',
+                transform=ax.transAxes,
+                fontsize=10,
+                verticalalignment="top",
+                bbox=dict(facecolor="white", alpha=0.5),
+            )
+        plt.suptitle("T1")
+        plt.tight_layout()
+        plt.show()
+        node.results[f"figure_idx_{iter}"] = grid_2.fig
+        
+    else:
+        grid = QubitGrid(ds, [q.grid_location for q in qubits])
+        for ax, qubit in grid_iter(grid):
             fitted = decay_exp(
                 ds.idle_time,
                 fit_collection[qubit['qubit']].sel(fit_vals="a"),
@@ -322,17 +363,15 @@ if not node.parameters.simulate:
                 verticalalignment="top",
                 bbox=dict(facecolor="white", alpha=0.5),
             )
-            mu_collection[qubit['qubit']], sig_collection[qubit['qubit']] = float(tau.values), float(tau_error.values)
-
-    if node.parameters.histo_num > 1:
-        plt.suptitle(f" T1 Statistics, #={tot_c}", fontsize=16, y=1.02)
-    else:
         plt.suptitle("T1")
-    plt.tight_layout()
-    plt.show()
+        plt.tight_layout()
+        plt.show()
+        node.results["figure"] = grid.fig
+        mu_collection[qubit['qubit']], sig_collection[qubit['qubit']] = float(tau.values), float(tau_error.values)
 
-    node.results["t1_stats"] = {q: {"mu_us": mu_collection[q], "sigma_us": sig_collection[q]} for q in qbs}
-    node.results["figure_histogram"] = grid.fig
+
+    node.results["t1_stats"] = {q: {"mu_us": mu_collection[q], "sigma_us": sig_collection[q]} for q in mu_collection}
+    
 
 
     # %% {Update_state}
@@ -341,8 +380,12 @@ if not node.parameters.simulate:
             for index, q in enumerate(qubits):
                 if mu_collection[q.name]> 0:
                     q.T1 = float(mu_collection[q.name]) * 1e-6
-                if sig_collection[q.name]> 0:
-                    q.extras["T1_dev"] = float(sig_collection[q.name]) * 1e-6
+                if node.parameters.histo_num >= 100:
+                    if sig_collection[q.name]> 0:
+                        q.extras["T1_dev"] = float(sig_collection[q.name]) * 1e-6
+                    if mu_collection[q.name]> 0:
+                        q.extras["T1"] = float(mu_collection[q.name]) * 1e-6
+                    
 
         # %% {Save_results}
         node.results["initial_parameters"] = node.parameters.model_dump()
