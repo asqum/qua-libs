@@ -37,7 +37,7 @@ from time import time
 # %% {Node_parameters}
 class Parameters(NodeParameters):
     qubits: Optional[List[str]] = None
-    num_averages: int = 200
+    num_averages: int = 100
     min_wait_time_in_ns: int = 16
     max_wait_time_in_ns: int = 200016
     flux_point_joint_or_independent_or_arbitrary: Literal["joint", "independent"] = "independent"
@@ -363,13 +363,13 @@ if not node.parameters.simulate:
                 verticalalignment="top",
                 bbox=dict(facecolor="white", alpha=0.5),
             )
+            mu_collection[qubit['qubit']], sig_collection[qubit['qubit']] = float(tau.values), float(tau_error.values)
+
         plt.suptitle("T1")
         plt.tight_layout()
         plt.show()
         node.results["figure"] = grid.fig
-        mu_collection[qubit['qubit']], sig_collection[qubit['qubit']] = float(tau.values), float(tau_error.values)
-
-
+        
     node.results["t1_stats"] = {q: {"mu_us": mu_collection[q], "sigma_us": sig_collection[q]} for q in mu_collection}
     
 
