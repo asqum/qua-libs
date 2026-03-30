@@ -112,9 +112,12 @@ class json_to_csv:
         tunable = ["tunable"]
         for id in self.qubit_id[1:]:
             val = self.NOT_MEASURED
-            period_V = float(self.state_data["qubits"][id]['phi0_voltage'])
-            if period_V > 0 and period_V<=1.5:
-                tunable.append("O")
+            if 'phi0_voltage' in self.state_data["qubits"][id]:
+                period_V = float(self.state_data["qubits"][id]['phi0_voltage'])
+                if period_V > 0 and period_V<=1.5:
+                    tunable.append("O")
+                else:
+                    tunable.append("X")
             else:
                 tunable.append("X")
         self.dataset.append(tunable)
