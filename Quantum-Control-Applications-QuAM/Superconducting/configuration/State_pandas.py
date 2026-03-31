@@ -1,6 +1,7 @@
 import csv
 import json
 import os
+from datetime import datetime
 
 class json_to_csv:
     def __init__(self, state_folder_name: str):
@@ -21,8 +22,14 @@ class json_to_csv:
             self.state_data = json.load(f)
         with open(os.path.join(folder_abs_path, 'wiring.json'), "r", encoding="utf-8") as f:
             self.wiring_data = json.load(f)
+        
+        # build folder for QPU_info
+        self.QPU_info_dir = os.path.join(current_dir, "QPU_info")
+        os.makedirs(self.QPU_info_dir, exist_ok=True)
 
-        self.output_csv_name = f"{self.state_folder}_QPUinfo.csv"
+        now = datetime.now()
+        date_stamp = now.strftime("%y%m%d")
+        self.output_csv_name = f"{self.state_folder}_QPUinfo_{date_stamp}.csv"
 
     def basic_information(self):
         # 1. 寫入標題列 (Qubit IDs)
@@ -132,13 +139,14 @@ class json_to_csv:
         self.dataset.append(new_row)
 
     def write_information(self):
+        to_loc = os.path.join(self.QPU_info_dir, self.output_csv_name)
         
-        with open(self.output_csv_name, "w", newline="", encoding="utf-8") as f:
+        with open(to_loc, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
             writer.writerows(self.dataset)
 
         print(f"--- 報告產生完成 ---")
-        print(f"檔案路徑: {os.path.abspath(self.output_csv_name)}")
+        print(f"檔案路徑: {to_loc}")
 
 if __name__ == "__main__":
     # 設定資料夾名稱

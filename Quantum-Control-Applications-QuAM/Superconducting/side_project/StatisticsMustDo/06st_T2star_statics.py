@@ -22,15 +22,15 @@ from scipy.stats import norm
 # %% {Node_parameters}
 class Parameters(NodeParameters):
     qubits: Optional[List[str]] = None #The qubit to be measured. If None, all active qubits will be measured
-    num_averages: int = 300
-    frequency_detuning_in_mhz:float=0.5
+    num_averages: int = 200
+    frequency_detuning_in_mhz:float=0.2
     min_wait_time_in_ns: int = 16
-    max_wait_time_in_ns: int = 8008
+    max_wait_time_in_ns: int = 30016
     flux_point_joint_or_independent_or_arbitrary: Literal['joint', 'independent'] = 'independent'   
     simulate: bool = False
     timeout: int = 100
     use_state_discrimination: bool = True
-    time_scale:Literal["log"] = "log"
+    time_scale:Literal["linear",'log'] = "linear"
     reset_type: Literal['active', 'thermal'] = "active"
     histo_num:int = 1
 
@@ -62,13 +62,23 @@ n_avg = node.parameters.num_averages  # The number of averages
 detuning = node.parameters.frequency_detuning_in_mhz * u.MHz
 
 # Dephasing time sweep (in clock cycles = 4ns) - minimum is 4 clock cycles
-idle_times = np.unique(
-    np.geomspace(
-        node.parameters.min_wait_time_in_ns,
-        node.parameters.max_wait_time_in_ns,
-        100,
-    )//4
-).astype(int)
+time_points:int = 150
+if node.parameters.time_scale == 'linear':
+    idle_times = np.unique(
+        np.linspace(
+            node.parameters.min_wait_time_in_ns,
+            node.parameters.max_wait_time_in_ns,
+            time_points,
+        )//4
+    ).astype(int)
+else:
+    idle_times = np.unique(
+        np.geomspace(
+            node.parameters.min_wait_time_in_ns,
+            node.parameters.max_wait_time_in_ns,
+            time_points,
+        )//4
+    ).astype(int)
 
 
 
@@ -180,8 +190,8 @@ else:
                 # Fetch results
                     fetched_data = results.fetch_all()
                     n = fetched_data[0]
-
-                    progress_counter(n, n_avg, start_time=results.start_time)
+                    if target_counts <= 5:
+                        progress_counter(n, n_avg, start_time=results.start_time)
             
             ds = fetch_results_as_xarray(job.result_handles, qubits, {"idle_time": idle_times})
 
