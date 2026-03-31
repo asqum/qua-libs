@@ -24,7 +24,7 @@ from scipy.stats import norm
 # %% {Node_parameters}
 class Parameters(NodeParameters):
     qubits: Optional[List[str]] = None #The qubit to be measured. If None, all active qubits will be measured
-    num_averages: int = 500
+    num_averages: int = 150
     min_wait_time_in_ns: int = 16
     max_wait_time_in_ns: int = 25008
     flux_point_joint_or_independent_or_arbitrary: Literal['joint', 'independent'] = 'independent'   
@@ -112,7 +112,7 @@ with program() as t1:
                     # active_reset(qubit, "readout")
                     active_reset_simple(qubit, "readout")
                 else:
-                    qubit.resonator.wait(qubit.thermalization_time * u.ns)
+                    qubit.resonator.wait(5*qubit.thermalization_time * u.ns)
                     qubit.align()
                 
                     
@@ -189,8 +189,8 @@ else:
                 # Fetch results
                     fetched_data = results.fetch_all()
                     n = fetched_data[0]
-
-                    progress_counter(n, n_avg, start_time=results.start_time)
+                    if target_counts <= 5:
+                        progress_counter(n, n_avg, start_time=results.start_time)
             
             ds = fetch_results_as_xarray(job.result_handles, qubits, {"idle_time": idle_times})
 
