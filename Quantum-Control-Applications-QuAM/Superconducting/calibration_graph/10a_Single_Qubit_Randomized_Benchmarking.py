@@ -45,12 +45,12 @@ class Parameters(NodeParameters):
     use_state_discrimination: bool = True
     use_strict_timing: bool = False
     num_random_sequences: int = 70  # Number of random sequences
-    num_averages: int = 100
+    num_averages: int = 200
     max_circuit_depth: int = 400  # Maximum circuit depth
     delta_clifford: int = 10
     seed: int = 345324
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
-    reset_type_thermal_or_active: Literal["thermal", "active"] = "active"
+    reset_type_thermal_or_active: Literal["thermal", "active"] = "thermal"
     simulate: bool = False
     simulation_duration_ns: int = 2500
     timeout: int = 100
@@ -394,6 +394,11 @@ if not node.parameters.simulate:
 
 
     # %% {Save_results}
+    if not node.parameters.simulate:
+        with node.record_state_updates():
+            for q in qubits:
+                q.extras["EPG"] = EPG.sel(qubit=q.name).item()
+                
     if not node.parameters.simulate:
         node.outcomes = {q.name: "successful" for q in qubits}
         node.results["initial_parameters"] = node.parameters.model_dump()
