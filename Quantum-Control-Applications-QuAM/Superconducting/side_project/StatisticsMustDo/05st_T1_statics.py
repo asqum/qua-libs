@@ -37,9 +37,9 @@ from time import time
 # %% {Node_parameters}
 class Parameters(NodeParameters):
     qubits: Optional[List[str]] = ["q1", "q2"]
-    num_averages: int = 100
+    num_averages: int = 5000
     min_wait_time_in_ns: int = 16
-    max_wait_time_in_ns: int = 100016
+    max_wait_time_in_ns: int = 250016
     flux_point_joint_or_independent_or_arbitrary: Literal["joint", "independent"] = "independent"
     reset_type: Literal["active", "thermal"] = "active"
     time_scale:Literal["log"] = "log"
@@ -49,7 +49,7 @@ class Parameters(NodeParameters):
     timeout: int = 100
     load_data_id: Optional[int] = None
     multiplexed: bool = False
-    histo_num:int = 2 # 
+    histo_num:int = 1 # 
 node = QualibrationNode(name="05st_T1_histogram", parameters=Parameters())
 
 
@@ -109,9 +109,9 @@ with program() as t1:
         with for_(n, 0, n < n_avg, n + 1):
             save(n, n_st)
             with for_each_(t, idle_times):
-                if not node.parameters.simulate:
+                for i, qubit in multiplexed_qubits.items():
+                    if not node.parameters.simulate:
                     # measure ground-state IQ blob for all qubits
-                    for i, qubit in multiplexed_qubits.items():
                         if node.parameters.reset_type == "active":
                             # active_reset(qubit, "readout")
                             active_reset_simple(qubit, "readout")
@@ -120,12 +120,10 @@ with program() as t1:
                         else:
                             raise ValueError(f"Unrecognized reset type {node.parameters.reset_type}.")
                         
-                for i, qubit in multiplexed_qubits.items():
                     qubit.xy.play("x180")
                     qubit.align()
                     qubit.wait(t)
                 
-                for i, qubit in multiplexed_qubits.items():
                     # Measure the state of the resonators
                     if node.parameters.use_state_discrimination:
                         readout_state(qubit, state[i])

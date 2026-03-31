@@ -24,7 +24,7 @@ from scipy.stats import norm
 # %% {Node_parameters}
 class Parameters(NodeParameters):
     qubits: Optional[List[str]] = None #The qubit to be measured. If None, all active qubits will be measured
-    num_averages: int = 150
+    num_averages: int = 50000
     min_wait_time_in_ns: int = 16
     max_wait_time_in_ns: int = 4008
     flux_point_joint_or_independent_or_arbitrary: Literal['joint', 'independent'] = 'independent'   
@@ -33,7 +33,7 @@ class Parameters(NodeParameters):
     use_state_discrimination: bool = True
     time_scale:Literal["log"] = "log"
     reset_type: Literal['active', 'thermal'] = "active"
-    histo_num:int = 2
+    histo_num:int = 1
 
 node = QualibrationNode(
     name="06st_T2e_histogram",
@@ -97,15 +97,15 @@ with program() as t1:
         for i, qubit in multiplexed_qubits.items():
             wait(1000, qubit.z.name)
 
-        align()
+            qubit.align()
 
         with for_(n, 0, n < n_avg, n + 1):
             save(n, n_st)
             with for_each_(t, idle_times):
 
-                if not node.parameters.simulate:
+                for i, qubit in multiplexed_qubits.items():
+                    if not node.parameters.simulate:
                     # measure ground-state IQ blob for all qubits
-                    for i, qubit in multiplexed_qubits.items():
                         if node.parameters.reset_type == "active":
                             # active_reset(qubit, "readout")
                             active_reset_simple(qubit, "readout")
@@ -113,7 +113,7 @@ with program() as t1:
                             qubit.wait(2 * qubit.thermalization_time * u.ns)
                         else:
                             raise ValueError(f"Unrecognized reset type {node.parameters.reset_type}.")
-                for i, qubit in multiplexed_qubits.items():
+
                     qubit.xy.play("x90")
                     qubit.wait(t)
                     qubit.xy.play("x180")
@@ -121,7 +121,7 @@ with program() as t1:
                     qubit.xy.play("-x90")
                     qubit.align()
 
-                    
+
                     # Measure the state of the resonators
                     if node.parameters.use_state_discrimination:
                         readout_state(qubit, state[i])
@@ -132,7 +132,7 @@ with program() as t1:
                         save(I[i], I_st[i])
                         save(Q[i], Q_st[i])
 
-        align()
+        # align()
 
     with stream_processing():
         n_st.save("n")
