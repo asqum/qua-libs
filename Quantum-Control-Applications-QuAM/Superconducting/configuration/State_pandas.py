@@ -99,6 +99,16 @@ class json_to_csv:
             else:
                 RO.append(self.NOT_MEASURED)
         self.dataset.append(RO)
+        # Control fidelity
+        GF = ["Gate_fidelity"]
+        for id in self.qubit_id[1:]:
+            extras = self.state_data["qubits"][id].get("extras", {})
+            if "EPG" in extras:
+                GF.append(str(round(1-extras['EPG'], 3)))
+            else:
+                GF.append(self.NOT_MEASURED)
+        self.dataset.append(GF)
+
 
         # 6. Effective temperature (Teff)
         Teff = ['Teff (mK)']
