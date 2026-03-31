@@ -52,7 +52,7 @@ node = QualibrationNode(
     name="07bx_QubitThermometer",
     parameters=Parameters(
         qubits=None,
-        multiplexed=0,
+        multiplexed=False,
         flux_point_joint_or_independent="independent",
         num_runs=4096*1,
         load_data_id=None,
@@ -176,7 +176,8 @@ else:
                         results = fetching_tool(job, ["n"], mode="live")
                         while results.is_processing():
                             n = results.fetch_all()[0]
-                            progress_counter(n, n_runs, start_time=results.start_time)
+                            if target_counts <= 5:
+                                progress_counter(n, n_runs, start_time=results.start_time)
                 ds = fetch_dataset(job, qubits, node.parameters)
                 dss.append(ds)
                 current_success += 1

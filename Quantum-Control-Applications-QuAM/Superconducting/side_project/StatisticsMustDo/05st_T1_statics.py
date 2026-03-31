@@ -184,6 +184,7 @@ else:
         current_success = 0
         max_retries = target_counts + 5  # 設定一個總嘗試上限，避免無限迴圈
         attempts = 0
+    
 
         while current_success < target_counts and attempts < max_retries:
             attempts += 1
@@ -195,7 +196,8 @@ else:
                         # Fetch results
                         n = results.fetch_all()[0]
                         # Progress bar
-                        progress_counter(n, n_avg, start_time=results.start_time)
+                        if target_counts <= 5:
+                            progress_counter(n, n_avg, start_time=results.start_time)
                 
                 ds = fetch_results_as_xarray(job.result_handles, qubits, {"idle_time": idle_times})
                 # Convert IQ data into volts
