@@ -36,20 +36,20 @@ from time import time
 
 # %% {Node_parameters}
 class Parameters(NodeParameters):
-    qubits: Optional[List[str]] = None
+    qubits: Optional[List[str]] = ["q1", "q2"]
     num_averages: int = 100
     min_wait_time_in_ns: int = 16
-    max_wait_time_in_ns: int = 200016
+    max_wait_time_in_ns: int = 100016
     flux_point_joint_or_independent_or_arbitrary: Literal["joint", "independent"] = "independent"
     reset_type: Literal["active", "thermal"] = "active"
     time_scale:Literal["log"] = "log"
-    use_state_discrimination: bool = True
+    use_state_discrimination: bool = False
     simulate: bool = False
     simulation_duration_ns: int = 2500
     timeout: int = 100
     load_data_id: Optional[int] = None
     multiplexed: bool = False
-    histo_num:int = 1 # 
+    histo_num:int = 2 # 
 node = QualibrationNode(name="05st_T1_histogram", parameters=Parameters())
 
 
@@ -65,10 +65,7 @@ if node.parameters.load_data_id is None:
     qmm = machine.connect()
     
 # Get the relevant QuAM components
-if node.parameters.qubits is None or node.parameters.qubits == "":
-    qubits = machine.active_qubits
-else:
-    qubits = [machine.qubits[q] for q in node.parameters.qubits]
+qubits = machine.get_qubits_used_in_node(node.parameters)
 num_qubits = len(qubits)
 
 
@@ -100,49 +97,47 @@ with program() as t1:
         state_st = [declare_stream() for _ in range(num_qubits)]
 
     machine.apply_all_couplers_to_min()
-    for i, qubit in enumerate(qubits):
+    for multiplexed_qubits in qubits.batch():
 
         # Bring the active qubits to the desired frequency point
-        machine.set_all_fluxes(flux_point=flux_point, target=qubit)
-        if "c" in qubit.id: qubit.z.set_dc_offset(qubit.z.joint_offset) # for coupler-test case
-        qubit.z.settle()
-        qubit.align()
+        machine.set_all_fluxes(flux_point=flux_point, target=list(multiplexed_qubits.values())[0])
+        # if "c" in qubit.id: qubit.z.set_dc_offset(qubit.z.joint_offset) # for coupler-test case
+        for i, qubit in multiplexed_qubits.items():
+            qubit.z.settle()
+            qubit.align()
 
         with for_(n, 0, n < n_avg, n + 1):
             save(n, n_st)
             with for_each_(t, idle_times):
-                if node.parameters.reset_type == "active":
-                    # active_reset(qubit, "readout")
-                    active_reset_simple(qubit, "readout")
-                else:
-                    qubit.resonator.wait(qubit.thermalization_time * u.ns)
+                if not node.parameters.simulate:
+                    # measure ground-state IQ blob for all qubits
+                    for i, qubit in multiplexed_qubits.items():
+                        if node.parameters.reset_type == "active":
+                            # active_reset(qubit, "readout")
+                            active_reset_simple(qubit, "readout")
+                        elif node.parameters.reset_type == "thermal":
+                            qubit.wait(2 * qubit.thermalization_time * u.ns)
+                        else:
+                            raise ValueError(f"Unrecognized reset type {node.parameters.reset_type}.")
+                        
+                for i, qubit in multiplexed_qubits.items():
+                    qubit.xy.play("x180")
                     qubit.align()
-
-                qubit.xy.play("x180")
-                qubit.align()
-                # qubit.z.wait(20)
-                # qubit.z.play(
-                #     "const",
-                #     amplitude_scale=arb_flux_bias_offset[qubit.name] / qubit.z.operations["const"].amplitude,
-                #     duration=t,
-                # )
-                # qubit.z.wait(20)
-                # qubit.align()
-                qubit.wait(t)
-               
-
-                # Measure the state of the resonators
-                if node.parameters.use_state_discrimination:
-                    readout_state(qubit, state[i])
-                    save(state[i], state_st[i])
-                else:
-                    qubit.resonator.measure("readout", qua_vars=(I[i], Q[i]))
-                    # save data
-                    save(I[i], I_st[i])
-                    save(Q[i], Q_st[i])
-        # Measure sequentially
-        if not node.parameters.multiplexed:
-            align()
+                    qubit.wait(t)
+                
+                for i, qubit in multiplexed_qubits.items():
+                    # Measure the state of the resonators
+                    if node.parameters.use_state_discrimination:
+                        readout_state(qubit, state[i])
+                        save(state[i], state_st[i])
+                    else:
+                        qubit.resonator.measure("readout", qua_vars=(I[i], Q[i]))
+                        # save data
+                        save(I[i], I_st[i])
+                        save(Q[i], Q_st[i])
+        # # Measure sequentially
+        # if not node.parameters.multiplexed:
+        #     align()
 
     with stream_processing():
         n_st.save("n")
