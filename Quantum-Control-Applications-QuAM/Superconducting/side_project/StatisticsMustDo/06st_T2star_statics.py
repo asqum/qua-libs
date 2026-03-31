@@ -22,10 +22,10 @@ from scipy.stats import norm
 # %% {Node_parameters}
 class Parameters(NodeParameters):
     qubits: Optional[List[str]] = None #The qubit to be measured. If None, all active qubits will be measured
-    num_averages: int = 200
+    num_averages: int = 5000
     frequency_detuning_in_mhz:float=0.2
     min_wait_time_in_ns: int = 16
-    max_wait_time_in_ns: int = 30016
+    max_wait_time_in_ns: int = 20016
     flux_point_joint_or_independent_or_arbitrary: Literal['joint', 'independent'] = 'independent'   
     simulate: bool = False
     timeout: int = 100
@@ -50,10 +50,7 @@ config = machine.generate_config()
 qmm = machine.connect()
 
 # Get the relevant QuAM components
-if node.parameters.qubits is None or node.parameters.qubits == '':
-    qubits = machine.active_qubits
-else:
-    qubits = [machine.qubits[q] for q in node.parameters.qubits]
+qubits = machine.get_qubits_used_in_node(node.parameters)
 num_qubits = len(qubits)
 
 
@@ -97,55 +94,54 @@ with program() as t1:
     if node.parameters.use_state_discrimination:
         state = [declare(int) for _ in range(num_qubits)]
         state_st = [declare_stream() for _ in range(num_qubits)]
-    for i, qubit in enumerate(qubits):
+    for multiplexed_qubits in qubits.batch():
+        for i, qubit in multiplexed_qubits.items():
 
-        # Bring the active qubits to the minimum frequency point
-        if flux_point == "independent":
-            machine.apply_all_flux_to_min()
-            machine.apply_all_couplers_to_min()
-            qubit.z.to_independent_idle()
-        elif flux_point == "joint" or "arbitrary":
-            machine.apply_all_flux_to_joint_idle()
-        else:
-            machine.apply_all_flux_to_zero()
+            # Bring the active qubits to the minimum frequency point
+            if flux_point == "independent":
+                machine.apply_all_flux_to_min()
+                machine.apply_all_couplers_to_min()
+                qubit.z.to_independent_idle()
+            elif flux_point == "joint" or "arbitrary":
+                machine.apply_all_flux_to_joint_idle()
+            else:
+                machine.apply_all_flux_to_zero()
 
-        # Wait for the flux bias to settle
-        for qb in qubits:
-            wait(1000, qb.z.name)
+            # Wait for the flux bias to settle
+            wait(1000, qubit.z.name)
 
-        align()
+            qubit.align()
 
         with for_(n, 0, n < n_avg, n + 1):
             save(n, n_st)
             with for_each_(t, idle_times):
                 assign(virtual_detuning_phases[i], Cast.mul_fixed_by_int(detuning * 1e-9, 4 * t))
-                align()
-                if node.parameters.reset_type == "active":
-                    # active_reset(qubit, "readout")
-                    active_reset_simple(qubit, "readout")
-                else:
-                    qubit.resonator.wait(qubit.thermalization_time * u.ns)
-                    qubit.align()
-                
-                reset_frame(qubit.xy.name)
-                qubit.xy.play("x90")
-                qubit.wait(t)
-                qubit.xy.frame_rotation_2pi(virtual_detuning_phases[i])
-                qubit.xy.play("x90")
+                # align()
+                for i, qubit in multiplexed_qubits.items():
+                    if not node.parameters.simulate:
+                        if node.parameters.reset_type == "active":
+                            # active_reset(qubit, "readout")
+                            active_reset_simple(qubit, "readout")
+                        elif node.parameters.reset_type == "thermal":
+                            qubit.wait(2 * qubit.thermalization_time * u.ns)
+                        else:
+                            raise ValueError(f"Unrecognized reset type {node.parameters.reset_type}.")
 
+                    reset_frame(qubit.xy.name)
+                    qubit.xy.play("x90")
+                    qubit.wait(t)
+                    qubit.xy.frame_rotation_2pi(virtual_detuning_phases[i])
+                    qubit.xy.play("x90")
 
-                
-                # Measure the state of the resonators
-                if node.parameters.use_state_discrimination:
-                    readout_state(qubit, state[i])
-                    save(state[i], state_st[i])
-                else:
-                    qubit.resonator.measure("readout", qua_vars=(I[i], Q[i]))
-                    # save data
-                    save(I[i], I_st[i])
-                    save(Q[i], Q_st[i])
-
-        align()
+                    # Measure the state of the resonators
+                    if node.parameters.use_state_discrimination:
+                        readout_state(qubit, state[i])
+                        save(state[i], state_st[i])
+                    else:
+                        qubit.resonator.measure("readout", qua_vars=(I[i], Q[i]))
+                        # save data
+                        save(I[i], I_st[i])
+                        save(Q[i], Q_st[i])
 
     with stream_processing():
         n_st.save("n")
