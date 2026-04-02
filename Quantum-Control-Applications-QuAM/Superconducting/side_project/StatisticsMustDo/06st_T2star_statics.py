@@ -21,17 +21,18 @@ from scipy.stats import norm
 
 # %% {Node_parameters}
 class Parameters(NodeParameters):
-    qubits: Optional[List[str]] = None #The qubit to be measured. If None, all active qubits will be measured
-    num_averages: int = 5000
+    qubits: Optional[List[str]] = ["q1", "q2"] #The qubit to be measured. If None, all active qubits will be measured
+    num_averages: int = 500
     frequency_detuning_in_mhz:float=0.2
     min_wait_time_in_ns: int = 16
-    max_wait_time_in_ns: int = 20016
+    max_wait_time_in_ns: int = 4016
     flux_point_joint_or_independent_or_arbitrary: Literal['joint', 'independent'] = 'independent'   
     simulate: bool = False
     timeout: int = 100
     use_state_discrimination: bool = True
     time_scale:Literal["linear",'log'] = "linear"
-    reset_type: Literal['active', 'thermal'] = "active"
+    reset_type: Literal['active', 'thermal'] = "thermal"
+    multiplexed: bool = True
     histo_num:int = 1
 
 node = QualibrationNode(
@@ -39,6 +40,7 @@ node = QualibrationNode(
     parameters=Parameters()
 )
 
+# %% {Initialize_QuAM_and_QOP}
 
 # Class containing tools to help handle units and conversions.
 u = unit(coerce_to_integer=True)
@@ -126,7 +128,12 @@ with program() as t1:
                             qubit.wait(2 * qubit.thermalization_time * u.ns)
                         else:
                             raise ValueError(f"Unrecognized reset type {node.parameters.reset_type}.")
-
+                
+                align(*[q.xy.name for q in multiplexed_qubits.values()] +
+                   [q.resonator.name for q in multiplexed_qubits.values()] +
+                   [q.z.name for q in multiplexed_qubits.values()])
+                
+                for i, qubit in multiplexed_qubits.items():
                     reset_frame(qubit.xy.name)
                     qubit.xy.play("x90")
                     qubit.wait(t)
@@ -142,7 +149,12 @@ with program() as t1:
                         # save data
                         save(I[i], I_st[i])
                         save(Q[i], Q_st[i])
-
+                if node.parameters.multiplexed:
+                    align(*[q.xy.name for q in multiplexed_qubits.values()] +
+                   [q.resonator.name for q in multiplexed_qubits.values()] +
+                   [q.z.name for q in multiplexed_qubits.values()])
+                else:
+                    align()
     with stream_processing():
         n_st.save("n")
         for i in range(num_qubits):
