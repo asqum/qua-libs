@@ -83,7 +83,7 @@ class Parameters(NodeParameters):
     
 
 node = QualibrationNode(
-    name="67b_Ramsey_ZZ_coupling", parameters=Parameters()
+    name="67b_JAZZ_ZZ_coupling", parameters=Parameters()
 )
 assert not (node.parameters.simulate and node.parameters.load_data_id is not None), "If simulate is True, load_data_id must be None, and vice versa."
 
