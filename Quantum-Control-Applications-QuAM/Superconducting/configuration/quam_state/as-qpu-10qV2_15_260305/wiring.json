@@ -1,0 +1,198 @@
+{
+    "wiring": {
+        "qubits": {
+            "q5": {
+                "rr": {
+                    "opx_input": "#/ports/mw_inputs/con1/8/1",
+                    "opx_output": "#/ports/mw_outputs/con1/8/1"
+                },
+                "xy": {
+                    "opx_output": "#/ports/mw_outputs/con1/8/6"
+                },
+                "z": {
+                    "opx_output": "#/ports/analog_outputs/con1/4/1"
+                }
+            },
+            "q4": {
+                "rr": {
+                    "opx_input": "#/ports/mw_inputs/con1/8/1",
+                    "opx_output": "#/ports/mw_outputs/con1/8/1"
+                },
+                "xy": {
+                    "opx_output": "#/ports/mw_outputs/con1/8/5"
+                },
+                "z": {
+                    "opx_output": "#/ports/analog_outputs/con1/5/7"
+                }
+            },
+            "q3": {
+                "rr": {
+                    "opx_input": "#/ports/mw_inputs/con1/8/1",
+                    "opx_output": "#/ports/mw_outputs/con1/8/1"
+                },
+                "xy": {
+                    "opx_output": "#/ports/mw_outputs/con1/8/4"
+                },
+                "z": {
+                    "opx_output": "#/ports/analog_outputs/con1/5/5"
+                }
+            },
+            "q2": {
+                "rr": {
+                    "opx_input": "#/ports/mw_inputs/con1/8/1",
+                    "opx_output": "#/ports/mw_outputs/con1/8/1"
+                },
+                "xy": {
+                    "opx_output": "#/ports/mw_outputs/con1/8/3"
+                },
+                "z": {
+                    "opx_output": "#/ports/analog_outputs/con1/5/3"
+                }
+            },
+            "q1": {
+                "rr": {
+                    "opx_input": "#/ports/mw_inputs/con1/8/1",
+                    "opx_output": "#/ports/mw_outputs/con1/8/1"
+                },
+                "xy": {
+                    "opx_output": "#/ports/mw_outputs/con1/8/2"
+                },
+                "z": {
+                    "opx_output": "#/ports/analog_outputs/con1/5/1"
+                }
+            },
+            "q6": {
+                "rr": {
+                    "opx_input": "#/ports/mw_inputs/con1/8/2",
+                    "opx_output": "#/ports/mw_outputs/con1/8/8"
+                },
+                "xy": {
+                    "opx_output": "#/ports/mw_outputs/con1/8/7"
+                },
+                "z": {
+                    "opx_output": "#/ports/analog_outputs/con1/4/3"
+                }
+            },
+            "q7": {
+                "rr": {
+                    "opx_input": "#/ports/mw_inputs/con1/8/2",
+                    "opx_output": "#/ports/mw_outputs/con1/8/8"
+                },
+                "xy": {
+                    "opx_output": "#/ports/mw_outputs/con1/7/5"
+                },
+                "z": {
+                    "opx_output": "#/ports/analog_outputs/con1/4/5"
+                }
+            },
+            "q8": {
+                "rr": {
+                    "opx_input": "#/ports/mw_inputs/con1/8/2",
+                    "opx_output": "#/ports/mw_outputs/con1/8/8"
+                },
+                "xy": {
+                    "opx_output": "#/ports/mw_outputs/con1/7/6"
+                },
+                "z": {
+                    "opx_output": "#/ports/analog_outputs/con1/4/7"
+                }
+            },
+            "q9": {
+                "rr": {
+                    "opx_input": "#/ports/mw_inputs/con1/8/2",
+                    "opx_output": "#/ports/mw_outputs/con1/8/8"
+                },
+                "xy": {
+                    "opx_output": "#/ports/mw_outputs/con1/7/7"
+                },
+                "z": {
+                    "opx_output": "#/ports/analog_outputs/con1/3/5"
+                }
+            },
+            "q10": {
+                "rr": {
+                    "opx_input": "#/ports/mw_inputs/con1/8/2",
+                    "opx_output": "#/ports/mw_outputs/con1/8/8"
+                },
+                "xy": {
+                    "opx_output": "#/ports/mw_outputs/con1/7/8"
+                },
+                "z": {
+                    "opx_output": "#/ports/analog_outputs/con1/3/7"
+                }
+            }
+        },
+        "qubit_pairs": {
+            "q1-2": {
+                "c": {
+                    "control_qubit": "#/qubits/q2",
+                    "target_qubit": "#/qubits/q1",
+                    "opx_output": "#/ports/analog_outputs/con1/5/2"
+                }
+            },
+            "q2-3": {
+                "c": {
+                    "control_qubit": "#/qubits/q2",
+                    "target_qubit": "#/qubits/q3",
+                    "opx_output": "#/ports/analog_outputs/con1/5/4"
+                }
+            },
+            "q3-4": {
+                "c": {
+                    "control_qubit": "#/qubits/q4",
+                    "target_qubit": "#/qubits/q3",
+                    "opx_output": "#/ports/analog_outputs/con1/5/6"
+                }
+            },
+            "q4-5": {
+                "c": {
+                    "control_qubit": "#/qubits/q5",
+                    "target_qubit": "#/qubits/q4",
+                    "opx_output": "#/ports/analog_outputs/con1/5/8"
+                }
+            },
+            "q5-6": {
+                "c": {
+                    "control_qubit": "#/qubits/q6",
+                    "target_qubit": "#/qubits/q5",
+                    "opx_output": "#/ports/analog_outputs/con1/4/2"
+                }
+            },
+            "q6-7": {
+                "c": {
+                    "control_qubit": "#/qubits/q7",
+                    "target_qubit": "#/qubits/q6",
+                    "opx_output": "#/ports/analog_outputs/con1/4/4"
+                }
+            },
+            "q7-8": {
+                "c": {
+                    "control_qubit": "#/qubits/q7",
+                    "target_qubit": "#/qubits/q8",
+                    "opx_output": "#/ports/analog_outputs/con1/4/6"
+                }
+            },
+            "q8-9": {
+                "c": {
+                    "control_qubit": "#/qubits/q8",
+                    "target_qubit": "#/qubits/q9",
+                    "opx_output": "#/ports/analog_outputs/con1/4/8"
+                }
+            },
+            "q9-10": {
+                "c": {
+                    "control_qubit": "#/qubits/q10",
+                    "target_qubit": "#/qubits/q9",
+                    "opx_output": "#/ports/analog_outputs/con1/3/6"
+                }
+            }
+        }
+    },
+    "network": {
+        "host": "10.21.19.201",
+        "port": 9511,
+        "cluster_name": "QPX1000_1",
+        "octave_ips": [],
+        "octave_ports": []
+    }
+}
