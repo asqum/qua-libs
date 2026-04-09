@@ -120,6 +120,18 @@
                 "z": {
                     "opx_output": "#/ports/analog_outputs/con1/3/7"
                 }
+            },
+            "q11": {
+                "rr": {
+                    "opx_input": "#/ports/mw_inputs/con1/8/1",
+                    "opx_output": "#/ports/mw_outputs/con1/8/1"
+                },
+                "xy": {
+                    "opx_output": "#/ports/mw_outputs/con1/8/2"
+                },
+                "z": {
+                    "opx_output": "#/ports/analog_outputs/con1/3/7"
+                }
             }
         },
         "qubit_pairs": {
