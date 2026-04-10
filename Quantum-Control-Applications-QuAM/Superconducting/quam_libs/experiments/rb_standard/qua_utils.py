@@ -203,10 +203,10 @@ def play_gate(gate: QuaVariable, qubit_pair: TransmonPair, state: QuaVariable, s
             # qubit_pair.macros['cz'].apply()
             qubit_pair.gates['Cz'].execute()
         with case_(65): # idle_2q
-            # qubit_pair.qubit_control.wait(int(1e9*(qubit_pair.qubit_control.T1/1000)) // 4)
-            # qubit_pair.qubit_target.wait(int(1e9*(qubit_pair.qubit_target.T1/1000)) // 4)
-            qubit_pair.qubit_control.wait(4)
-            qubit_pair.qubit_target.wait(4)
+            qubit_pair.qubit_control.wait(qubit_pair.gates['Cz'].flux_pulse_control.length // 4)
+            qubit_pair.qubit_target.wait(qubit_pair.gates['Cz'].flux_pulse_control.length // 4)
+            # qubit_pair.qubit_control.wait(4)
+            # qubit_pair.qubit_target.wait(4)
         
         with case_(66):
             
