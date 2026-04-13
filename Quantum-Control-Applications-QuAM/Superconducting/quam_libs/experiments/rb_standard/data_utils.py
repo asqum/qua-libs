@@ -37,9 +37,6 @@ class RBResult:
     def plot_hist(self, n_cols=3):
         """
         Plots histograms of the N-qubit state distribution at each circuit depth.
-
-        Args:
-            n_cols (int): Number of columns in the plot grid. Adjusted if fewer circuit depths are provided.
         """
         if len(self.circuit_depths) < n_cols:
             n_cols = len(self.circuit_depths)
@@ -53,7 +50,6 @@ class RBResult:
     def plot(self):
         """
         Plots the raw recovery probability decay curve as a function of circuit depth.
-        The curve is plotted using the averaged probability and without any fitting.
         """
         recovery_probability = (self.data.state == 0).sum(("repeat", "average")) / (
             self.num_repeats * self.num_averages
@@ -63,15 +59,9 @@ class RBResult:
     def plot_with_fidelity(self):
         """
         Plots the RB fidelity as a function of circuit depth, including a fit to an exponential decay model.
-        The fitted curve is overlaid with the raw data points, and error bars are included.
-        
-        Note: This method assumes that fit() has been called first to calculate all metrics.
-        
-        Returns:
-            matplotlib.figure.Figure: The figure object containing the plot.
         """
-        # std of average
-        error_bars = (self.data == 0).stack(combined=("average", "repeat")).std(dim="combined").state.data / np.sqrt(self.num_repeats * self.num_averages)
+        sequence_means = (self.data.state == 0).mean(dim="average")
+        error_bars = sequence_means.std(dim="repeat").data
 
         fig = plt.figure()
         plt.errorbar(
@@ -94,11 +84,13 @@ class RBResult:
             label="Exponential Fit",
         )
 
-     
-        if isinstance(self, InterleavedRBResult):
-            title = f"target gate fidelity = {self.fidelity * 100:.2f}%"
+        # 組合標題 (包含誤差)
+        err_str = f" \u00B1 {self.fidelity_err * 100:.2f}%" if hasattr(self, 'fidelity_err') else ""
+        
+        if type(self).__name__ == "InterleavedRBResult": # 避免迴圈 import 問題的寫法
+            title = f"target gate fidelity = {self.fidelity * 100:.2f}%{err_str}"
         else:
-            title = f"2Q average Clifford fidelity = {self.fidelity * 100:.2f}%"
+            title = f"2Q average Clifford fidelity = {self.fidelity * 100:.2f}%{err_str}"
             
         plt.text(
             0.5,
@@ -108,6 +100,7 @@ class RBResult:
             verticalalignment="top",
             fontdict={"fontsize": "large", "fontweight": "bold"},
             transform=plt.gca().transAxes,
+            bbox=dict(boxstyle='round', facecolor='white', alpha=0.8, edgecolor='none')
         )
         
         # Add average gate fidelity if it was calculated
@@ -122,49 +115,53 @@ class RBResult:
                 transform=plt.gca().transAxes,
             )
 
+        num_repeats = self.num_repeats
+        text_info = f"Random circuits per depth: {num_repeats}"
+        
+        plt.text(                  # 如果是用 plt.text
+            0.05, 0.05,            
+            text_info, 
+            transform=plt.gca().transAxes, # 修正這裡：先抓取當前 ax 再呼叫 transAxes
+            fontsize=11,
+            verticalalignment='bottom',
+            bbox=dict(
+                boxstyle='round,pad=0.5', 
+                facecolor='white', 
+                alpha=0.8, 
+                edgecolor='gray'
+            )
+        )
+
         plt.xlabel("Circuit Depth")
         plt.ylabel(r"Probability to recover to $|00\rangle$")
         plt.legend(framealpha=0)
         
         return fig
-        
-        
 
     def plot_two_qubit_state_distribution(self):
         """
         Plot how the two-qubit state is distributed as a function of circuit-depth on average.
         """
+        # (保持你原本的程式碼不變)
         plt.plot(
             self.circuit_depths,
             (self.data.state == 0).mean(dim="average").mean(dim="repeat").data,
-            label=r"$|00\rangle$",
-            marker=".",
-            color="c",
-            linewidth=3,
+            label=r"$|00\rangle$", marker=".", color="c", linewidth=3,
         )
         plt.plot(
             self.circuit_depths,
             (self.data.state == 1).mean(dim="average").mean(dim="repeat").data,
-            label=r"$|01\rangle$",
-            marker=".",
-            color="b",
-            linewidth=1,
+            label=r"$|01\rangle$", marker=".", color="b", linewidth=1,
         )
         plt.plot(
             self.circuit_depths,
             (self.data.state == 2).mean(dim="average").mean(dim="repeat").data,
-            label=r"$|10\rangle$",
-            marker=".",
-            color="y",
-            linewidth=1,
+            label=r"$|10\rangle$", marker=".", color="y", linewidth=1,
         )
         plt.plot(
             self.circuit_depths,
             (self.data.state == 3).mean(dim="average").mean(dim="repeat").data,
-            label=r"$|11\rangle$",
-            marker=".",
-            color="r",
-            linewidth=1,
+            label=r"$|11\rangle$", marker=".", color="r", linewidth=1,
         )
         plt.axhline(0.25, color="grey", linestyle="--", linewidth=2, label="2Q mixed-state")
 
@@ -174,53 +171,61 @@ class RBResult:
         plt.legend(framealpha=0, title=r"2Q State $\mathbf{|q_cq_t\rangle}$", title_fontproperties={"weight": "bold"})
         plt.show()
 
-    def fit_exponential(self):
+    def fit_exponential(self, use_weights=False):
         """
         Fits the decay curve of the RB data to an exponential model.
-
-        Returns:
-            tuple: Fitted parameters (A, alpha, B) where:
-                - A is the amplitude.
-                - alpha is the decay constant.
-                - B is the offset.
         """
         decay_curve = self.get_decay_curve()
+        p0 = [0.75, 0.9, 0.25]
 
-        popt, _ = curve_fit(rb_decay_curve, self.circuit_depths, decay_curve, p0=[0.75, 0.9, 0.25], maxfev=10000)
+        if use_weights:
+            # 計算出實驗資料的標準差作為權重
+            sigma = (self.data.state == 0).mean(dim="average").std(dim="repeat").data
+            # 防呆：避免標準差為0導致 curve_fit 發生除以零的錯誤
+            sigma = np.where(sigma == 0, 1e-8, sigma)
+            
+            popt, pcov = curve_fit(
+                rb_decay_curve, self.circuit_depths, decay_curve, 
+                p0=p0, maxfev=10000, sigma=sigma, absolute_sigma=True
+            )
+        else:
+            popt, pcov = curve_fit(
+                rb_decay_curve, self.circuit_depths, decay_curve, 
+                p0=p0, maxfev=10000
+            )
+            
         A, alpha, B = popt
         
+        # 儲存參數與計算出來的誤差 (對角線開根號)
         self.alpha = alpha
+        self.fit_errors = np.sqrt(np.diag(pcov)) 
 
         return A, alpha, B
+    
 
-    def fit(self, average_layers_per_clifford=None, average_gates_per_2q_layer=None):
+    def fit(self, average_layers_per_clifford=None, average_gates_per_2q_layer=None, use_weights=False):
         """
         Fits the RB data and calculates all error and fidelity metrics.
-        
-        Args:
-            average_layers_per_clifford (float, optional): Average number of 2q layers per Clifford.
-                If provided, will calculate error_per_2q_layer, error_per_gate, and average_gate_fidelity.
-            average_gates_per_2q_layer (float, optional): Average number of gates per 2q layer.
-                If provided, will calculate error_per_2q_layer, error_per_gate, and average_gate_fidelity.
-        
-        This method calculates and stores the following attributes:
-            - A, alpha, B: Fitted exponential parameters
-            - fidelity: 2Q Clifford fidelity
-            - epc: Error per Clifford
-            - error_per_2q_layer: Error per 2q layer (if constants provided)
-            - error_per_gate: Error per gate (if constants provided)
-            - average_gate_fidelity: Average gate fidelity (if constants provided)
         """
-        # Fit exponential decay
-        A, alpha, B = self.fit_exponential()
+        # Fit exponential decay (傳入 use_weights 參數)
+        A, alpha, B = self.fit_exponential(use_weights=use_weights)
         self.A = A
         self.alpha = alpha
         self.B = B
+        
+        # 提取 alpha 的擬合誤差
+        self.alpha_err = self.fit_errors[1]
         
         # Calculate fidelity and error per Clifford
         fidelity = self.get_fidelity(alpha)
         self.fidelity = fidelity
         self.epc = 1 - self.fidelity
+        
+        # 誤差傳遞 (Error Propagation)：計算 Fidelity 的誤差
+        # 公式: r = (1 - alpha) * (1 - 1/d), fidelity = 1 - r
+        n_qubits = 2
+        d = 2**n_qubits
+        self.fidelity_err = self.alpha_err * (1 - 1/d)
         
         # Calculate additional metrics if constants are provided
         if average_layers_per_clifford is not None and average_gates_per_2q_layer is not None:
@@ -231,40 +236,18 @@ class RBResult:
     def get_fidelity(self, alpha):
         """
         Calculates the average fidelity per Clifford based on the decay constant.
-
-        Args:
-            alpha (float): Decay constant from the exponential fit.
-
-        Returns:
-            float: Estimated average fidelity per Clifford.
         """
-        n_qubits = 2  # Assuming 2 qubits as per the context
+        n_qubits = 2  
         d = 2**n_qubits
-        r = 1 - alpha - (1 - alpha) / d # error per clifford
+        r = 1 - alpha - (1 - alpha) / d 
         fidelity = 1 - r
 
         return fidelity
 
     def get_decay_curve(self):
-        """
-        Calculates the decay curve from the RB data.
-
-        Returns:
-            np.ndarray: Decay curve representing the fidelity as a function of circuit depth.
-        """
         return (self.data.state == 0).sum(("repeat", "average")) / (self.num_repeats * self.num_averages)
     
     def get_decay_curve_1q(self, qubit_index: int):
-        """
-        Calculates the decay curve for a single qubit.
-        
-        Args:
-            qubit_index (int): Index of the qubit to calculate the decay curve for.
-
-        Returns:
-            np.ndarray: Decay curve representing the fidelity as a function of circuit depth.
-        """
-        
         if qubit_index == 0:
             return ((self.data.state == 0) | (self.data.state == 1)).sum(("repeat", "average")) / (self.num_repeats * self.num_averages)
         elif qubit_index == 1:
@@ -292,13 +275,16 @@ def rb_decay_curve(x, A, alpha, B):
 
 class InterleavedRBResult(RBResult):
     """
-    Class for analyzing and visualizing the results of a Interleaved Randomized Benchmarking (IRB) experiment.
+    Class for analyzing and visualizing the results of an Interleaved Randomized Benchmarking (IRB) experiment.
     """
-    standard_rb_alpha: float = 1
+    standard_rb_alpha: float = 1.0
+    standard_rb_alpha_err: float = 0.0  # 新增：用來接收 SRB 衰減率的誤差
     
-    def __init__(self, standard_rb_alpha: float, circuit_depths: list[int], num_repeats: int, num_averages: int, state: np.ndarray):
+    def __init__(self, standard_rb_alpha: float, circuit_depths: list[int], num_repeats: int, num_averages: int, state: np.ndarray, standard_rb_alpha_err: float = 0.0):
+        # 初始化父類別 (RBResult)
         super().__init__(circuit_depths, num_repeats, num_averages, state)
         self.standard_rb_alpha = standard_rb_alpha
+        self.standard_rb_alpha_err = standard_rb_alpha_err
 
     def get_fidelity(self, alpha: float):
         """
@@ -308,13 +294,46 @@ class InterleavedRBResult(RBResult):
         d = 2**n_qubits
         self.IRB_decayTau = 1 - (1 - alpha - (1 - alpha) / d) # error per clifford
         
-        return 1 - ((2**2 - 1) * (1 - alpha / self.standard_rb_alpha) / 2**2)
+        return 1 - ((d - 1) * (1 - alpha / self.standard_rb_alpha) / d)
+
+    def fit(self, average_layers_per_clifford=None, average_gates_per_2q_layer=None, use_weights=False):
+        # 1. 先呼叫父類別的 fit()
+        super().fit(average_layers_per_clifford, average_gates_per_2q_layer, use_weights)
+        
+        d = 2**2  # 4
+        
+        # ==========================================
+        # [新增] 儲存 IRB 曲線本身的衰減誤差 (藍線圖例要用的)
+        # ==========================================
+        self.IRB_decayTau_err = self.alpha_err * ((d - 1) / d)
+        
+        # 2. 計算 IRB 特有的 Target Gate Fidelity Error (結合 SRB 誤差傳遞)
+        ratio = self.alpha / self.standard_rb_alpha
+        
+        if self.standard_rb_alpha_err > 0:
+            ratio_err = ratio * np.sqrt(
+                (self.alpha_err / self.alpha)**2 + 
+                (self.standard_rb_alpha_err / self.standard_rb_alpha)**2
+            )
+        else:
+            ratio_err = self.alpha_err / self.standard_rb_alpha
+            
+        # 這個是最後顯示在標題上的目標閘誤差
+        self.fidelity_err = ((d - 1) / d) * ratio_err
     
 def plot_combined_rb(qp_name, rb_result_SRB, rb_result_IRB, target_gate:str|None=None):
 
     fig, ax = plt.subplots(figsize=(8, 6))
+    
+    # ==========================================
+    # 1. 處理 Standard RB (SRB) 數據與繪圖
+    # ==========================================
     decay_curve_SRB = rb_result_SRB.get_decay_curve()
-    error_bars_SRB = (rb_result_SRB.data == 0).stack(combined=("average", "repeat")).std(dim="combined").state.data / np.sqrt(rb_result_SRB.num_repeats * rb_result_SRB.num_averages)
+    sequence_means_SRB = (rb_result_SRB.data.state == 0).mean(dim="average")
+    error_bars_SRB = sequence_means_SRB.std(dim="repeat").data
+
+    # 動態產生誤差字串 (如果有計算出誤差的話)
+    srb_err_str = f" \u00B1 {rb_result_SRB.fidelity_err * 100:.2f}%" if hasattr(rb_result_SRB, 'fidelity_err') else ""
 
     ax.errorbar(
         rb_result_SRB.circuit_depths,
@@ -334,13 +353,22 @@ def plot_combined_rb(qp_name, rb_result_SRB, rb_result_IRB, target_gate:str|None
         color="red",
         linestyle="--",
         linewidth=2,
-        label=f"SRB Fit (Clifford Fidelity = {rb_result_SRB.fidelity * 100:.2f}%)",
+        label=f"SRB Fit (Clifford Fidelity = {rb_result_SRB.fidelity * 100:.2f}%{srb_err_str})",
     )
     
-
+    # ==========================================
+    # 2. 處理 Interleaved RB (IRB) 數據與繪圖
+    # ==========================================
     decay_curve_IRB = rb_result_IRB.get_decay_curve()
-    error_bars_IRB = (rb_result_IRB.data == 0).stack(combined=("average", "repeat")).std(dim="combined").state.data / np.sqrt(rb_result_IRB.num_repeats * rb_result_IRB.num_averages)
+    sequence_means_IRB = (rb_result_IRB.data.state == 0).mean(dim="average")
+    error_bars_IRB = sequence_means_IRB.std(dim="repeat").data
+    
     _ = rb_result_IRB.get_fidelity(rb_result_IRB.alpha)
+    
+    # 動態產生 IRB 閘保真度的誤差字串與曲線本身衰減誤差
+    irb_err_str = f" \u00B1 {rb_result_IRB.fidelity_err * 100:.2f}%" if hasattr(rb_result_IRB, 'fidelity_err') else ""
+    irb_decay_err_str = f" \u00B1 {rb_result_IRB.IRB_decayTau_err * 100:.2f}%" if hasattr(rb_result_IRB, 'IRB_decayTau_err') else ""
+
     ax.errorbar(
         rb_result_IRB.circuit_depths,
         decay_curve_IRB,
@@ -349,7 +377,7 @@ def plot_combined_rb(qp_name, rb_result_SRB, rb_result_IRB, target_gate:str|None
         capsize=3,
         elinewidth=1.0,
         color="blue",
-        label=f"IRB Experimental Data",
+        label="IRB Experimental Data",
     )
 
     ax.plot(
@@ -358,13 +386,39 @@ def plot_combined_rb(qp_name, rb_result_SRB, rb_result_IRB, target_gate:str|None
         color="blue",
         linestyle="-",
         linewidth=2,
-        label=f"IRB Fit, Fidelity = {rb_result_IRB.IRB_decayTau*100:.2f}%",
+        label=f"IRB Fit, IRB Decay = {rb_result_IRB.IRB_decayTau * 100:.2f}%{irb_decay_err_str}",
     )
 
-    ax.set_title(f"{qp_name} {'Target' if target_gate is None else target_gate} Gate Fidelity = {rb_result_IRB.fidelity * 100:.2f}%", fontsize=16)
-    ax.set_xlabel("Circuit Depth")
-    ax.set_ylabel(r"Probability to recover to a given state")
-    ax.legend(loc='best', frameon=True, shadow=True)
+    # ==========================================
+    # 3. 設定圖表標題與格式
+    # ==========================================
+    gate_name = "Target" if target_gate is None else target_gate
+    ax.set_title(f"{qp_name} {gate_name} Gate Fidelity = {rb_result_IRB.fidelity * 100:.2f}%{irb_err_str}", fontsize=16)
+    
+    ax.set_xlabel("Circuit Depth", fontsize=12)
+    ax.set_ylabel(r"Probability to recover to $|00\rangle$", fontsize=12)
+    ax.legend(loc='upper right', frameon=True, shadow=True)
     ax.grid(True, linestyle=':', alpha=0.7)
+    
+    # ==========================================
+    # 4. [新增] 在圖表左下角加入 Repeat 資訊文字方塊
+    # ==========================================
+    num_repeats = rb_result_SRB.num_repeats
+    text_info = f"Random circuits per depth: {num_repeats}"
+    
+    # 使用 ax.text，並設定 transform=ax.transAxes 讓座標比例以整張圖為基準 (0~1)
+    ax.text(
+        0.05, 0.05,            # X, Y 座標 (左下角)
+        text_info, 
+        transform=ax.transAxes, 
+        fontsize=11,
+        verticalalignment='bottom',
+        bbox=dict(
+            boxstyle='round,pad=0.5', 
+            facecolor='white', 
+            alpha=0.8, 
+            edgecolor='gray'
+        )
+    )
     
     return fig
