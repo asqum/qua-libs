@@ -36,14 +36,14 @@ from time import time
 
 # %% {Node_parameters}
 class Parameters(NodeParameters):
-    qubits: Optional[List[str]] = ["q1", "q2"]
-    num_averages: int = 2000
+    qubits: Optional[List[str]] = None
+    num_averages: int = 150
     min_wait_time_in_ns: int = 16
     max_wait_time_in_ns: int = 250016
     flux_point_joint_or_independent_or_arbitrary: Literal["joint", "independent"] = "independent"
     reset_type: Literal["active", "thermal"] = "active"
     time_scale:Literal["log"] = "log"
-    use_state_discrimination: bool = False
+    use_state_discrimination: bool = True
     simulate: bool = False
     simulation_duration_ns: int = 2500
     timeout: int = 100
@@ -268,6 +268,9 @@ if not node.parameters.simulate:
         for ax, qubit in grid_iter(grid):
         
             data = np.array(t1_collection[qubit['qubit']])
+            lower_bound = np.percentile(data, 1)   # 下界
+            upper_bound = np.percentile(data, 99)  # 上界
+            data = data[(data >= lower_bound) & (data <= upper_bound)]
             tot_c = len(data)
             counts, bins, _ = ax.hist(data, bins=15, alpha=0.7, color='skyblue', edgecolor='white', label='Counts')
             ### Normal distribution

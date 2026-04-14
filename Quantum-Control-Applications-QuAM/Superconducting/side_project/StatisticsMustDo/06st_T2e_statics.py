@@ -23,16 +23,16 @@ from scipy.stats import norm
 
 # %% {Node_parameters}
 class Parameters(NodeParameters):
-    qubits: Optional[List[str]] = ["q1", "q2"] #The qubit to be measured. If None, all active qubits will be measured
-    num_averages: int = 500
+    qubits: Optional[List[str]] = None #The qubit to be measured. If None, all active qubits will be measured
+    num_averages: int = 200
     min_wait_time_in_ns: int = 16
-    max_wait_time_in_ns: int = 4008
+    max_wait_time_in_ns: int = 35008
     flux_point_joint_or_independent_or_arbitrary: Literal['joint', 'independent'] = 'independent'   
     simulate: bool = False
     timeout: int = 100
     use_state_discrimination: bool = True
     time_scale:Literal["log"] = "log"
-    reset_type: Literal['active', 'thermal'] = "thermal"
+    reset_type: Literal['active', 'thermal'] = "active"
     multiplexed: bool = True
     histo_num:int = 1
 
@@ -62,7 +62,7 @@ n_avg = node.parameters.num_averages  # The number of averages
 # Dephasing time sweep (in clock cycles = 4ns) - minimum is 4 clock cycles
 
 idle_times = np.unique(
-    np.geomspace(
+    np.linspace(
         node.parameters.min_wait_time_in_ns,
         node.parameters.max_wait_time_in_ns,
         100,
@@ -253,6 +253,9 @@ if not node.parameters.simulate:
         for ax, qubit in grid_iter(grid):
             
             data = np.array(t2_collection[qubit['qubit']])
+            lower_bound = np.percentile(data, 1)   # 下界
+            upper_bound = np.percentile(data, 99)  # 上界
+            data = data[(data >= lower_bound) & (data <= upper_bound)]
             tot_c = len(data)
             counts, bins, _ = ax.hist(data, bins=15, alpha=0.7, color='skyblue', edgecolor='white', label='Counts')
             ### Normal distribution

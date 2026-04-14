@@ -21,18 +21,18 @@ from scipy.stats import norm
 
 # %% {Node_parameters}
 class Parameters(NodeParameters):
-    qubits: Optional[List[str]] = ["q1", "q2"] #The qubit to be measured. If None, all active qubits will be measured
+    qubits: Optional[List[str]] = None #The qubit to be measured. If None, all active qubits will be measured
     num_averages: int = 500
-    frequency_detuning_in_mhz:float=0.2
+    frequency_detuning_in_mhz:float = 0.02
     min_wait_time_in_ns: int = 16
-    max_wait_time_in_ns: int = 4016
+    max_wait_time_in_ns: int = 40016
     flux_point_joint_or_independent_or_arbitrary: Literal['joint', 'independent'] = 'independent'   
     simulate: bool = False
     timeout: int = 100
     use_state_discrimination: bool = True
     time_scale:Literal["linear",'log'] = "linear"
-    reset_type: Literal['active', 'thermal'] = "thermal"
-    multiplexed: bool = True
+    reset_type: Literal['active', 'thermal'] = "active"
+    multiplexed: bool = 1
     histo_num:int = 1
 
 node = QualibrationNode(
@@ -251,6 +251,9 @@ if not node.parameters.simulate:
                 t2_collection.append(tau)
 
             data = np.array(t2_collection)
+            lower_bound = np.percentile(data, 5)   # 下界
+            upper_bound = np.percentile(data, 95)  # 上界
+            data = data[(data >= lower_bound) & (data <= upper_bound)]
             tot_c = len(data)
             counts, bins, _ = ax.hist(data, bins=15, alpha=0.7, color='skyblue', edgecolor='white', label='Counts')
             ### Normal distribution

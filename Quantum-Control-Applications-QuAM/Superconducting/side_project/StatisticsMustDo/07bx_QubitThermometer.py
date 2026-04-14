@@ -53,7 +53,7 @@ node = QualibrationNode(
     parameters=Parameters(
         qubits=None,
         flux_point_joint_or_independent="independent",
-        num_runs=20000,
+        num_runs=4096,
         load_data_id=None,
         simulate=False,
         simulation_duration_ns=1000,
@@ -273,7 +273,10 @@ if not node.parameters.simulate:
         tot_c = 0
         grid = QubitGrid(ds, [q.grid_location for q in qubits])
         for ax, qubit in grid_iter(grid):
-            data = Teff[qubit['qubit']]
+            data = np.array(Teff[qubit['qubit']])
+            lower_bound = np.percentile(data, 1)   # 下界
+            upper_bound = np.percentile(data, 99)  # 上界
+            data = data[(data >= lower_bound) & (data <= upper_bound)]
             tot_c = len(data)
             counts, bins, _ = ax.hist(data, bins=15, alpha=0.7, color='skyblue', edgecolor='white', label='Counts')
             ### Normal distribution
