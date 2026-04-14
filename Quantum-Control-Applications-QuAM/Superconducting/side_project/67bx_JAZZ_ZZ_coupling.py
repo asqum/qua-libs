@@ -65,7 +65,7 @@ qubit_pair_indexes = [6]  # The indexes of the qubit pairs to measure
 class Parameters(NodeParameters):
 
     qubit_pairs: Optional[List[str]] = ["coupler_q%s_q%s"%(i,i+1) for i in qubit_pair_indexes]
-    num_averages: int = 200
+    num_averages: int = 1000
     flux_point_joint_or_independent_or_pairwise: Literal["joint", "independent", "pairwise"] = "joint"
     reset_type: Literal['active', 'thermal'] = "active"
     simulate: bool = False
@@ -79,8 +79,8 @@ class Parameters(NodeParameters):
     """Maximum wait time in nanoseconds. Default is 5000."""
     wait_time_step_in_ns: int = 50
     """Step size for the wait time scan in nanoseconds. Default is 60."""
-    min_flux_amp: float = -0.6
-    max_flux_amp: float = 0.0
+    minus_flux_span: float = 0.05
+    positive_flux_span: float = 0.05
     """Span of flux values to sweep in volts. Default is 0.01 V."""
     flux_num: int = 51
     """Number of flux points to sample. Default is 21."""
@@ -124,8 +124,8 @@ flux_point = node.parameters.flux_point_joint_or_independent_or_pairwise  # 'ind
 
 # Loop parameters
 fluxes_coupler = np.linspace(
-        node.parameters.min_flux_amp,
-        node.parameters.max_flux_amp,
+        -1*node.parameters.minus_flux_span,
+        node.parameters.positive_flux_span,
         node.parameters.flux_num,
     )
 
@@ -134,7 +134,7 @@ idle_times = np.arange(
     node.parameters.max_wait_time_in_ns // 4,
     node.parameters.wait_time_step_in_ns // 4,
 )
-reset_coupler_bias = True
+reset_coupler_bias = False
 
 with program() as Ramsey_ZZ_coupling:
     n = declare(int)
@@ -267,6 +267,8 @@ if not node.parameters.simulate:
         ds, machine = load_dataset(node.parameters.load_data_id)
 
 
+
+
 # %% {Data_analysis}
 node.results = {"ds": ds}
 node.results["fit_results"] = {}   # optional if you also store raw fits
@@ -275,14 +277,10 @@ node.results["analysis_success"] = {}  # for success flags per pair
 if not node.parameters.simulate:
     try:
         print("Starting analysis...")
-        if not reset_coupler_bias:
-            flux_coupler_full = np.array([
-                fluxes_coupler + qp.coupler.decouple_offset for qp in qubit_pairs
-            ])
-        else:
-            flux_coupler_full = np.array([
-                fluxes_coupler for _ in qubit_pairs
-            ])
+        
+        flux_coupler_full = np.array([
+            fluxes_coupler for _ in qubit_pairs
+        ])
         
         ds = ds.assign_coords({
             "flux_coupler_full": (["qubit", "flux_coupler"], flux_coupler_full)
@@ -432,7 +430,7 @@ if not node.parameters.simulate:
             ax.axvline(1e3 * flux_val_min, color="gray", linestyle="--", lw=1.2, alpha=0.6, label="min |χZZ|")
             ax.axhline(0, color="k", lw=1, alpha=0.4)
             ax.set_title("Linear scale")
-            ax.set_xlabel("Coupler flux [mV]")
+            ax.set_xlabel("Coupler flux span [mV]")
             ax.set_ylabel("χZZ [kHz]")
             ax.grid(True)
             ax.legend(fontsize=8)
@@ -472,29 +470,29 @@ if not node.parameters.simulate:
                 ("min", flux_val_min, chi_min),
             ]:
                 flux_idx = int((abs(flux_full - flux_val)).argmin(dim="flux_coupler").item())
-                meas = ds_pair["state_target"].isel(flux_coupler=flux_idx)
-                fit = ds_pair["state_target_fit"].isel(flux_coupler=flux_idx)
+                meas = ds_pair["state_target"].isel(flux_coupler=flux_idx).values
+                fit = ds_pair["state_target_fit"].isel(flux_coupler=flux_idx).values
                 idle_time = ds_pair["idle_time"]
-
-                fig, axes = plt.subplots(1, 2, figsize=(8, 4), sharex=True)
-                axes[0].plot(
+                
+                fig, ax = plt.subplots( figsize=(8, 4))
+                ax.scatter(
                     idle_time,
                     meas,
-                    "-",
-                    alpha=0.8,
+                    alpha=0.5,
+                    label='measured'
                 )
-                axes[1].plot(
+                ax.plot(
                     idle_time,
                     fit,
-                    "-",
+                    "--",
+                    c='red',
                     lw=2,
+                    label='fitting'
                 )
-                axes[0].set_title(f"Measured ({qubit_name})")
-                axes[1].set_title("Fitted")
-                for ax_ in axes:
-                    ax_.legend()
-                    ax_.set_xlabel("Idle time [µs]")
-                    ax_.set_ylabel("State")
+                
+                ax.legend()
+                ax.set_xlabel("Idle time [µs]")
+                ax.set_ylabel("State")
                 fig.suptitle(
                     f"{qubit_name} ({label} |χZZ|): Flux={flux_val:.3f}, χZZ={chi_val:.2f} kHz",
                     fontsize=12,
@@ -506,12 +504,13 @@ if not node.parameters.simulate:
         else:
             print(f"No χZZ analysis or failed fit for {qubit_name} — only raw data plotted.")
 
+
 #%% {Update state}
 if node.parameters.load_data_id is None:
         with node.record_state_updates():
             for i, qp in enumerate(qubit_pairs):
-                qp.extras["ZZ_zero_flux"] = node.results['fit_results'][qp.name]["chiZZ_min_flux"]
-                qp.coupler.decouple_offset = node.results['fit_results'][qp.name]["chiZZ_min_flux"]
+                qp.extras["ZZ_zero_flux"] = qp.coupler.decouple_offset + node.results['fit_results'][qp.name]["chiZZ_min_flux"]
+                qp.coupler.decouple_offset += node.results['fit_results'][qp.name]["chiZZ_min_flux"]
 #  %% {Save_results}
 if not node.parameters.simulate:
     node.outcomes = {q.name: "successful" for q in qubit_pairs}

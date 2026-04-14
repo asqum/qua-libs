@@ -14,21 +14,16 @@ With the frequency f extracted from fitting the the oscillating signal P|0⟩, t
 
 The process involves:
 1. Performing a JAZZ (Joint Amplification of ZZ interaction) pulse sequence (PHYS. REV. X 14, 041050 (2024)).
-2. Repeating the measurement while varying the coupler flux bias.
 
 
 The outcome of this measurement will be used to:
-1. Identify the coupler flux bias point where ζ_ZZ ≈ 0 (the “zero-ZZ” operating point).
-2. Quantify unwanted static interactions affecting single- and two-qubit gate fidelities.
+- The statistics for the current ZZ strength.
 
 Prerequisites:
-- Calibrated single-qubit X/Y gates for both qubits.
-- Known qubit frequencies.
-- Qubit frq vs coupler flux trend rougnly known.
+- any node of 67b or 67bx
 
 Outcomes:
-- ζ_ZZ as a function of coupler flux bias.
-- Identification of the zero-ZZ operating point.
+- ZZ strength statistics
 """
 
 # %% {Imports}
@@ -46,44 +41,36 @@ from qm.qua import *
 from typing import Literal, Optional, List
 import matplotlib.pyplot as plt
 import numpy as np
-import warnings
-from qualang_tools.bakery import baking
-from quam_libs.lib.fit import fit_oscillation, oscillation, fix_oscillation_phi_2pi
-from quam_libs.lib.plot_utils import QubitPairGrid, grid_iter, grid_pair_names
-from scipy.optimize import curve_fit
-from quam_libs.components.gates.two_qubit_gates import CZGate
-from quam_libs.lib.pulses import FluxPulse
+from scipy.stats import norm
 from quam_libs.lib.fit import fit_oscillation_decay_exp, oscillation_decay_exp
 
 # %% {Node_parameters}
-qubit_pair_indexes = [3]  # The indexes of the qubit pairs to measure
+qubit_pair_indexes = [7]  # The indexes of the qubit pairs to measure
 class Parameters(NodeParameters):
 
     qubit_pairs: Optional[List[str]] = ["coupler_q%s_q%s"%(i,i+1) for i in qubit_pair_indexes]
-    num_averages: int = 20
+    num_averages: int = 1000
     flux_point_joint_or_independent_or_pairwise: Literal["joint", "independent", "pairwise"] = "joint"
     reset_type: Literal['active', 'thermal'] = "active"
     simulate: bool = False
     timeout: int = 100
     load_data_id: Optional[int] = None
-    frequency_detuning_in_mhz: float = 1.0
-    """Frequency detuning in MHz. Default is 1.0 MHz."""
+    frequency_detuning_in_mhz: float = 2.0
+    """Frequency detuning in MHz. Default is 1.0 MHz. Determined by the T2"""
     min_wait_time_in_ns: int = 16
     """Minimum wait time in nanoseconds. Default is 16."""
-    max_wait_time_in_ns: int = 5016
+    max_wait_time_in_ns: int = 5016 
     """Maximum wait time in nanoseconds. Default is 5000."""
     wait_time_step_in_ns: int = 50
-    """Step size for the wait time scan in nanoseconds. Default is 60."""
-    flux_span: float = 0.25
-    """Span of flux values to sweep in volts. Default is 0.01 V."""
-    flux_num: int = 101
-    """Number of flux points to sample. Default is 21."""
-    use_state_discrimination: bool = False
+    """Number of time points to sample. Default is 50."""
+    histo_num:int = 951
+    """Number of statistics. Default is 100."""
+    use_state_discrimination: bool = True
 
     
 
 node = QualibrationNode(
-    name="67b_JAZZ_ZZ_coupling", parameters=Parameters()
+    name="67bxx_ZZstrength_Histogram", parameters=Parameters()
 )
 assert not (node.parameters.simulate and node.parameters.load_data_id is not None), "If simulate is True, load_data_id must be None, and vice versa."
 
@@ -117,17 +104,14 @@ detuning = int(1e6 * node.parameters.frequency_detuning_in_mhz)
 flux_point = node.parameters.flux_point_joint_or_independent_or_pairwise  # 'independent' or 'joint' or 'pairwise'
 
 # Loop parameters
-fluxes_coupler = np.linspace(
-        -0.05,
-        0.3,
-        node.parameters.flux_num,
-    )
+fluxes_coupler = np.arange(node.parameters.histo_num)
+
 idle_times = np.arange(
     node.parameters.min_wait_time_in_ns // 4,
     node.parameters.max_wait_time_in_ns // 4,
     node.parameters.wait_time_step_in_ns // 4,
 )
-reset_coupler_bias = True
+reset_coupler_bias = False
 
 with program() as Ramsey_ZZ_coupling:
     n = declare(int)
@@ -155,8 +139,6 @@ with program() as Ramsey_ZZ_coupling:
         XY_delay = q_target.xy.opx_output.delay + 4  # Delay to account delayed pulses in the XY channel
         # Bring the active qubits to the minimum frequency point
         machine.set_all_fluxes(flux_point, qp)
-        if reset_coupler_bias:
-            qp.coupler.set_dc_offset(0.0)
         wait(1000)
 
         with for_(n, 0, n < n_avg, n + 1):
@@ -186,7 +168,7 @@ with program() as Ramsey_ZZ_coupling:
                     
                     # Coupler flux pulse
                     qp.coupler.play(
-                        "const", amplitude_scale=flux_coupler / qp.coupler.operations["const"].amplitude, duration=t_half
+                        "const", amplitude_scale=0, duration=t_half
                     )
                     qp.align()
                     
@@ -197,7 +179,7 @@ with program() as Ramsey_ZZ_coupling:
                     
                     # Coupler flux pulse
                     qp.coupler.play(
-                        "const", amplitude_scale=flux_coupler / qp.coupler.operations["const"].amplitude, duration=t_half
+                        "const", amplitude_scale=0, duration=t_half
                     )
                     qp.align()
                     
@@ -260,6 +242,8 @@ if not node.parameters.simulate:
         ds, machine = load_dataset(node.parameters.load_data_id)
 
 
+
+
 # %% {Data_analysis}
 node.results = {"ds": ds}
 node.results["fit_results"] = {}   # optional if you also store raw fits
@@ -268,10 +252,11 @@ node.results["analysis_success"] = {}  # for success flags per pair
 if not node.parameters.simulate:
     try:
         print("Starting analysis...")
-
+        
         flux_coupler_full = np.array([
-            fluxes_coupler + qp.coupler.decouple_offset for qp in qubit_pairs
+            fluxes_coupler for _ in qubit_pairs
         ])
+        
         ds = ds.assign_coords({
             "flux_coupler_full": (["qubit", "flux_coupler"], flux_coupler_full)
         })
@@ -320,20 +305,10 @@ if not node.parameters.simulate:
             chi_max = float(chiZZ.isel(flux_coupler=max_idx))
             chi_min = float(chiZZ.isel(flux_coupler=min_idx))
 
-            # ---------------- SAVE PER-PAIR RESULTS ----------------
-            node.results["fit_results"][qp.name] = {
-                "chiZZ_max_flux": flux_val_max,
-                "chiZZ_min_flux": flux_val_min,
-                "chiZZ_max_value": chi_max,
-                "chiZZ_min_value": chi_min,
-            }
+            
 
             # ---------------- SAVE FIT SUCCESS FLAG ----------------
             node.results["analysis_success"][qp.name] = "successful" if fit_ok else "failed"
-
-            print(f"  → max |χZZ|={chi_max:.2f} kHz @ {flux_val_max:.3f}")
-            print(f"  → χZZ≈0={chi_min:.2f} kHz @ {flux_val_min:.3f}")
-            print(f"  → fit status: {'success' if fit_ok else '❌ failed'}")
 
         print("Analysis complete ")
 
@@ -346,8 +321,10 @@ if not node.parameters.simulate:
 # %% {plotting}
 
 if not node.parameters.simulate:
+    
     for i, qp in enumerate(qubit_pairs):
         qubit_name = qp.name
+        node.results["fit_results"][qubit_name] = {}
         fit_status = node.results.get("analysis_success", {}).get(qubit_name, "failed")
 
         # =====================================================
@@ -356,7 +333,7 @@ if not node.parameters.simulate:
         print(f"Plotting raw data for {qubit_name}")
         ds_pair = ds.isel(qubit=i)
         flux_full = ds_pair["flux_coupler_full"]
-        flux_mV = 1e3 * flux_full.squeeze()
+        flux_mV = flux_full.squeeze()
         idle_time_us = ds_pair["idle_time"]
 
         fig, ax = plt.subplots(figsize=(6, 4))
@@ -384,13 +361,9 @@ if not node.parameters.simulate:
             chi = ds_pair["chiZZ"]
             chi_std = ds_pair["chiZZ_std"]
             flux_full = ds_pair["flux_coupler_full"]
-            flux_mV = 1e3 * flux_full.squeeze()
+            flux_mV = flux_full.squeeze()
 
             res = node.results["fit_results"][qubit_name]
-            flux_val_max = res["chiZZ_max_flux"]
-            flux_val_min = res["chiZZ_min_flux"]
-            chi_max = res["chiZZ_max_value"]
-            chi_min = res["chiZZ_min_value"]
 
             # --- χZZ vs flux plot ---
             # --- χZZ vs flux: 2 subplots (linear + log-log) ---
@@ -416,11 +389,10 @@ if not node.parameters.simulate:
                 alpha=0.9,
                 label="χZZ ± fit std",
             )
-            ax.axvline(1e3 * flux_val_max, color="k", linestyle="--", lw=1.2, alpha=0.8, label="max |χZZ|")
-            ax.axvline(1e3 * flux_val_min, color="gray", linestyle="--", lw=1.2, alpha=0.6, label="min |χZZ|")
+
             ax.axhline(0, color="k", lw=1, alpha=0.4)
             ax.set_title("Linear scale")
-            ax.set_xlabel("Coupler flux [mV]")
+            ax.set_xlabel("The index")
             ax.set_ylabel("χZZ [kHz]")
             ax.grid(True)
             ax.legend(fontsize=8)
@@ -442,7 +414,7 @@ if not node.parameters.simulate:
             )
             ax.set_yscale("log")
             ax.set_title("Log-log scale")
-            ax.set_xlabel("|Coupler flux| [mV]")
+            ax.set_xlabel("The index")
             ax.set_ylabel("|χZZ| [kHz]")
             ax.grid(True, which="both", ls="--", alpha=0.5)
             ax.legend(fontsize=8)
@@ -454,52 +426,76 @@ if not node.parameters.simulate:
             plt.show()
 
 
-            # --- Time-domain fits at χZZ max and min ---
-            for label, flux_val, chi_val in [
-                ("max", flux_val_max, chi_max),
-                ("min", flux_val_min, chi_min),
-            ]:
-                flux_idx = int((abs(flux_full - flux_val)).argmin(dim="flux_coupler").item())
-                meas = ds_pair["state_target"].isel(flux_coupler=flux_idx)
-                fit = ds_pair["state_target_fit"].isel(flux_coupler=flux_idx)
-                idle_time = ds_pair["idle_time"]
-
-                fig, axes = plt.subplots(1, 2, figsize=(8, 4), sharex=True)
-                axes[0].plot(
-                    idle_time,
-                    meas,
-                    "-",
-                    alpha=0.8,
-                )
-                axes[1].plot(
-                    idle_time,
-                    fit,
-                    "-",
-                    lw=2,
-                )
-                axes[0].set_title(f"Measured ({qubit_name})")
-                axes[1].set_title("Fitted")
-                for ax_ in axes:
-                    ax_.legend()
-                    ax_.set_xlabel("Idle time [µs]")
-                    ax_.set_ylabel("State")
-                fig.suptitle(
-                    f"{qubit_name} ({label} |χZZ|): Flux={flux_val:.3f}, χZZ={chi_val:.2f} kHz",
-                    fontsize=12,
-                )
-                plt.tight_layout(rect=[0, 0, 1, 0.96])
-                node.results[f"figure_fit_{label}_chiZZ_{qubit_name}"] = fig
-                plt.show()
-
         else:
             print(f"No χZZ analysis or failed fit for {qubit_name} — only raw data plotted.")
+        
+        # --- 繪製 χZZ 直方圖 (Histogram) ---
+        # 1. 建立新的圖表視窗
+        fig_hist, ax_h = plt.subplots(figsize=(7, 5))
+
+        # 2. 準備資料（排除 NaN 值以確保繪圖正常）
+        chi_raw = ds.isel(qubit=i)["chiZZ"].squeeze().values.flatten()
+        chi_raw = chi_raw[~np.isnan(chi_raw)]
+
+        lower_bound = np.percentile(chi_raw, 1)   # 下界
+        upper_bound = np.percentile(chi_raw, 99)  # 上界
+        chi_data = chi_raw[(chi_raw >= lower_bound) & (chi_raw <= upper_bound)]
+
+        # 2. 繪製直方圖 (維持 Counts，不使用 density=True)
+        
+        n, bins, patches = ax_h.hist(
+            chi_data, 
+            bins='auto', 
+            color="#B19CD9", # 淡淡的紫色
+            edgecolor="#00F8D3", 
+            alpha=0.99, 
+            label="χZZ distribution"
+        )
+
+        # 3. 計算統計參數
+        mu, std = norm.fit(chi_data)
+
+        # 4. 生成高斯曲線並「縮放」以匹配次數
+        xmin, xmax = ax_h.get_xlim()
+        x = np.linspace(xmin, xmax, 10*chi_data.shape[0])
+        p = norm.pdf(x, mu, std)
+
+        # 重點：將機率密度縮放成次數
+        # 縮放因子 = 資料總筆數 * 組距寬度
+        bin_width = bins[1] - bins[0]
+        p_scaled = p * len(chi_data) * bin_width
+
+        # 5. 繪製縮放後的高斯曲線
+        ax_h.plot(x, p_scaled, 'r', linewidth=2, label=f'$\mu$={mu:.1f}, $\sigma$={std:.1f}')
+
+        # 6. 加入平均值虛線
+        ax_h.axvline(mu, color="red", linestyle="dashed", linewidth=1.5)
+
+        # 7. 圖表美化
+        ax_h.set_title(f"#={node.parameters.histo_num}", fontsize=12)
+        ax_h.set_xlabel("χZZ [kHz]")
+        ax_h.set_ylabel("Counts") # 回到次數單位
+        ax_h.grid(axis='y', alpha=0.3)
+        ax_h.legend()
+        plt.suptitle(f"{qubit_name} χZZ Histogram")
+        plt.tight_layout()
+        node.results[f"figure_zz_histogram_{qubit_name}"] = fig_hist
+        
+        plt.show()
+        node.results["fit_results"][qubit_name] = {
+                "chiZZ_kHz": mu,
+                "chiZZ_kHz_dev": std,
+            }
+
 
 #%% {Update state}
 if node.parameters.load_data_id is None:
-        with node.record_state_updates():
-            for i, qp in enumerate(qubit_pairs):
-                qp.extras["ZZ_zero_flux"] = node.results['fit_results'][qp.name]["chiZZ_min_flux"]
-                qp.coupler.decouple_offset = node.results['results'][qp.name]["chiZZ_min_flux"]
+        if node.parameters.histo_num >=100:
+            with node.record_state_updates():
+                for qp in qubit_pairs:
+                    qp.extras["ZZ_strength_kHz"] = np.abs(node.results["fit_results"][qp.name]['chiZZ_kHz'])
+                    qp.extras["ZZ_strength_kHz_dev"] = node.results["fit_results"][qp.name]['chiZZ_kHz_dev']
+
 #  %% {Save_results}
 if not node.parameters.simulate:
     node.outcomes = {q.name: "successful" for q in qubit_pairs}

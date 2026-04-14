@@ -52,13 +52,13 @@ node = QualibrationNode(
     name="07bx_QubitThermometer",
     parameters=Parameters(
         qubits=None,
-        multiplexed=False,
         flux_point_joint_or_independent="independent",
-        num_runs=4096*1,
+        num_runs=4096,
         load_data_id=None,
         simulate=False,
         simulation_duration_ns=1000,
         use_waveform_report=False,
+        multiplexed=True
     )
 )
 # statistics number
@@ -140,7 +140,12 @@ with program() as iq_blobs:
                 qubit.resonator.wait(qubit.resonator.depletion_time * u.ns)
                 save(I_e[i], I_e_st[i])
                 save(Q_e[i], Q_e_st[i])
-        
+            if node.parameters.multiplexed:
+                align(*[q.xy.name for q in multiplexed_qubits.values()] +
+                [q.resonator.name for q in multiplexed_qubits.values()] +
+                [q.z.name for q in multiplexed_qubits.values()])
+            else:
+                align()
     with stream_processing():
         n_st.save("n")
         for i in range(num_qubits):
@@ -268,7 +273,10 @@ if not node.parameters.simulate:
         tot_c = 0
         grid = QubitGrid(ds, [q.grid_location for q in qubits])
         for ax, qubit in grid_iter(grid):
-            data = Teff[qubit['qubit']]
+            data = np.array(Teff[qubit['qubit']])
+            lower_bound = np.percentile(data, 1)   # 下界
+            upper_bound = np.percentile(data, 99)  # 上界
+            data = data[(data >= lower_bound) & (data <= upper_bound)]
             tot_c = len(data)
             counts, bins, _ = ax.hist(data, bins=15, alpha=0.7, color='skyblue', edgecolor='white', label='Counts')
             ### Normal distribution

@@ -36,19 +36,19 @@ from time import time
 
 # %% {Node_parameters}
 class Parameters(NodeParameters):
-    qubits: Optional[List[str]] = ["q1", "q2"]
-    num_averages: int = 5000
+    qubits: Optional[List[str]] = None
+    num_averages: int = 150
     min_wait_time_in_ns: int = 16
     max_wait_time_in_ns: int = 250016
     flux_point_joint_or_independent_or_arbitrary: Literal["joint", "independent"] = "independent"
     reset_type: Literal["active", "thermal"] = "active"
     time_scale:Literal["log"] = "log"
-    use_state_discrimination: bool = False
+    use_state_discrimination: bool = True
     simulate: bool = False
     simulation_duration_ns: int = 2500
     timeout: int = 100
     load_data_id: Optional[int] = None
-    multiplexed: bool = False
+    multiplexed: bool = True
     histo_num:int = 1 # 
 node = QualibrationNode(name="05st_T1_histogram", parameters=Parameters())
 
@@ -119,7 +119,12 @@ with program() as t1:
                             qubit.wait(2 * qubit.thermalization_time * u.ns)
                         else:
                             raise ValueError(f"Unrecognized reset type {node.parameters.reset_type}.")
-                        
+                
+                align(*[q.xy.name for q in multiplexed_qubits.values()] +
+                   [q.resonator.name for q in multiplexed_qubits.values()] +
+                   [q.z.name for q in multiplexed_qubits.values()])
+                
+                for i, qubit in multiplexed_qubits.items():
                     qubit.xy.play("x180")
                     qubit.align()
                     qubit.wait(t)
@@ -133,6 +138,13 @@ with program() as t1:
                         # save data
                         save(I[i], I_st[i])
                         save(Q[i], Q_st[i])
+                if node.parameters.multiplexed:
+                    align(*[q.xy.name for q in multiplexed_qubits.values()] +
+                   [q.resonator.name for q in multiplexed_qubits.values()] +
+                   [q.z.name for q in multiplexed_qubits.values()])
+                else:
+                    align()
+                
         # # Measure sequentially
         # if not node.parameters.multiplexed:
         #     align()
@@ -256,6 +268,9 @@ if not node.parameters.simulate:
         for ax, qubit in grid_iter(grid):
         
             data = np.array(t1_collection[qubit['qubit']])
+            lower_bound = np.percentile(data, 1)   # 下界
+            upper_bound = np.percentile(data, 99)  # 上界
+            data = data[(data >= lower_bound) & (data <= upper_bound)]
             tot_c = len(data)
             counts, bins, _ = ax.hist(data, bins=15, alpha=0.7, color='skyblue', edgecolor='white', label='Counts')
             ### Normal distribution

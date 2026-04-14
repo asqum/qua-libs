@@ -24,15 +24,16 @@ from scipy.stats import norm
 # %% {Node_parameters}
 class Parameters(NodeParameters):
     qubits: Optional[List[str]] = None #The qubit to be measured. If None, all active qubits will be measured
-    num_averages: int = 50000
+    num_averages: int = 200
     min_wait_time_in_ns: int = 16
-    max_wait_time_in_ns: int = 4008
+    max_wait_time_in_ns: int = 35008
     flux_point_joint_or_independent_or_arbitrary: Literal['joint', 'independent'] = 'independent'   
     simulate: bool = False
     timeout: int = 100
     use_state_discrimination: bool = True
     time_scale:Literal["log"] = "log"
     reset_type: Literal['active', 'thermal'] = "active"
+    multiplexed: bool = True
     histo_num:int = 1
 
 node = QualibrationNode(
@@ -40,7 +41,7 @@ node = QualibrationNode(
     parameters=Parameters()
 )
 
-
+# %% {Initialize_QuAM_and_QOP}
 # Class containing tools to help handle units and conversions.
 u = unit(coerce_to_integer=True)
 # Instantiate the QuAM class from the state file
@@ -61,7 +62,7 @@ n_avg = node.parameters.num_averages  # The number of averages
 # Dephasing time sweep (in clock cycles = 4ns) - minimum is 4 clock cycles
 
 idle_times = np.unique(
-    np.geomspace(
+    np.linspace(
         node.parameters.min_wait_time_in_ns,
         node.parameters.max_wait_time_in_ns,
         100,
@@ -113,7 +114,12 @@ with program() as t1:
                             qubit.wait(2 * qubit.thermalization_time * u.ns)
                         else:
                             raise ValueError(f"Unrecognized reset type {node.parameters.reset_type}.")
-
+                
+                align(*[q.xy.name for q in multiplexed_qubits.values()] +
+                   [q.resonator.name for q in multiplexed_qubits.values()] +
+                   [q.z.name for q in multiplexed_qubits.values()])
+                                
+                for i, qubit in multiplexed_qubits.items():
                     qubit.xy.play("x90")
                     qubit.wait(t)
                     qubit.xy.play("x180")
@@ -131,7 +137,12 @@ with program() as t1:
                         # save data
                         save(I[i], I_st[i])
                         save(Q[i], Q_st[i])
-
+                if node.parameters.multiplexed:
+                    align(*[q.xy.name for q in multiplexed_qubits.values()] +
+                   [q.resonator.name for q in multiplexed_qubits.values()] +
+                   [q.z.name for q in multiplexed_qubits.values()])
+                else:
+                    align()
         # align()
 
     with stream_processing():
@@ -242,6 +253,9 @@ if not node.parameters.simulate:
         for ax, qubit in grid_iter(grid):
             
             data = np.array(t2_collection[qubit['qubit']])
+            lower_bound = np.percentile(data, 1)   # 下界
+            upper_bound = np.percentile(data, 99)  # 上界
+            data = data[(data >= lower_bound) & (data <= upper_bound)]
             tot_c = len(data)
             counts, bins, _ = ax.hist(data, bins=15, alpha=0.7, color='skyblue', edgecolor='white', label='Counts')
             ### Normal distribution
