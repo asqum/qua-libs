@@ -26,15 +26,15 @@ import math
 from time import time, sleep
 
 
-def run_batched_rb(depth_type:Literal["short", "standard", "long"], target_operation: Literal['idle_2q', 'cz'] = 'cz', total_circuits: int = 40, id_to_load:int|None=None, time_mark:bool=True, zero_removal_plot:bool=False):
+def run_batched_rb(depth_type:Literal["short", "standard", "long"]='short', target_operation: Literal['idle_2q', 'cz'] = 'cz', total_circuits: int = 40, id_to_load:int|None=None, time_mark:bool=True, zero_removal_plot:bool=False):
     start = time()
     if total_circuits < 2:
         total_circuits = 2
 
     depth_mapping = {
-        "short": (0,2), #(0, 1, 3, 5, 7, 11, 16),
-        "standard": (0, 2, 4, 7, 11, 17, 24),
-        "long": (0, 2, 4, 8, 16, 24, 32, 64)
+        "short": (1, 3, 5, 7, 11, 16),
+        "standard": (1, 2, 4, 7, 11, 17, 24),
+        "long": (1, 2, 4, 6, 8, 12, 15, 21, 29, 36, 41, 50, 64)
     }
 
     tot_depth = depth_mapping[depth_type]

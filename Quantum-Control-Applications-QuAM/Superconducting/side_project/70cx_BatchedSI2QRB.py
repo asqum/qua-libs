@@ -4,9 +4,9 @@ from quam_libs.experiments.batched_SI2QRB import run_batched_rb
 
 # # 20 random circuits takes 10 mins
 target_operation:Literal['cz', 'idle_2q'] = 'cz'
-random_gates_per_depth:int = 750
-depth_rank:Literal["short", "standard", "long"] = "short"
-job_id:int|None = None #1271
+random_gates_per_depth:int = 40
+depth_rank:Literal["short", "standard", "long"] = "long"
+job_id:int|None = None
 remove_zero_to_analyze:bool = False
 
 

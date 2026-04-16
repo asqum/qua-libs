@@ -5,7 +5,7 @@ from quam_libs.components import Transmon, TransmonPair
 from qm.qua import * 
 from qm.qua._expressions import QuaVariable, QuaArrayVariable
 from quam_libs.lib.data_utils import split_list_by_integer_count
-from quam_libs.macros import active_reset, readout_state, qua_declaration, align, assign, reset_frame
+from quam_libs.macros import active_reset,active_reset_gef, readout_state, qua_declaration, align, assign, reset_frame
 from qualibrate import NodeParameters, QualibrationNode
 from quam_libs.components import QuAM
 from qualang_tools.units import unit
@@ -203,10 +203,15 @@ def play_gate(gate: QuaVariable, qubit_pair: TransmonPair, state: QuaVariable, s
             # qubit_pair.macros['cz'].apply()
             qubit_pair.gates['Cz'].execute()
         with case_(65): # idle_2q
-            qubit_pair.qubit_control.wait(qubit_pair.gates['Cz'].flux_pulse_control.length // 4)
-            qubit_pair.qubit_target.wait(qubit_pair.gates['Cz'].flux_pulse_control.length // 4)
+            # # wait CZ duratoin
+            # qubit_pair.qubit_control.wait(qubit_pair.gates['Cz'].flux_pulse_control.length // 4)
+            # qubit_pair.qubit_target.wait(qubit_pair.gates['Cz'].flux_pulse_control.length // 4)
+            # # original ver 
             # qubit_pair.qubit_control.wait(4)
             # qubit_pair.qubit_target.wait(4)
+            # # wait sq gate duraition
+            qubit_pair.qubit_control.wait(qubit_pair.qubit_control.xy.operations['x180'].length//4)
+            qubit_pair.qubit_target.wait(qubit_pair.qubit_target.xy.operations['x180'].length//4)
         
         with case_(66):
             
