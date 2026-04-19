@@ -70,19 +70,20 @@ average_gates_per_2q_layer = None
 # %% {Node_parameters}
 
 class Parameters(NodeParameters):
-    qubit_pairs: Optional[List[str]] = ["coupler_q2_q3"]#None
-    circuit_lengths: tuple[int] = (0,1,2,3,5,6,8,9,10,12,16) # in number of cliffords
-    num_circuits_per_length: int = 20
-    num_averages: int = 100
+    qubit_pairs: Optional[List[str]] = ["coupler_q4_q5"]#None
+    circuit_lengths: tuple[int] = (1, 2 ,4, 8, 16, 20) # in number of cliffords
+    num_circuits_per_length: int = 2
+    num_averages: int = 50
     basis_gates: list[str] = ['rz', 'sx', 'x', 'cz'] 
+    readout_mode: Literal["ge", "gef"] = "ge"
     flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
-    reset_type_thermal_or_active: Literal["thermal", "active"] = "active"
+    reset_type_thermal_or_active: Literal["thermal", "active", "active_gef"] = "active"
     reduce_to_1q_cliffords: bool = False
     use_input_stream: bool = False
     simulate: bool = False
     simulation_duration_ns: int = 10000
     load_data_id: Optional[int] = None
-    timeout: int = 100
+    timeout: int = 600
     seed: int = 0
     targets_name = "qubit_pairs"
 
@@ -106,7 +107,7 @@ if len(qubit_pairs) == 0:
 
 # Open Communication with the QOP
 if node.parameters.load_data_id is None:
-    qmm = node.machine.connect()
+    qmm = node.machine.connect(timeout=node.parameters.timeout)
 
 config = node.machine.generate_config()
 

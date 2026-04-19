@@ -65,14 +65,16 @@ from quam_libs.experiments.rb_standard.plot_utils import gate_mapping
 # %% {Node_parameters}
 
 class Parameters(NodeParameters):
-    qubit_pairs: Optional[List[str]] = ["coupler_q2_q3"]#None
+    qubit_pairs: Optional[List[str]] = ["coupler_q1_q2"]#None
     circuit_lengths: tuple[int] = (0,) # in number of cliffords
     num_circuits_per_length: int = 1
     num_averages: int =1
     target_gate: str = "" # "idle_2q" or "cz" supported 
     basis_gates: list[str] = [] 
-    load_data_id_SRB: Optional[int] = 11115 #put the data id of the standard RB here
-    load_data_id_IRB: Optional[int] = 11116 #put the data id of the interleaved RB here
+    readout_mode: Literal["ge", "gef"] = "ge"
+    reset_type_thermal_or_active: Literal["thermal", "active", "active_gef"] = "active"
+    load_data_id_SRB: Optional[int] = 112 #put the data id of the standard RB here
+    load_data_id_IRB: Optional[int] = 113 #put the data id of the interleaved RB here
     reduce_to_1q_cliffords: bool = False
     timeout: int = 100
     seed: int = 0
