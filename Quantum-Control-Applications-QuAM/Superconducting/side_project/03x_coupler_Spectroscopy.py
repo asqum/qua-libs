@@ -32,12 +32,12 @@ import numpy as np
 # %% {Node_parameters}
 class Parameters(NodeParameters):
 
-    couplers: str = 'coupler_q3_q4'
+    couplers: str = 'coupler_q5_q6'
     num_averages: int = 500
     operation: str = "saturation"
-    operation_amplitude_factor: Optional[float] = 0.05    # 0.05 , 0.1 good
+    operation_amplitude_factor: Optional[float] = 0.1    # 0.05 , 0.1 good
     operation_len_in_ns: Optional[int] = None
-    Driving_LO_GHz:float|None = None      # None use state recorded. Otherwise, use this value as the new LO (and will be updated into state)
+    Driving_LO_GHz:float|None = 3.2      # None use state recorded. Otherwise, use this value as the new LO (and will be updated into state)
     frequency_span_in_mhz: float = 300 #200, 4, 800
     frequency_step_in_mhz: float = 1 #0.25, 0.01
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
@@ -332,6 +332,7 @@ if not node.parameters.simulate:
                         coupler[0].extras["RD"]["IF"] += float(result.sel(qubit=q.name).position.values)
                         if node.parameters.Driving_LO_GHz is not None:
                             coupler[0].extras["RD"]["LO"] = node.parameters.Driving_LO_GHz * 1e9
+                        coupler[0].extras["T1"] = 30e-6 # Default for thermalization time.
                         q.xy.operations["x180_cp"] = pulses.DragCosinePulse(
                             amplitude=0.3,
                             alpha=0.0,
