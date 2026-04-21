@@ -67,17 +67,62 @@ from numpy import arange
 average_gates_per_2q_layer = None
 
 
+def build_two_qubit_state_probabilities(ds: xr.Dataset) -> xr.DataArray:
+    state = ds["state"]
+    outcome_probs = xr.concat([(state == i) for i in range(4)], dim="outcome").astype(float)
+    outcome_probs = outcome_probs.assign_coords(outcome=("outcome", ["00", "01", "10", "11"]))
+    leakage_probs = (state >= 4).astype(float)
+    leakage_probs = leakage_probs.expand_dims(outcome=["leakage"])
+    return xr.concat([outcome_probs, leakage_probs], dim="outcome")
+
+
+def plot_two_qubit_state_probabilities(probabilities: xr.DataArray, qubit_pair_name: str):
+    fig, ax = plt.subplots()
+
+    style_map = {
+        "00": {"color": "tab:blue", "linewidth": 2.5, "marker": "o"},
+        "01": {"color": "tab:orange", "linewidth": 1.5, "marker": "s"},
+        "10": {"color": "tab:green", "linewidth": 1.5, "marker": "^"},
+        "11": {"color": "tab:red", "linewidth": 1.5, "marker": "d"},
+        "leakage": {"color": "black", "linewidth": 2.5, "marker": "x", "linestyle": "--"},
+    }
+
+    for outcome in probabilities.outcome.values:
+        outcome_probabilities = probabilities.sel(outcome=outcome)
+        sequence_means = outcome_probabilities.mean(dim="average")
+        mean_prob = sequence_means.mean(dim="repeat")
+        error_bars = sequence_means.std(dim="repeat")
+        ax.errorbar(
+            mean_prob.circuit_depth,
+            mean_prob,
+            yerr=error_bars,
+            label=outcome,
+            capsize=3,
+            elinewidth=1.0,
+            **style_map[str(outcome)],
+        )
+
+    ax.set_xlabel("Circuit Depth")
+    ax.set_ylabel("Probability")
+    ax.set_title(f"2Q State Distribution - {qubit_pair_name}")
+    ax.set_ylim(0, 1)
+    ax.grid(alpha=0.3)
+    ax.legend(framealpha=0, title="State")
+
+    return fig
+
+
 # %% {Node_parameters}
 
 class Parameters(NodeParameters):
     qubit_pairs: Optional[List[str]] = ["coupler_q4_q5"]#None
-    circuit_lengths: tuple[int] = (1, 2 ,4, 8, 16, 20) # in number of cliffords
-    num_circuits_per_length: int = 2
-    num_averages: int = 50
+    circuit_lengths: tuple[int] = (0, 1, 2 ,3, 4, 6, 8, 12 ,16, 20) # in number of cliffords
+    num_circuits_per_length: int = 20
+    num_averages: int = 200
     basis_gates: list[str] = ['rz', 'sx', 'x', 'cz'] 
-    readout_mode: Literal["ge", "gef"] = "ge"
+    readout_mode: Literal["ge", "gef"] = "gef"
     flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
-    reset_type_thermal_or_active: Literal["thermal", "active", "active_gef"] = "active"
+    reset_type_thermal_or_active: Literal["thermal", "active", "active_gef"] = "thermal"
     reduce_to_1q_cliffords: bool = False
     use_input_stream: bool = False
     simulate: bool = False
@@ -87,7 +132,7 @@ class Parameters(NodeParameters):
     seed: int = 0
     targets_name = "qubit_pairs"
 
-node = QualibrationNode[Parameters, QuAM](name="70b_two_qubit_standard_rb", parameters=Parameters())
+node = QualibrationNode[Parameters, QuAM](name="70e_two_qubit_standard_rb", parameters=Parameters())
 
 # %% {Initialize_QuAM_and_QOP}
 
@@ -213,30 +258,16 @@ else:
 node.results = {"ds": ds}
 # %% {Data_analysis and plotting}
 
-# Assume ds is your input dataset and ds['state'] is your DataArray
-state = ds['state']  # shape: (qubit, shots, sequence, depths)
-
-# Outcome labels for 2-qubit states
-labels = ["00", "01", "10", "11"]
-
-# Create a list of DataArrays: one for each outcome
-probs = [state == i for i in range(4)]
-
-# Stack along a new outcome dimension
-probs = xr.concat(probs, dim='outcome')
-
-# Assign outcome labels
-probs = probs.assign_coords(outcome=("outcome", labels))
-
-probs_00 = probs.sel(outcome="00")
-probs_00 = probs_00.rename({"shots": "average", "sequence": "repeat", "depths": "circuit_depth"})
-probs_00 = probs_00.transpose("qubit", "repeat", "circuit_depth", "average")
-
-
-probs_00 = probs_00.astype(int)
+state_probabilities = build_two_qubit_state_probabilities(ds)
+state_probabilities = state_probabilities.rename(
+    {"shots": "average", "sequence": "repeat", "depths": "circuit_depth"}
+)
+state_probabilities = state_probabilities.transpose("qubit", "outcome", "repeat", "circuit_depth", "average")
 
 ds_transposed = ds.rename({"shots": "average", "sequence": "repeat", "depths": "circuit_depth"})
 ds_transposed = ds_transposed.transpose("qubit", "repeat", "circuit_depth", "average")
+
+node.results["state_probabilities"] = state_probabilities.to_dataset(name="probability")
 
 rb_result = {}
 
@@ -263,6 +294,13 @@ for qp in qubit_pairs:
     fig.show()
     
     node.results[f"{qp.id}_figure_RB_decay"] = fig
+
+    state_distribution_fig = plot_two_qubit_state_probabilities(
+        state_probabilities.sel(qubit=qp.name),
+        qp.name,
+    )
+    state_distribution_fig.show()
+    node.results[f"{qp.id}_figure_state_distribution"] = state_distribution_fig
 
 # %% {Update_state}
 with node.record_state_updates():

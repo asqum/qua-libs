@@ -225,8 +225,14 @@ else:
         ds = ds.assign_coords(idle_time=4 * ds.idle_time / u.us)  # convert to µs
         ds.idle_time.attrs = {"long_name": "idle time", "units": "µs"}
         node.results = {"ds": ds}
+        reload_qbs = False
     else:
-        ds, machine, json_data, qubits, node.parameters = load_dataset(node.parameters.load_data_id, parameters = node.parameters)
+        node = node.load_from_id(node.parameters.load_data_id)
+        ds = node.results["ds"] 
+        machine = node.machine
+        reload_qbs = True
+
+
 
 
 # %% {Data_analysis}
@@ -260,6 +266,8 @@ if not node.parameters.simulate:
     # %% {Plotting}
     
     mu_collection, sig_collection = {}, {}
+    if reload_qbs:
+        qubits = [machine.qubits[q] for q in qbs]
     
 
     if node.parameters.histo_num > 1:

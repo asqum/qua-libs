@@ -26,15 +26,15 @@ import math
 from time import time, sleep
 
 
-def run_batched_rb(depth_type:Literal["short", "standard", "long"], target_operation: Literal['idle_2q', 'cz'] = 'cz', total_circuits: int = 40, id_to_load:int|None=None, time_mark:bool=True, zero_removal_plot:bool=False):
+def run_batched_rb(couplers:list,depth_type:Literal["short", "standard", "long"]='short', target_operation: Literal['idle_2q', 'cz'] = 'cz', total_circuits: int = 40, id_to_load:int|None=None, time_mark:bool=True, zero_removal_plot:bool=False):
     start = time()
     if total_circuits < 2:
         total_circuits = 2
 
     depth_mapping = {
-        "short": (0,2), #(0, 1, 3, 5, 7, 11, 16),
-        "standard": (0, 2, 4, 7, 11, 17, 24),
-        "long": (0, 2, 4, 8, 16, 24, 32, 64)
+        "short": (1, 3, 5, 7, 11, 16),
+        "standard": (1, 2, 4, 7, 11, 17, 24),
+        "long": (1, 2, 4, 6, 8, 12, 15, 21, 29, 36, 41, 50, 64)
     }
 
     tot_depth = depth_mapping[depth_type]
@@ -51,7 +51,7 @@ def run_batched_rb(depth_type:Literal["short", "standard", "long"], target_opera
     total_circuits = num_batches * BATCH_SIZE # actually we ran
     
     class Parameters(NodeParameters):
-        qubit_pairs: Optional[List[str]] = ["coupler_q4_q5"]
+        qubit_pairs: Optional[List[str]] = couplers
         circuit_lengths: tuple[int] = tot_depth
         num_circuits_per_length: int = BATCH_SIZE
         num_averages: int = 300
@@ -312,7 +312,7 @@ def run_batched_rb(depth_type:Literal["short", "standard", "long"], target_opera
                 "error_per_clifford": 1 - srb_result[qp.id].fidelity, 
                 "alpha": srb_result[qp.id].alpha
             }
-            qp.extras['Interleaved_RB'] = srb_result[qp.id].fidelity
+            qp.extras['Interleaved_RB'] = irb_result[qp.id].fidelity
     
     node.save()
     return list(cz_fidelity.values()), list(cz_fidelity.keys())

@@ -5,20 +5,40 @@ from quam_libs.components import Transmon, TransmonPair
 from qm.qua import * 
 from qm.qua._expressions import QuaVariable, QuaArrayVariable
 from quam_libs.lib.data_utils import split_list_by_integer_count
-from quam_libs.macros import active_reset, readout_state, qua_declaration, align, assign, reset_frame
+from quam_libs.macros import active_reset, active_reset_gef, readout_state, qua_declaration, align, assign, reset_frame, readout_state_gef
 from qualibrate import NodeParameters, QualibrationNode
 from quam_libs.components import QuAM
 from qualang_tools.units import unit
 
 def reset_qubits(node, control: Transmon, target: Transmon, thermalization_time: float | None = None):
-    if node.parameters.reset_type == "active":
+    reset_mode = getattr(node.parameters, "reset_type_thermal_or_active", "active")
+    if reset_mode == "active":
         active_reset(control, "readout")
         active_reset(target, "readout")
+    elif reset_mode == "active_gef":
+        active_reset_gef(control, "readout")
+        active_reset_gef(target, "readout")
     else:
-        control.resonator.wait(thermalization_time//4)
+        control.resonator.wait(thermalization_time // 4)
 
 
-def play_gate(gate: QuaVariable, qubit_pair: TransmonPair, state: QuaVariable, state_control: QuaVariable, state_target: QuaVariable, state_st: "_ResultSource", reset_type: Literal["thermal", "active"]):
+def measure_two_qubit_state(node, qubit_pair: TransmonPair, state: QuaVariable, state_control: QuaVariable, state_target: QuaVariable):
+    readout_mode = getattr(node.parameters, "readout_mode", "ge")
+
+    if readout_mode == "gef":
+        readout_state_gef(qubit_pair.qubit_control, state_control)
+        readout_state_gef(qubit_pair.qubit_target, state_target)
+        with if_((state_control < 2) & (state_target < 2)):
+            assign(state, state_control * 2 + state_target)
+        with else_():
+            assign(state, 4)
+    else:
+        readout_state(qubit_pair.qubit_control, state_control)
+        readout_state(qubit_pair.qubit_target, state_target)
+        assign(state, state_control * 2 + state_target)
+
+
+def play_gate(gate: QuaVariable, qubit_pair: TransmonPair, state: QuaVariable, state_control: QuaVariable, state_target: QuaVariable, state_st: "_ResultSource", reset_type: Literal["thermal", "active", "active_gef"], readout_mode: Literal["ge", "gef"], node: QualibrationNode):
     with switch_(gate, unsafe=True):
                                
         with case_(0):
@@ -203,25 +223,31 @@ def play_gate(gate: QuaVariable, qubit_pair: TransmonPair, state: QuaVariable, s
             # qubit_pair.macros['cz'].apply()
             qubit_pair.gates['Cz'].execute()
         with case_(65): # idle_2q
-            qubit_pair.qubit_control.wait(qubit_pair.gates['Cz'].flux_pulse_control.length // 4)
-            qubit_pair.qubit_target.wait(qubit_pair.gates['Cz'].flux_pulse_control.length // 4)
+            # # wait CZ duratoin
+            # qubit_pair.qubit_control.wait(qubit_pair.gates['Cz'].flux_pulse_control.length // 4)
+            # qubit_pair.qubit_target.wait(qubit_pair.gates['Cz'].flux_pulse_control.length // 4)
+            # # original ver 
             # qubit_pair.qubit_control.wait(4)
             # qubit_pair.qubit_target.wait(4)
+            # # wait sq gate duraition
+            qubit_pair.qubit_control.wait(qubit_pair.qubit_control.xy.operations['x180'].length//4)
+            qubit_pair.qubit_target.wait(qubit_pair.qubit_target.xy.operations['x180'].length//4)
         
         with case_(66):
             
             align()
             wait(4)
             
-            readout_state(qubit_pair.qubit_control, state_control)
-            readout_state(qubit_pair.qubit_target, state_target)
-            assign(state, state_control*2 + state_target)
+            measure_two_qubit_state(node, qubit_pair, state, state_control, state_target)
             save(state, state_st)
             
             # Initialize the qubits
             if reset_type == "active":
                 active_reset(qubit_pair.qubit_control, "readout")
                 active_reset(qubit_pair.qubit_target, "readout")
+            elif reset_type == "active_gef":
+                active_reset_gef(qubit_pair.qubit_control, "readout")
+                active_reset_gef(qubit_pair.qubit_target, "readout")
             else:
                 qubit_pair.qubit_control.resonator.wait(qubit_pair.qubit_control.thermalization_time // 4)
                 qubit_pair.qubit_target.resonator.wait(qubit_pair.qubit_target.thermalization_time // 4)
@@ -230,11 +256,11 @@ def play_gate(gate: QuaVariable, qubit_pair: TransmonPair, state: QuaVariable, s
             
             align()
             
-def play_sequence(sequence: QuaArrayVariable, depth: int, qubit_pair: TransmonPair, state: list[QuaVariable], state_control: QuaVariable, state_target: QuaVariable, state_st, reset_type: Literal["thermal", "active"]): 
+def play_sequence(sequence: QuaArrayVariable, depth: int, qubit_pair: TransmonPair, state: list[QuaVariable], state_control: QuaVariable, state_target: QuaVariable, state_st, reset_type: Literal["thermal", "active", "active_gef"], readout_mode: Literal["ge", "gef"], node: QualibrationNode): 
     
     i = declare(int)
     with for_(i, 0, i < depth, i + 1):
-        play_gate(sequence[i], qubit_pair, state, state_control, state_target, state_st, reset_type)    
+        play_gate(sequence[i], qubit_pair, state, state_control, state_target, state_st, reset_type, readout_mode, node)    
 
 class QuaProgramHandler:
     
@@ -247,6 +273,8 @@ class QuaProgramHandler:
         self.machine = machine
         self.qubit_pairs = qubit_pairs
         self.max_sequence_length = max_sequence_length
+        self.readout_mode = getattr(self.node.parameters, "readout_mode", "ge")
+        self.reset_mode = getattr(self.node.parameters, "reset_type_thermal_or_active", "active")
         
         if self.node.parameters.use_input_stream:
             self.circuits_as_ints_batched = split_list_by_integer_count(self.circuits_as_ints, self.max_sequence_length)
@@ -275,9 +303,12 @@ class QuaProgramHandler:
                 self.machine.set_all_fluxes(flux_point=self.node.parameters.flux_point_joint_or_independent, target=qubit_pair.qubit_control)
 
                 # Initialize the qubits
-                if self.node.parameters.reset_type_thermal_or_active == "active":
+                if self.reset_mode == "active":
                     active_reset(qubit_pair.qubit_control, "readout")
                     active_reset(qubit_pair.qubit_target, "readout")
+                elif self.reset_mode == "active_gef":
+                    active_reset_gef(qubit_pair.qubit_control, "readout")
+                    active_reset_gef(qubit_pair.qubit_target, "readout")
                 else:
                     # qubit_pair.qubit_control.resonator.wait(4)
                     qubit_pair.qubit_control.resonator.wait(qubit_pair.qubit_control.thermalization_time * self.u.ns)
@@ -291,7 +322,7 @@ class QuaProgramHandler:
 
                     with for_(n, 0, n < self.node.parameters.num_averages, n + 1):
                         
-                        play_sequence(sequence, l, qubit_pair, state, state_control, state_target, state_st[i], self.node.parameters.reset_type_thermal_or_active)
+                        play_sequence(sequence, l, qubit_pair, state, state_control, state_target, state_st[i], self.reset_mode, self.readout_mode, self.node)
                                     
                         save(n, n_st)
 
@@ -326,9 +357,12 @@ class QuaProgramHandler:
                 self.machine.set_all_fluxes(flux_point=self.node.parameters.flux_point_joint_or_independent, target=qubit_pair.qubit_control)
 
                 # Initialize the qubits
-                if self.node.parameters.reset_type_thermal_or_active == "active":
+                if self.reset_mode == "active":
                     active_reset(qubit_pair.qubit_control, "readout")
                     active_reset(qubit_pair.qubit_target, "readout")
+                elif self.reset_mode == "active_gef":
+                    active_reset_gef(qubit_pair.qubit_control, "readout")
+                    active_reset_gef(qubit_pair.qubit_target, "readout")
                 else:
                     # qubit_pair.qubit_control.resonator.wait(4)
                     qubit_pair.qubit_control.resonator.wait(qubit_pair.qubit_control.thermalization_time * self.u.ns)
@@ -339,7 +373,7 @@ class QuaProgramHandler:
                 
                 with for_(n, 0, n < self.node.parameters.num_averages, n + 1):
                     
-                    play_sequence(job_sequence_qua, sequence_length, qubit_pair, state, state_control, state_target, state_st[i], self.node.parameters.reset_type_thermal_or_active)
+                    play_sequence(job_sequence_qua, sequence_length, qubit_pair, state, state_control, state_target, state_st[i], self.reset_mode, self.readout_mode, self.node)
                                 
                     save(n, n_st)
                     
