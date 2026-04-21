@@ -26,7 +26,7 @@ import math
 from time import time, sleep
 
 
-def run_batched_rb(depth_type:Literal["short", "standard", "long"]='short', target_operation: Literal['idle_2q', 'cz'] = 'cz', total_circuits: int = 40, id_to_load:int|None=None, time_mark:bool=True, zero_removal_plot:bool=False):
+def run_batched_rb(couplers:list,depth_type:Literal["short", "standard", "long"]='short', target_operation: Literal['idle_2q', 'cz'] = 'cz', total_circuits: int = 40, id_to_load:int|None=None, time_mark:bool=True, zero_removal_plot:bool=False):
     start = time()
     if total_circuits < 2:
         total_circuits = 2
@@ -51,7 +51,7 @@ def run_batched_rb(depth_type:Literal["short", "standard", "long"]='short', targ
     total_circuits = num_batches * BATCH_SIZE # actually we ran
     
     class Parameters(NodeParameters):
-        qubit_pairs: Optional[List[str]] = ["coupler_q4_q5"]
+        qubit_pairs: Optional[List[str]] = couplers
         circuit_lengths: tuple[int] = tot_depth
         num_circuits_per_length: int = BATCH_SIZE
         num_averages: int = 300
@@ -312,7 +312,7 @@ def run_batched_rb(depth_type:Literal["short", "standard", "long"]='short', targ
                 "error_per_clifford": 1 - srb_result[qp.id].fidelity, 
                 "alpha": srb_result[qp.id].alpha
             }
-            qp.extras['Interleaved_RB'] = srb_result[qp.id].fidelity
+            qp.extras['Interleaved_RB'] = irb_result[qp.id].fidelity
     
     node.save()
     return list(cz_fidelity.values()), list(cz_fidelity.keys())
