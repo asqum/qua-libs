@@ -48,12 +48,12 @@ from typing import Literal, Optional, List
 # %% Node parameters
 class Parameters(NodeParameters):
 
-    qubits: Optional[List[str]] = ["q5"]
-    source: str = "q3"
+    qubits: Optional[List[str]] = ["q7", "q8"]
+    source: str = "coupler_q7_q8"
 
     num_averages: int = 300
 
-    operation_len_in_ns: float = 40
+    operation_len_in_ns: float = 44
 
     min_source_flux: float = -0.1
     max_source_flux: float = 0.4
@@ -413,11 +413,11 @@ if not node.parameters.simulate:
                 source.extras["flux_xtalk_matrix"] = {}
                 for q in qubits:
                     if not np.isnan(xtalk.sel(qubit=q.name).values):
-                        source.extras["flux_xtalk_matrix"][q.name] = xtalk.sel(qubit=q.name).values
+                        source.extras["flux_xtalk_matrix"][q.name] = xtalk.sel(qubit=q.name).item()
             else:
                 for q in qubits:
                     if not np.isnan(xtalk.sel(qubit=q.name).values):
-                        source.extras["flux_xtalk_matrix"][q.name] = xtalk.sel(qubit=q.name).values
+                        source.extras["flux_xtalk_matrix"][q.name] = xtalk.sel(qubit=q.name).item()
 
             # Flux Xtalk compensation: add the compensation value into the target qubit's z opx output port.
             for q in qubits:
@@ -428,6 +428,8 @@ if not node.parameters.simulate:
                             q.z.opx_output.crosstalk[source_port] += -1*xtalk.sel(qubit=q.name).values # -1 is because we add this value on target port. 
                         else:
                             q.z.opx_output.crosstalk = {source_port: -1*xtalk.sel(qubit=q.name).values}
+                    else:
+                        print(f"{q.name} didn't be updated because its flux output is on different controller or fem with the source. Source port: {source_wiring.controller_id} fem-{source_wiring.fem_id} port-{source_wiring.port_id}, target port: {q.z.opx_output.controller_id} fem-{q.z.opx_output.fem_id} port-{q.z.opx_output.port_id}")
 
 
     # %% {Save_results}
