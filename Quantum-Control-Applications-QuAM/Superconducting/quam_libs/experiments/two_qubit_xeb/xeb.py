@@ -386,7 +386,7 @@ class XEB:
             qmm = qmm_cloud_simulator
         else:
             qmm = self.machine.connect()
-        qm = qmm.open_qm(config)
+        qm = qmm.open_qm(config, close_other_machines=False)
         if simulate:
             with open("debug.py", "w+") as f:
                 f.write(generate_qua_script(xeb_prog, config))
@@ -398,7 +398,15 @@ class XEB:
                           "Use XEBResult.from_data() method to load data from a previous run.")
             return 
 
-        return XEBJob(job, self.xeb_config, self.data_handler, self.available_combinations, False, simulate)
+        return XEBJob(
+            job,
+            self.xeb_config,
+            self.data_handler,
+            self.available_combinations,
+            False,
+            simulate,
+            qm=qm,
+        )
 
     def simulate(self, backend: BackendV2):
         """
@@ -494,11 +502,14 @@ class XEBJob:
         available_combinations: List[Tuple[Tuple[int, int]]],
         simulate=False,
         hardware_simulate=False,
+        qm=None,
     ):
         self.job = running_job
         self.available_combinations = available_combinations
         self._simulate = simulate
         self._hardware_simulate = hardware_simulate
+        self._qm = qm
+        self._qm_closed = False
         self._result_handles = self.job.result() if isinstance(running_job, AerJob) else self.job.result_handles
         if not isinstance(running_job, AerJob):
             self._result_handles.wait_for_all_values()
@@ -557,70 +568,73 @@ class XEBJob:
         if disjoint_processing is not None:
             assert isinstance(disjoint_processing, bool), "disjoint_processing should be a boolean"
             self.xeb_config.disjoint_processing = disjoint_processing
-        if self._simulate:
-            result = self.job.result()
-            counts = result.get_counts()
-            dms = np.array([result.data(i)["density_matrix"].data for i in range(len(counts))])
-            for count in counts:  # Fill in missing bit-strings with 0 counts
-                for key in [binary(i, self.xeb_config.n_qubits) for i in range(self.xeb_config.dim)]:
-                    if key not in count.keys():
-                        count[key] = 0
-            states = [{f"state_{qubit.name}": 0.0 for qubit in self.xeb_config.qubits} for _ in range(len(counts))]
-            for c, count in enumerate(counts):
-                for key, value in count.items():
-                    for i, bit in enumerate(reversed(key)):
-                        if bit == "1":
-                            states[c][f"state_{self.xeb_config.qubits[i].name}"] += value
-            states = {
-                key: np.reshape(
-                    [state[key] / self.xeb_config.n_shots for state in states],
-                    (self.xeb_config.seqs, len(self.xeb_config.depths)),
-                )
-                for key in states[0].keys()
-            }
+        try:
+            if self._simulate:
+                result = self.job.result()
+                counts = result.get_counts()
+                dms = np.array([result.data(i)["density_matrix"].data for i in range(len(counts))])
+                for count in counts:  # Fill in missing bit-strings with 0 counts
+                    for key in [binary(i, self.xeb_config.n_qubits) for i in range(self.xeb_config.dim)]:
+                        if key not in count.keys():
+                            count[key] = 0
+                states = [{f"state_{qubit.name}": 0.0 for qubit in self.xeb_config.qubits} for _ in range(len(counts))]
+                for c, count in enumerate(counts):
+                    for key, value in count.items():
+                        for i, bit in enumerate(reversed(key)):
+                            if bit == "1":
+                                states[c][f"state_{self.xeb_config.qubits[i].name}"] += value
+                states = {
+                    key: np.reshape(
+                        [state[key] / self.xeb_config.n_shots for state in states],
+                        (self.xeb_config.seqs, len(self.xeb_config.depths)),
+                    )
+                    for key in states[0].keys()
+                }
 
-            counts = {
-                key: np.reshape(
-                    [count[key] for count in counts],
-                    (self.xeb_config.seqs, len(self.xeb_config.depths)),
-                )
-                for key in counts[0].keys()
-            }
+                counts = {
+                    key: np.reshape(
+                        [count[key] for count in counts],
+                        (self.xeb_config.seqs, len(self.xeb_config.depths)),
+                    )
+                    for key in counts[0].keys()
+                }
 
-            saved_data = {"counts": counts, "states": states, "density_matrices": dms}
-        else:
+                saved_data = {"counts": counts, "states": states, "density_matrices": dms}
+            else:
 
-            gate_indices, states, counts, quadratures, amp_st = {}, {}, {}, {}, {}
-            result = self._result_handles
-            for q, qubit in enumerate(self.xeb_config.qubits):
-                gate_indices[f"g_{qubit.name}"] = result.get(f"g{q}").fetch_all()["value"]
-                quadratures[f"I_{qubit.name}"] = result.get(f"I{q}").fetch_all()["value"]
-                quadratures[f"Q_{qubit.name}"] = result.get(f"Q{q}").fetch_all()["value"]
-                states[f"state_{qubit.name}"] = result.get(f"state{q}").fetch_all()["value"]
-                if self.xeb_config.gate_set.run_through_amp_matrix_modulation:
-                    amp_st[f"amp_matrix_{qubit.name}"] = result.get(f"amp_matrix_q{q}").fetch_all()["value"]
+                gate_indices, states, counts, quadratures, amp_st = {}, {}, {}, {}, {}
+                result = self._result_handles
+                for q, qubit in enumerate(self.xeb_config.qubits):
+                    gate_indices[f"g_{qubit.name}"] = result.get(f"g{q}").fetch_all()["value"]
+                    quadratures[f"I_{qubit.name}"] = result.get(f"I{q}").fetch_all()["value"]
+                    quadratures[f"Q_{qubit.name}"] = result.get(f"Q{q}").fetch_all()["value"]
+                    states[f"state_{qubit.name}"] = result.get(f"state{q}").fetch_all()["value"]
+                    if self.xeb_config.gate_set.run_through_amp_matrix_modulation:
+                        amp_st[f"amp_matrix_{qubit.name}"] = result.get(f"amp_matrix_q{q}").fetch_all()["value"]
 
-            n_qubits = self.xeb_config.n_qubits
-            for i in range(self.xeb_config.dim):
-                counts[binary(i, n_qubits)] = result.get(f"s{binary(i, n_qubits)}").fetch_all()["value"]
+                n_qubits = self.xeb_config.n_qubits
+                for i in range(self.xeb_config.dim):
+                    counts[binary(i, n_qubits)] = result.get(f"s{binary(i, n_qubits)}").fetch_all()["value"]
 
-            saved_data = {
-                **quadratures,
-                **states,
-                **counts,
-                **amp_st,
-                "gate_indices": self.gate_indices,
-                "gate_sequences": self.gate_sequences,
-            }
+                saved_data = {
+                    **quadratures,
+                    **states,
+                    **counts,
+                    **amp_st,
+                    "gate_indices": self.gate_indices,
+                    "gate_sequences": self.gate_sequences,
+                }
 
-        return XEBResult(
-            self.xeb_config,
-            self.circuits,
-            counts,
-            states,
-            saved_data,
-            self.data_handler if self.xeb_config.should_save_data else None,
-        )
+            return XEBResult(
+                self.xeb_config,
+                self.circuits,
+                counts,
+                states,
+                saved_data,
+                self.data_handler if self.xeb_config.should_save_data else None,
+            )
+        finally:
+            self.close()
 
     @property
     def circuits(self):
@@ -678,6 +692,11 @@ class XEBJob:
         else:
             warnings.warn("Simulated samples are not available because the job was run and not hardware-simulated.")
 
+    def close(self):
+        if self._qm is not None and not self._qm_closed:
+            self._qm.close()
+            self._qm_closed = True
+
 
 class XEBResult:
     def __init__(
@@ -720,13 +739,15 @@ class XEBResult:
 
         if self.xeb_config.should_save_data and self.data_handler is not None:
             save_data = {}
-            for key in save_data.keys(): # Remove the amplitude matrices from the saved data
-                if 'amp_matrix' in key:
+            for key, value in self.data.items():  # Remove the amplitude matrices from the saved data
+                if "amp_matrix" in key:
                     continue
-                save_data[key] = self.data[key]
-            self.data_handler.save_data(saved_data,
-                                        self.xeb_config.data_folder_name,
-                                        metadata=self.xeb_config.as_dict())
+                save_data[key] = value
+            self.data_handler.save_data(
+                save_data,
+                self.xeb_config.data_folder_name,
+                metadata=self.xeb_config.as_dict(),
+            )
 
     @classmethod
     def from_data(
@@ -768,6 +789,66 @@ class XEBResult:
                     new_data[key] = value
 
         return cls(xeb_config, circuits, new_data["counts"], new_data["states"], new_data, data_handler)
+
+    @staticmethod
+    def _normalize_probabilities(probabilities: np.ndarray) -> np.ndarray:
+        corrected = np.clip(np.real_if_close(probabilities), 0, None).astype(float)
+        norm = corrected.sum()
+        if norm <= 0:
+            return corrected
+        return corrected / norm
+
+    def _get_joint_confusion_matrix(self) -> Optional[np.ndarray]:
+        if len(self.xeb_config.qubit_pairs) != 1 or self.xeb_config.n_qubits != 2:
+            return None
+
+        qp = self.xeb_config.qubit_pairs[0]
+        confusion = getattr(qp, "confusion", None)
+        if confusion is None:
+            return None
+
+        confusion = np.asarray(confusion, dtype=float)
+        if confusion.shape != (4, 4):
+            return None
+        return confusion
+
+    def _get_single_qubit_confusion_matrix(self, qubit_index: int) -> Optional[np.ndarray]:
+        resonator = self.xeb_config.qubits[qubit_index].resonator
+        confusion = getattr(resonator, "confusion_matrix", None)
+        if confusion is None:
+            return None
+
+        confusion = np.asarray(confusion, dtype=float)
+        if confusion.shape != (2, 2):
+            return None
+        return confusion
+
+    def _apply_joint_confusion_correction(self, measured_probs: np.ndarray) -> np.ndarray:
+        confusion = self._get_joint_confusion_matrix()
+        if confusion is None:
+            return measured_probs
+
+        try:
+            corrected = np.linalg.solve(confusion, measured_probs)
+        except np.linalg.LinAlgError:
+            warnings.warn("Joint confusion matrix is singular. Falling back to raw measured probabilities.")
+            return measured_probs
+        return self._normalize_probabilities(corrected)
+
+    def _apply_single_qubit_confusion_correction(self, qubit_index: int, measured_probs: np.ndarray) -> np.ndarray:
+        confusion = self._get_single_qubit_confusion_matrix(qubit_index)
+        if confusion is None:
+            return measured_probs
+
+        try:
+            corrected = np.linalg.solve(confusion, measured_probs)
+        except np.linalg.LinAlgError:
+            warnings.warn(
+                f"Single-qubit confusion matrix for {self.qubit_names[qubit_index]} is singular. "
+                "Falling back to raw measured probabilities."
+            )
+            return measured_probs
+        return self._normalize_probabilities(corrected)
 
     def retrieve_data(self):
         """
@@ -822,14 +903,24 @@ class XEBResult:
                 if not existing_data:
                     statevector = Statevector(qc)
                     joint_expected_probs[s, d_] = statevector.probabilities(decimals=5)
-                    joint_measured_probs[s, d_] = (
+                    joint_raw_measured_probs = (
                         np.array([counts[binary(i, n_qubits)][s][d_] for i in range(dim)]) / self.xeb_config.n_shots
                     )
+                    if self.xeb_config.apply_confusion_matrix:
+                        joint_measured_probs[s, d_] = self._apply_joint_confusion_correction(joint_raw_measured_probs)
+                    else:
+                        joint_measured_probs[s, d_] = joint_raw_measured_probs
 
                     for q in range(n_qubits):
                         disjoint_expected_probs[q, s, d_] = statevector.probabilities([q], 5)
                         qubit_state = states[f"state_{self.qubit_names[q]}"][s, d_]
-                        disjoint_measured_probs[q, s, d_] = np.array([1 - qubit_state, qubit_state])
+                        disjoint_raw_measured_probs = np.array([1 - qubit_state, qubit_state])
+                        if self.xeb_config.apply_confusion_matrix:
+                            disjoint_measured_probs[q, s, d_] = self._apply_single_qubit_confusion_correction(
+                                q, disjoint_raw_measured_probs
+                            )
+                        else:
+                            disjoint_measured_probs[q, s, d_] = disjoint_raw_measured_probs
 
                 if not self.xeb_config.disjoint_processing:
                     # Calculate the cross-entropy fidelities (logarithmic)
