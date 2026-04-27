@@ -12,7 +12,7 @@ PS. load_data is working.
 # %% {Imports}
 from qualibrate import QualibrationNode, NodeParameters
 from quam_libs.components import QuAM
-from quam_libs.macros import qua_declaration, readout_state_coupler
+from quam_libs.macros import qua_declaration, readout_state_coupler, active_reset
 
 from quam_libs.lib.plot_utils import QubitGrid, grid_iter
 from quam_libs.lib.save_utils import fetch_results_as_xarray
@@ -32,20 +32,21 @@ from scipy.ndimage import median_filter
 
 # %% {Node_parameters}
 class Parameters(NodeParameters):
-    couplers: str = 'coupler_q5_q6' #'coupler_q3_q4'
+    couplers: str = 'coupler_q7_q8' #'coupler_q3_q4'
     num_averages: int = 500
     operation: str = "saturation"
-    operation_amplitude_factor: Optional[float] = 0.05 #0.004, 0.02 # q6:3e-3, q7:1e-2, q8:3e-3, q9:***,
+    operation_amplitude_factor: Optional[float] = 0.1 #0.004, 0.02 # q6:3e-3, q7:1e-2, q8:3e-3, q9:***,
     operation_len_in_ns: Optional[int] = None
-    Driving_LO_GHz: float|None = 3.9 # 3.18
+    Driving_LO_GHz: float|None = 3.0 # 3.18
     frequency_span_in_mhz: float = 300 #12, 120
     frequency_step_in_mhz: float = 3 #0.1, 1
     frequency_shift_in_mhz: float = 0 #0  
-    min_flux_offset_in_v: float = 0.05 ##-0.042
-    max_flux_offset_in_v: float = 0.4 #0.042
+    min_flux_offset_in_v: float = -0.1 ##-0.042
+    max_flux_offset_in_v: float = 0.1 #0.042
     num_flux_points: int = 75
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
     qubits_detune_flux_amp: float = 0.0 # once you see the spectrum split at sweet spot due to q-c ZZ, you can try this to detune its all neighboring qubits. 0.3 is recommanded. 
+    enforce_aswap_on_coupler:bool = False # Use it once you see the coupler's sweet spot freq is higher than your detector qubit. Make sure you have 'aSWAP' in your coupler.coupler.operations !!!
     simulate: bool = False
     simulation_duration_ns: int = 2500
     timeout: int = 100
@@ -71,6 +72,7 @@ drive_q = [machine.qubits[coupler[0].extras["RD"]["driven_q"]]]
 detector_q = [machine.qubits[coupler[0].extras["RD"]["readout_q"]]]
 # Change driving LO
 if node.parameters.load_data_id is None and not node.parameters.simulate:
+    aswap_dir_update_is_q = True
     drive_LO_original = {drive_q[0].name: drive_q[0].xy.opx_output.upconverter_frequency}
     if node.parameters.Driving_LO_GHz is None:
         drive_q[0].xy.opx_output.upconverter_frequency = coupler[0].extras["RD"]["LO"]
@@ -85,6 +87,27 @@ if node.parameters.load_data_id is None and not node.parameters.simulate:
         readout_strategy = 'aswap'
     else:
         readout_strategy = coupler[0].extras["RD"]["strategy"]
+    
+    if not node.parameters.enforce_aswap_on_coupler:
+        if 'aswap_supplier' not in coupler[0].extras["RD"]:
+            aswaper = None
+        else:
+            if coupler[0].extras["RD"]["aswap_supplier"].lower() == 'c':
+                print("*** aSWAP is applied on coupler itself !")
+                if not hasattr(coupler[0].coupler.operations, "aSWAP"):
+                    raise  LookupError(f"aSWAP operation now is not in {coupler[0].name}.coupler.operation, please add it to unlock the ability for coupler's measurement!")
+                aswaper = coupler[0]
+                coupler[0].coupler.operations['aSWAP'].slope_direction = coupler[0].extras["RD"]["swap_direction"]
+                aswap_dir_update_is_q = False
+            else:
+                aswaper = None
+    else:
+        if not hasattr(coupler[0].coupler.operations, "aSWAP"):
+            raise  LookupError(f"aSWAP operation now is not in {coupler[0].name}.coupler.operation, please add it to unlock the ability for coupler's measurement!")
+        print("*** aSWAP is applied on coupler itself !")
+        aswaper = coupler[0]
+        coupler[0].coupler.operations['aSWAP'].slope_direction = coupler[0].extras["RD"]["swap_direction"]
+        aswap_dir_update_is_q = False
 
 
 # Generate the OPX and Octave configurations
@@ -147,6 +170,8 @@ with program() as multi_qubit_spec_vs_flux:
                 with for_(*from_array(dc, dcs)):
                     # Flux sweeping for a qubit
                     align()
+                    active_reset(detector_q[i])
+                    align()
                     duration = operation_len * u.ns if operation_len is not None else qubit.xy.operations[operation].length * u.ns
                     # Bring the qubit to the desired point during the saturation pulse
                     # qubit.z.play("const", amplitude_scale=dc / qubit.z.operations["const"].amplitude, duration=duration)
@@ -162,7 +187,7 @@ with program() as multi_qubit_spec_vs_flux:
                     )
                     align()
                     # QUA macro to read the state of the active resonators
-                    readout_state_coupler(detector_q[i], state[i], method=readout_strategy)
+                    readout_state_coupler(detector_q[i], state[i], flux_applied_target = aswaper, method=readout_strategy)
                     save(state[i], state_st[i])
                     # Wait for the qubit to decay to the ground state
                     # Wait for the qubits to decay to the ground state
@@ -387,8 +412,12 @@ else:
         if node.parameters.load_data_id is None:
             for q in drive_q:
                 q.xy.opx_output.upconverter_frequency = drive_LO_original[q.name] # revert the driving LO
-            for q in detector_q:
-                q.z.operations['aSWAP'].slope_direction = -1
+            if aswap_dir_update_is_q:
+                for q in detector_q:
+                    q.z.operations['aSWAP'].slope_direction = -1
+            else:
+                for c in coupler:
+                    c.coupler.operations['aSWAP'].slope_direction = -1
         node.results["ds"] = ds
         node.outcomes = {q.name: "successful" for q in drive_q}
         node.results["initial_parameters"] = node.parameters.model_dump()
