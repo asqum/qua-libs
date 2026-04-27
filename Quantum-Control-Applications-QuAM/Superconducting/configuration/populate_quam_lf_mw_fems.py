@@ -167,7 +167,7 @@ for qp in machine.qubit_pairs.values():
     qp.coupler.opx_output.output_mode = "amplified"
     qp.coupler.opx_output.upsampling_mode = "pulse"
     qp.coupler.operations["const"].amplitude = 1.25
-    qp.extras["RD"] = {"LO":3e9, "IF":-100e6, "readout_q":qp.name.split["_"][1], "driven_q":qp.name.split["_"][2], "strategy": "aswap"}
+    qp.extras["RD"] = {"LO":3e9, "IF":-100e6, "readout_q":qp.name.split["_"][1], "driven_q":qp.name.split["_"][2], "strategy": "aswap", "aswap_supplier": "c"}
     qp.extras["T1"] = 30e-6
     qp.extras["T2"] = 5e-6
 
