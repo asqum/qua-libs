@@ -49,7 +49,7 @@ class Parameters(NodeParameters):
     timeout: int = 100
     load_data_id: Optional[int] = None
     multiplexed: bool = False
-    readme_password: str|None = '0xffe8'
+    readme_password: str|None = None
 
 
 node = QualibrationNode(name="03x_Coupler_Spectroscopy", parameters=Parameters())
