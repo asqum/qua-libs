@@ -1,6 +1,6 @@
 # COUPLER MEASUREMETS WORKFLOW
 ##  Basic Requirements 
-    1. Qubit's Readout Fidelity > 85%
+    1. Qubit's Readout Fidelity > 85%. Otherwise, increase your shot please.
     2. Active Reset for qubits is doing good.
     3. Amplitude for aSWAP operation had been updated in node 02b_resonator_spectroscopy_ns_flux.
     4. Check the RD and T1 is in your coupler.extras (it should be initialized when populate_quam) like :
@@ -18,7 +18,7 @@
             }
         }
     5. 
-## _**Standard**_ - Sweet Spot Information included
+##  _**Standard**_ - Sweet Spot Information included
     1. 03xa - Tuning driving LO to widely search a suspicious signal by 2-tone measurement.
                 - Update: driving frequency, and Initialize π-pulse parameters.
     2. 04x  - Check a correct driving frequency with Rabi Oscillation.
@@ -59,11 +59,19 @@
     5. 06x  - Statistics for coupler's T2 at idle point.
                 - Update: T2 and its deviation T2_dev.
 
+## **CZ Focusing** - The operation point frequency, make sure your CZ gate is now available (node 61 updated)
+    1. 12x  - Use BOTH SQUARE flux pulse with different duration and coupler flux amplitude to measure CZ coupling strength.
+                - Warning: Since your CZ may not be composed with BOTH SQUARE, the measured coupling strength might be slightly different.
+                - Update: An additional information 'CZgMHz_bias_conversion' in extras recorded the conversion between specific g_CZ to coupler's flux amplitude.   
+    2. 03xc - Applied the flux amplitude obtained from node 12x while coupler's 2tone measurement.
+                - Save: The operation frequency figure.
+
+
 ## Another useful information in RD
     1. swap_direction can be either -1 or 1, depends on your coupler's RO SNR.
-    2. aswap_supplier is default as "q" which means aSWAP pulse will be applied on the readout_q. You may set it "c" makes the it applied on coupler itself.
+    2. aswap_supplier is default as "q" which means aSWAP pulse will be applied on the readout_q. You may set it "c" makes it applied on coupler itself.
         - Warnings:  Once you set it "c", please make sure you have aSWAP operation in your coupler.coupler.operation. This amplitude needs to be dynamically adjusted by node 03xb.
 
 
-* If any **BUG** were observed, please reach out to Ratis Wu (AS) **:P**
-* Congrats ! You had checked this doc. `readme_password = '0xffe8' ` Use it in 03xa's node parameters then start the measurements.
+* If any **BUG** were found, please reach out to Ratis Wu (AS) **:P**
+* Congrats ! You have gone through this doc. **`readme_password = '0xffe8' `** Use it in 03xa's node parameters then start the measurements.
