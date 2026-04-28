@@ -48,18 +48,18 @@ from typing import Literal, Optional, List
 # %% Node parameters
 class Parameters(NodeParameters):
 
-    qubits: Optional[List[str]] = ["q3", "q4"]
-    source: str = "coupler_q3_q4"
+    qubits: Optional[List[str]] = ["q6"]
+    source: str = "coupler_q6_q7"
 
     num_averages: int = 300
 
-    operation_len_in_ns: float = 1_000
+    operation_len_in_ns: float = 88
 
     min_source_flux: float = -0.2
     max_source_flux: float = 0.2
     num_flux_points: int = 51
 
-    qubits_flux_span: float = 0.1
+    qubits_flux_span: float = 0.15
     qubits_freq_shift: float = 0  #MHz, currently no use
 
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
@@ -425,7 +425,10 @@ if not node.parameters.simulate:
                     if source_wiring.controller_id == q.z.opx_output.controller_id and source_wiring.fem_id == q.z.opx_output.fem_id:
                         source_port = source_wiring.port_id
                         if q.z.opx_output.crosstalk is not None:
-                            q.z.opx_output.crosstalk[source_port] += -1*xtalk.sel(qubit=q.name).values # -1 is because we add this value on target port. 
+                            if source_port in q.z.opx_output.crosstalk:
+                                q.z.opx_output.crosstalk[source_port] += -1*xtalk.sel(qubit=q.name).values # -1 is because we add this value on target port. 
+                            else:
+                                q.z.opx_output.crosstalk[source_port] = -1*xtalk.sel(qubit=q.name).values
                         else:
                             q.z.opx_output.crosstalk = {source_port: -1*xtalk.sel(qubit=q.name).values}
                     else:
