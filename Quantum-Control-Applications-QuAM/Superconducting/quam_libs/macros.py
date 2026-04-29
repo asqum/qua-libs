@@ -259,12 +259,12 @@ def active_reset_coupler(
     else:
 
         align()
-        active_reset(drive_qubit)
-        active_reset(read_qubit)
-        readout_state_coupler(read_qubit, state=None, method='aswap', flux_applied_target=flux_applied_target)
+        # # active_reset(drive_qubit)
+        
+        readout_state_coupler(read_qubit, state=None, method='aswap', flux_applied_target=flux_applied_target, active_reset_readout_q=True)
         align()
-        active_reset(drive_qubit)
-        active_reset(read_qubit)
+        # active_reset(drive_qubit)
+        active_reset(read_qubit, max_attempts=1)
         align()
         
 
@@ -304,7 +304,8 @@ def readout_state_coupler(
         readout_gef:bool = False,
         buffer_b4_readout:bool = True,
         zz_pi_pulse_duration_scale:int = 100,
-        assign_aswap_duration:int|None = None
+        assign_aswap_duration:int|None = None,
+        active_reset_readout_q:bool = False
     ):
     '''
     A readout macro for reading a coupler, can be achieved by either performing an aswap and reading the qubit, or by performing a 3-tone spectroscopy.
@@ -321,6 +322,9 @@ def readout_state_coupler(
 
     '''
     align() # to make sure the timing is correct when performing the aSWAP and the readout
+    if active_reset_readout_q:
+        active_reset(qb2read, max_attempts=2)
+        align()
     match method:
         case "aswap":
             try:
