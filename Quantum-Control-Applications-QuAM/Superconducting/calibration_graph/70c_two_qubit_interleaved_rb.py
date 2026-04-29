@@ -63,15 +63,16 @@ from quam_libs.experiments.rb_standard.plot_utils import gate_mapping
 # %% {Node_parameters}
 
 class Parameters(NodeParameters):
-    qubit_pairs: Optional[List[str]] = ["coupler_q2_q3"] #None
-    circuit_lengths: tuple[int] = (0,1,2,3,4,5,6,7,8,11,14,19,25,35,40) # in number of cliffords
-    num_circuits_per_length: int = 15
-    num_averages: int = 150
+    qubit_pairs: Optional[List[str]] = ["coupler_q4_q5"] #None
+    circuit_lengths: tuple[int] = (1, 2 ,4, 6, 8, 12, 16, 20) # in number of cliffords
+    num_circuits_per_length: int = 20
+    num_averages: int = 100
     target_gate: str = "cz" # "idle_2q" or "cz" supported 
     basis_gates: list[str] = ['rz', 'sx', 'x', 'cz'] 
+    readout_mode: Literal["ge", "gef"] = "gef"
     flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
-    reset_type_thermal_or_active: Literal["thermal", "active"] = "active"
-    reduce_to_1q_cliffords: bool = True
+    reset_type_thermal_or_active: Literal["thermal", "active", "active_gef"] = "active"
+    reduce_to_1q_cliffords: bool = False
     use_input_stream: bool = False
     simulate: bool = False
     simulation_duration_ns: int = 10000

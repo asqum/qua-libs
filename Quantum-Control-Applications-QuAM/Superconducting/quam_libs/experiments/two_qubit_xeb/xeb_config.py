@@ -60,6 +60,7 @@ class XEBConfig:
     data_folder_name: Optional[str] = None
     generate_new_data: bool = True
     disjoint_processing: bool = False
+    apply_confusion_matrix: bool = False
     seed: int = 1234
 
     def __post_init__(self):
@@ -87,6 +88,7 @@ class XEBConfig:
             "qubit_pairs": [pair.name if isinstance(pair, TransmonPair) else pair for pair in self.qubit_pairs],
             "coupling_map": list(self.coupling_map.get_edges()) if self.coupling_map else None,
             "available_combinations": self.available_combinations,
+            "apply_confusion_matrix": self.apply_confusion_matrix,
             "seed": self.seed,
         }
         return config_dict
@@ -121,6 +123,7 @@ class XEBConfig:
             gate_set_choice=config_dict["gate_set_choice"],
             two_qb_gate=two_qb_gate,
             qubit_pairs=qubit_pairs,
+            apply_confusion_matrix=config_dict.get("apply_confusion_matrix", False),
         )
         new_class.coupling_map = config_dict["coupling_map"]
         new_class.available_combinations = config_dict["available_combinations"]

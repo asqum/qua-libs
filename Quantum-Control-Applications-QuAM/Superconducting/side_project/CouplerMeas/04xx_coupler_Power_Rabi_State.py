@@ -22,7 +22,7 @@ Next steps before going to the next node:
 # %% {Imports}
 from qualibrate import QualibrationNode, NodeParameters
 from quam_libs.components import QuAM
-from quam_libs.macros import qua_declaration, readout_state_coupler
+from quam_libs.macros import qua_declaration, readout_state_coupler, active_reset_coupler
 from quam_libs.lib.plot_utils import QubitPairGrid, grid_iter, grid_pair_names
 from quam_libs.lib.save_utils import fetch_results_as_xarray
 from quam_libs.lib.fit import fit_oscillation, oscillation
@@ -41,13 +41,14 @@ import numpy as np
 class Parameters(NodeParameters):
 
     coupler: str = 'coupler_q4_q5'
-    num_averages: int = 500 #10
-    operation_x180_or_any_90: Literal["x180_cp", "x90_cp"] = "x180_cp"
+    num_averages: int = 200 #10
+    operation_x180_or_any_90: Literal["x180", "x90"] = "x180"
     update_x90:bool = True
     min_amp_factor: float = 0.8
     max_amp_factor: float = 1.2
     amp_factor_step: float = 0.004
-    max_number_rabi_pulses_per_sweep: int = 32
+    max_number_rabi_pulses_per_sweep: int = 44
+    reset_type: Literal['active', 'thermal'] = 'active'
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
     simulate: bool = False
     timeout: int = 100
@@ -70,10 +71,24 @@ detector_q = [machine.qubits[coupler[0].extras["RD"]["readout_q"]]]
 
 # Change driving LO
 if not node.parameters.simulate and node.parameters.load_data_id is None:
+    aswap_dir_update_is_q = True
     drive_LO_original = {drive_q[0].name: drive_q[0].xy.opx_output.upconverter_frequency}
     drive_q[0].xy.opx_output.upconverter_frequency = coupler[0].extras["RD"]["LO"]
     if "swap_direction" in coupler[0].extras["RD"]:
         detector_q[0].z.operations['aSWAP'].slope_direction = coupler[0].extras["RD"]["swap_direction"]
+    if 'strategy' not in coupler[0].extras["RD"]:
+        readout_strategy = 'aswap'
+    else:
+        readout_strategy = coupler[0].extras["RD"]["strategy"]
+    if coupler[0].extras["RD"]["aswap_supplier"].lower() == 'c':
+        print("*** aSWAP is applied on coupler itself !")
+        if not hasattr(coupler[0].coupler.operations, "aSWAP"):
+            raise  LookupError(f"aSWAP operation now is not in {coupler[0].name}.coupler.operation, please add it to unlock the ability for coupler's measurement!")
+        aswaper = coupler[0]
+        coupler[0].coupler.operations['aSWAP'].slope_direction = coupler[0].extras["RD"]["swap_direction"]
+        aswap_dir_update_is_q = False
+    else:
+        aswaper = None
 
 
 # Generate the OPX and Octave configurations
@@ -99,13 +114,14 @@ amps = np.arange(
     node.parameters.amp_factor_step,
 )
 
-if operation == "x180_cp":
+if operation == "x180":
     N_pi_vec = np.arange(1, N_pi, 2).astype("int")
-elif operation in ["x90_cp"]:
+elif operation in ["x90"]:
     N_pi_vec = np.arange(2, N_pi, 4).astype("int")
 else:
     raise ValueError(f"Unrecognized operation {operation}.")
 
+operation_exact_name = f"{operation}_{coupler[0].name}"
 
 with program() as power_rabi:
     I, _, Q, _, n, n_st = qua_declaration(num_qubits=num_qubits)
@@ -118,15 +134,6 @@ with program() as power_rabi:
     if not node.parameters.simulate:
         machine.apply_all_couplers_to_min()
     for i, qubit in enumerate(drive_q):
-        # Bring the active qubits to the minimum frequency point
-        # if flux_point == "independent":
-        #     machine.apply_all_flux_to_min()
-        #     machine.apply_all_couplers_to_min()
-        #     qubit.z.to_independent_idle()
-        # elif flux_point == "joint":
-        #     machine.apply_all_flux_to_joint_idle()
-        # else:
-        #     machine.apply_all_flux_to_zero()
         if not node.parameters.simulate:
             machine.set_all_fluxes(flux_point=flux_point, target=qubit)
             if "c" in qubit.id: qubit.z.set_dc_offset(qubit.z.joint_offset) # for coupler-test case
@@ -139,20 +146,23 @@ with program() as power_rabi:
             save(n, n_st)
             with for_(*from_array(npi, N_pi_vec)):
                 with for_(*from_array(a, amps)):
-                    # Initialize the qubits
-                    if not node.parameters.simulate:
-                        if qubit.thermalization_time//5 > coupler[0].extras['T1']*1e9:
-                            wait(qubit.thermalization_time * u.ns)
-                        else:
-                            wait(5*coupler[0].extras['T1']*1e9 * u.ns)
+                    if node.parameters.reset_type == "active":
+                        active_reset_coupler(qubit, detector_q[i], f"x180_{coupler[0].name}", flux_applied_target=aswaper, method='aswap')
+                        
+                    else:
+                        if not node.parameters.simulate:
+                            if qubit.thermalization_time//5 > coupler[0].extras['T1']*1e9:
+                                wait(qubit.thermalization_time * u.ns)
+                            else:
+                                wait(5*coupler[0].extras['T1']*1e9 * u.ns)
 
                     align()
                     # Loop for error amplification (perform many qubit pulses)
                     with for_(count, 0, count < npi, count + 1):
-                        qubit.xy.play(operation, amplitude_scale=a)
+                        qubit.xy.play(operation_exact_name, amplitude_scale=a)
                     align()
                     
-                    readout_state_coupler(detector_q[i], state[i], method='aswap')
+                    readout_state_coupler(detector_q[i], state[i], flux_applied_target=aswaper, method=readout_strategy)
                     save(state[i], state_stream[i])
 
         align()
@@ -160,11 +170,11 @@ with program() as power_rabi:
     with stream_processing():
         n_st.save("n")
         for i, qubit in enumerate(drive_q):
-            if operation == "x180_cp":
+            if operation == "x180":
                 state_stream[i].buffer(len(amps)).buffer(
                     np.ceil(N_pi / 2)
                 ).average().save(f"state{i + 1}")
-            elif operation in ["x90_cp"]:
+            elif operation in ["x90"]:
                 state_stream[i].buffer(len(amps)).buffer(
                     np.ceil(N_pi / 4)
                 ).average().save(f"state{i + 1}")
@@ -204,7 +214,7 @@ else:
         {
             "abs_amp": (
                 ["qubit", "amp"],
-                np.array([q.xy.operations[operation].amplitude * amps for q in drive_q]),
+                np.array([q.xy.operations[operation_exact_name].amplitude * amps for q in drive_q]),
             )
         }
     )
@@ -231,7 +241,7 @@ else:
             phi_fit = fit.loc[q.name].sel(fit_vals="phi")
             phi_fit = phi_fit - np.pi * (phi_fit > np.pi / 2)
             factor = float(1.0 * (np.pi - phi_fit) / (2 * np.pi * f_fit))
-            new_pi_amp = drive_q[0].xy.operations[operation].amplitude * factor
+            new_pi_amp = drive_q[0].xy.operations[operation_exact_name].amplitude * factor
             if new_pi_amp < 0.3:  # TODO: 1 for OPX1000 MW
                 print(f"amplitude for Pi pulse is modified by a factor of {factor:.2f}")
                 print(
@@ -283,26 +293,32 @@ else:
             ax.set_ylabel("num. of pulses")
         ax.set_xlabel("Amplitude [mV]")
         ax.set_title(qubit["qubit"])
-    grid.fig.suptitle(f"{operation} Power Rabi State")
+    grid.fig.suptitle(f"{operation_exact_name} Power Rabi State")
     plt.tight_layout()
     plt.show()
     node.results["figure"] = grid.fig
 
     # %% {Update_state}
-    with node.record_state_updates():
-        for q in coupler:
-            drive_q[0].xy.operations[operation].amplitude = fit_results[q.name]["Pi_amplitude"]
-            if operation == 'x180_cp' and node.parameters.update_x90:
-                drive_q[0].xy.operations['x90_cp'].amplitude = fit_results[q.name]["Pi_amplitude"]/2
+    if not node.parameters.simulate:
+        with node.record_state_updates():
+            for q in coupler:
+                drive_q[0].xy.operations[operation_exact_name].amplitude = fit_results[q.name]["Pi_amplitude"]
+                if operation == 'x180' and node.parameters.update_x90:
+                    drive_q[0].xy.operations[f'x90_{coupler[0].name}'].amplitude = fit_results[q.name]["Pi_amplitude"]/2
 
-    # %% {Save_results}
-    for q in drive_q:
-        q.xy.opx_output.upconverter_frequency = drive_LO_original[q.name] # revert the driving LO
-    for q in detector_q:
-        q.z.operations['aSWAP'].slope_direction = -1
-    node.outcomes = {q.name: "successful" for q in coupler}
-    node.results["initial_parameters"] = node.parameters.model_dump()
-    node.machine = machine
-    node.save()
+        # %% {Save_results}
+        if node.parameters.load_data_id is None:
+            for q in drive_q:
+                q.xy.opx_output.upconverter_frequency = drive_LO_original[q.name] # revert the driving LO
+            if aswap_dir_update_is_q:
+                for q in detector_q:
+                    q.z.operations['aSWAP'].slope_direction = -1
+            else:
+                for c in coupler:
+                    c.coupler.operations['aSWAP'].slope_direction = -1
+        node.outcomes = {q.name: "successful" for q in coupler}
+        node.results["initial_parameters"] = node.parameters.model_dump()
+        node.machine = machine
+        node.save()
 
 # %%

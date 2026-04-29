@@ -40,24 +40,24 @@ from typing import Literal, Optional, List
 # %% Node parameters
 class Parameters(NodeParameters):
 
-    qubits: Optional[List[str]] = None
-    source: str = "coupler_q1_q2"
+    qubits: Optional[List[str]] = ["q4", "q5"]
+    source: str = "coupler_q4_q5"
 
-    num_averages: int = 50
+    num_averages: int = 300
 
     operation: str = "saturation"
-    operation_amplitude_factor: Optional[float] = 0.1 #0.004, 0.02
-    operation_len_in_ns: float = 100
+    operation_amplitude_factor: Optional[float] = 0.01  #0.004, 0.02
+    operation_len_in_ns: float = 100000
 
-    source_flux_span: float = 1
+    source_flux_span: float = 0.6
     num_flux_points: int = 51
 
-    expect_crosstalk: float = 0.05
+    expect_crosstalk: float = 0.1
     qubits_bias: float = 0
     qubits_freq_shift: float = 0  #MHz
 
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
-    reset_type: Literal["active", "thermal"] = "thermal"
+    reset_type: Literal["active", "thermal"] = "active"
 
     simulate: bool = False
     simulation_duration_ns: int = 2000

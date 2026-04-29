@@ -82,7 +82,7 @@
                     "opx_output": "#/ports/mw_outputs/con1/8/3"
                 },
                 "z": {
-                    "opx_output": "#/ports/analog_outputs/con1/3/7"
+                    "opx_output": "#/ports/analog_outputs/con1/4/1"
                 }
             },
             "q8": {
@@ -94,7 +94,7 @@
                     "opx_output": "#/ports/mw_outputs/con1/8/4"
                 },
                 "z": {
-                    "opx_output": "#/ports/analog_outputs/con1/4/1"
+                    "opx_output": "#/ports/analog_outputs/con1/3/7"
                 }
             },
             "q9": {

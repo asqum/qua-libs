@@ -60,11 +60,11 @@ class Parameters(
     use_state_discrimination: bool = True
     use_strict_timing: bool = False
     num_random_sequences: int = 100 # Number of random sequences
-    num_averages: int = 20
-    max_circuit_depth: int = 400  # Maximum circuit depth
-    delta_clifford: int = 10
-    seed: int = 345324
-    reset_type_thermal_or_active: Literal["thermal", "active"] = "thermal"
+    num_averages: int = 50
+    max_circuit_depth: int = 800  # Maximum circuit depth
+    delta_clifford: int = 40
+    seed: int = None
+    reset_type_thermal_or_active: Literal["thermal", "active"] = "active"
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
     simulate: bool = False
     simulation_duration_ns: int = 2500
@@ -142,7 +142,7 @@ def play_sequence(sequence_list, depth, qubit: Transmon):
     with for_(i, 0, i <= depth, i + 1):
         with switch_(sequence_list[i], unsafe=True):
             with case_(0):
-                qubit.xy.wait(qubit.xy.operations["x180"].length // 4)
+                qubit.xy.play("x180", amplitude_scale=0.0)
             with case_(1):  # x180
                 qubit.xy.play("x180")
             with case_(2):  # y180
@@ -270,8 +270,9 @@ with program() as randomized_benchmarking:
                         # Initialize the qubits.
                         for qubit in multiplexed_qubits.values():
                             if reset_type == "active":
-                                qubit.resonator.wait(qubit.resonator.depletion_time * u.ns)
+                                # qubit.resonator.wait(qubit.resonator.depletion_time * u.ns)
                                 active_reset(qubit)
+                                # qubit.resonator.wait(qubit.resonator.depletion_time * u.ns)
                             else:
                                 qubit.resonator.wait(qubit.thermalization_time * u.ns)
 
@@ -408,19 +409,20 @@ if not node.parameters.simulate:
         ax.text(
             0.0,
             1.07,
-            f"RB fidelity = {1 - EPG.sel(**qubit).values:.5f}",
+            f"1Q gate fidelity = {1 - EPG.sel(**qubit).values:.5f}",
             transform=ax.transAxes,
         )
+    plt.suptitle(f"SQ RB\n Random gate number per depth = {node.parameters.num_random_sequences}")
     plt.tight_layout()
     plt.show()
     node.results["figure"] = grid.fig
-
 
     # %% {Save_results}
     if not node.parameters.simulate:
         with node.record_state_updates():
             for q in qubits:
                 q.extras["EPG"] = EPG.sel(qubit=q.name).item()
+                q.extras["EPC"] = EPC.sel(qubit=q.name).item()
                 
     if not node.parameters.simulate:
         node.outcomes = {q.name: "successful" for q in qubits}

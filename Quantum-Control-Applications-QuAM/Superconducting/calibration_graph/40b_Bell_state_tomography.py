@@ -56,7 +56,7 @@ from quam_libs.components.gates.two_qubit_gates import CZGate
 from quam_libs.lib.pulses import FluxPulse
 
 # %% {Node_parameters}
-qubit_pair_indexes = [1]
+qubit_pair_indexes = [4]
 class Parameters(NodeParameters): 
 
     qubit_pairs: Optional[List[str]] = ["coupler_q%s_q%s"%(i,i+1) for i in qubit_pair_indexes]
@@ -304,11 +304,11 @@ with program() as CPhase_Oscillations:
                 for tomo_axis_target in [0,1,2]:
                     # reset
                     if node.parameters.reset_type == "active":
-                            wait(2*qp.qubit_control.thermalization_time * u.ns)
-                            active_reset_simple(qp.qubit_control)
-                            active_reset_simple(qp.qubit_target)
-                            active_reset_simple(qp.qubit_control)
-                            active_reset_simple(qp.qubit_target)   
+                            # wait(2*qp.qubit_control.thermalization_time * u.ns)
+                            # active_reset_simple(qp.qubit_control)
+                            # active_reset_simple(qp.qubit_target)
+                            active_reset(qp.qubit_control)
+                            active_reset(qp.qubit_target)   
                     else:
                         wait(5*qp.qubit_control.thermalization_time * u.ns)
                     qp.align()
@@ -508,28 +508,76 @@ if not node.parameters.simulate:
     grid.fig.suptitle(f"Bell state tomography (imaginary part)")
     node.results["figure_rho_imag"] = grid.fig
 
+
+    pauli_map = {'0': 'I', '1': 'X', '2': 'Y', '3': 'Z'}
+    
+    theo_values = [1.0, 0.0, 0.0, 0.0,  # II, IX, IY, IZ
+                   0.0, 1.0, 0.0, 0.0,  # XI, XX, XY, XZ
+                   0.0, 0.0, -1.0, 0.0, # YI, YX, YY, YZ
+                   0.0, 0.0, 0.0, 1.0]  # ZI, ZX, ZY, ZZ
+
     grid_names, qubit_pair_names = grid_pair_names(qubit_pairs)
     grid = QubitPairGrid(grid_names, qubit_pair_names)
+    
+    width = 0.25
     for ax, qubit_pair in grid_iter(grid):
         # Extract the values and labels for plotting
         values = paulis_data[qubit_pair['qubit']].values
         labels = paulis_data[qubit_pair['qubit']].coords['pauli_op'].values
+        pauli_labels = []
+        for lbl in labels:
+            # 將原本的字串 (例如 '0,1') 移除逗號變成 '01'
+            new_lbl = lbl.replace(',', '') 
+            # 把數字替換成對應的英文字母
+            for num, char in pauli_map.items():
+                new_lbl = new_lbl.replace(num, char)
+            pauli_labels.append(new_lbl)  # 轉換後會變成 'IX' 並存入新陣列
 
+
+        x = np.arange(len(labels))
         # Create a bar plot
-        bars = ax.bar(range(len(values)), values)
+        ax.bar(x, theo_values, width, label='Theory', color='red')
+        ax.bar(x, values, width, label='Experiment', color='lightsteelblue')
 
         # Customize the plot
-        ax.set_xlabel('Pauli Operators')
-        ax.set_ylabel('Value')
+        bottom_labels = []
+        top_labels = []
+        
+        # 利用 enumerate 取得索引值 i，藉由判斷奇偶數來分配標籤
+        for i, label in enumerate(pauli_labels):
+            if i % 2 == 0:  # 偶數索引 (第 0, 2, 4... 個)：放下面
+                bottom_labels.append(label)
+                top_labels.append("")       # 上面留空
+            else:           # 奇數索引 (第 1, 3, 5... 個)：放上面
+                bottom_labels.append("")    # 下面留空
+                top_labels.append(label)
+        ax.set_xticks(x)
+        ax.set_xticklabels(bottom_labels, rotation=0, ha="center")
+        
+        # 建立頂部的 X 軸 (ax_top)
+        ax_top = ax.twiny()
+        # 非常重要：確保上下軸的座標範圍完全一致，柱子才不會歪掉
+        ax_top.set_xlim(ax.get_xlim()) 
+        # 設定頂部 X 軸的刻度與標籤
+        ax_top.set_xticks(x)
+        ax_top.set_xticklabels(top_labels, rotation=0, ha="center")
+        
+        # （可選）稍微縮短上下軸的刻度線長度，看起來更簡潔
+        ax.tick_params(axis='x', length=3)
+        ax_top.tick_params(axis='x', length=3)
+        
+        for i, val in enumerate(theo_values):
+            if val == 0.0:
+                ax.scatter(x[i], 0, marker='x', color='#d62728', s=40, zorder=3)
+        
+        
+        ax.set_yticks(np.arange(-1.0, 1.1, 0.5))
+        ax.grid(True, linestyle=':', alpha=0.7)
         ax.set_title(qubit_pair['qubit'])
-        ax.set_xticks(range(len(labels)), labels, rotation=45, ha='right')
+        ax.legend()
+        
 
         # Add value labels on top of each bar
-        for bar in bars:
-            height = bar.get_height()
-            ax.text(bar.get_x() + bar.get_width()/2., height,
-                    f'{height:.2f}',
-                    ha='center', va='bottom')
 
 # Adjust layout and display the plot
     plt.tight_layout()

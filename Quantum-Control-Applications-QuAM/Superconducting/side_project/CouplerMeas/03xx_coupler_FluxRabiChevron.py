@@ -1,14 +1,15 @@
 # %%
 """
 RABI CHEVRON flux version
-Use the same pi-pulse condition with the flux varied for the coupler, optimize the flux offset this current driving frequency.  
+Use the same pi-pulse condition with the flux varied for the coupler, optimize the flux offset this current driving frequency. Noticed, the loger x180_cp_duration is, the sharper a signal will be shown.
 
 Prerequisites:
     - x180_cp calibrated
+    - node 67bxx JAZZ statistics checked.
 
 Recommended node parameters
-    - x180cp_dura_scaling = [3, 9]
-    -flux_span_V: float = 0.025
+    - x180cp_dura_scaling = [3, 9] # use may need to change it and see.
+    - flux_span_V: float = 0.025
 
 Next steps before going to the next node:
     - Update coupler's decouple offset in the state.
@@ -20,7 +21,7 @@ Next steps before going to the next node:
 from quam_libs.lib.fit import peaks_dips
 from qualibrate import QualibrationNode, NodeParameters
 from quam_libs.components import QuAM
-from quam_libs.macros import qua_declaration, readout_state_coupler
+from quam_libs.macros import qua_declaration, readout_state_coupler, active_reset_coupler
 from quam_libs.lib.plot_utils import QubitPairGrid, grid_iter, grid_pair_names
 from quam_libs.lib.save_utils import fetch_results_as_xarray
 from qualang_tools.results import progress_counter, fetching_tool
@@ -39,9 +40,10 @@ class Parameters(NodeParameters):
 
     coupler: str = 'coupler_q4_q5'
     num_averages: int = 500
-    flux_span_V: float = 0.02 # 0.05
+    flux_span_V: float = 0.01 # 0.05
     flux_pts: int = 100
-    x180cp_dura_scaling:List[int] = [3, 9] # [3, 9]
+    x180cp_dura_scaling:List[int] = [9, 15] # [3, 9]
+    reset_type: Literal['active', 'thermal'] = 'active'
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
     simulate: bool = False
     timeout: int = 100
@@ -63,11 +65,25 @@ detector_q = [machine.qubits[coupler[0].extras["RD"]["readout_q"]]]
 
 # Change driving LO
 if not node.parameters.simulate:
+    aswap_dir_update_is_q = True
     drive_LO_original = {drive_q[0].name: drive_q[0].xy.opx_output.upconverter_frequency}
     drive_q[0].xy.opx_output.upconverter_frequency = coupler[0].extras["RD"]["LO"]
     if "swap_direction" in coupler[0].extras["RD"]:
         detector_q[0].z.operations['aSWAP'].slope_direction = coupler[0].extras["RD"]["swap_direction"]
+    if 'strategy' not in coupler[0].extras["RD"]:
+        readout_strategy = 'aswap'
+    else:
+        readout_strategy = coupler[0].extras["RD"]["strategy"]
 
+    if coupler[0].extras["RD"]["aswap_supplier"].lower() == 'c':
+        print("*** aSWAP is applied on coupler itself !")
+        if not hasattr(coupler[0].coupler.operations, "aSWAP"):
+            raise  LookupError(f"aSWAP operation now is not in {coupler[0].name}.coupler.operation, please add it to unlock the ability for coupler's measurement!")
+        aswaper = coupler[0]
+        coupler[0].coupler.operations['aSWAP'].slope_direction = coupler[0].extras["RD"]["swap_direction"]
+        aswap_dir_update_is_q = False
+    else:
+        aswaper = None
 
 
 
@@ -123,20 +139,24 @@ with program() as EF_PR_Chevron:
 
                 with for_each_(dura_scal, pi_dura_scal):
 
-                    if not node.parameters.simulate:
-                        if qubit.thermalization_time//5 > coupler[0].extras['T1']*1e9:
-                            wait(qubit.thermalization_time * u.ns)
-                        else:
-                            wait(5*coupler[0].extras['T1']*1e9 * u.ns)
+                    if node.parameters.reset_type == "active":
+                        active_reset_coupler(qubit, detector_q[i], f"x180_{coupler[0].name}", method='aswap')
+                        
+                    else:
+                        if not node.parameters.simulate:
+                            if qubit.thermalization_time//5 > coupler[0].extras['T1']*1e9:
+                                wait(qubit.thermalization_time * u.ns)
+                            else:
+                                wait(5*coupler[0].extras['T1']*1e9 * u.ns)
 
                     align()
                     coupler[0].coupler.play("const", amplitude_scale=dc/ coupler[0].coupler.operations['const'].amplitude, duration=current_x180cp_length_qua[qubit.name]*dura_scal+z_rising_buffer_time_ns//4)
                     qubit.xy.wait(z_rising_buffer_time_ns//4)
-                    qubit.xy.play("x180_cp", amplitude_scale=1/dura_scal, duration=current_x180cp_length_qua[qubit.name]*dura_scal)
+                    qubit.xy.play(f"x180_{coupler[0].name}", amplitude_scale=1/dura_scal, duration=current_x180cp_length_qua[qubit.name]*dura_scal)
                     align()
 
-                    # readout
-                    readout_state_coupler(detector_q[i], state[i], method='aswap')
+                    # readout 
+                    readout_state_coupler(detector_q[i], state[i], flux_applied_target=aswaper, method=readout_strategy)
                     save(state[i], state_st[i])
 
                 align()
@@ -221,19 +241,24 @@ else:
 
 
     # %% {Update_state}
-    for q in coupler:
-        with node.record_state_updates():
-            if fit_results[q.name]["fit_successful"]:
-                q.coupler.decouple_offset += fit_results[q.name]["correct_additional_flux"]
+    if not node.parameters.simulate:
+        for q in coupler:
+            with node.record_state_updates():
+                if fit_results[q.name]["fit_successful"]:
+                    q.coupler.decouple_offset += fit_results[q.name]["correct_additional_flux"]
 
-    # %% {Save_results}
-    for q in drive_q:
-        q.xy.opx_output.upconverter_frequency = drive_LO_original[q.name] # revert the driving LO
-    for q in detector_q:
-        q.z.operations['aSWAP'].slope_direction = -1
-    node.outcomes = {q.name: "successful" for q in coupler}
-    node.results["initial_parameters"] = node.parameters.model_dump()
-    node.machine = machine
-    node.save()
+        # %% {Save_results}
+        for q in drive_q:
+            q.xy.opx_output.upconverter_frequency = drive_LO_original[q.name] # revert the driving LO
+        if aswap_dir_update_is_q:
+            for q in detector_q:
+                q.z.operations['aSWAP'].slope_direction = -1
+        else:
+            for c in coupler:
+                c.coupler.operations['aSWAP'].slope_direction = -1
+        node.outcomes = {q.name: "successful" for q in coupler}
+        node.results["initial_parameters"] = node.parameters.model_dump()
+        node.machine = machine
+        node.save()
 
 # %%

@@ -12,7 +12,7 @@ from qualibrate import QualibrationNode, NodeParameters
 
 from quam_libs.components import QuAM
 from quam_libs.lib.instrument_limits import instrument_limits
-from quam_libs.macros import qua_declaration, readout_state_coupler
+from quam_libs.macros import qua_declaration, readout_state_coupler, active_reset
 from quam_libs.lib.qua_datasets import convert_IQ_to_V
 from quam_libs.lib.plot_utils import QubitGrid, grid_iter
 from quam_libs.lib.save_utils import fetch_results_as_xarray, load_dataset
@@ -32,12 +32,12 @@ import numpy as np
 # %% {Node_parameters}
 class Parameters(NodeParameters):
 
-    couplers: str = 'coupler_q3_q4'
+    couplers: str = 'coupler_q7_q8'
     num_averages: int = 500
     operation: str = "saturation"
     operation_amplitude_factor: Optional[float] = 0.05    # 0.05 , 0.1 good
     operation_len_in_ns: Optional[int] = None
-    Driving_LO_GHz:float|None = None      # None use state recorded. Otherwise, use this value as the new LO (and will be updated into state)
+    Driving_LO_GHz:float|None = 3.0      # None use state recorded. Otherwise, use this value as the new LO (and will be updated into state)
     frequency_span_in_mhz: float = 300 #200, 4, 800
     frequency_step_in_mhz: float = 1 #0.25, 0.01
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
@@ -49,6 +49,7 @@ class Parameters(NodeParameters):
     timeout: int = 100
     load_data_id: Optional[int] = None
     multiplexed: bool = False
+    readme_password: str|None = None
 
 
 node = QualibrationNode(name="03x_Coupler_Spectroscopy", parameters=Parameters())
@@ -61,11 +62,21 @@ u = unit(coerce_to_integer=True)
 machine = QuAM.load()
 # Generate the OPX and Octave configurations
 
+def encode():
+    MASK = 0xFFFF
+    cal = (13 - 37) & MASK
+    return hex(cal)
+ 
+
+assert node.parameters.readme_password == encode(), PermissionError("WARNING: Please go Checking README.md in CouplerMeas directory and use the correct readme_password !!!!")
+
+
 coupler = [machine.qubit_pairs[node.parameters.couplers]] # currently supports 1 coupler a time only.
 drive_q = [machine.qubits[coupler[0].extras["RD"]["driven_q"]]]
 detector_q = [machine.qubits[coupler[0].extras["RD"]["readout_q"]]]
 # Change driving LO
 if node.parameters.load_data_id is None and not node.parameters.simulate:
+    aswap_dir_update_is_q = True
     drive_LO_original = {drive_q[0].name: drive_q[0].xy.opx_output.upconverter_frequency}
     if node.parameters.Driving_LO_GHz is None:
         LO_to_plot = coupler[0].extras["RD"]["LO"]
@@ -75,6 +86,20 @@ if node.parameters.load_data_id is None and not node.parameters.simulate:
         drive_q[0].xy.opx_output.upconverter_frequency = node.parameters.Driving_LO_GHz*1e9
     if "swap_direction" in coupler[0].extras["RD"]:
         detector_q[0].z.operations['aSWAP'].slope_direction = coupler[0].extras["RD"]["swap_direction"]
+    if 'strategy' not in coupler[0].extras["RD"]:
+        readout_strategy = 'aswap'
+    else:
+        readout_strategy = coupler[0].extras["RD"]["strategy"]
+    
+    if coupler[0].extras["RD"]["aswap_supplier"].lower() == 'c':
+        print("*** aSWAP is applied on coupler itself !")
+        if not hasattr(coupler[0].coupler.operations, "aSWAP"):
+            raise  LookupError(f"aSWAP operation now is not in {coupler[0].name}.coupler.operation, please add it to unlock the ability for coupler's measurement!")
+        aswaper = coupler[0]
+        coupler[0].coupler.operations['aSWAP'].slope_direction = coupler[0].extras["RD"]["swap_direction"]
+        aswap_dir_update_is_q = False
+    else:
+        aswaper = None
     
 
 config = machine.generate_config()
@@ -148,9 +173,14 @@ with program() as qubit_spec:
         with for_(n, 0, n < n_avg, n + 1):
             save(n, n_st)
             with for_(*from_array(df, dfs)):
+                
+                align()
+                active_reset(detector_q[i])
+
+
                 # Update the qubit frequency
                 qubit.xy.update_frequency(df + coupler[0].extras["RD"]["IF"] + detunings[qubit.name])
-                
+                wait(4)
                 # qubit.xy.update_frequency(df + qubit.xy.intermediate_frequency + detunings[qubit.name] + 700e6) # for coupler search 
                 qubit.align()
                 if not node.parameters.simulate:
@@ -169,7 +199,7 @@ with program() as qubit_spec:
                 qubit.align()
 
                 # readout the resonator
-                readout_state_coupler(detector_q[i], state[i], method='aswap')
+                readout_state_coupler(detector_q[i], state[i], flux_applied_target=aswaper, method=readout_strategy)
                 save(state[i], state_st[i])
                 # Wait for the qubit to decay to the ground state
                 detector_q[i].resonator.wait(machine.depletion_time * u.ns)
@@ -317,7 +347,7 @@ if not node.parameters.simulate:
 
 
     # %% {Update_state}
-    if node.parameters.load_data_id is None and not node.parameters.simulate:
+    if not node.parameters.simulate:
         with node.record_state_updates():
             for q in drive_q:
                 x180_length = q.xy.operations["x180"].length
@@ -332,20 +362,25 @@ if not node.parameters.simulate:
                         coupler[0].extras["RD"]["IF"] += float(result.sel(qubit=q.name).position.values)
                         if node.parameters.Driving_LO_GHz is not None:
                             coupler[0].extras["RD"]["LO"] = node.parameters.Driving_LO_GHz * 1e9
-                        q.xy.operations["x180_cp"] = pulses.DragCosinePulse(
+                        # Default for thermalization time.
+                        if "T1" not in coupler[0].extras:
+                            coupler[0].extras["T1"] = 30e-6 
+
+                        # Initialize Driving pulse for coupler
+                        q.xy.operations[f"x180_{coupler[0].name}"] = pulses.DragCosinePulse(
                             amplitude=0.3,
                             alpha=0.0,
                             anharmonicity=f"#/qubits/{q.name}/anharmonicity",
-                            length=x180_length,
+                            length=32,
                             axis_angle=0,
                             detuning=0,
                             digital_marker="ON",
                         )
-                        q.xy.operations["x90_cp"] = pulses.DragCosinePulse(
+                        q.xy.operations[f"x90_{coupler[0].name}"] = pulses.DragCosinePulse(
                             amplitude=0.15,
                             alpha=0.0,
                             anharmonicity=f"#/qubits/{q.name}/anharmonicity",
-                            length=x180_length,
+                            length=32,
                             axis_angle=0,
                             detuning=0,
                             digital_marker="ON",
@@ -353,10 +388,15 @@ if not node.parameters.simulate:
         node.results["ds"] = ds
 
         # %% {Save_results}
-        for q in drive_q:
-            q.xy.opx_output.upconverter_frequency = drive_LO_original[q.name] # revert the driving LO
-        for q in detector_q:
-            q.z.operations['aSWAP'].slope_direction = -1
+        if node.parameters.load_data_id is None:
+            for q in drive_q:
+                q.xy.opx_output.upconverter_frequency = drive_LO_original[q.name] # revert the driving LO
+            if aswap_dir_update_is_q:
+                for q in detector_q:
+                    q.z.operations['aSWAP'].slope_direction = -1
+            else:
+                for c in coupler:
+                    c.coupler.operations['aSWAP'].slope_direction = -1
         node.outcomes = {q.name: "successful" for q in coupler}
         node.results["initial_parameters"] = node.parameters.model_dump()
         node.machine = machine

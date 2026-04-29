@@ -1,23 +1,17 @@
 """
-        T1 MEASUREMENT
-The sequence consists in putting the qubit in the excited stated by playing the x180 pulse and measuring the resonator
-after a varying time. The qubit T1 is extracted by fitting the exponential decay of the measured quadratures.
+The T1 for the target coupler.
 
 Prerequisites:
-    - Having found the resonance frequency of the resonator coupled to the qubit under study (resonator_spectroscopy).
-    - Having calibrated qubit pi pulse (x180) by running qubit spectroscopy, power_rabi and updated the state.
-    - (optional) Having calibrated the readout (readout_frequency, amplitude, duration_optimization IQ_blobs) for better SNR.
-    - Set the desired flux bias.
+    - pi_pulse for the coupler.
+    - node 08x to check the robustness for aSWAP method active reset if you want to use active reset.
 
-Next steps before going to the next node:
-    - Update the qubit T1 in the state.
+PS. load_data is working
 """
-
+## hihihi 
 # %% {Imports}
 from qualibrate import QualibrationNode, NodeParameters
 from quam_libs.components import QuAM
-from quam_libs.macros import qua_declaration, active_reset, readout_state, active_reset_simple, readout_state_coupler
-from quam_libs.lib.qua_datasets import convert_IQ_to_V
+from quam_libs.macros import qua_declaration, active_reset, active_reset_coupler, readout_state_coupler
 from quam_libs.lib.plot_utils import QubitGrid, grid_iter
 from quam_libs.lib.save_utils import fetch_results_as_xarray, load_dataset
 from quam_libs.lib.fit import fit_decay_exp, decay_exp
@@ -30,27 +24,29 @@ from qm.qua import *
 from typing import Literal, Optional, List
 import matplotlib.pyplot as plt
 import numpy as np
-from time import time 
+from time import time
 import xarray as xr
+from scipy.stats import norm
 
 
 # %% {Node_parameters}
 class Parameters(NodeParameters):
-    coupler: str = 'coupler_q4_q5'
-    coupler_flux_amp:float = -0.08
-    num_averages: int = 500
+    coupler: str = 'coupler_q6_q7'
+    num_averages: int = 250
     min_wait_time_in_ns: int = 16
-    max_wait_time_in_ns: int = 150016
-    wait_time_step_in_ns: int = 1500
+    max_wait_time_in_ns: int = 200016
+    wait_time_step_in_ns: int = 2000
+    reset_type: Literal["active", "thermal"] = "active"
     flux_point_joint_or_independent_or_arbitrary: Literal["joint", "independent"] = "independent"
     simulate: bool = False
-    simulation_duration_ns: int = 5000
+    simulation_duration_ns: int = 10000
     timeout: int = 100
     load_data_id: Optional[int] = None
-    histo_num:int = 50
+    debug: bool = False
+    histo_num:int = 1
 
 
-node = QualibrationNode(name="05x_coupler_FluxTuning_T1", parameters=Parameters())
+node = QualibrationNode(name="05x_coupler_T1", parameters=Parameters())
 
 
 # %% {Initialize_QuAM_and_QOP}
@@ -60,16 +56,30 @@ u = unit(coerce_to_integer=True)
 machine = QuAM.load()
 
 # Get the relevant QuAM components
-
 coupler = [machine.qubit_pairs[node.parameters.coupler]] # currently supports 1 coupler a time only.
 drive_q = [machine.qubits[coupler[0].extras["RD"]["driven_q"]]]
 detector_q = [machine.qubits[coupler[0].extras["RD"]["readout_q"]]]
+
 # Change driving LO
 if not node.parameters.simulate and node.parameters.load_data_id is None:
+    aswap_dir_update_is_q = True
     drive_LO_original = {drive_q[0].name: drive_q[0].xy.opx_output.upconverter_frequency}
     drive_q[0].xy.opx_output.upconverter_frequency = coupler[0].extras["RD"]["LO"]
     if "swap_direction" in coupler[0].extras["RD"]:
         detector_q[0].z.operations['aSWAP'].slope_direction = coupler[0].extras["RD"]["swap_direction"]
+    if 'strategy' not in coupler[0].extras["RD"]:
+        readout_strategy = 'aswap'
+    else:
+        readout_strategy = coupler[0].extras["RD"]["strategy"]
+    if coupler[0].extras["RD"]["aswap_supplier"].lower() == 'c':
+        print("*** aSWAP is applied on coupler itself !")
+        if not hasattr(coupler[0].coupler.operations, "aSWAP"):
+            raise  LookupError(f"aSWAP operation now is not in {coupler[0].name}.coupler.operation, please add it to unlock the ability for coupler's measurement!")
+        aswaper = coupler[0]
+        coupler[0].coupler.operations['aSWAP'].slope_direction = coupler[0].extras["RD"]["swap_direction"]
+        aswap_dir_update_is_q = False
+    else:
+        aswaper = None
 
 # Generate the OPX and Octave configurations
 config = machine.generate_config()
@@ -77,11 +87,6 @@ config = machine.generate_config()
 if node.parameters.load_data_id is None:
     qmm = machine.connect()
     
-
-
-# 
-detuned_qs = [machine.qubits[q] for q in node.parameters.coupler.split("_")[1:]]
-
 
 
 # %% {QUA_program}
@@ -106,6 +111,8 @@ with program() as t1:
     t = declare(int)  # QUA variable for the idle time
     
     state = [declare(int) for _ in range(len(detector_q))]
+    dummy_state = [declare(int) for _ in range(len(detector_q))]
+    flip_state = declare(int) 
     state_st = [declare_stream() for _ in range(len(detector_q))]
     if not node.parameters.simulate:
         machine.apply_all_couplers_to_min()
@@ -122,29 +129,25 @@ with program() as t1:
         with for_(n, 0, n < n_avg, n + 1):
             save(n, n_st)
             with for_(*from_array(t, idle_times)):
-                # if node.parameters.reset_type == "active":
-                #     # active_reset(qubit, "readout")
-                #     active_reset_simple(qubit, "readout")
-                # else:
-                if not node.parameters.simulate:
-                    if qubit.thermalization_time//5 > coupler[0].extras['T1']*1e9:
-                        wait(qubit.thermalization_time * u.ns)
-                    else:
-                        wait(5*coupler[0].extras['T1']*1e9 * u.ns)
+                if node.parameters.reset_type == "active":
+                    active_reset_coupler(qubit, detector_q[i], f"x180_{coupler[0].name}", flux_applied_target=aswaper, method='aswap')
+                    
+                else:
+                    if not node.parameters.simulate:
+                        if qubit.thermalization_time//5 > coupler[0].extras['T1']*1e9:
+                            wait(qubit.thermalization_time * u.ns)
+                        else:
+                            wait(10*coupler[0].extras['T1']*1e9 * u.ns)
+
+                align()
+                if not node.parameters.debug:
+                    qubit.xy.play(f"x180_{coupler[0].name}")
                 align()
                 
-                qubit.xy.play("x180_cp")
-                align()
-                coupler[0].coupler.play("const", amplitude_scale=node.parameters.coupler_flux_amp/coupler[0].coupler.operations["const"].amplitude, duration=t)
-                # for q in detuned_qs:
-                #     q.z.play("const", amplitude_scale=0.25 / q.z.operations["const"].amplitude, duration=t)
-                
-                align()
-                wait(100) # 400 ns flux settle down time.
-                
+                wait(t)
 
                 # Measure the state of the resonators
-                readout_state_coupler(detector_q[i], state[i], method='aswap')
+                readout_state_coupler(detector_q[i], state[i], flux_applied_target=aswaper, method=readout_strategy)
                 save(state[i], state_st[i])
 
 
@@ -171,11 +174,18 @@ if node.parameters.simulate:
     wf_report = job.get_simulated_waveform_report()
     wf_report.create_plot(samples, plot=True, save_path=None)
     node.save()
+
 else:
     if node.parameters.load_data_id is None:
         dss = []
         start = time()
-        for jj in range(node.parameters.histo_num):
+        target_counts = node.parameters.histo_num
+        current_success = 0
+        max_retries = target_counts + 5  # 設定一個總嘗試上限，避免無限迴圈
+        attempts = 0
+
+        while current_success < target_counts and attempts < max_retries:
+            attempts += 1
             try:
                 with qm_session(qmm, config, timeout=node.parameters.timeout) as qm:
                     job = qm.execute(t1)
@@ -184,23 +194,35 @@ else:
                         # Fetch results
                         n = results.fetch_all()[0]
                         # Progress bar
-                        progress_counter(n, n_avg, start_time=results.start_time)
+                        if target_counts <= 5:
+                            progress_counter(n, n_avg, start_time=results.start_time)
+                
                 ds = fetch_results_as_xarray(job.result_handles, coupler, {"idle_time": idle_times})
-                print(f"Counts: {jj+1}\n")
+                
                 dss.append(ds)
-            except:
-                print("Error got, break the loop and step into analysis.")
-                break
-        
+                current_success += 1
+                print(f"Counts: {current_success} (Total attempts: {attempts})")
+
+            except Exception as e:
+                print(f"Attempt {attempts} failed: {e}. Skipping...")
+                if (attempts - current_success) > 5:
+                    print("Too many consecutive failures. Stopping experiment.")
+                    break
+
         end = time()
         print(f"Total {round(end-start,1)} sec for {node.parameters.histo_num} counts")
         ds = xr.concat(dss, dim='iteration')
         ds = ds.assign_coords(idle_time=4 * ds.idle_time / u.us)  # convert to µs
         ds.idle_time.attrs = {"long_name": "idle time", "units": "µs"}
         node.results = {"ds": ds}
-
+        reload_qbs = False
+    
     else:
-        ds, machine, json_data, qubits, node.parameters = load_dataset(node.parameters.load_data_id, parameters = node.parameters)
+        node = node.load_from_id(node.parameters.load_data_id)
+        ds = node.results["ds"] 
+        machine = node.machine
+        reload_qbs = True
+
 
 # %% {Data_fetching_and_dataset_creation}
 if not node.parameters.simulate:
@@ -227,13 +249,20 @@ if not node.parameters.simulate:
             t1_collection[q_name].append(tau_val)
 
     # %% {Plotting}
+
     grid = QubitGrid(ds, [q.grid_location for q in drive_q])
     mu_collection, sig_collection = {}, {}
+    if reload_qbs:
+        coupler = [machine.qubit_pairs[c_name] for c_name in ds.qubit.values]
     for ax, qubit in grid_iter(grid):
         ## HARDcoded:
         qubit['qubit'] = coupler[0].name
         if node.parameters.histo_num > 1:
             data = np.array(t1_collection[qubit['qubit']])
+            lower_bound = np.percentile(data, 1)   # 下界
+            upper_bound = np.percentile(data, 99)  # 上界
+            data = data[(data >= lower_bound) & (data <= upper_bound)]
+            tot_c = len(data)
             counts, bins, _ = ax.hist(data, bins=15, alpha=0.7, color='skyblue', edgecolor='white', label='Counts')
             ### Normal distribution
             mu, sigma = norm.fit(data)
@@ -245,15 +274,13 @@ if not node.parameters.simulate:
         
             ### Plot
             ax.plot(x, p, 'r-', lw=2, label='Normal Fit')
-            ax.set_title(f"{qubit['qubit']} at additional offset {node.parameters.coupler_flux_amp} V")
+            ax.set_title(f"{qubit['qubit']}\n#={tot_c}")
             ax.set_xlabel("T1 (µs)")
             ax.set_ylabel("Counts")
             ax.grid(axis='y', alpha=0.3)
             
             stats_text = (
-                f"$\mu = {mu:.2f}$ µs\n"
-                f"$\sigma = {sigma:.2f}$ µs\n"
-                f"Total # = {len(data)}"
+                f"$T_{1} = {mu:.1f} \pm {sigma:.2f}$ µs"
             )
             ax.text(
                 0.05, 0.95, stats_text,
@@ -262,6 +289,7 @@ if not node.parameters.simulate:
                 verticalalignment="top",
                 bbox=dict(boxstyle="round", facecolor="white", alpha=0.7)
             )
+            
         else:
             fitted = decay_exp(
                 ds.idle_time,
@@ -274,11 +302,11 @@ if not node.parameters.simulate:
             tau = -1 / fit_collection[qubit['qubit']].sel(fit_vals="decay")
             tau_error = -tau * (np.sqrt(decay_res) / decay)
             
-            ds.sel(qubit=qubit["qubit"]).state.plot(ax=ax)
+            ds.sel(qubit=qubit["qubit"]).state.plot(ax=ax, marker='o', linestyle='', ms=3, alpha=0.65)
             ax.set_ylabel("State")
             
             ax.plot(ds.idle_time, fitted, "r--")
-            ax.set_title(qubit["qubit"]+f" at additional offset {node.parameters.coupler_flux_amp} V")
+            ax.set_title(qubit["qubit"])
             ax.set_xlabel("Idle_time (uS)")
             ax.text(
                 0.1,
@@ -291,25 +319,34 @@ if not node.parameters.simulate:
             )
             mu_collection[qubit['qubit']], sig_collection[qubit['qubit']] = float(tau.values), float(tau_error.values)
 
-
+    plt.suptitle(f"Coupler T1 with {node.parameters.reset_type} reset")
     plt.tight_layout()
     plt.show()
 
     node.results["t1_stats"] = {q: {"mu_us": mu_collection[q], "sigma_us": sig_collection[q]} for q in qbs}
     node.results["figure_histogram"] = grid.fig
 
-    #%% {save data}
-    if node.parameters.load_data_id is None:
-        
-        for q in drive_q:
-            q.xy.opx_output.upconverter_frequency = drive_LO_original[q.name] # revert the driving LO
-        for q in detector_q:
-            q.z.operations['aSWAP'].slope_direction = -1
+    # %% {update state}
+    if not node.parameters.simulate:
+        with node.record_state_updates():
+            if not node.parameters.simulate:
+                for c in coupler:
+                    c.extras["T1"] = float(mu_collection[c.name]) * 1e-6
+                    c.extras["T1_dev"] = float(mu_collection[c.name]) * 1e-6
+
+        #%% {save data}
+        if node.parameters.load_data_id is None:
+            for q in drive_q:
+                q.xy.opx_output.upconverter_frequency = drive_LO_original[q.name] # revert the driving LO
+            if aswap_dir_update_is_q:
+                for q in detector_q:
+                    q.z.operations['aSWAP'].slope_direction = -1
+            else:
+                for c in coupler:
+                    c.coupler.operations['aSWAP'].slope_direction = -1
         node.results["initial_parameters"] = node.parameters.model_dump()
         node.machine = machine
         node.save()
-        
-
 
 
 # %%

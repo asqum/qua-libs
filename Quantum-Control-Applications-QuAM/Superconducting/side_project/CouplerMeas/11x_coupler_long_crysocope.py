@@ -1,27 +1,9 @@
-"""
-        RESONATOR SPECTROSCOPY VERSUS FLUX
-This sequence involves measuring the resonator by sending a readout pulse and demodulating the signals to
-extract the 'I' and 'Q' quadratures. This is done across various readout intermediate dfs and flux biases.
-The resonator frequency as a function of flux bias is then extracted and fitted so that the parameters can be stored in the state.
-
-This information can then be used to adjust the readout frequency for the maximum and minimum frequency points.
-
-Prerequisites:
-    - Calibration of the time of flight, offsets, and gains (referenced as "time_of_flight").
-    - Calibration of the IQ mixer connected to the readout line (be it an external mixer or an Octave port).
-    - Identification of the resonator's resonance frequency (referred to as "resonator_spectroscopy").
-    - Configuration of the readout pulse amplitude and duration.
-    - Specification of the expected resonator depletion time in the state.
-
-Before proceeding to the next node:
-    - Update the relevant flux biases in the state.
-    - Save the current state
-"""
 
 # %% {Imports}
 from qualibrate import QualibrationNode, NodeParameters
 from quam_libs.components import QuAM
-from quam_libs.macros import qua_declaration, active_reset_simple, readout_state_coupler
+from quam.components.pulses import DragCosinePulse
+from quam_libs.macros import qua_declaration, active_reset_simple, readout_state_coupler, active_reset_coupler
 from quam_libs.lib.qua_datasets import convert_IQ_to_V
 from quam_libs.lib.save_utils import fetch_results_as_xarray
 from qualang_tools.results import progress_counter, fetching_tool
@@ -42,18 +24,20 @@ from typing import List, Tuple, Optional, Any
 
 # %% {Node_parameters}
 class Parameters(NodeParameters):
-
-    coupler: str = "coupler_q4_q5"
+    #TODO: Still in a deployment
+    coupler: str = "coupler_q3_q4"
     """List of qubit pair names to be measured. If None or empty, all active qubit pairs are measured."""
-    num_averages: int = 300
+    num_averages: int = 500
     """Number of averages for the measurement."""
-    frequency_span_in_mhz: float = 48
+    reset_type: Literal['active', 'thermal'] = 'active'
+    frequency_span_in_mhz: float = 300
     """Frequency span around the coupler RF frequency for the scan."""
-    frequency_step_in_mhz: float = 0.8
+    detuning_shift_MHz: float = -1.2
+    frequency_step_in_mhz: float = 5
     """Frequency step size for the scan."""
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
     """Whether to set flux point jointly for all qubits or independently."""
-    duration_in_ns: Optional[int] = 2_016
+    duration_in_ns: Optional[int] = 416
     """Total duration of the flux pulse in ns."""
     time_axis: Literal["linear", "log"] = "linear"
     """Type of time axis for the flux pulse duration sweep."""
@@ -61,9 +45,9 @@ class Parameters(NodeParameters):
     """Number of time steps for logarithmic time axis."""
     min_wait_time_in_ns: Optional[int] = 16
     """Minimum wait time in ns for the flux pulse duration sweep."""
-    coupler_flux: float = 0.1
+    coupler_flux: float = 0.002
     """Coupler flux value set  """
-    pi_pulse_duration_scale: int = 5 
+    pi_pulse_duration_scale: int = 3
     """Duration of the control qubit pulse in ns."""
     simulate: bool = False
     """Whether to simulate the QUA program instead of executing it."""
@@ -73,7 +57,7 @@ class Parameters(NodeParameters):
     """Timeout for the QOP session in seconds."""
     load_data_id: Optional[int] = None
     """If provided, load data from the specified node ID instead of executing the program."""
-
+    thermal_reset_extra_time_in_us: float = 10
     fitting_base_fractions: List[float] = [0.4, 0.15, 0.05]
     """Fitting coefs and can be editted later"""
 
@@ -101,7 +85,24 @@ if not node.parameters.simulate and node.parameters.load_data_id is None:
     drive_q[0].xy.opx_output.upconverter_frequency = coupler[0].extras["RD"]["LO"]
     if "swap_direction" in coupler[0].extras["RD"]:
         detector_q[0].z.operations['aSWAP'].slope_direction = coupler[0].extras["RD"]["swap_direction"]
+    if 'strategy' not in coupler[0].extras["RD"]:
+        readout_strategy = 'aswap'
+    else:
+        readout_strategy = coupler[0].extras["RD"]["strategy"]
 
+
+for q in drive_q:
+    operation_len = node.parameters.pi_pulse_duration_scale * q.xy.operations[f'x180_{coupler[0].name}'].length
+    factor = 1/node.parameters.pi_pulse_duration_scale
+    
+    q.xy.operations['x180_cp_long'] = DragCosinePulse(
+        digital_marker="ON",
+        axis_angle=0.0,
+        amplitude= factor * q.xy.operations[f'x180_{coupler[0].name}'].amplitude,
+        length=operation_len,
+        alpha=q.xy.operations['x180'].alpha,
+        anharmonicity=q.anharmonicity
+    )
 
 # Generate the OPX and Octave configurations
 config = machine.generate_config()
@@ -159,7 +160,7 @@ with program() as multi_res_spec_vs_flux:
             machine.set_all_fluxes(flux_point=flux_point, target=qubit)
             if "c" in qubit.id: qubit.z.set_dc_offset(qubit.z.joint_offset) # for coupler-test case
             qubit.z.settle()
-        new_du = node.parameters.pi_pulse_duration_scale*qubit.xy.operations['x180_cp'].length//4
+        new_du = node.parameters.pi_pulse_duration_scale*qubit.xy.operations[f'x180_{coupler[0].name}'].length//4
         align()
         with for_(n, 0, n < n_avg, n + 1):
             save(n, n_st)
@@ -167,28 +168,33 @@ with program() as multi_res_spec_vs_flux:
                 with for_each_(t_delay, times):
                     
                     # update the frequency of the control qubit
-                    qubit.xy.update_frequency(df + coupler[0].extras["RD"]["IF"])
                     
-                    if not node.parameters.simulate:
-                        if qubit.thermalization_time//5 > coupler[0].extras['T1']*1e9:
-                            wait(qubit.thermalization_time * u.ns)
-                        else:
-                            wait(5*coupler[0].extras['T1']*1e9 * u.ns)
+                    if node.parameters.reset_type == "active":
+                        active_reset_coupler(qubit, detector_q[i], f"x180_{coupler[0].name}", method='aswap')
+                        
+                    else:
+                        if not node.parameters.simulate:
+                            if qubit.thermalization_time//5 > coupler[0].extras['T1']*1e9:
+                                wait(qubit.thermalization_time * u.ns)
+                            else:
+                                wait(5*coupler[0].extras['T1']*1e9 * u.ns)
+                    if node.parameters.thermal_reset_extra_time_in_us:
+                        wait(node.parameters.thermal_reset_extra_time_in_us * u.us)
                     align()
-                    
+                    qubit.xy.update_frequency(df + coupler[0].extras["RD"]["IF"] + node.parameters.detuning_shift_MHz*u.MHz)
+                    wait(4)
+                    align()
                     qp.coupler.play(
                         "const",
                         amplitude_scale=node.parameters.coupler_flux / qp.coupler.operations["const"].amplitude,
-                        duration=t_delay,
+                        duration=t_delay+operation_len//4,
                     )
+                    qubit.xy.wait(t_delay)
+                    qubit.xy.play('x180_cp_long')
+                    qubit.xy.update_frequency(qubit.xy.intermediate_frequency)
                     align()
-                    qubit.xy.play(
-                        'x180_cp',
-                        amplitude_scale=1/node.parameters.pi_pulse_duration_scale,
-                        duration=new_du,
-                    )
                     
-                    readout_state_coupler(detector_q[0], state_target[i], method='aswap')
+                    readout_state_coupler(detector_q[0], state_target[i], method=readout_strategy)
                     save(state_target[i], state_stream_target[i])
         
 

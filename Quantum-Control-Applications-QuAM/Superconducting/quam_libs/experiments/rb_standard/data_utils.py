@@ -56,7 +56,7 @@ class RBResult:
         )
         recovery_probability.rename("Recovery Probability").plot.line()
 
-    def plot_with_fidelity(self):
+    def plot_with_fidelity(self, simultaneous_SQ_RB:bool=False):
         """
         Plots the RB fidelity as a function of circuit depth, including a fit to an exponential decay model.
         """
@@ -90,7 +90,10 @@ class RBResult:
         if type(self).__name__ == "InterleavedRBResult": # 避免迴圈 import 問題的寫法
             title = f"target gate fidelity = {self.fidelity * 100:.2f}%{err_str}"
         else:
-            title = f"2Q average Clifford fidelity = {self.fidelity * 100:.2f}%{err_str}"
+            if not simultaneous_SQ_RB:
+                title = f"2Q average Clifford fidelity = {self.fidelity * 100:.2f}%{err_str}"
+            else:
+                title = rf"1Q$\otimes$1Q Clifford Fidelity = {self.fidelity * 100:.2f}%{err_str}"
             
         plt.text(
             0.5,
@@ -193,12 +196,29 @@ class RBResult:
                 rb_decay_curve, self.circuit_depths, decay_curve, 
                 p0=p0, maxfev=10000
             )
+
+        print("***** ", popt)
             
         A, alpha, B = popt
+
         
         # 儲存參數與計算出來的誤差 (對角線開根號)
         self.alpha = alpha
         self.fit_errors = np.sqrt(np.diag(pcov)) 
+
+        # --- 新增：計算 R^2 ---
+        # 1. 根據擬合出的參數，計算理論上的預測值
+        fit_values = rb_decay_curve(self.circuit_depths, A, alpha, B)
+        
+        # 2. 計算殘差平方和 (Residual Sum of Squares)
+        ss_res = np.sum((decay_curve - fit_values) ** 2)
+        
+        # 3. 計算總平方和 (Total Sum of Squares)
+        ss_tot = np.sum((decay_curve - np.mean(decay_curve)) ** 2)
+        
+        # 4. 算出 R^2
+        r_squared = 1 - (ss_res / ss_tot)
+        self.r_squared = r_squared
 
         return A, alpha, B
     
@@ -332,6 +352,11 @@ def plot_combined_rb(qp_name, rb_result_SRB, rb_result_IRB, target_gate:str|None
     sequence_means_SRB = (rb_result_SRB.data.state == 0).mean(dim="average")
     error_bars_SRB = sequence_means_SRB.std(dim="repeat").data
 
+    irb_r_square = rb_result_IRB.r_squared.item()
+    srb_r_square = rb_result_SRB.r_squared.item()
+    
+    averaged_r_squarre = np.mean([irb_r_square, srb_r_square])
+
     # 動態產生誤差字串 (如果有計算出誤差的話)
     srb_err_str = f" \u00B1 {rb_result_SRB.fidelity_err * 100:.2f}%" if hasattr(rb_result_SRB, 'fidelity_err') else ""
 
@@ -353,7 +378,7 @@ def plot_combined_rb(qp_name, rb_result_SRB, rb_result_IRB, target_gate:str|None
         color="red",
         linestyle="--",
         linewidth=2,
-        label=f"SRB Fit (Clifford Fidelity = {rb_result_SRB.fidelity * 100:.2f}%{srb_err_str})",
+        label=f"SRB Fit (Clifford Fidelity = {rb_result_SRB.fidelity * 100:.2f}%)",
     )
     
     # ==========================================
@@ -386,14 +411,14 @@ def plot_combined_rb(qp_name, rb_result_SRB, rb_result_IRB, target_gate:str|None
         color="blue",
         linestyle="-",
         linewidth=2,
-        label=f"IRB Fit, IRB Decay = {rb_result_IRB.IRB_decayTau * 100:.2f}%{irb_decay_err_str}",
+        label=f"IRB Fit, IRB Decay = {rb_result_IRB.IRB_decayTau * 100:.2f}%",
     )
 
     # ==========================================
     # 3. 設定圖表標題與格式
     # ==========================================
     gate_name = "Target" if target_gate is None else target_gate
-    ax.set_title(f"{qp_name} {gate_name} Gate Fidelity = {rb_result_IRB.fidelity * 100:.2f}%{irb_err_str}", fontsize=16)
+    ax.set_title(f"{qp_name} {gate_name} Gate Fidelity = {rb_result_IRB.fidelity * 100:.2f}%", fontsize=16)
     
     ax.set_xlabel("Circuit Depth", fontsize=12)
     ax.set_ylabel(r"Probability to recover to $|00\rangle$", fontsize=12)
@@ -404,7 +429,7 @@ def plot_combined_rb(qp_name, rb_result_SRB, rb_result_IRB, target_gate:str|None
     # 4. [新增] 在圖表左下角加入 Repeat 資訊文字方塊
     # ==========================================
     num_repeats = rb_result_SRB.num_repeats
-    text_info = f"Random circuits per depth: {num_repeats}"
+    text_info = f"Random circuits per depth: {num_repeats}\n" + rf"$R^{2}$={averaged_r_squarre:.1%}"
     
     # 使用 ax.text，並設定 transform=ax.transAxes 讓座標比例以整張圖為基準 (0~1)
     ax.text(

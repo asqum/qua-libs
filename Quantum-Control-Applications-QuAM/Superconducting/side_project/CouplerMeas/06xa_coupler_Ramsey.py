@@ -16,7 +16,7 @@ from qualang_tools.loops import from_array
 from qualang_tools.multi_user import qm_session
 from qualang_tools.units import unit
 from quam_libs.components import QuAM
-from quam_libs.macros import qua_declaration, readout_state_coupler
+from quam_libs.macros import qua_declaration, readout_state_coupler, active_reset_coupler
 import matplotlib.pyplot as plt
 import numpy as np
 from quam_libs.lib.plot_utils import QubitGrid, grid_iter
@@ -30,11 +30,12 @@ import matplotlib.pyplot as plt
 class Parameters(NodeParameters):
     coupler: str = 'coupler_q4_q5'
 
-    num_averages: int = 5000
+    num_averages: int = 2000
     min_wait_time_in_ns: int = 16
     max_wait_time_in_ns: int = 516
-    frequency_detuning_in_mhz: float = 5.0
+    frequency_detuning_in_mhz: float = 6.0
     wait_time_step_in_ns: int = 4
+    reset_type: Literal['thermal', 'active'] = 'active'
     flux_point_joint_or_independent_or_arbitrary: Literal['joint', 'independent'] = 'independent'   
     simulate: bool = False
     timeout: int = 100
@@ -58,22 +59,31 @@ detector_q = [machine.qubits[coupler[0].extras["RD"]["readout_q"]]]
 
 # Change driving LO
 if not node.parameters.simulate:
+    aswap_dir_update_is_q = True
     drive_LO_original = {drive_q[0].name: drive_q[0].xy.opx_output.upconverter_frequency}
     drive_q[0].xy.opx_output.upconverter_frequency = coupler[0].extras["RD"]["LO"]
     if "swap_direction" in coupler[0].extras["RD"]:
         detector_q[0].z.operations['aSWAP'].slope_direction = coupler[0].extras["RD"]["swap_direction"]
+    if 'strategy' not in coupler[0].extras["RD"]:
+        readout_strategy = 'aswap'
+    else:
+        readout_strategy = coupler[0].extras["RD"]["strategy"]
+    if coupler[0].extras["RD"]["aswap_supplier"].lower() == 'c':
+        print("*** aSWAP is applied on coupler itself !")
+        if not hasattr(coupler[0].coupler.operations, "aSWAP"):
+            raise  LookupError(f"aSWAP operation now is not in {coupler[0].name}.coupler.operation, please add it to unlock the ability for coupler's measurement!")
+        aswaper = coupler[0]
+        coupler[0].coupler.operations['aSWAP'].slope_direction = coupler[0].extras["RD"]["swap_direction"]
+        aswap_dir_update_is_q = False
+    else:
+        aswaper = None
+    
 
 # Generate the OPX and Octave configurations
 config = machine.generate_config()
 # Open Communication with the QOP
 qmm = machine.connect()
 
-
-
-# pi pulse duration check
-if not node.parameters.simulate:
-    if drive_q[0].xy.operations['x180_cp'].length != detector_q[0].xy.operations['x180'].length:
-        raise ValueError(f"The duration of the pi pulse for the coupler and the qubit should be same for the echo sequence to be well aligned. Currently, the duration of the x180_cp pulse for the coupler {coupler[0].name} is {drive_q[0].xy.operations['x180_cp'].length} ns, while the duration of the x180 pulse for the qubit {detector_q[0].name} is {detector_q[0].xy.operations['x180'].length} ns. Please calibrate the pulses such that they have the same duration.")
 
 # %% {QUA_program}
 n_avg = node.parameters.num_averages  # The number of averages
@@ -132,21 +142,24 @@ with program() as Ramsey:
                         assign(virtual_detuning_phases[i], Cast.mul_fixed_by_int(-detuning * 1e-9, 4 * t))
                     align()
                     
-                    if not node.parameters.simulate:
-                        if qubit.thermalization_time//5 > coupler[0].extras['T1']*1e9:
-                            wait(qubit.thermalization_time * u.ns)
-                        else:
-                            wait(5*coupler[0].extras['T1']*1e9 * u.ns)
+                    if node.parameters.reset_type == "active":
+                        active_reset_coupler(qubit, detector_q[i], f"x180_{coupler[0].name}", flux_applied_target=aswaper, method='aswap')
+                    else:
+                        if not node.parameters.simulate:
+                            if qubit.thermalization_time//5 > coupler[0].extras['T1']*1e9:
+                                wait(qubit.thermalization_time * u.ns)
+                            else:
+                                wait(5*coupler[0].extras['T1']*1e9 * u.ns)
                     
                     align()  
-                    qubit.xy.play("x90_cp")
+                    qubit.xy.play(f"x90_{coupler[0].name}")
                     wait(t)
                     qubit.xy.frame_rotation_2pi(virtual_detuning_phases[i])
-                    qubit.xy.play("x90_cp")
+                    qubit.xy.play(f"x90_{coupler[0].name}")
                     align()
 
                     # Measure the state of the resonators
-                    readout_state_coupler(detector_q[i], state[i], method='aswap')
+                    readout_state_coupler(detector_q[i], state[i], flux_applied_target=aswaper, method=readout_strategy)
                     save(state[i], state_st[i])
 
             align()
@@ -280,8 +293,12 @@ if not node.parameters.simulate :
     # %%{Save data}
     for q in drive_q:
         q.xy.opx_output.upconverter_frequency = drive_LO_original[q.name] # revert the driving LO
-    for q in detector_q:
-        q.z.operations['aSWAP'].slope_direction = -1
+    if aswap_dir_update_is_q:
+        for q in detector_q:
+            q.z.operations['aSWAP'].slope_direction = -1
+    else:
+        for c in coupler:
+            c.coupler.operations['aSWAP'].slope_direction = -1
     node.results['initial_parameters'] = node.parameters.model_dump()
     node.machine = machine
     node.save()

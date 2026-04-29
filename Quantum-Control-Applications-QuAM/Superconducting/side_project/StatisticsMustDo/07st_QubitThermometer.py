@@ -25,8 +25,8 @@ Next steps before going to the next node:
 import matplotlib.pyplot as plt
 import numpy as np
 import xarray as xr
-
-from qualibrate import QualibrationNode
+from typing import List, Literal, Optional
+from qualibrate import QualibrationNode, NodeParameters
 from quam_libs.components import QuAM
 from quam_libs.experiments.iq_blobs.fetch_dataset import fetch_dataset
 from quam_libs.experiments.iq_blobs.parameters import Parameters
@@ -48,21 +48,24 @@ from quam_libs.lib.qubit_thermometer import repetition_data, StateDiscrimination
 
 
 # %% {Node_parameters}
+class Parameters(NodeParameters):
+    qubits: Optional[List[str]] = None #The qubit to be measured. If None, all active qubits will be measured
+    num_runs: int = 2048*2
+    flux_point_joint_or_independent_or_arbitrary: Literal['joint', 'independent'] = 'independent'   
+    simulate: bool = False
+    timeout: int = 100
+    use_state_discrimination: bool = True
+    reset_type: Literal['thermal'] = "thermal"
+    load_data_id: Optional[int] = None
+    multiplexed: bool = 1
+    histo_num:int = 1
+    
+
 node = QualibrationNode(
-    name="07bx_QubitThermometer",
-    parameters=Parameters(
-        qubits=None,
-        flux_point_joint_or_independent="independent",
-        num_runs=4096,
-        load_data_id=None,
-        simulate=False,
-        simulation_duration_ns=1000,
-        use_waveform_report=False,
-        multiplexed=True
-    )
+    name="07st_QubitThermometer_histogram",
+    parameters=Parameters()
 )
-# statistics number
-histo_num:int = 1
+
 
 # %% {Initialize_QuAM_and_QOP}
 u = unit(coerce_to_integer=True)
@@ -79,9 +82,9 @@ config = machine.generate_config()
 
 # %% {QUA_program}
 n_runs = node.parameters.num_runs
-flux_point = node.parameters.flux_point_joint_or_independent
-reset_type = node.parameters.reset_type_thermal_or_active
-operation_name = node.parameters.operation_name
+flux_point = node.parameters.flux_point_joint_or_independent_or_arbitrary
+reset_type = node.parameters.reset_type
+operation_name = 'readout'
 
 with program() as iq_blobs:
     reset_global_phase()
@@ -167,7 +170,7 @@ else:
         dss = []
         start = time()
         
-        target_counts = histo_num
+        target_counts = node.parameters.histo_num
         current_success = 0
         max_retries = target_counts + 5  # 設定一個總嘗試上限，避免無限迴圈
         attempts = 0
@@ -197,9 +200,12 @@ else:
         print(f"Total {round(end-start,1)} sec for {current_success} counts")
         ds = xr.concat(dss, dim='iteration')
         node.results = {"ds": ds, "figs": {}, "results": {}}
+        reload_qbs = False
     else:
         node = node.load_from_id(node.parameters.load_data_id)
-        ds = node.results["ds"]
+        ds = node.results["ds"] 
+        machine = node.machine
+        reload_qbs = True
 
 
 # %% {analysis}
@@ -236,7 +242,9 @@ if not node.parameters.simulate:
 
     #%% {Plot}
     mu_collection, sig_collection = {}, {}
-    if histo_num == 1:
+    if reload_qbs:
+        qubits = [machine.qubits[q] for q in list(models.keys())]
+    if node.parameters.histo_num == 1:
         ## prepare ground 1D histogram
         grid = QubitGrid(ds, [q.grid_location for q in qubits])
         for ax, qubit in grid_iter(grid):
@@ -334,7 +342,7 @@ if not node.parameters.simulate:
     if node.parameters.load_data_id is None:
         with node.record_state_updates():
             for qubit in qubits:
-                if histo_num >= 100:
+                if node.parameters.histo_num >= 100:
                     qubit.extras['Teff_mK'] = mu_collection[qubit.name]
                     qubit.extras['Teff_mK_dev'] = sig_collection[qubit.name]
 

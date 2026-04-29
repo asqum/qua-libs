@@ -34,6 +34,7 @@ class Parameters(NodeParameters):
     time_scale:Literal["log"] = "log"
     reset_type: Literal['active', 'thermal'] = "active"
     multiplexed: bool = True
+    load_data_id: Optional[int] = None
     histo_num:int = 1
 
 node = QualibrationNode(
@@ -166,52 +167,60 @@ if node.parameters.simulate:
     node.save()
 
 else:
-    dss = []
-    start = time()
-    target_counts = node.parameters.histo_num
-    current_success = 0
-    max_retries = target_counts + 5  # 設定一個總嘗試上限，避免無限迴圈
-    attempts = 0
 
-    while current_success < target_counts and attempts < max_retries:
-        attempts += 1
-        try:
-            with qm_session(qmm, config, timeout=node.parameters.timeout) as qm:
-                job = qm.execute(t1)
-                # Get results from QUA program
-                data_list = ["n"]
-                results = fetching_tool(job, data_list, mode="live")
-                # Live plotting
-                # fig, axes = plt.subplots(2, num_qubits, figsize=(4 * num_qubits, 8))
-                # interrupt_on_close(fig, job)  # Interrupts the job when closing the figure
-                while results.is_processing():
-                # Fetch results
-                    fetched_data = results.fetch_all()
-                    n = fetched_data[0]
-                    if target_counts <= 5:
-                        progress_counter(n, n_avg, start_time=results.start_time)
-            
-            ds = fetch_results_as_xarray(job.result_handles, qubits, {"idle_time": idle_times})
+    if node.parameters.load_data_id is None:
+        dss = []
+        start = time()
+        target_counts = node.parameters.histo_num
+        current_success = 0
+        max_retries = target_counts + 5  # 設定一個總嘗試上限，避免無限迴圈
+        attempts = 0
 
-            if not node.parameters.use_state_discrimination:
-                ds = convert_IQ_to_V(ds, qubits)
-            
-            dss.append(ds)
-            current_success += 1
-            print(f"Counts: {current_success} (Total attempts: {attempts})")
-        except Exception as e:
-            print(f"Attempt {attempts} failed: {e}. Skipping...")
-            if (attempts - current_success) > 5:
-                print("Too many consecutive failures. Stopping experiment.")
-                break
-    
-    end = time()
-    print(f"Total {round(end-start,1)} sec for {node.parameters.histo_num} counts")
-    ds = xr.concat(dss, dim='iteration')
+        while current_success < target_counts and attempts < max_retries:
+            attempts += 1
+            try:
+                with qm_session(qmm, config, timeout=node.parameters.timeout) as qm:
+                    job = qm.execute(t1)
+                    # Get results from QUA program
+                    data_list = ["n"]
+                    results = fetching_tool(job, data_list, mode="live")
+                    # Live plotting
+                    # fig, axes = plt.subplots(2, num_qubits, figsize=(4 * num_qubits, 8))
+                    # interrupt_on_close(fig, job)  # Interrupts the job when closing the figure
+                    while results.is_processing():
+                    # Fetch results
+                        fetched_data = results.fetch_all()
+                        n = fetched_data[0]
+                        if target_counts <= 5:
+                            progress_counter(n, n_avg, start_time=results.start_time)
+                
+                ds = fetch_results_as_xarray(job.result_handles, qubits, {"idle_time": idle_times})
 
-    ds = ds.assign_coords(idle_time=8*ds.idle_time/1e3)  # convert to usec
-    ds.idle_time.attrs = {'long_name': 'idle time', 'units': 'usec'}
-    node.results = {"ds": ds}
+                if not node.parameters.use_state_discrimination:
+                    ds = convert_IQ_to_V(ds, qubits)
+                
+                dss.append(ds)
+                current_success += 1
+                print(f"Counts: {current_success} (Total attempts: {attempts})")
+            except Exception as e:
+                print(f"Attempt {attempts} failed: {e}. Skipping...")
+                if (attempts - current_success) > 5:
+                    print("Too many consecutive failures. Stopping experiment.")
+                    break
+        
+        end = time()
+        print(f"Total {round(end-start,1)} sec for {node.parameters.histo_num} counts")
+        ds = xr.concat(dss, dim='iteration')
+
+        ds = ds.assign_coords(idle_time=8*ds.idle_time/1e3)  # convert to usec
+        ds.idle_time.attrs = {'long_name': 'idle time', 'units': 'usec'}
+        node.results = {"ds": ds}
+        reload_qbs = False
+    else:
+        node = node.load_from_id(node.parameters.load_data_id)
+        ds = node.results["ds"] 
+        machine = node.machine
+        reload_qbs = True
 
 
 # %% {Data_analysis}
@@ -245,7 +254,8 @@ if not node.parameters.simulate:
     # %% {Plotting}
     
     mu_collection, sig_collection = {}, {}
-    
+    if reload_qbs:
+        qubits = [machine.qubits[q] for q in qbs]
     
     if node.parameters.histo_num > 1:
         grid = QubitGrid(ds, [q.grid_location for q in qubits])

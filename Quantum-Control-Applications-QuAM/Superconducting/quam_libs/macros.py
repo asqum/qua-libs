@@ -223,6 +223,50 @@ def active_reset(
     if save_qua_var is not None:
         save(attempts, save_qua_var)
 
+def active_reset_coupler(
+        drive_qubit: Transmon,
+        read_qubit: Transmon,
+        pi_pulse_name: str,
+        flux_applied_target:Transmon|TransmonPair|None = None,
+        save_qua_var: Optional[StreamType] = None,
+        max_attempts: int = 15,
+        method:Literal['standard', 'aswap'] = 'aswap'):
+    if method == 'standard':
+        state = declare(int)
+        true_int = declare(int, value=1)
+        cond = declare(bool)
+        attempts = declare(int, value=1)
+        align()
+        readout_state_coupler(read_qubit, state, method='aswap', flux_applied_target=flux_applied_target)
+        assign(cond, state==true_int)
+        align()
+        drive_qubit.xy.play(pi_pulse_name, condition=cond)
+        align()
+        with while_(broadcast.and_(cond, attempts < max_attempts)):
+            align()
+            wait(4)
+            reset_if_phase(read_qubit.resonator.name)
+            wait(4)
+            readout_state_coupler(read_qubit, state, method='aswap', flux_applied_target=flux_applied_target)
+            assign(cond, state==true_int)
+            align()
+            drive_qubit.xy.play(pi_pulse_name, condition=cond)
+            align()
+            assign(attempts, attempts + 1)
+        wait(250)
+        if save_qua_var is not None:
+            save(attempts, save_qua_var)
+    else:
+
+        align()
+        active_reset(drive_qubit)
+        active_reset(read_qubit)
+        readout_state_coupler(read_qubit, state=None, method='aswap', flux_applied_target=flux_applied_target)
+        align()
+        active_reset(drive_qubit)
+        active_reset(read_qubit)
+        align()
+        
 
 def split_bipolar_macro(
         qbORqp:Transmon|TransmonPair,
@@ -254,7 +298,7 @@ def split_bipolar_macro(
 
 def readout_state_coupler(
         qb2read:Transmon,
-        state: QuaVariable,
+        state: QuaVariable|None,
         method:Literal["aswap", "3tone", "zz-pi"],
         flux_applied_target:Transmon|TransmonPair|None = None,
         readout_gef:bool = False,
@@ -280,6 +324,8 @@ def readout_state_coupler(
     match method:
         case "aswap":
             try:
+                
+                align()
                 if flux_applied_target is not None:
                     if isinstance(flux_applied_target, TransmonPair):
                         if assign_aswap_duration is None:
@@ -300,10 +346,11 @@ def readout_state_coupler(
                 align()
                 if buffer_b4_readout:
                     wait(25) # optional wait time, 40ns is recommended by Li-Chieh  
-                if not readout_gef:
-                    readout_state(qb2read, state=state, pulse_name='readout')
-                else:
-                    readout_state_gef(qb2read, state=state, pulse_name='readout')
+                if state is not None:
+                    if not readout_gef:
+                        readout_state(qb2read, state=state, pulse_name='readout')
+                    else:
+                        readout_state_gef(qb2read, state=state, pulse_name='readout')
             except:
                 print("Got an issue when performing the aSWAP readout. Please check if the flux pulse is properly configured with the name 'aSWAP' in the state.json")
         case "zz-pi":
