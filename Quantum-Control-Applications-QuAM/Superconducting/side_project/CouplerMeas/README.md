@@ -17,7 +17,8 @@
                 }
             }
         }
-    5. 
+    5. All these scripts are temporarily supported only for VScode.
+    6. All the nodes currently support only 1 coupler for a single run.
 ##  _**Standard**_ - Sweet Spot Information included
     1. 03xa - Tuning driving LO to widely search a suspicious signal by 2-tone measurement.
                 - Update: driving frequency, and Initialize π-pulse parameters.
@@ -61,6 +62,7 @@
 
 ## **CZ Focusing** - The operation point frequency, make sure your CZ gate is now available (node 61 updated)
     1. 12x  - Use BOTH SQUARE flux pulse with different duration and coupler flux amplitude to measure CZ coupling strength.
+                - Status: Testing
                 - Warning: Since your CZ may not be composed with BOTH SQUARE, the measured coupling strength might be slightly different.
                 - Update: An additional information 'CZgMHz_bias_conversion' in extras recorded the conversion between specific g_CZ to coupler's flux amplitude.   
     2. 03xc - Applied the flux amplitude obtained from node 12x while coupler's 2tone measurement.
@@ -73,5 +75,6 @@
         - Warnings:  Once you set it "c", please make sure you have aSWAP operation in your coupler.coupler.operation. This amplitude needs to be dynamically adjusted by node 03xb.
 
 
+* Version: 2026/05/03
 * If any **BUG** were found, please reach out to Ratis Wu (AS) **:P**
 * Congrats ! You have gone through this doc. **`readme_password = '0xffe8' `** Use it in 03xa's node parameters then start the measurements.
