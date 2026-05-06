@@ -152,6 +152,7 @@ def run_batched_rb(couplers:list,depth_type:Literal["short", "standard", "long"]
             batch_results = {}
             for RB_type, RB_circuit in {"SRB": circuits_as_ints_SRB, "IRB": circuits_as_ints_IRB}.items():
                 switch:bool = True
+                qm = None
                 max_try = 3
                 while switch:
                     try:
@@ -178,6 +179,7 @@ def run_batched_rb(couplers:list,depth_type:Literal["short", "standard", "long"]
                     
                     except Exception as e:
                         print(f"{e} while job is running, run it again")
+                        qm.close()
                         max_try -= 1
                         if max_try > 0:
                             switch = True

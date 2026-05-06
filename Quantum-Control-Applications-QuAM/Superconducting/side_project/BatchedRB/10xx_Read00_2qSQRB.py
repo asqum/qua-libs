@@ -44,7 +44,8 @@ def run_batched_simutanSQRB(couplers:list, total_circuits: int = 50, data_id_to_
         raise ValueError(f"random circuits per length must >=2, please reduce your depth by {math.ceil(depth_sum-maximum_depth_sum)}.")
    
     BATCH_SIZE = min(max_randomness, total_circuits)
-    num_batches = total_circuits // BATCH_SIZE 
+    num_batches = math.ceil(total_circuits / BATCH_SIZE)
+    total_circuits = num_batches * BATCH_SIZE # actually we ran
     
     class Parameters(NodeParameters):
         qubit_pairs: Optional[List[str]] = couplers
@@ -87,7 +88,7 @@ def run_batched_simutanSQRB(couplers:list, total_circuits: int = 50, data_id_to_
 
     if node.parameters.load_data_id is None:
         for b in range(num_batches):
-            print(f"\n>>> 正在執行批次 {b+1}/{num_batches} (電路索引: {b*BATCH_SIZE} 到 {(b+1)*BATCH_SIZE-1})")
+            print(f"\n>>> BATCH @ {b+1}/{num_batches} (Random Circuit Depth: {b*BATCH_SIZE} ~ {(b+1)*BATCH_SIZE-1})")
             
             # 讓每一批次的 seed 不同，確保產生不同的隨機電路
             current_seed = node.parameters.seed + b if node.parameters.seed is not None else None
@@ -128,28 +129,39 @@ def run_batched_simutanSQRB(couplers:list, total_circuits: int = 50, data_id_to_
                 rb_prog = qua_program_handler.get_qua_program()
 
                 config = node.machine.generate_config()
-                
-                with qm_session(node.machine.qmm, config, timeout=node.parameters.timeout) as qm:
-                    job = qm.execute(rb_prog)
-                    results = fetching_tool(job, ["iteration"], mode="live")
-                    while results.is_processing():
-                        n = results.fetch_all()[0]
-                        progress_counter(n, node.parameters.num_averages, start_time=results.start_time)
+                max_try = 5
+                while max_try > 0:
+                    qm = None
+                    try:
+                        with qm_session(node.machine.qmm, config, timeout=node.parameters.timeout) as qm:
+                            job = qm.execute(rb_prog)
+                            results = fetching_tool(job, ["iteration"], mode="live")
+                            while results.is_processing():
+                                n = results.fetch_all()[0]
+                                progress_counter(n, node.parameters.num_averages, start_time=results.start_time)
 
-                    ds = fetch_results_as_xarray(
-                        job.result_handles,
-                        qubit_pairs,
-                        {"sequence": range(BATCH_SIZE), "depths": length_incluse_inverse, "shots": range(node.parameters.num_averages)},
-                    )
-                    
-                    # 修改 sequence 座標避免合併時衝突
-                    ds = ds.assign_coords(sequence=[i + b * BATCH_SIZE for i in range(BATCH_SIZE)])
-                    batch_results[RB_type] = ds
+                            ds = fetch_results_as_xarray(
+                                job.result_handles,
+                                qubit_pairs,
+                                {"sequence": range(BATCH_SIZE), "depths": length_incluse_inverse, "shots": range(node.parameters.num_averages)},
+                            )
+                            
+                            # 修改 sequence 座標避免合併時衝突
+                            ds = ds.assign_coords(sequence=[i + b * BATCH_SIZE for i in range(BATCH_SIZE)])
+                            batch_results[RB_type] = ds
+                            
+                            max_try = 0
+                    except:
+                        qm.close()
+                        max_try -= 0
+                        if max_try == 0:
+                            raise RuntimeError(f"Over {max_try} Error were caught at {b+1} batch, we stop the experiment. Please check the issues !")
                     sleep(2)
+
 
             srb_ds_list.append(batch_results["SQRB"])
     
-        print("\n>>> 所有批次執行完畢，正在合併數據...")
+        print("\n>>> All batches finished, merging all the data now...")
         final_avg_layers = np.mean(all_layers_per_clifford)
         node.results["final_avg_layers"] = final_avg_layers
         node.results["total_circuits"] = total_circuits
@@ -200,7 +212,7 @@ def run_batched_simutanSQRB(couplers:list, total_circuits: int = 50, data_id_to_
                 use_weights=True
             )
             
-            fig = srb_result[qp.id].plot_with_fidelity(conjugated_SQ_RB=True)
+            fig = srb_result[qp.id].plot_with_fidelity(simultaneous_SQ_RB=True)
             fidelity[qp.id]=srb_result[qp.id].fidelity
             ax = fig.axes[0]
             
@@ -222,7 +234,7 @@ def run_batched_simutanSQRB(couplers:list, total_circuits: int = 50, data_id_to_
 
 if __name__ == '__main__':
     # 100 random circuits takes ~ 4000 sec
-    couplers = ['coupler_q4_q5']
-    random_gates_per_depth:int = 100
+    couplers = ['coupler_q7_q8']
+    random_gates_per_depth:int = 125
     job_id:int|None = None
     fidelities, names = run_batched_simutanSQRB(couplers, random_gates_per_depth, job_id, time_mark=True)

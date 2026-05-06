@@ -93,7 +93,7 @@ class RBResult:
             if not simultaneous_SQ_RB:
                 title = f"2Q average Clifford fidelity = {self.fidelity * 100:.2f}%{err_str}"
             else:
-                title = rf"1Q$\otimes$1Q Clifford Fidelity = {self.fidelity * 100:.2f}%{err_str}"
+                title = rf"1Q$\otimes$1Q gate Fidelity = {(1 - (1-self.fidelity)/1.875) * 100:.2f}%{err_str}"
             
         plt.text(
             0.5,
