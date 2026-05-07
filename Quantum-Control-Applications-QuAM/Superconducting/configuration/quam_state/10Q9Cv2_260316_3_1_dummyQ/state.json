@@ -8,7 +8,7 @@
                         "length": 1100,
                         "digital_marker": "ON",
                         "axis_angle": 0,
-                        "amplitude": 0.5643361642597163,
+                        "amplitude": 0.5622568410930175,
                         "alpha": 0.0,
                         "anharmonicity": "#/qubits/q1/anharmonicity",
                         "__class__": "quam.components.pulses.DragCosinePulse"
@@ -17,7 +17,7 @@
                         "length": "#../x180_DragCosine/length",
                         "digital_marker": "ON",
                         "axis_angle": 0,
-                        "amplitude": 0.28216808212985817,
+                        "amplitude": 0.2811284205465088,
                         "alpha": 0.0,
                         "anharmonicity": "#../x180_DragCosine/anharmonicity",
                         "__class__": "quam.components.pulses.DragCosinePulse"
@@ -118,7 +118,7 @@
                         "__class__": "quam.components.pulses.SquarePulse"
                     }
                 },
-                "intermediate_frequency": 298981192.08530647,
+                "intermediate_frequency": 298969856.02289826,
                 "thread": "a",
                 "opx_output": "#/wiring/qubits/q1/xy/opx_output",
                 "__class__": "quam.components.channels.MWChannel"
@@ -140,21 +140,21 @@
                 "depletion_time": 1000,
                 "confusion_matrix": [
                     [
-                        0.85925,
-                        0.14075
+                        0.867,
+                        0.133
                     ],
                     [
-                        0.29225,
-                        0.70775
+                        0.3705,
+                        0.6295
                     ]
                 ],
                 "operations": {
                     "readout": {
-                        "length": 2000,
-                        "amplitude": 0.46702731067799796,
-                        "threshold": -0.0010152321284523033,
-                        "rus_exit_threshold": -0.001244980050336729,
-                        "integration_weights_angle": 0.8864786493069055,
+                        "length": 2400,
+                        "amplitude": 0.3536749561787268,
+                        "threshold": -0.0009792514276262855,
+                        "rus_exit_threshold": -0.0011854412387425277,
+                        "integration_weights_angle": -5.673709004005934,
                         "__class__": "quam.components.pulses.SquareReadoutPulse"
                     },
                     "const": {
@@ -163,7 +163,7 @@
                         "__class__": "quam.components.pulses.SquarePulse"
                     }
                 },
-                "intermediate_frequency": -175050504,
+                "intermediate_frequency": -174950504,
                 "thread": "a",
                 "opx_input": "#/wiring/qubits/q1/rr/opx_input",
                 "time_of_flight": 408,
@@ -171,16 +171,20 @@
                 "__class__": "quam_libs.components.readout_resonator.ReadoutResonatorMW"
             },
             "freq_vs_flux_01_quad_term": -5450988843.102624,
-            "T1": 5.101697552045943e-06,
-            "T2ramsey": 4.37008784048437e-06,
-            "T2echo": 8.435235132089075e-06,
+            "T1": 3.807528987110556e-06,
+            "T2ramsey": 2.6369198153955937e-06,
+            "T2echo": 6.4386391946750515e-06,
             "phi0_current": 51.408217334922114,
             "phi0_voltage": 1.0281643466984423,
-            "chi": -25000.0,
+            "chi": -50000.0,
             "grid_location": "0,0",
             "extras": {
-                "T1_dev": 2.434356077159876e-07,
-                "T1": 5.101697552045943e-06
+                "T1_dev": 6.274952892361627e-07,
+                "T1": 4.689163523655144e-06,
+                "T2ramsey": 3.0915217391304348e-06,
+                "T2ramsey_dev": 6.956009831708691e-07,
+                "T2": 6.4386391946750515e-06,
+                "T2_dev": 7.032038504411429e-07
             },
             "__class__": "quam_libs.components.transmon.Transmon"
         }
