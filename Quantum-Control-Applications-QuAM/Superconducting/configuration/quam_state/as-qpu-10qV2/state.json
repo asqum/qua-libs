@@ -2560,51 +2560,17 @@
                     "phase_shift_target": 0.24116826057434082,
                     "__class__": "quam_libs.components.gates.two_qubit_gates.CZGate"
                 },
-                "Cz_square_cosine": {
-                    "flux_pulse_control": {
-                        "length": 48,
-                        "id": "flux_pulse_control_q3_q4",
-                        "amplitude": 0.11012218359935284,
-                        "__class__": "quam.components.pulses.SquarePulse"
-                    },
-                    "coupler_flux_pulse": {
-                        "length": 48,
-                        "id": "coupler_flux_pulse_q3_q4",
-                        "amplitude": -0.188,
-                        "__class__": "quam_libs.lib.pulses.CosineFluxPulse"
-                    },
-                    "phase_shift_control": 0.9487734469473152,
-                    "phase_shift_target": 0.2165787994836279,
-                    "__class__": "quam_libs.components.gates.two_qubit_gates.CZGate"
-                },
-                "Cz_square_flattop": {
-                    "flux_pulse_control": {
-                        "length": 44,
-                        "id": "flux_pulse_control_q3_q4",
-                        "amplitude": 0.11572701909184771,
-                        "__class__": "quam.components.pulses.SquarePulse"
-                    },
-                    "coupler_flux_pulse": {
-                        "length": 44,
-                        "id": "coupler_flux_pulse_q3_q4",
-                        "amplitude": -0.14200000000000002,
-                        "flat_length": 24,
-                        "__class__": "quam_libs.lib.pulses.CosineFlatTopPulse"
-                    },
-                    "phase_shift_control": 0.8340214584731647,
-                    "phase_shift_target": 0.22372547579496882,
-                    "__class__": "quam_libs.components.gates.two_qubit_gates.CZGate"
-                },
+                
                 "Cz_flattop": {
                     "flux_pulse_control": {
-                        "length": 48,
+                        "length": 108,
                         "id": "flux_pulse_control_q3_q4",
                         "amplitude": 0.11779228989504763,
                         "flat_length": 40,
                         "__class__": "quam_libs.lib.pulses.CosineFlatTopPulse"
                     },
                     "coupler_flux_pulse": {
-                        "length": 48,
+                        "length": 108,
                         "id": "coupler_flux_pulse_q3_q4",
                         "amplitude": -0.12199872236251832,
                         "flat_length": 40,
@@ -2628,7 +2594,7 @@
                     },
                     "__class__": "quam_libs.components.gates.two_qubit_gates.CZGate"
                 },
-                "Cz": "#./Cz_square_flattop"
+                "Cz": "#./Cz_bipolar"
             },
             "detuning": 0.123,
             "confusion": [
@@ -2747,116 +2713,7 @@
                     },
                     "__class__": "quam_libs.components.gates.two_qubit_gates.CZGate"
                 },
-                "Cz_square_cosine": {
-                    "flux_pulse_control": {
-                        "length": 44,
-                        "id": "flux_pulse_control_q5_q4",
-                        "amplitude": 0.11132754119872325,
-                        "__class__": "quam_libs.lib.pulses.FluxPulse"
-                    },
-                    "coupler_flux_pulse": {
-                        "length": 44,
-                        "id": "coupler_flux_pulse_q5_q4",
-                        "amplitude": -0.11830598694831936,
-                        "__class__": "quam_libs.lib.pulses.CosineFluxPulse"
-                    },
-                    "phase_shift_control": -0.06377851963043213,
-                    "phase_shift_target": 0.17894840240478516,
-                    "__class__": "quam_libs.components.gates.two_qubit_gates.CZGate"
-                },
-                "Cz_square_flattop": {
-                    "flux_pulse_control": {
-                        "length": 40,
-                        "id": "flux_pulse_control_q5_q4",
-                        "amplitude": 0.11547133115192203,
-                        "__class__": "quam_libs.lib.pulses.FluxPulse"
-                    },
-                    "coupler_flux_pulse": {
-                        "length": 40,
-                        "id": "coupler_flux_pulse_q5_q4",
-                        "amplitude": -0.09050152062406398,
-                        "flat_length": 20,
-                        "__class__": "quam_libs.lib.pulses.CosineFlatTopPulse"
-                    },
-                    "phase_shift_control": 0.010877609252929688,
-                    "phase_shift_target": 0.20752078294754028,
-                    "__class__": "quam_libs.components.gates.two_qubit_gates.CZGate"
-                },
-                "Cz_flattop_cosine": {
-                    "flux_pulse_control": {
-                        "length": 40,
-                        "id": "flux_pulse_control_q5_q4",
-                        "amplitude": 0.1073085387944038,
-                        "flat_length": 36,
-                        "__class__": "quam_libs.lib.pulses.CosineFlatTopPulse"
-                    },
-                    "coupler_flux_pulse": {
-                        "length": 40,
-                        "id": "coupler_flux_pulse_q5_q4",
-                        "amplitude": -0.1255568686801,
-                        "__class__": "quam_libs.lib.pulses.CosineFluxPulse"
-                    },
-                    "phase_shift_control": 0.07560676336288452,
-                    "phase_shift_target": 0.18265902996063232,
-                    "__class__": "quam_libs.components.gates.two_qubit_gates.CZGate"
-                },
-                "Cz_double_flattop": {
-                    "flux_pulse_control": {
-                        "length": 44,
-                        "id": "flux_pulse_control_q5_q4",
-                        "amplitude": 0.10921288052769322,
-                        "flat_length": 36,
-                        "__class__": "quam_libs.lib.pulses.CosineFlatTopPulse"
-                    },
-                    "coupler_flux_pulse": {
-                        "length": 44,
-                        "id": "coupler_flux_pulse_q5_q4",
-                        "amplitude": -0.0883522516021597,
-                        "flat_length": 24,
-                        "__class__": "quam_libs.lib.pulses.CosineFlatTopPulse"
-                    },
-                    "phase_shift_control": -0.49428534507751465,
-                    "phase_shift_target": 0.1507267951965332,
-                    "__class__": "quam_libs.components.gates.two_qubit_gates.CZGate"
-                },
-                "Cz_double_flattop_long": {
-                    "flux_pulse_control": {
-                        "length": 80,
-                        "id": "flux_pulse_control_q5_q4",
-                        "amplitude": 0.11162553189121927,
-                        "flat_length": 32,
-                        "__class__": "quam_libs.lib.pulses.CosineFlatTopPulse"
-                    },
-                    "coupler_flux_pulse": {
-                        "length": 80,
-                        "id": "coupler_flux_pulse_q5_q4",
-                        "amplitude": -0.08141510947942734,
-                        "flat_length": 20,
-                        "__class__": "quam_libs.lib.pulses.CosineFlatTopPulse"
-                    },
-                    "phase_shift_control": -0.07781121134757996,
-                    "phase_shift_target": 0.1677924394607544,
-                    "__class__": "quam_libs.components.gates.two_qubit_gates.CZGate"
-                },
-                "Cz_adiabatic": {
-                    "flux_pulse_control": {
-                        "length": 84,
-                        "id": "flux_pulse_control_q5_q4",
-                        "amplitude": 0.0,
-                        "flat_length": 84,
-                        "__class__": "quam_libs.lib.pulses.CosineFlatTopPulse"
-                    },
-                    "coupler_flux_pulse": {
-                        "length": 84,
-                        "id": "coupler_flux_pulse_q5_q4",
-                        "amplitude": -0.13707996918762402,
-                        "flat_length": 56,
-                        "__class__": "quam_libs.lib.pulses.CosineFlatTopPulse"
-                    },
-                    "phase_shift_control": -0.4998900592327118,
-                    "phase_shift_target": 0.32568055391311646,
-                    "__class__": "quam_libs.components.gates.two_qubit_gates.CZGate"
-                },
+                
                 "Cz_bipolar": {
                     "flux_pulse_control": {
                         "length": 88,
@@ -2875,26 +2732,7 @@
                     },
                     "__class__": "quam_libs.components.gates.two_qubit_gates.CZGate"
                 },
-                "Cz_adia_hybrid": {
-                    "flux_pulse_control": {
-                        "length": 32,
-                        "id": "flux_pulse_control_q5_q4",
-                        "amplitude": 0.09,
-                        "flat_length": 20,
-                        "__class__": "quam_libs.lib.pulses.CosineBipolarPulse"
-                    },
-                    "coupler_flux_pulse": {
-                        "length": 32,
-                        "id": "coupler_flux_pulse_q5_q4",
-                        "amplitude": -0.12950341915560953,
-                        "flat_length": 24,
-                        "__class__": "quam_libs.lib.pulses.CosineFlatTopPulse"
-                    },
-                    "phase_shift_control": -0.2776024639606476,
-                    "phase_shift_target": -0.4993288516998291,
-                    "__class__": "quam_libs.components.gates.two_qubit_gates.CZGate"
-                },
-                "Cz": "#./Cz_square_flattop"
+                "Cz": "#./Cz_unipolar"
             },
             "J2": 12195080.66691034,
             "detuning": 0.12,
@@ -3352,43 +3190,8 @@
                     "phase_shift_target": 0.24014779470157388,
                     "__class__": "quam_libs.components.gates.two_qubit_gates.CZGate"
                 },
-                "Cz_square_flattop": {
-                    "flux_pulse_control": {
-                        "length": 48,
-                        "id": "flux_pulse_control_q7_q8",
-                        "amplitude": 0.12631527129292494,
-                        "__class__": "quam_libs.lib.pulses.FluxPulse"
-                    },
-                    "coupler_flux_pulse": {
-                        "length": 48,
-                        "id": "coupler_flux_pulse_q7_q8",
-                        "amplitude": -0.1,
-                        "flat_length": 20,
-                        "__class__": "quam_libs.lib.pulses.CosineFlatTopPulse"
-                    },
-                    "phase_shift_control": 0.7111824152306327,
-                    "phase_shift_target": 0.23267889669434205,
-                    "__class__": "quam_libs.components.gates.two_qubit_gates.CZGate"
-                },
-                "Cz_adiabatic": {
-                    "flux_pulse_control": {
-                        "length": 72,
-                        "id": "flux_pulse_control_q7_q8",
-                        "amplitude": 0.0,
-                        "__class__": "quam_libs.lib.pulses.FluxPulse"
-                    },
-                    "coupler_flux_pulse": {
-                        "length": 72,
-                        "id": "coupler_flux_pulse_q7_q8",
-                        "amplitude": -0.13023873909526132,
-                        "flat_length": 38,
-                        "__class__": "quam_libs.lib.pulses.CosineFlatTopPulse"
-                    },
-                    "phase_shift_control": 0.7141750291745527,
-                    "phase_shift_target": 0.762410534468748,
-                    "__class__": "quam_libs.components.gates.two_qubit_gates.CZGate"
-                },
-                "Cz": "#./Cz_square_flattop",
+                
+                "Cz": "#./Cz_unipolar",
                 "Cz_flattop": {
                     "flux_pulse_control": {
                         "length": 80,
