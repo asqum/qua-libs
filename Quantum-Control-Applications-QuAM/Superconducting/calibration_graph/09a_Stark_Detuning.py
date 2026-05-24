@@ -24,7 +24,7 @@ Next steps before going to the next node:
 # %% {Imports}
 from qualibrate import QualibrationNode, NodeParameters
 from quam_libs.components import QuAM
-from quam_libs.macros import qua_declaration, active_reset, active_reset_simple
+from quam_libs.macros import qua_declaration, active_reset
 from quam_libs.lib.qua_datasets import convert_IQ_to_V
 from quam_libs.lib.plot_utils import QubitGrid, grid_iter
 from quam_libs.lib.save_utils import fetch_results_as_xarray, load_dataset
@@ -44,13 +44,13 @@ import numpy as np
 class Parameters(NodeParameters):
     qubits: Optional[List[str]] = None
     num_averages: int = 20
-    operation: str = "x180"
-    frequency_span_in_mhz: float = 20
-    frequency_step_in_mhz: float = 0.02
+    operation: Literal["x180", "x90"] = "x180"
+    frequency_span_in_mhz: float = 10
+    frequency_step_in_mhz: float = 0.1
     max_number_pulses_per_sweep: int = 20
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
     reset_type_thermal_or_active: Literal["thermal", "active"] = "thermal"
-    DRAG_setpoint: Optional[float] = -1.0
+    DRAG_setpoint: Optional[float] = None  # None keeps the alpha value from the loaded state.
     simulate: bool = False
     simulation_duration_ns: int = 2500
     timeout: int = 100
@@ -109,8 +109,10 @@ with program() as stark_detuning:
     df = declare(int)  # QUA variable for the qubit drive amplitude pre-factor
     npi = declare(int)  # QUA variable for the number of qubit pulses
     count = declare(int)  # QUA variable for counting the qubit pulses
+    iteration = declare(int)
 
     machine.apply_all_couplers_to_min()
+    assign(iteration, 0)
     for i, qubit in enumerate(qubits):
         # Bring the active qubits to the desired frequency point
         machine.set_all_fluxes(flux_point=flux_point, target=qubit)
@@ -118,12 +120,11 @@ with program() as stark_detuning:
         qubit.align()
 
         with for_(n, 0, n < n_avg, n + 1):
-            save(n, n_st)
             with for_(*from_array(npi, N_pi_vec)):
                 with for_(*from_array(df, dfs)):
                     # Initialize the qubits
                     if reset_type == "active":
-                        active_reset_simple(qubit, "readout")
+                        active_reset(qubit)
                     else:
                         qubit.wait(qubit.thermalization_time * u.ns)
 
@@ -148,12 +149,14 @@ with program() as stark_detuning:
                     save(state[i], state_stream[i])
                     save(I[i], I_st[i])
                     save(Q[i], Q_st[i])
+            assign(iteration, iteration + 1)
+            save(iteration, n_st)
         # Measure sequentially
         if not node.parameters.multiplexed:
             align()
 
     with stream_processing():
-        n_st.save("n")
+        n_st.save("iteration")
         for i, qubit in enumerate(qubits):
             state_stream[i].boolean_to_int().buffer(len(dfs)).buffer(N_pi).average().save(f"state{i + 1}")
             I_stream = I_st[i].buffer(len(dfs)).buffer(N_pi).average().save(f"I{i + 1}")
@@ -163,7 +166,7 @@ with program() as stark_detuning:
 # %% {Simulate_or_execute}
 if node.parameters.simulate:
     # Simulates the QUA program for the specified duration
-    simulation_config = SimulationConfig(duration=node.parameters.simulation_duration_ns * 4)  # In clock cycles = 4ns
+    simulation_config = SimulationConfig(duration=node.parameters.simulation_duration_ns // 4)  # In clock cycles = 4ns
     job = qmm.simulate(config, stark_detuning, simulation_config)
     # Get the simulated samples and plot them for all controllers
     samples = job.get_simulated_samples()
@@ -181,12 +184,13 @@ if node.parameters.simulate:
 elif node.parameters.load_data_id is None:
     with qm_session(qmm, config, timeout=node.parameters.timeout) as qm:
         job = qm.execute(stark_detuning)
-        results = fetching_tool(job, ["n"], mode="live")
+        results = fetching_tool(job, ["iteration"], mode="live")
+        total_iterations = n_avg * num_qubits
         while results.is_processing():
             # Fetch results
-            n = results.fetch_all()[0]
+            iteration = results.fetch_all()[0]
             # Progress bar
-            progress_counter(n, n_avg, start_time=results.start_time)
+            progress_counter(iteration, total_iterations, start_time=results.start_time)
 
 # %% {Data_fetching_and_dataset_creation}
 if not node.parameters.simulate:
@@ -225,10 +229,11 @@ if not node.parameters.simulate:
     plt.show()
     node.results["figure"] = grid.fig
 
-    # %% {Update_state}
     # Revert the change done at the beginning of the node
     for qubit in tracked_qubits:
         qubit.revert_changes()
+
+    # %% {Update_state}
     if node.parameters.load_data_id is None:
         with node.record_state_updates():
             for qubit in qubits:
