@@ -29,8 +29,8 @@ from scipy.signal import savgol_filter
 
 # %% {Node_parameters}
 class Parameters(NodeParameters):
-    qubits: Optional[List[str]] = None
-    num_averages: int = 100
+    qubits: Optional[List[str]] = ["q3"]
+    num_averages: int = 1000
     time_of_flight_in_ns: Optional[int] = 28 
     intermediate_frequency_in_mhz: Optional[float] = 50
     readout_amplitude_in_dBm: Optional[float] = -3
@@ -93,12 +93,21 @@ with program() as raw_trace_prog:
 
     with stream_processing():
         for i in range(num_qubits):
+            input_port = resonators[i].opx_input.port_id
+            if input_port == 1:
+                adc_in = adc_st[i].input1()
+            elif input_port == 2:
+                adc_in = adc_st[i].input2()
+            else:
+                raise ValueError(
+                    f"Unsupported readout input port {input_port} for {resonators[i].name}; expected 1 or 2"
+                )
             # Will save average:
-            adc_st[i].input1().real().average().save(f"adcI{i + 1}")
-            adc_st[i].input1().image().average().save(f"adcQ{i + 1}")
+            adc_in.real().average().save(f"adcI{i + 1}")
+            adc_in.image().average().save(f"adcQ{i + 1}")
             # Will save only last run:
-            adc_st[i].input1().real().save(f"adc_single_runI{i + 1}")
-            adc_st[i].input1().image().save(f"adc_single_runQ{i + 1}")
+            adc_in.real().save(f"adc_single_runI{i + 1}")
+            adc_in.image().save(f"adc_single_runQ{i + 1}")
 
 
 # %% {Simulate_or_execute}
