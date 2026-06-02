@@ -42,7 +42,7 @@ class Parameters(NodeParameters):
     max_wait_time_in_ns: int = 250016
     flux_point_joint_or_independent_or_arbitrary: Literal["joint", "independent"] = "independent"
     reset_type: Literal["active", "thermal"] = "active"
-    time_scale:Literal["log"] = "log"
+    time_scale:Literal["log","lin"] = "log"
     use_state_discrimination: bool = True
     simulate: bool = False
     simulation_duration_ns: int = 2500
@@ -73,13 +73,22 @@ num_qubits = len(qubits)
 n_avg = node.parameters.num_averages  # The number of averages
 # Dephasing time sweep (in clock cycles = 4ns) - minimum is 4 clock cycles
 
-idle_times = np.unique(
-    np.geomspace(
-        node.parameters.min_wait_time_in_ns,
-        node.parameters.max_wait_time_in_ns,
-        100,
-    )//4
-).astype(int)
+if node.parameters.time_scale == 'log':
+    idle_times = np.unique(
+        np.geomspace(
+            node.parameters.min_wait_time_in_ns,
+            node.parameters.max_wait_time_in_ns,
+            100,
+        )//4
+    ).astype(int)
+else:
+    idle_times = np.unique(
+        np.linspace(
+            node.parameters.min_wait_time_in_ns,
+            node.parameters.max_wait_time_in_ns,
+            100,
+        )//4
+    ).astype(int)
 
 flux_point = node.parameters.flux_point_joint_or_independent_or_arbitrary  # 'independent' or 'joint'
 if flux_point == "arbitrary":
@@ -256,7 +265,7 @@ if not node.parameters.simulate:
             else:
                 fit_data = fit_decay_exp(ds_sub.I, "idle_time")
 
-            fit_collection[q_name] = fit_data
+            fit_collection[q_name].append(fit_data)
             
             
             decay_val = fit_data.sel(fit_vals="decay").values
@@ -319,13 +328,13 @@ if not node.parameters.simulate:
             sub_ds = ds.sel(iteration=iter)
             fitted = decay_exp(
                 sub_ds.idle_time,
-                fit_collection[qubit['qubit']].sel(fit_vals="a"),
-                fit_collection[qubit['qubit']].sel(fit_vals="offset"),
-                fit_collection[qubit['qubit']].sel(fit_vals="decay"),
+                fit_collection[qubit['qubit']][iter].sel(fit_vals="a"),
+                fit_collection[qubit['qubit']][iter].sel(fit_vals="offset"),
+                fit_collection[qubit['qubit']][iter].sel(fit_vals="decay"),
             )
-            decay = fit_collection[qubit['qubit']].sel(fit_vals="decay")
-            decay_res = fit_collection[qubit['qubit']].sel(fit_vals="decay_decay")
-            tau = -1 / fit_collection[qubit['qubit']].sel(fit_vals="decay")
+            decay = fit_collection[qubit['qubit']][iter].sel(fit_vals="decay")
+            decay_res = fit_collection[qubit['qubit']][iter].sel(fit_vals="decay_decay")
+            tau = -1 / fit_collection[qubit['qubit']][iter].sel(fit_vals="decay")
             tau_error = -tau * (np.sqrt(decay_res) / decay)
             if node.parameters.use_state_discrimination:
                 sub_ds.sel(qubit=qubit["qubit"]).state.plot(ax=ax, marker='o', linestyle='', alpha=0.5)
@@ -355,13 +364,13 @@ if not node.parameters.simulate:
         for ax, qubit in grid_iter(grid):
             fitted = decay_exp(
                 ds.idle_time,
-                fit_collection[qubit['qubit']].sel(fit_vals="a"),
-                fit_collection[qubit['qubit']].sel(fit_vals="offset"),
-                fit_collection[qubit['qubit']].sel(fit_vals="decay"),
+                fit_collection[qubit['qubit']][0].sel(fit_vals="a"),
+                fit_collection[qubit['qubit']][0].sel(fit_vals="offset"),
+                fit_collection[qubit['qubit']][0].sel(fit_vals="decay"),
             )
-            decay = fit_collection[qubit['qubit']].sel(fit_vals="decay")
-            decay_res = fit_collection[qubit['qubit']].sel(fit_vals="decay_decay")
-            tau = -1 / fit_collection[qubit['qubit']].sel(fit_vals="decay")
+            decay = fit_collection[qubit['qubit']][0].sel(fit_vals="decay")
+            decay_res = fit_collection[qubit['qubit']][0].sel(fit_vals="decay_decay")
+            tau = -1 / fit_collection[qubit['qubit']][0].sel(fit_vals="decay")
             tau_error = -tau * (np.sqrt(decay_res) / decay)
             if node.parameters.use_state_discrimination:
                 ds.sel(qubit=qubit["qubit"]).state.plot(ax=ax, marker='o', linestyle='', alpha=0.5)
