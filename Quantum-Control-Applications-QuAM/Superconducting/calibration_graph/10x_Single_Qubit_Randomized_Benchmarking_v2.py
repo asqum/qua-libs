@@ -22,7 +22,13 @@ Prerequisites:
 # %% {Imports}
 from qualibrate import QualibrationNode, NodeParameters
 from quam_libs.components import QuAM, Transmon
-from quam_libs.macros import qua_declaration, active_reset, active_reset_simple
+from quam_libs.macros import (
+    qua_declaration,
+    active_reset,
+    active_reset_simple,
+    active_reset_gef,
+    readout_state_gef,
+)
 from quam_libs.lib.plot_utils import QubitGrid, grid_iter
 from quam_libs.lib.save_utils import fetch_results_as_xarray, load_dataset
 from quam_libs.lib.fit import fit_decay_exp, decay_exp
@@ -58,13 +64,14 @@ class Parameters(
 ):
     qubits: Optional[List[str]] = None
     use_state_discrimination: bool = True
+    readout_mode: Literal["ge", "gef"] = "ge" #gef will plot the probability of being in g,e and outside of the qubit subspace
     use_strict_timing: bool = False
     num_random_sequences: int = 100 # Number of random sequences
     num_averages: int = 50
     max_circuit_depth: int = 800  # Maximum circuit depth
     delta_clifford: int = 40
     seed: int = None
-    reset_type_thermal_or_active: Literal["thermal", "active"] = "active"
+    reset_type_thermal_or_active: Literal["thermal", "active", "active_gef"] =  "active"
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
     simulate: bool = False
     simulation_duration_ns: int = 2500
@@ -102,6 +109,7 @@ if node.parameters.delta_clifford < 1:
 delta_clifford = node.parameters.delta_clifford
 flux_point = node.parameters.flux_point_joint_or_independent
 reset_type = node.parameters.reset_type_thermal_or_active
+readout_mode = node.parameters.readout_mode
 assert (max_circuit_depth / delta_clifford).is_integer(), "max_circuit_depth / delta_clifford must be an integer."
 num_depths = max_circuit_depth // delta_clifford + 1
 seed = node.parameters.seed  # Pseudo-random number generator seed
@@ -212,6 +220,71 @@ def play_sequence(sequence_list, depth, qubit: Transmon):
                 qubit.xy.play("-x90")
 
 
+def build_gef_state_probabilities(ds: xr.Dataset) -> xr.DataArray:
+    required_vars = ["state_g", "state_e", "state_outside"]
+    missing_vars = [var for var in required_vars if var not in ds]
+    if missing_vars:
+        raise ValueError(f"GEF readout data is missing {missing_vars}")
+
+    probabilities = xr.concat(
+        [ds["state_g"], ds["state_e"], ds["state_outside"]],
+        dim="state",
+    )
+    probabilities = probabilities.assign_coords(state=("state", ["0", "1", "outside"]))
+    probabilities.attrs = {"long_name": "state probability"}
+    return probabilities
+
+
+def plot_gef_state_probabilities(
+    probabilities: xr.DataArray,
+    qubits: List[Transmon],
+    num_random_sequences: int,
+):
+    grid = QubitGrid(probabilities, [q.grid_location for q in qubits])
+    style_map = {
+        "0": {"color": "tab:blue", "marker": "o", "linewidth": 2.0},
+        "1": {"color": "tab:orange", "marker": "s", "linewidth": 2.0},
+        "outside": {"color": "black", "marker": "x", "linewidth": 2.0, "linestyle": "--"},
+    }
+
+    for ax, qubit in grid_iter(grid):
+        for state_label in probabilities.state.values:
+            state_probabilities = probabilities.sel(qubit=qubit["qubit"], state=state_label)
+            mean_prob = state_probabilities.mean(dim="sequence")
+            error_bars = state_probabilities.std(dim="sequence")
+            ax.errorbar(
+                mean_prob.m,
+                mean_prob,
+                yerr=error_bars,
+                label=state_label,
+                capsize=2,
+                elinewidth=0.5,
+                **style_map[str(state_label)],
+            )
+        ax.set_title(qubit["qubit"], pad=12)
+        ax.set_xlabel("Circuit depth")
+        ax.set_ylabel("Probability")
+        ax.set_ylim(-0.05, 1.05)
+        ax.grid("all")
+        ax.legend(
+            framealpha=0,
+            title="State",
+            fontsize=7,
+            title_fontsize=8,
+            handlelength=1.0,
+            markerscale=0.7,
+            labelspacing=0.2,
+            borderpad=0.2,
+            borderaxespad=0.2,
+        )
+
+    grid.fig.suptitle(
+        f"GEF readout state probabilities\nRandom gate number per depth = {num_random_sequences}"
+    )
+    grid.fig.tight_layout()
+    return grid.fig
+
+
 # %% {QUA_program}
 with program() as randomized_benchmarking:
     depth = declare(int)  # QUA variable for the varying depth
@@ -226,17 +299,14 @@ with program() as randomized_benchmarking:
     m_st = declare_stream()
     # state_st = declare_stream()
     state_st = [declare_stream() for _ in range(num_qubits)]
-
-    # for i, qubit in enumerate(qubits):
-    #     # Bring the active qubits to the desired frequency point
-    #     if flux_point == "independent":
-    #         machine.apply_all_flux_to_min()
-    #         qubit.z.to_independent_idle()
-    #         machine.apply_all_couplers_to_min()
-    #     elif flux_point == "joint":
-    #         machine.apply_all_flux_to_joint_idle()
-    #     else:
-    #         raise ValueError(f"Unrecognized flux point {flux_point}")
+    if readout_mode == "gef":
+        state_not_g = [declare(int) for _ in range(num_qubits)]
+        state_g = [declare(int) for _ in range(num_qubits)]
+        state_e = [declare(int) for _ in range(num_qubits)]
+        state_outside = [declare(int) for _ in range(num_qubits)]
+        state_g_st = [declare_stream() for _ in range(num_qubits)]
+        state_e_st = [declare_stream() for _ in range(num_qubits)]
+        state_outside_st = [declare_stream() for _ in range(num_qubits)]
 
     # QUA for_ loop over the random sequences
     for multiplexed_qubits in qubits.batch():
@@ -273,6 +343,8 @@ with program() as randomized_benchmarking:
                                 # qubit.resonator.wait(qubit.resonator.depletion_time * u.ns)
                                 active_reset(qubit)
                                 # qubit.resonator.wait(qubit.resonator.depletion_time * u.ns)
+                            elif reset_type == "active_gef":
+                                active_reset_gef(qubit)
                             else:
                                 qubit.resonator.wait(qubit.thermalization_time * u.ns)
 
@@ -294,12 +366,23 @@ with program() as randomized_benchmarking:
 
                         # Read out all qubits in the batch with aligned resonators.
                         for i, qubit in multiplexed_qubits.items():
-                            qubit.resonator.measure("readout", qua_vars=(I[i], Q[i]))
-                            assign(
-                                state[i],
-                                Cast.to_int(I[i] > qubit.resonator.operations["readout"].threshold),
-                            )
-                            save(state[i], state_st[i])
+                            if readout_mode == "gef":
+                                readout_state_gef(qubit, state[i])
+                                assign(state_not_g[i], Cast.to_int(state[i] > 0))
+                                assign(state_g[i], Cast.to_int(state[i] == 0))
+                                assign(state_e[i], Cast.to_int(state[i] == 1))
+                                assign(state_outside[i], Cast.to_int(state[i] > 1))
+                                save(state_not_g[i], state_st[i])
+                                save(state_g[i], state_g_st[i])
+                                save(state_e[i], state_e_st[i])
+                                save(state_outside[i], state_outside_st[i])
+                            else:
+                                qubit.resonator.measure("readout", qua_vars=(I[i], Q[i]))
+                                assign(
+                                    state[i],
+                                    Cast.to_int(I[i] > qubit.resonator.operations["readout"].threshold),
+                                )
+                                save(state[i], state_st[i])
 
                     # Go to the next depth
                     assign(depth_target, depth_target + delta_clifford)
@@ -315,6 +398,16 @@ with program() as randomized_benchmarking:
             state_st[i].buffer(n_avg).map(FUNCTIONS.average()).buffer(num_depths).buffer(num_of_sequences).save(
                 f"state{i + 1}"
             )
+            if readout_mode == "gef":
+                state_g_st[i].buffer(n_avg).map(FUNCTIONS.average()).buffer(num_depths).buffer(
+                    num_of_sequences
+                ).save(f"state_g{i + 1}")
+                state_e_st[i].buffer(n_avg).map(FUNCTIONS.average()).buffer(num_depths).buffer(
+                    num_of_sequences
+                ).save(f"state_e{i + 1}")
+                state_outside_st[i].buffer(n_avg).map(FUNCTIONS.average()).buffer(num_depths).buffer(
+                    num_of_sequences
+                ).save(f"state_outside{i + 1}")
 
 # %% {Simulate_or_execute}
 if node.parameters.simulate:
@@ -359,30 +452,61 @@ elif node.parameters.load_data_id is None:
     # Add the dataset to the node
     node.results = {"ds": ds}
     # %% {Data_analysis}
-    da_state = 1 - ds["state"].mean(dim="sequence")
+    if readout_mode == "gef":
+        gef_state_probabilities = build_gef_state_probabilities(ds)
+        gef_state_probabilities = gef_state_probabilities.assign_coords(
+            depths=gef_state_probabilities.depths - 1
+        )
+        gef_state_probabilities = gef_state_probabilities.rename(depths="m")
+        gef_state_probabilities.m.attrs = {"long_name": "no. of Cliffords"}
+        node.results["gef_state_probabilities"] = gef_state_probabilities.to_dataset(name="probability")
+        da_state = ds["state_g"].mean(dim="sequence")
+    else:
+        gef_state_probabilities = None
+        da_state = 1 - ds["state"].mean(dim="sequence")
     da_state: xr.DataArray
     da_state.attrs = {"long_name": "p(0)"}
     da_state = da_state.assign_coords(depths=da_state.depths - 1)
     da_state = da_state.rename(depths="m")
     da_state.m.attrs = {"long_name": "no. of Cliffords"}
     # Fit the exponential decay
-    da_fit = fit_decay_exp(da_state, "m")
-    # Extract the decay rate
-    alpha = np.exp(da_fit.sel(fit_vals="decay"))
-    # average_gate_per_clifford = 45/24 = 1.875
-    average_gate_per_clifford = (1 * 3 + 9 * 2 + 1 * 4 + 2 * 3 + 4 * 2 + 2 * 3) / 24
-    # EPC from here: https://qiskit.org/textbook/ch-quantum-hardware/randomized-benchmarking.html#Step-5:-Fit-the-results
-    EPC = (1 - alpha) - (1 - alpha) / 2
-    EPG = EPC / average_gate_per_clifford
+    da_fit = None
+    EPC = None
+    EPG = None
+    fit_error = None
+    fit_successful = False
+    node.results["fit_results"] = {}
+    try:
+        da_fit = fit_decay_exp(da_state, "m")
+        # Extract the decay rate
+        alpha = np.exp(da_fit.sel(fit_vals="decay"))
+        # average_gate_per_clifford = 45/24 = 1.875
+        average_gate_per_clifford = (1 * 3 + 9 * 2 + 1 * 4 + 2 * 3 + 4 * 2 + 2 * 3) / 24
+        # EPC from here: https://qiskit.org/textbook/ch-quantum-hardware/randomized-benchmarking.html#Step-5:-Fit-the-results
+        EPC = (1 - alpha) - (1 - alpha) / 2
+        EPG = EPC / average_gate_per_clifford
+        fit_successful = True
+    except Exception as e:
+        da_fit = None
+        fit_error = str(e)
+        print(f"RB fit failed: {fit_error}")
+        print("Proceeding with raw data plot only.")
 
     # Save fitting results
-    node.results["fit_results"] = {}
     for q in qubits:
-        node.results["fit_results"][q.name] = {}
-        node.results["fit_results"][q.name]["EPC"] = EPC.sel(qubit=q.name).values
-        node.results["fit_results"][q.name]["EPG"] = EPG.sel(qubit=q.name).values
-        print(f"{q.name}: EPC={EPC.sel(qubit=q.name).values}")
-        print(f"{q.name}: EPG={EPG.sel(qubit=q.name).values}")
+        node.results["fit_results"][q.name] = {"fit_successful": fit_successful}
+        if not fit_successful:
+            node.results["fit_results"][q.name]["fit_error"] = fit_error
+            continue
+        try:
+            node.results["fit_results"][q.name]["EPC"] = EPC.sel(qubit=q.name).values
+            node.results["fit_results"][q.name]["EPG"] = EPG.sel(qubit=q.name).values
+            print(f"{q.name}: EPC={EPC.sel(qubit=q.name).values}")
+            print(f"{q.name}: EPG={EPG.sel(qubit=q.name).values}")
+        except Exception as e:
+            node.results["fit_results"][q.name]["fit_successful"] = False
+            node.results["fit_results"][q.name]["fit_error"] = str(e)
+            print(f"RB fit result extraction failed for {q.name}: {e}")
 
 
 # %% {Plotting}
@@ -391,7 +515,10 @@ if not node.parameters.simulate:
     grid = QubitGrid(ds, [q.grid_location for q in qubits])
     for ax, qubit in grid_iter(grid):
         da_state_qubit = da_state.sel(qubit=qubit["qubit"])
-        da_state_std = ds["state"].std(dim="sequence").sel(qubit=qubit["qubit"])
+        if readout_mode == "gef":
+            da_state_std = ds["state_g"].std(dim="sequence").sel(qubit=qubit["qubit"])
+        else:
+            da_state_std = ds["state"].std(dim="sequence").sel(qubit=qubit["qubit"])
         ax.errorbar(
             da_state_qubit.m,
             da_state_qubit,
@@ -404,28 +531,54 @@ if not node.parameters.simulate:
         m = da_state.m.values
         ax.set_title(qubit["qubit"], pad=22)
         ax.set_xlabel("Circuit depth")
-        fit_dict = {k: da_fit.sel(**qubit).sel(fit_vals=k).values for k in da_fit.fit_vals.values}
-        ax.plot(m, decay_exp(m, **fit_dict), "r--", label="fit")
-        ax.text(
-            0.0,
-            1.07,
-            f"1Q gate fidelity = {1 - EPG.sel(**qubit).values:.5f}",
-            transform=ax.transAxes,
-        )
+        fit_result = node.results["fit_results"].get(qubit["qubit"], {})
+        if fit_result.get("fit_successful", False):
+            try:
+                fit_dict = {k: da_fit.sel(**qubit).sel(fit_vals=k).values for k in da_fit.fit_vals.values}
+                ax.plot(m, decay_exp(m, **fit_dict), "r--", label="fit")
+                ax.text(
+                    0.0,
+                    1.07,
+                    f"1Q gate fidelity = {1 - EPG.sel(**qubit).values:.5f}",
+                    transform=ax.transAxes,
+                )
+            except Exception as e:
+                fit_result["fit_successful"] = False
+                fit_result["fit_error"] = str(e)
+                print(f"RB fit plotting failed for {qubit['qubit']}: {e}")
     plt.suptitle(f"SQ RB\n Random gate number per depth = {node.parameters.num_random_sequences}")
     plt.tight_layout()
     plt.show()
     node.results["figure"] = grid.fig
 
+    if readout_mode == "gef" and gef_state_probabilities is not None:
+        gef_state_fig = plot_gef_state_probabilities(
+            gef_state_probabilities,
+            qubits,
+            node.parameters.num_random_sequences,
+        )
+        gef_state_fig.show()
+        node.results["figure_gef_state_probabilities"] = gef_state_fig
+
     # %% {Save_results}
-    if not node.parameters.simulate:
+    successful_fit_qubits = [
+        q for q in qubits if node.results["fit_results"].get(q.name, {}).get("fit_successful", False)
+    ]
+    if not node.parameters.simulate and successful_fit_qubits:
         with node.record_state_updates():
-            for q in qubits:
+            for q in successful_fit_qubits:
                 q.extras["EPG"] = EPG.sel(qubit=q.name).item()
                 q.extras["EPC"] = EPC.sel(qubit=q.name).item()
                 
     if not node.parameters.simulate:
-        node.outcomes = {q.name: "successful" for q in qubits}
+        node.outcomes = {
+            q.name: (
+                "successful"
+                if node.results["fit_results"].get(q.name, {}).get("fit_successful", False)
+                else "failed"
+            )
+            for q in qubits
+        }
         node.results["initial_parameters"] = node.parameters.model_dump()
         node.machine = machine
         node.save()

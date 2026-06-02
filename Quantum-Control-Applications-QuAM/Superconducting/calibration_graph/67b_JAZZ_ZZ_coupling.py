@@ -56,27 +56,27 @@ from quam_libs.lib.pulses import FluxPulse
 from quam_libs.lib.fit import fit_oscillation_decay_exp, oscillation_decay_exp
 
 # %% {Node_parameters}
-qubit_pair_indexes = [3]  # The indexes of the qubit pairs to measure
+qubit_pair_indexes = [1, 2, 3, 4]  # The indexes of the qubit pairs to measure
 class Parameters(NodeParameters):
 
     qubit_pairs: Optional[List[str]] = ["coupler_q%s_q%s"%(i,i+1) for i in qubit_pair_indexes]
     num_averages: int = 20
     flux_point_joint_or_independent_or_pairwise: Literal["joint", "independent", "pairwise"] = "joint"
-    reset_type: Literal['active', 'thermal'] = "active"
+    reset_type: Literal['active', 'thermal'] = 'thermal'
     simulate: bool = False
     timeout: int = 100
     load_data_id: Optional[int] = None
-    frequency_detuning_in_mhz: float = 1.0
+    frequency_detuning_in_mhz: float = 3.0
     """Frequency detuning in MHz. Default is 1.0 MHz."""
     min_wait_time_in_ns: int = 16
     """Minimum wait time in nanoseconds. Default is 16."""
-    max_wait_time_in_ns: int = 5016
+    max_wait_time_in_ns: int = 4016
     """Maximum wait time in nanoseconds. Default is 5000."""
-    wait_time_step_in_ns: int = 50
+    wait_time_step_in_ns: int = 40
     """Step size for the wait time scan in nanoseconds. Default is 60."""
-    flux_span: float = 0.25
+    flux_span: float = 0.2
     """Span of flux values to sweep in volts. Default is 0.01 V."""
-    flux_num: int = 101
+    flux_num: int = 81
     """Number of flux points to sample. Default is 21."""
     use_state_discrimination: bool = False
 
@@ -98,8 +98,6 @@ if node.parameters.qubit_pairs is None or node.parameters.qubit_pairs == "":
     qubit_pairs = machine.active_qubit_pairs
 else:
     qubit_pairs = [machine.qubit_pairs[qp] for qp in node.parameters.qubit_pairs]
-# if any([qp.q1.z is None or qp.q2.z is None for qp in qubit_pairs]):
-#     warnings.warn("Found qubit pairs without a flux line. Skipping")
 
 num_qubit_pairs = len(qubit_pairs)
 
@@ -118,8 +116,8 @@ flux_point = node.parameters.flux_point_joint_or_independent_or_pairwise  # 'ind
 
 # Loop parameters
 fluxes_coupler = np.linspace(
-        -0.05,
-        0.3,
+        -node.parameters.flux_span / 2,
+        node.parameters.flux_span / 2,
         node.parameters.flux_num,
     )
 idle_times = np.arange(
@@ -127,7 +125,6 @@ idle_times = np.arange(
     node.parameters.max_wait_time_in_ns // 4,
     node.parameters.wait_time_step_in_ns // 4,
 )
-reset_coupler_bias = True
 
 with program() as Ramsey_ZZ_coupling:
     n = declare(int)
@@ -143,7 +140,6 @@ with program() as Ramsey_ZZ_coupling:
     state_target = [declare(int) for _ in range(num_qubit_pairs)]
     I_target = [declare(float) for _ in range(num_qubit_pairs)]
     Q_target = [declare(float) for _ in range(num_qubit_pairs)]
-
     state_st_target = [declare_stream() for _ in range(num_qubit_pairs)]
     I_st_target = [declare_stream() for _ in range(num_qubit_pairs)]
     Q_st_target = [declare_stream() for _ in range(num_qubit_pairs)]
@@ -152,11 +148,8 @@ with program() as Ramsey_ZZ_coupling:
     for i, qp in enumerate(qubit_pairs):
         q_control = qp.qubit_control
         q_target = qp.qubit_target
-        XY_delay = q_target.xy.opx_output.delay + 4  # Delay to account delayed pulses in the XY channel
         # Bring the active qubits to the minimum frequency point
         machine.set_all_fluxes(flux_point, qp)
-        if reset_coupler_bias:
-            qp.coupler.set_dc_offset(0.0)
         wait(1000)
 
         with for_(n, 0, n < n_avg, n + 1):
@@ -188,18 +181,23 @@ with program() as Ramsey_ZZ_coupling:
                     qp.coupler.play(
                         "const", amplitude_scale=flux_coupler / qp.coupler.operations["const"].amplitude, duration=t_half
                     )
-                    qp.align()
+                    qp.qubit_target.xy.wait(t_half)
+                    qp.qubit_control.xy.wait(t_half)
+                    # qp.align()
                     
                     # Echo pulse
                     qp.qubit_control.xy.play("x180")
                     qp.qubit_target.xy.play("x180")
-                    qp.align()
+                    qp.coupler.wait(qp.qubit_target.xy.operations["x180"].length//4)
+                    # qp.align()
                     
                     # Coupler flux pulse
                     qp.coupler.play(
                         "const", amplitude_scale=flux_coupler / qp.coupler.operations["const"].amplitude, duration=t_half
                     )
-                    qp.align()
+                    qp.qubit_target.xy.wait(t_half)
+                    qp.qubit_control.xy.wait(t_half)
+                    # qp.align()
                     
                     # rotate the frame
                     qp.qubit_target.xy.frame_rotation_2pi(phi)
@@ -255,19 +253,25 @@ elif node.parameters.load_data_id is None:
 if not node.parameters.simulate:
     if node.parameters.load_data_id is None:
         # Fetch the data from the OPX and convert it into a xarray with corresponding axes (from most inner to outer loop)
-        ds = fetch_results_as_xarray(job.result_handles, qubit_pairs, {"idle_time": idle_times, "flux_coupler": fluxes_coupler})
+        ds = fetch_results_as_xarray(
+            job.result_handles,
+            qubit_pairs,
+            {"idle_time": idle_times, "flux_coupler": fluxes_coupler},
+        )
     else:
         ds, machine = load_dataset(node.parameters.load_data_id)
 
 
 # %% {Data_analysis}
 node.results = {"ds": ds}
-node.results["fit_results"] = {}   # optional if you also store raw fits
-node.results["analysis_success"] = {}  # for success flags per pair
+node.results["fit_results"] = {}
+node.results["analysis_success"] = {}
 
 if not node.parameters.simulate:
     try:
         print("Starting analysis...")
+        target_signal_name = "state_target" if "state_target" in ds.data_vars else "I_target"
+        print(f"Using '{target_signal_name}' for ZZ analysis.")
 
         flux_coupler_full = np.array([
             fluxes_coupler + qp.coupler.decouple_offset for qp in qubit_pairs
@@ -277,70 +281,72 @@ if not node.parameters.simulate:
         })
         ds = ds.assign_coords(idle_time=4 * idle_times / 1e3)
 
+        fit_curve_list = []
+        chiZZ_list = []
+        chiZZ_std_list = []
+
         for i, qp in enumerate(qubit_pairs):
             print(f"Analyzing qubit pair {i}: {qp.id if hasattr(qp, 'id') else qp}")
+            target_signal_pair = ds[target_signal_name].sel(qubit=qp.name)
 
-            # ---------------- FIT ----------------
-            fit_data = fit_oscillation_decay_exp(ds.state_target, "idle_time")
+            fit_data = fit_oscillation_decay_exp(target_signal_pair, "idle_time")
 
-            # Save fit data for reference
-
-            # Determine if fit succeeded (e.g. presence of valid freq)
             fit_ok = (
                 np.isfinite(fit_data.sel(fit_vals="f")).any()
                 and not np.isnan(fit_data.sel(fit_vals="f")).all()
             )
 
-            # ---------------- χZZ COMPUTATION ----------------
-            fitted = oscillation_decay_exp(
-                ds.state_target.idle_time,
+            fitted_pair = oscillation_decay_exp(
+                target_signal_pair.idle_time,
                 fit_data.sel(fit_vals="a"),
                 fit_data.sel(fit_vals="f"),
                 fit_data.sel(fit_vals="phi"),
                 fit_data.sel(fit_vals="offset"),
                 fit_data.sel(fit_vals="decay"),
             )
-            ds["state_target_fit"] = fitted
+            fit_curve_list.append(fitted_pair.expand_dims(qubit=[qp.name]))
 
-            chiZZ = 2 * (fit_data.sel(fit_vals="f") * 1e3 - node.parameters.frequency_detuning_in_mhz * 1e3)  # MHz → kHz
-            ds["chiZZ"] = chiZZ
+            chiZZ_pair = 2 * (
+                fit_data.sel(fit_vals="f") * 1e3 - node.parameters.frequency_detuning_in_mhz * 1e3
+            )
+            chiZZ_list.append(chiZZ_pair.expand_dims(qubit=[qp.name]))
 
-            chiZZ_std = 1e3 * np.sqrt(fit_data.sel(fit_vals="f_f"))
-            ds["chiZZ_std"] = chiZZ_std
+            chiZZ_std_pair = 1e3 * np.sqrt(fit_data.sel(fit_vals="f_f"))
+            chiZZ_std_list.append(chiZZ_std_pair.expand_dims(qubit=[qp.name]))
 
-            chiZZ_std_filt = chiZZ_std.where(chiZZ_std < chiZZ_std.median() * 2)
-            chiZZ_filt = chiZZ.where(~np.isnan(chiZZ_std_filt))
+            chiZZ_std_filt = chiZZ_std_pair.where(chiZZ_std_pair < chiZZ_std_pair.median() * 2)
+            chiZZ_filt = chiZZ_pair.where(~np.isnan(chiZZ_std_filt))
 
             max_idx = abs(chiZZ_filt).argmax(dim="flux_coupler").item()
             min_idx = abs(chiZZ_filt).argmin(dim="flux_coupler").item()
 
-            flux_full = ds["flux_coupler_full"].isel(qubit=i)
+            flux_full = ds["flux_coupler_full"].sel(qubit=qp.name)
             flux_val_max = float(flux_full.isel(flux_coupler=max_idx))
             flux_val_min = float(flux_full.isel(flux_coupler=min_idx))
-            chi_max = float(chiZZ.isel(flux_coupler=max_idx))
-            chi_min = float(chiZZ.isel(flux_coupler=min_idx))
+            chi_max = float(chiZZ_pair.isel(flux_coupler=max_idx))
+            chi_min = float(chiZZ_pair.isel(flux_coupler=min_idx))
 
-            # ---------------- SAVE PER-PAIR RESULTS ----------------
             node.results["fit_results"][qp.name] = {
                 "chiZZ_max_flux": flux_val_max,
                 "chiZZ_min_flux": flux_val_min,
                 "chiZZ_max_value": chi_max,
                 "chiZZ_min_value": chi_min,
             }
-
-            # ---------------- SAVE FIT SUCCESS FLAG ----------------
             node.results["analysis_success"][qp.name] = "successful" if fit_ok else "failed"
 
             print(f"  → max |χZZ|={chi_max:.2f} kHz @ {flux_val_max:.3f}")
             print(f"  → χZZ≈0={chi_min:.2f} kHz @ {flux_val_min:.3f}")
-            print(f"  → fit status: {'success' if fit_ok else '❌ failed'}")
+            print(f"  → fit status: {'success' if fit_ok else 'failed'}")
 
+        ds["target_signal_fit"] = xr.concat(fit_curve_list, dim="qubit")
+        ds["chiZZ"] = xr.concat(chiZZ_list, dim="qubit")
+        ds["chiZZ_std"] = xr.concat(chiZZ_std_list, dim="qubit")
+        node.results["ds"] = ds
         print("Analysis complete ")
 
     except Exception as e:
-        node.results = {"ds": ds}
         node.results["analysis_error"] = str(e)
-        analysis_successful = False
+        node.results["ds"] = ds
         print(f"Analysis failed : {e}")
 
 # %% {plotting}
@@ -358,19 +364,21 @@ if not node.parameters.simulate:
         flux_full = ds_pair["flux_coupler_full"]
         flux_mV = 1e3 * flux_full.squeeze()
         idle_time_us = ds_pair["idle_time"]
+        target_signal_name = "state_target" if "state_target" in ds_pair.data_vars else "I_target"
+        raw_data_label = "State probability" if target_signal_name == "state_target" else "I quadrature [a.u.]"
 
         fig, ax = plt.subplots(figsize=(6, 4))
-        data = ds_pair["state_target"]
+        data = ds_pair[target_signal_name]
         im = ax.pcolormesh(
             flux_mV,
             idle_time_us,
             data.transpose(),
             shading="auto",
             cmap="viridis",
-            vmin=0,
-            vmax=1,
+            vmin=0 if target_signal_name == "state_target" else None,
+            vmax=1 if target_signal_name == "state_target" else None,
         )
-        fig.colorbar(im, ax=ax, label="State probability")
+        fig.colorbar(im, ax=ax, label=raw_data_label)
         ax.set_xlabel("Coupler flux [mV]")
         ax.set_ylabel("Idle time [µs]")
         ax.set_title(f"{qubit_name} – Raw Ramsey", fontsize=10)
@@ -447,7 +455,11 @@ if not node.parameters.simulate:
             ax.grid(True, which="both", ls="--", alpha=0.5)
             ax.legend(fontsize=8)
 
-            fig.suptitle(f"{qubit_name}: χZZ vs Coupler Flux", fontsize=12)
+            coupler_offset_mV = 1e3 * qp.coupler.decouple_offset
+            fig.suptitle(
+                f"{qubit_name}: χZZ vs Coupler Flux (Current coupler offset = {coupler_offset_mV:.3f} mV)",
+                fontsize=12,
+            )
 
             plt.tight_layout(rect=[0, 0, 1, 0.95])
             node.results[f"figure_zz_curve_{qubit_name}"] = fig
@@ -460,8 +472,8 @@ if not node.parameters.simulate:
                 ("min", flux_val_min, chi_min),
             ]:
                 flux_idx = int((abs(flux_full - flux_val)).argmin(dim="flux_coupler").item())
-                meas = ds_pair["state_target"].isel(flux_coupler=flux_idx)
-                fit = ds_pair["state_target_fit"].isel(flux_coupler=flux_idx)
+                meas = ds_pair[target_signal_name].isel(flux_coupler=flux_idx)
+                fit = ds_pair["target_signal_fit"].isel(flux_coupler=flux_idx)
                 idle_time = ds_pair["idle_time"]
 
                 fig, axes = plt.subplots(1, 2, figsize=(8, 4), sharex=True)
@@ -499,7 +511,7 @@ if node.parameters.load_data_id is None:
         with node.record_state_updates():
             for i, qp in enumerate(qubit_pairs):
                 qp.extras["ZZ_zero_flux"] = node.results['fit_results'][qp.name]["chiZZ_min_flux"]
-                qp.coupler.decouple_offset = node.results['results'][qp.name]["chiZZ_min_flux"]
+                qp.coupler.decouple_offset = node.results['fit_results'][qp.name]["chiZZ_min_flux"]
 #  %% {Save_results}
 if not node.parameters.simulate:
     node.outcomes = {q.name: "successful" for q in qubit_pairs}
