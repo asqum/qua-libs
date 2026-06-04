@@ -1,17 +1,14 @@
-from typing import List
+"""Plotting utilities for XY-Z delay calibration visualizations."""
+
+from typing import Any, List
 
 import xarray as xr
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
-from qualang_tools.units import unit
-from quam_libs.lib.fit import oscillation
 from quam_libs.lib.plot_utils import QubitGrid, grid_iter
-from typing import Any
-
-u = unit(coerce_to_integer=True)
 
 
-def plot_raw_data_with_fit(ds: xr.Dataset, qubits: List[Any], fits: xr.Dataset):
+def plot_raw_data_with_fit(ds: xr.Dataset, qubits: List[Any], fits: xr.Dataset) -> Figure:
     """
     Plots the relative delay scans between the XY and Z pulses with the fitted center.
 
@@ -19,7 +16,7 @@ def plot_raw_data_with_fit(ds: xr.Dataset, qubits: List[Any], fits: xr.Dataset):
     ----------
     ds : xr.Dataset
         The dataset containing the quadrature data.
-    qubits : list of AnyTransmon
+    qubits : list
         A list of qubits to plot.
     fits : xr.Dataset
         The dataset containing the fit parameters.
@@ -28,15 +25,12 @@ def plot_raw_data_with_fit(ds: xr.Dataset, qubits: List[Any], fits: xr.Dataset):
     -------
     Figure
         The matplotlib figure object containing the plots.
-
-    Notes
-    -----
-    - The function creates a grid of subplots, one for each qubit.
-    - Each subplot contains the raw data and the fitted curve.
     """
     grid = QubitGrid(ds, [q.grid_location for q in qubits])
     for ax, qubit in grid_iter(grid):
-        plot_individual_data_with_fit(ax, ds, qubit, fits.sel(qubit=qubit["qubit"]))
+        plot_individual_data_with_fit(
+            ax, ds.sel(qubit=qubit["qubit"]), qubit, fits.sel(qubit=qubit["qubit"])
+        )
 
     grid.fig.suptitle("XY-Z delay calibration")
     grid.fig.set_size_inches(15, 9)
@@ -44,7 +38,9 @@ def plot_raw_data_with_fit(ds: xr.Dataset, qubits: List[Any], fits: xr.Dataset):
     return grid.fig
 
 
-def plot_individual_data_with_fit(ax: Axes, ds: xr.Dataset, qubit: dict[str, str], fit: xr.Dataset = None):
+def plot_individual_data_with_fit(
+    ax: Axes, ds: xr.Dataset, qubit: dict[str, str], fit: xr.Dataset = None
+) -> None:
     """
     Plots individual qubit data on a given axis with optional fit.
 
@@ -53,18 +49,14 @@ def plot_individual_data_with_fit(ax: Axes, ds: xr.Dataset, qubit: dict[str, str
     ax : matplotlib.axes.Axes
         The axis on which to plot the data.
     ds : xr.Dataset
-        The dataset containing the quadrature data.
+        Dataset already selected for one qubit.
     qubit : dict[str, str]
         mapping to the qubit to plot.
     fit : xr.Dataset, optional
-        The dataset containing the fit parameters (default is None).
-
-    Notes
-    -----
-    - If the fit dataset is provided, the fitted curve is plotted along with the raw data.
+        Fit dataset already selected for the same qubit.
     """
-
-    fit.difference.plot(ax=ax)
-    if fit.success.data:
+    ds.difference.plot(ax=ax)
+    if fit is not None and fit.success.data:
+        fit.fit.plot(ax=ax)
         ax.axvline(fit.flux_delay.data, color="red", linestyle="--", label="fitted center")
         ax.legend()

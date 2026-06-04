@@ -302,7 +302,10 @@ elif node.parameters.load_data_id is None:
 
 if not node.parameters.simulate:
     if node.parameters.load_data_id is not None:
-        ds, machine, json_data, qubits, node.parameters = load_dataset(node.parameters.load_data_id, parameters = node.parameters)
+        ds, machine, json_data, qubits, node.parameters = load_dataset(
+            node.parameters.load_data_id, parameters=node.parameters
+        )
+        node.namespace["qubits"] = qubits
     else:
         # Fetch the data from the OPX and convert it into a xarray with corresponding axes (from most inner to outer loop)
         ds = fetch_results_as_xarray(job.result_handles, qubits, {"relative_time": relative_time, "init_state": ["e", "g"]})
