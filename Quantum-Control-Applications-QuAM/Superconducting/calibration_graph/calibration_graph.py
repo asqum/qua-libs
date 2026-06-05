@@ -1,6 +1,10 @@
 from typing import List, Optional
-from qualibrate import QualibrationLibrary, QualibrationGraph, GraphParameters
-from qualibrate.orchestration.basic_orchestrator import BasicOrchestrator
+from compat import (
+    BasicOrchestrator,
+    GraphParameters,
+    QualibrationGraph,
+    QualibrationLibrary,
+)
 
 
 # Define graph target parameters
