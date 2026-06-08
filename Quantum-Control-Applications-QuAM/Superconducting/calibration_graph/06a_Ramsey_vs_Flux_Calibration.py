@@ -40,19 +40,19 @@ import numpy as np
 # %% {Node_parameters}
 class Parameters(NodeParameters):
     qubits: Optional[List[str]] = None
-    num_averages: int = 150
-    frequency_detuning_in_mhz: float = 4.0
+    num_averages: int = 200
+    frequency_detuning_in_mhz: float = 6
     min_wait_time_in_ns: int = 16
     max_wait_time_in_ns: int = 516
     wait_time_step_in_ns: int = 10
     flux_span: float = 0.08
-    flux_step: float = 0.001
-    flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
+    flux_step: float = 0.002
+    flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
     simulate: bool = False
     simulation_duration_ns: int = 2500
     timeout: int = 100
     load_data_id: Optional[int] = None
-    multiplexed: bool = False
+    multiplexed: bool = True
 
 node = QualibrationNode(name="06a_Ramsey_vs_Flux_Calibration", parameters=Parameters())
 

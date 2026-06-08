@@ -42,13 +42,13 @@ class Parameters(NodeParameters):
 
     qubits: Optional[List[str]] = None
     num_averages: int = 60 #10
-    operation_x180_or_any_90: Literal["x180", "x90", "-x90", "y90", "-y90"] = "x180"
-    min_amp_factor: float = 0.8
-    max_amp_factor: float = 1.2
-    amp_factor_step: float = 0.004
-    max_number_rabi_pulses_per_sweep: int = 88
-    flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
-    reset_type_thermal_or_active: Literal["thermal", "active"] = "thermal"
+    operation_x180_or_any_90: Literal["x180", "x90", "-x90", "y90", "-y90"] = "x90"
+    min_amp_factor: float = 0.95
+    max_amp_factor: float = 1.05
+    amp_factor_step: float = 0.001
+    max_number_rabi_pulses_per_sweep: int = 200
+    flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
+    reset_type_thermal_or_active: Literal["thermal", "active"] = "active"
     simulate: bool = False
     timeout: int = 100
 

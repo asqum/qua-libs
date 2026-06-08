@@ -56,7 +56,7 @@ from quam_libs.components.gates.two_qubit_gates import CZGate
 import xarray as xr
 
 # %% {Node_parameters}
-qubit_pair_indexes = [2]  # The indexes of the qubit pairs to measure
+qubit_pair_indexes = [3]  # The indexes of the qubit pairs to measure
 class Parameters(NodeParameters):
 
     qubit_pairs: Optional[List[str]] = ["coupler_q%s_q%s"%(i,i+1) for i in qubit_pair_indexes]

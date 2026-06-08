@@ -62,7 +62,7 @@ class Parameters(NodeParameters):
     circuit: str = "ARBI" # "BELL1", "BELL2", "H", "CX"
     num_shots: int = 64
     flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
-    reset_type: Literal['active', 'thermal'] = "thermal"
+    reset_type: Literal['active', 'thermal'] = "active"
     simulate: bool = True
     timeout: int = 100
     load_data_id: Optional[int] = None

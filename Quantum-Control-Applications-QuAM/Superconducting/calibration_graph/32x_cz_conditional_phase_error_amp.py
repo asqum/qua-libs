@@ -61,7 +61,7 @@ Prerequisites:
 State update:
 - The optimal CZ gate amplitude: qubit_pair.gates["Cz"].flux_pulse_control.amplitude
 """
-qubit_pair_indexes = [2]  # The indexes of the qubit pair to calibrate
+qubit_pair_indexes = [4]  # The indexes of the qubit pair to calibrate
 class Parameters(NodeParameters):
     qubit_pairs: Optional[List[str]] = ["coupler_q%s_q%s"%(i,i+1) for i in qubit_pair_indexes]
     num_averages: int = 50

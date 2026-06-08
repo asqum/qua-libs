@@ -30,7 +30,7 @@ from quam_libs.lib.cryoscope_tools import cryoscope_frequency, estimate_fir_coef
 
 # %% {Node_parameters}
 class Parameters(NodeParameters):
-    qubits: Optional[List[str]] = ['q3']    
+    qubits: Optional[List[str]] = ['q4']    
     num_averages: int = 10000
     amplitude_factor: float = 1.53
     cryoscope_len: int = 240 #960

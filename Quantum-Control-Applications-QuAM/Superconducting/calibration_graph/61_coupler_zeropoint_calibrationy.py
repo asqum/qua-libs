@@ -67,7 +67,7 @@ and preparing the system for entangling gate calibration.
 """
 
 # %% {Node_parameters}
-qubit_pair_indexes = [5]  # [1, 2]
+qubit_pair_indexes = [4]  # [1, 2]
 
 
 class Parameters(NodeParameters):
@@ -79,18 +79,18 @@ class Parameters(NodeParameters):
     timeout: int = 200
     load_data_id: Optional[int] = None
 
-    coupler_flux_min: float = -0.1  # relative to the coupler set point
-    coupler_flux_max: float = 0.5 # relative to the coupler set point
+    coupler_flux_min: float = -0.2  # relative to the coupler set point
+    coupler_flux_max: float = 0.0 # relative to the coupler set point
 
-    coupler_flux_step: float = 0.006
-    qubit_flux_span: float = 0.1  # relative to the known/calculated detuning between the qubits
-    qubit_flux_step: float = 0.002
+    coupler_flux_step: float = 0.005
+    qubit_flux_span: float = 0.2  # relative to the known/calculated detuning between the qubits
+    qubit_flux_step: float = 0.005
     guess_flux_detuning: float|None = None  # initial guess for the qubit flux detuning to bring the qubits closer to resonance (relative to the qubit set point)
-    use_state_discrimination: bool = False
-    pulse_duration_ns: int = 88
+    use_state_discrimination: bool = True
+    pulse_duration_ns: int = 48
     cz_or_iswap: Literal["cz", "iswap"] = "cz"
     use_saved_detuning: bool = False
-    con_tar_flip:bool = False
+    con_tar_flip:bool = True
 
 
 node = QualibrationNode(name="61_coupler_zeropoint_calibration", parameters=Parameters())
@@ -151,7 +151,7 @@ for qp in qubit_pairs:
         )  # TODO: figure out how to make this run properly after filters
     elif node.parameters.cz_or_iswap == "cz":
         est_flux_shift = np.sqrt(
-            -(qp.qubit_control.xy.RF_frequency - qp.qubit_target.xy.RF_frequency - qp.qubit_target.anharmonicity)
+            -(qp.qubit_control.xy.RF_frequency - qp.qubit_target.xy.RF_frequency + qp.qubit_target.anharmonicity)
             / qp.qubit_control.freq_vs_flux_01_quad_term
         )  # TODO: figure out how to make this run properly after filters
     else:

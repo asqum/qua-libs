@@ -52,9 +52,10 @@ from quam_libs.lib.pulses import FluxPulse, SNZPulse
 
 
 # %% {Node_parameters}
+qubit_pair_indexes = [3]  # The indexes of the qubit pair to calibrate
 class Parameters(NodeParameters):
 
-    qubit_pairs: Optional[List[str]] = None
+    qubit_pairs: Optional[List[str]] = ["coupler_q%s_q%s"%(i,i+1) for i in qubit_pair_indexes]
     num_averages: int = 50
     flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
     reset_type: Literal["active", "thermal"] = "active"

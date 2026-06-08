@@ -55,7 +55,7 @@ from quam_libs.components.gates.two_qubit_gates import CZGate
 from quam_libs.lib.pulses import FluxPulse
 
 # %% {Node_parameters}
-qubit_pair_indexes = [2]  # The indexes of the qubit pair to calibrate
+qubit_pair_indexes = [3]  # The indexes of the qubit pair to calibrate
 class Parameters(NodeParameters):
 
     qubit_pairs: Optional[List[str]] = ["coupler_q%s_q%s"%(i,i+1) for i in qubit_pair_indexes]
@@ -68,7 +68,7 @@ class Parameters(NodeParameters):
     amp_step : float = 0.002
     num_frames: int = 10
     load_data_id: Optional[int] = None # 92417 
-    plot_raw : bool = False
+    plot_raw : bool = True
     measure_leak : bool = True
     operation: Literal["Cz_flattop", "Cz_unipolar", "Cz_bipolar"] = "Cz_unipolar"
     """Type of CZ operation to perform. Options are 'cz_flattop', 'cz_unipolar', or 'cz_bipolar'. Default is 'cz_unipolar'."""

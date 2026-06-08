@@ -42,11 +42,11 @@ from scipy.optimize import curve_fit
 # %% {Node_parameters}
 class Parameters(NodeParameters):
 
-    qubits: Optional[List[str]] = ['q7', "q8"]
+    qubits: Optional[List[str]] = ['q3', "q4"]
     num_runs: int = 5000
     reset_type_thermal_or_active: Literal["thermal", "active"] = "thermal"
     flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
-    multiplexed: bool = False
+    multiplexed: bool = True
     simulate: bool = False
     timeout: int = 100
 

@@ -59,25 +59,24 @@ qubit_pair_indexes = [4]  # The indexes of the qubit pair to calibrate
 class Parameters(NodeParameters):
 
     qubit_pairs: Optional[List[str]] = ["coupler_q%s_q%s"%(i,i+1) for i in qubit_pair_indexes]
-    num_averages: int = 300
+    num_averages: int = 200
     flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
     reset_type: Literal['active', 'thermal'] = "active"
     simulate: bool = False
     timeout: int = 100
-    amp_min : float = -0.15
-    amp_max : float = -0.1
-    or_span:float|None = None
+    amp_min : float = -0.25
+    amp_max : float = -0.15
     amp_pts:int = 100
-    num_frames: int = 11
+    num_frames: int = 10
     load_data_id: Optional[int] = None # 92417 
     plot_raw : bool = False
-    measure_leak:bool = True
+    measure_leak:bool = False
     operation: Literal["Cz"] = "Cz"
     
 
 
 node = QualibrationNode(
-    name="32ax_adiabaticCz_phase_calibration_frame", parameters=Parameters()
+    name="32ax_Adiabatic_cz_coupler", parameters=Parameters()
 )
 assert not (node.parameters.simulate and node.parameters.load_data_id is not None), "If simulate is True, load_data_id must be None, and vice versa."
 
@@ -201,7 +200,7 @@ with program() as CPhase_Oscillations:
 # %% {Simulate_or_execute
 if node.parameters.simulate:
     # Simulates the QUA program for the specified duration
-    simulation_config = SimulationConfig(duration=10_000//4)  # In clock cycles = 4ns
+    simulation_config = SimulationConfig(duration=30_000//4)  # In clock cycles = 4ns
     job = qmm.simulate(config, CPhase_Oscillations, simulation_config)
     samples = job.get_simulated_samples()
     fig, ax = plt.subplots(nrows=len(samples.keys()), sharex=True)

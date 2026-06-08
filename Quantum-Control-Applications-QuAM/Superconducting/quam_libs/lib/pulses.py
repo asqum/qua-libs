@@ -282,6 +282,69 @@ class CosineFlatTopPulse(Pulse):
 
         return p.tolist()
 
+
+def _effective_dpss_bandwidth(length: int, time_bandwidth: float) -> float:
+    """Clip NW so scipy dpss(M, NW) satisfies NW < M/2."""
+    return min(time_bandwidth, length / 2.0 - 1e-9)
+
+
+def _slepian_segment(
+    length: int,
+    time_bandwidth: float,
+    slepian_order: int,
+    rising: bool = True,
+) -> np.ndarray:
+    """First-order (or k-th) DPSS edge: 0 -> 1 (rise) or 1 -> 0 (fall)."""
+    if length <= 0:
+        return np.array([])
+    if length == 1:
+        return np.array([1.0])
+
+    from scipy.signal.windows import dpss
+
+    dpss_length = 2 * length - 1
+    nw = _effective_dpss_bandwidth(dpss_length, time_bandwidth)
+    w_full = dpss(dpss_length, nw, Kmax=slepian_order + 1)[slepian_order]
+    w = w_full[:length].astype(float)
+    w = w / w[-1]
+    if not rising:
+        w = w[::-1]
+    return w
+
+
+@quam_dataclass
+class SlepianPulse(Pulse):
+    """
+    Unipolar flux pulse shaped by the first DPSS (Slepian) sequence.
+
+    Args:
+        length (int): Total pulse duration in samples.
+        amplitude (float): Peak amplitude of the pulse.
+        time_bandwidth (float): DPSS half-bandwidth product NW (concentration).
+            Automatically reduced for short pulses (scipy requires NW < M/2).
+        slepian_order (int): DPSS sequence index. 0 = first-order Slepian.
+        axis_angle (float, optional): IQ axis angle in radians.
+    """
+
+    amplitude: float
+    time_bandwidth: float = 4.0
+    slepian_order: int = 0
+    axis_angle: float = None
+
+    def waveform_function(self):
+        from scipy.signal.windows import dpss
+
+        length = int(self.length)
+        nw = _effective_dpss_bandwidth(length, self.time_bandwidth)
+        w = dpss(length, nw, Kmax=self.slepian_order + 1)[self.slepian_order]
+        w = w / np.max(np.abs(w))
+        p = float(self.amplitude) * w
+
+        if self.axis_angle is not None:
+            p = p * np.exp(1j * self.axis_angle)
+
+        return p.tolist()
+
 @quam_dataclass
 class FreeCosineBipolarPulse(Pulse):
     """

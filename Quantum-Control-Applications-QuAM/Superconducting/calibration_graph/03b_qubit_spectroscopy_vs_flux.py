@@ -39,23 +39,23 @@ import numpy as np
 # %% {Node_parameters}
 class Parameters(NodeParameters):
 
-    qubits: Optional[List[str]] = ['q9']
-    num_averages: int = 1000
+    qubits: Optional[List[str]] = None
+    num_averages: int = 2000
     operation: str = "saturation"
-    operation_amplitude_factor: Optional[float] = 0.013 #0.004, 0.02 # q6:3e-3, q7:1e-2, q8:3e-3, q9:***,
+    operation_amplitude_factor: Optional[float] = 0.05 #0.004, 0.02 # q6:3e-3, q7:1e-2, q8:3e-3, q9:***,
     operation_len_in_ns: Optional[int] = None
     frequency_span_in_mhz: float = 100 #12, 120
     frequency_step_in_mhz: float = 1 #0.1, 1
     frequency_shift_in_mhz: float = 0 #0  
-    min_flux_offset_in_v: float = -0.15 ##-0.042
+    min_flux_offset_in_v: float = -0.1 ##-0.042
     max_flux_offset_in_v: float = 0.1 #0.042
     num_flux_points: int = 51
-    flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
+    flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
     simulate: bool = False
     simulation_duration_ns: int = 2500
     timeout: int = 100
     load_data_id: Optional[int] = None
-    multiplexed: bool = False
+    multiplexed: bool = True
 
 
 node = QualibrationNode(name="03b_Qubit_Spectroscopy_vs_Flux", parameters=Parameters())

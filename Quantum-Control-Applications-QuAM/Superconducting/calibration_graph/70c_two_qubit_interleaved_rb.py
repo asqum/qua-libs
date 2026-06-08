@@ -69,7 +69,7 @@ class Parameters(NodeParameters):
     num_averages: int = 100
     target_gate: str = "cz" # "idle_2q" or "cz" supported 
     basis_gates: list[str] = ['rz', 'sx', 'x', 'cz'] 
-    readout_mode: Literal["ge", "gef"] = "gef"
+    readout_mode: Literal["ge", "gef"] = "ge"
     flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
     reset_type_thermal_or_active: Literal["thermal", "active", "active_gef"] = "active"
     reduce_to_1q_cliffords: bool = False

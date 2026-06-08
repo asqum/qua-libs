@@ -69,7 +69,7 @@ class Parameters(NodeParameters):
     plot_raw : bool = False
     measure_leak : bool = False
     con_tar_flip:bool = True
-    operation: Literal["Cz_flattop", "Cz_unipolar", "Cz_bipolar"] = "Cz_unipolar"
+    operation: Literal["Cz_flattop", "Cz_unipolar", "Cz_bipolar"] = "Cz"
     """Type of CZ operation to perform. Options are 'cz_flattop', 'cz_unipolar', or 'cz_bipolar'. Default is 'cz_unipolar'."""
 
 node = QualibrationNode(

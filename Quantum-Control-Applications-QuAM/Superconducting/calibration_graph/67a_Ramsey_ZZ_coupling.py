@@ -65,11 +65,11 @@ from quam_libs.lib.pulses import FluxPulse
 from quam_libs.lib.fit import fit_oscillation_decay_exp, oscillation_decay_exp
 
 # %% {Node_parameters}
-qubit_pair_indexes = [2]  # The indexes of the qubit pairs to measure
+qubit_pair_indexes = [1]  # The indexes of the qubit pairs to measure
 class Parameters(NodeParameters):
 
     qubit_pairs: Optional[List[str]] = ["coupler_q%s_q%s"%(i,i+1) for i in qubit_pair_indexes]
-    num_averages: int = 20
+    num_averages: int = 50
     flux_point_joint_or_independent_or_pairwise: Literal["joint", "independent", "pairwise"] = "joint"
     reset_type: Literal['active', 'thermal'] = "active"
     simulate: bool = False
@@ -79,11 +79,11 @@ class Parameters(NodeParameters):
     """Frequency detuning in MHz. Default is 1.0 MHz."""
     min_wait_time_in_ns: int = 128
     """Minimum wait time in nanoseconds. Default is 16."""
-    max_wait_time_in_ns: int = 10000
+    max_wait_time_in_ns: int = 2000
     """Maximum wait time in nanoseconds. Default is 5000."""
     wait_time_step_in_ns: int = 8
     """Step size for the wait time scan in nanoseconds. Default is 60."""
-    flux_span: float = 0.25
+    flux_span: float = 0.5
     """Span of flux values to sweep in volts. Default is 0.01 V."""
     flux_num: int = 101
     """Number of flux points to sample. Default is 21."""

@@ -19,7 +19,7 @@ Next steps before going to the next node:
 from dataclasses import asdict
 
 # %% {Imports}
-from qualibrate import QualibrationNode
+from qualibrate import QualibrationNode, NodeParameters
 from quam_libs.components import QuAM
 from quam_libs.experiments.ramsey.analysis.fetch_dataset import fetch_dataset
 from quam_libs.experiments.ramsey.analysis.fitting import fit_frequency_detuning_and_t2_decay
@@ -32,27 +32,30 @@ from qualang_tools.loops import from_array
 from qualang_tools.multi_user import qm_session
 from qualang_tools.units import unit
 from qm.qua import *
+from typing import Literal, Optional, List
 import matplotlib.pyplot as plt
 
+class Parameters(NodeParameters):
+    qubits: Optional[List[str]] = None
+    num_averages: int = 500
+    reset_type: Literal["active", "thermal"] = "thermal"
+    frequency_detuning_in_mhz: float = 4
+    min_wait_time_in_ns: int = 16
+    max_wait_time_in_ns: int = 1016
+    num_time_points: int = 100
+    log_or_linear_sweep: Literal["log", "linear"] = "log"
+    use_state_discrimination: bool = False
+    flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
+    load_data_id: Optional[int] = None
+    multiplexed: bool = True
+    use_waveform_report: bool = True
+    simulate: bool = False
+    simulation_duration_ns: int = 2500
+    timeout: int = 100
 
 node = QualibrationNode(
     name="06_Ramsey",
-    parameters=Parameters(
-        qubits=None,
-        num_averages=1000,
-        reset_type='active',
-        frequency_detuning_in_mhz=4.0,
-        min_wait_time_in_ns=16,
-        max_wait_time_in_ns=2016,
-        num_time_points=200,
-        log_or_linear_sweep="log",
-        use_state_discrimination=False,
-        flux_point_joint_or_independent="independent",
-        multiplexed=False,
-        simulate=False,
-        use_waveform_report=True,
-        simulation_duration_ns=10_000
-    )
+    parameters=Parameters()
 )
 
 

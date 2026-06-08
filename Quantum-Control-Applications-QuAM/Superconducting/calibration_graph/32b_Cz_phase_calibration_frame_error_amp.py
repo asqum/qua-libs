@@ -55,7 +55,7 @@ from quam_libs.components.gates.two_qubit_gates import CZGate
 from quam_libs.lib.pulses import FluxPulse
 
 # %% {Node_parameters}
-qubit_pair_indexes = [1]  # The indexes of the qubit pair to calibrate
+qubit_pair_indexes = [4]  # The indexes of the qubit pair to calibrate
 class Parameters(NodeParameters):
 
     qubit_pairs: Optional[List[str]] = ["coupler_q%s_q%s"%(i,i+1) for i in qubit_pair_indexes]
@@ -64,8 +64,8 @@ class Parameters(NodeParameters):
     reset_type: Literal['active', 'thermal'] = "active"
     simulate: bool = False
     timeout: int = 100
-    amp_range : float = 0.10 #0.12
-    amp_step : float = 0.002
+    amp_range : float = 0.02 #0.12
+    amp_step : float = 0.0004
     num_frames: int = 13
     num_repeats: int = 12 #12
     load_data_id: Optional[int] = None

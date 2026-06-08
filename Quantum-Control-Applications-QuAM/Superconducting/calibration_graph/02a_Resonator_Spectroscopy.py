@@ -18,6 +18,7 @@ Before proceeding to the next node:
 """
 
 # %% {Imports}
+from tkinter import N
 from qualibrate import QualibrationNode, NodeParameters
 from quam_libs.components import QuAM
 from quam_libs.macros import qua_declaration
@@ -41,8 +42,8 @@ class Parameters(NodeParameters):
 
     qubits: Optional[List[str]] = None
     num_averages: int = 300
-    frequency_span_in_mhz: float = 40 #20.0
-    frequency_step_in_mhz: float = 0.1
+    frequency_span_in_mhz: float = 20 #20.0
+    frequency_step_in_mhz: float = 0.05
     simulate: bool = False
     simulation_duration_ns: int = 2500
     timeout: int = 100
@@ -193,6 +194,7 @@ if not node.parameters.simulate:
         print(f"Qi for {q.name} is {Qi:,.0f} \n")
 
     # %% {Plotting}
+    print(qubits)
     grid = QubitGrid(ds, [q.grid_location for q in qubits])
     for ax, qubit in grid_iter(grid):
         (ds.assign_coords(freq_MHz=ds.freq / 1e6).loc[qubit].IQ_abs * 1e3).plot(ax=ax, x="freq_MHz")

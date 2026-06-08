@@ -45,17 +45,17 @@ class Parameters(NodeParameters):
     qubits: Optional[List[str]] = None
     num_averages: int = 20
     operation: Literal["x180", "x90"] = "x180"
-    frequency_span_in_mhz: float = 10
+    frequency_span_in_mhz: float = 20
     frequency_step_in_mhz: float = 0.1
-    max_number_pulses_per_sweep: int = 20
-    flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
-    reset_type_thermal_or_active: Literal["thermal", "active"] = "thermal"
+    max_number_pulses_per_sweep: int = 50
+    flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
+    reset_type_thermal_or_active: Literal["thermal", "active"] = "active"
     DRAG_setpoint: Optional[float] = None  # None keeps the alpha value from the loaded state.
     simulate: bool = False
     simulation_duration_ns: int = 2500
     timeout: int = 100
     load_data_id: Optional[int] = None
-    multiplexed: bool = False
+    multiplexed: bool = True
 
 node = QualibrationNode(name="09a_Stark_Detuning", parameters=Parameters())
 

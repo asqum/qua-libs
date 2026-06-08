@@ -56,13 +56,13 @@ from quam_libs.lib.pulses import FluxPulse
 from quam_libs.lib.fit import fit_oscillation_decay_exp, oscillation_decay_exp
 
 # %% {Node_parameters}
-qubit_pair_indexes = [1, 2, 3, 4]  # The indexes of the qubit pairs to measure
+qubit_pair_indexes = [4]  # The indexes of the qubit pairs to measure
 class Parameters(NodeParameters):
 
     qubit_pairs: Optional[List[str]] = ["coupler_q%s_q%s"%(i,i+1) for i in qubit_pair_indexes]
     num_averages: int = 20
     flux_point_joint_or_independent_or_pairwise: Literal["joint", "independent", "pairwise"] = "joint"
-    reset_type: Literal['active', 'thermal'] = 'thermal'
+    reset_type: Literal['active', 'thermal'] = 'active'
     simulate: bool = False
     timeout: int = 100
     load_data_id: Optional[int] = None

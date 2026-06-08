@@ -41,20 +41,20 @@ State update:
     - Adds extracted flux delay (fit_results[qubit]["flux_delay"]) to q.z.opx_output.delay per successful qubit.
 """
 class Parameters(NodeParameters):
-    qubits: Optional[List[str]] = ["q4"]
+    qubits: Optional[List[str]] = ["q3", "q4"]
     num_shots: int = 50
     """Number of averages to perform. Default is 50."""
     zeros_before_after_pulse: int = 80
     """Number of zeros before and after the flux pulse to see the rising time. Default is 60ns"""
     z_pulse_amplitude: float = 0.1
     """Amplitude of the Z pulse to detune the qubit in frequency. Default is 0.1V"""
-    flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
+    flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
     use_state_discrimination: bool = True
-    reset_type_active_or_thermal: Literal["active", "thermal"] = "thermal"
+    reset_type_active_or_thermal: Literal["active", "thermal"] = "active"
     timeout: int = 100
     load_data_id:str = None
     simulate:str = None
-    multiplexed: bool = False 
+    multiplexed: bool = True 
 
 # Be sure to include [Parameters, Quam] so the node has proper type hinting
 node = QualibrationNode(

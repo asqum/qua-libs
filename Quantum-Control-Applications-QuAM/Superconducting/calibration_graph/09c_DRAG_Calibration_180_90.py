@@ -42,18 +42,18 @@ import xarray as xr
 # %% {Node_parameters}
 class Parameters(NodeParameters):
     qubits: Optional[List[str]] = None
-    num_averages: int = 1200
+    num_averages: int = 2000
     operation: str = "x180"
-    min_amp_factor: float = 0.0001
+    min_amp_factor: float = -2.0
     max_amp_factor: float = 2.0
     amp_factor_step: float = 0.01
-    flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
-    reset_type_thermal_or_active: Literal["thermal", "active"] = "thermal"
+    flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
+    reset_type_thermal_or_active: Literal["thermal", "active"] = "active"
     simulate: bool = False
     simulation_duration_ns: int = 2500
     timeout: int = 100
     load_data_id: Optional[int] = None
-    multiplexed: bool = False
+    multiplexed: bool = True
 
 node = QualibrationNode(name="09c_DRAG_Calibration_180_90", parameters=Parameters())
 

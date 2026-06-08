@@ -61,7 +61,7 @@ from quam_libs.lib.pulses import FluxPulse
 from quam_libs.lib.fit import fit_oscillation_decay_exp, oscillation_decay_exp
 
 # %% {Node_parameters}
-qubit_pair_indexes = [6]  # The indexes of the qubit pairs to measure
+qubit_pair_indexes = [4]  # The indexes of the qubit pairs to measure
 class Parameters(NodeParameters):
 
     qubit_pairs: Optional[List[str]] = ["coupler_q%s_q%s"%(i,i+1) for i in qubit_pair_indexes]

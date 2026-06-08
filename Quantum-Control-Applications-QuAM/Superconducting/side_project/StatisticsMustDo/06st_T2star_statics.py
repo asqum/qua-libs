@@ -22,19 +22,19 @@ from scipy.stats import norm
 # %% {Node_parameters}
 class Parameters(NodeParameters):
     qubits: Optional[List[str]] = None #The qubit to be measured. If None, all active qubits will be measured
-    num_averages: int = 500
-    frequency_detuning_in_mhz:float = 0.02
+    num_averages: int = 2000
+    frequency_detuning_in_mhz:float = 3
     min_wait_time_in_ns: int = 16
-    max_wait_time_in_ns: int = 40016
+    max_wait_time_in_ns: int = 2016
     flux_point_joint_or_independent_or_arbitrary: Literal['joint', 'independent'] = 'independent'   
     simulate: bool = False
     timeout: int = 100
-    use_state_discrimination: bool = True
+    use_state_discrimination: bool = False
     time_scale:Literal["linear",'log'] = "linear"
-    reset_type: Literal['active', 'thermal'] = "active"
+    reset_type: Literal['active', 'thermal'] = "thermal"
     load_data_id: Optional[int] = None
     multiplexed: bool = 1
-    histo_num:int = 1
+    histo_num:int = 100
     
 
 node = QualibrationNode(
