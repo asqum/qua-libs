@@ -1,29 +1,30 @@
-[tool.poetry]
+[project]
 name = "quam_libs"
 version = "0.1.0"
 description = "QuAM Components for Quantum Control"
 readme = "README.md"
-license = "BSD-3-Clause"
+license = { text = "BSD-3-Clause" }
+requires-python = ">=3.10"
 keywords = []
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: BSD License",
     "Operating System :: OS Independent",
 ]
-
-[tool.poetry.dependencies]
-python = ">=3.10"
-quam = "0.4.2"
-qualang-tools = "0.20.0"
-xarray = "*"
-lmfit = "*"
-qiskit-experiments = "*"
-tqdm = "*"
-qualibrate = "0.2.2"
-qualibrate-config = "0.1.6"
-qm-qua = ">=1.2.5"
-tomli = { version = "^2.0.1", python = "<3.11" }
-colorama = "*"
+dependencies = [
+    "quam==0.4.2",
+    "qualang-tools==0.20.0",
+    "xarray",
+    "lmfit",
+    "qiskit-experiments",
+    "tqdm",
+    "qualibrate==0.2.2",
+    "qualibrate-config==0.1.11",
+    "qm-qua>=1.2.5",
+    "tomli>=2.0.1; python_version < '3.11'",
+    "colorama",
+    "more_itertools"
+]
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
