@@ -1,7 +1,7 @@
 from typing import Optional, Literal
 
 from qualibrate import NodeParameters
-from qualibrate.parameters import RunnableParameters
+from compat import RunnableParameters
 from qualibration_libs.parameters import QubitsExperimentNodeParameters, CommonNodeParameters
 
 

@@ -58,7 +58,7 @@ class Parameters(
     simulation_duration_ns: int = 2500
     timeout: int = 100
     load_data_id: Optional[int] = None
-    multiplexed: bool = True
+    multiplexed: bool = False
 
 
 node = QualibrationNode(name="12_all_xy", parameters=Parameters())
@@ -231,6 +231,12 @@ def build_expected_iq(values):
     return [vmax] * N_GROUND + [vmean] * N_SUPERPOSITION + [vmin] * N_EXCITED
 
 
+def compute_rms(measured, expected):
+    measured = np.asarray(measured, dtype=float)
+    expected = np.asarray(expected, dtype=float)
+    return float(np.sqrt(np.mean((measured - expected) ** 2)))
+
+
 # %% {QUA_program}
 with program() as all_xy:
     I, I_st, Q, Q_st, n, n_st = qua_declaration(num_qubits=num_qubits)
@@ -362,8 +368,7 @@ if not node.parameters.simulate:
     node.results = {"ds": ds}
 
     # %% {Data_analysis}
-    fit_results = {q.name: {"success": True} for q in qubits}
-    node.results["fit_results"] = fit_results
+    fit_results = {}
 
     # %% {Plotting}
     grid = QubitGrid(ds, [q.grid_location for q in qubits])
@@ -372,18 +377,31 @@ if not node.parameters.simulate:
         qubit_name = qubit["qubit"]
         if "state" in ds.data_vars:
             state_values = ds.state.sel(qubit=qubit_name).values
+            expected_state = build_expected_state(state_values)
+            rms = compute_rms(state_values, expected_state)
+            fit_results[qubit_name] = {"success": True, "rms": rms}
             ax.plot(x, state_values, "bo-", label="state")
-            ax.plot(x, build_expected_state(state_values), "r-", alpha=0.8, label="expected")
+            ax.plot(x, expected_state, "r-", alpha=0.8, label="expected")
             ax.set_ylabel("State population")
             ax.set_ylim(-0.05, 1.05)
+            rms_text = f"RMS = {rms:.4f}"
         else:
             I_values = ds.I.sel(qubit=qubit_name).values
             Q_values = ds.Q.sel(qubit=qubit_name).values
-            ax.plot(x, 1e3 * I_values, "bo-", label="I")
-            ax.plot(x, 1e3 * Q_values, "go-", label="Q")
-            ax.plot(x, 1e3 * np.array(build_expected_iq(I_values)), "r-", alpha=0.8, label="expected I")
-            ax.plot(x, 1e3 * np.array(build_expected_iq(Q_values)), "m-", alpha=0.8, label="expected Q")
+            expected_I = np.array(build_expected_iq(I_values))
+            expected_Q = np.array(build_expected_iq(Q_values))
+            I_mV = 1e3 * I_values
+            Q_mV = 1e3 * Q_values
+            rms_I = compute_rms(I_mV, 1e3 * expected_I)
+            rms_Q = compute_rms(Q_mV, 1e3 * expected_Q)
+            rms = compute_rms(np.concatenate([I_mV, Q_mV]), np.concatenate([1e3 * expected_I, 1e3 * expected_Q]))
+            fit_results[qubit_name] = {"success": True, "rms": rms, "rms_I": rms_I, "rms_Q": rms_Q}
+            ax.plot(x, I_mV, "bo-", label="I")
+            ax.plot(x, Q_mV, "go-", label="Q")
+            ax.plot(x, 1e3 * expected_I, "r-", alpha=0.8, label="expected I")
+            ax.plot(x, 1e3 * expected_Q, "m-", alpha=0.8, label="expected Q")
             ax.set_ylabel("Quadrature [mV]")
+            rms_text = f"RMS = {rms:.2f} mV\n(RMS I = {rms_I:.2f}, RMS Q = {rms_Q:.2f})"
 
         ax.set_xlabel("Sequence")
         ax.set_xticks(x)
@@ -391,8 +409,20 @@ if not node.parameters.simulate:
         ax.set_title(qubit_name)
         ax.grid("all")
         ax.legend(framealpha=0)
+        ax.text(
+            0.02,
+            0.98,
+            rms_text,
+            transform=ax.transAxes,
+            va="top",
+            ha="left",
+            fontsize=9,
+            bbox={"boxstyle": "round", "facecolor": "wheat", "alpha": 0.8},
+        )
 
-    grid.fig.suptitle("All-XY")
+    node.results["fit_results"] = fit_results
+
+    grid.fig.suptitle(f"All-XY (multiplexed={node.parameters.multiplexed})")
     plt.tight_layout()
     plt.show()
     node.results["figure"] = grid.fig

@@ -588,7 +588,7 @@ if not node.parameters.simulate:
         node.save()
         if node.parameters.gif_fps is not None: 
             from qualibrate_config.resolvers import get_qualibrate_config_path, get_qualibrate_config
-            from qualibrate.utils.node.path_solver import get_node_dir_path
+            from compat import get_node_dir_path
             import os
             qs = get_qualibrate_config(get_qualibrate_config_path())
             base_path = qs.storage.location

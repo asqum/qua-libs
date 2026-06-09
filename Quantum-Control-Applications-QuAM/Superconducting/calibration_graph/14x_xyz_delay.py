@@ -41,20 +41,20 @@ State update:
     - Adds extracted flux delay (fit_results[qubit]["flux_delay"]) to q.z.opx_output.delay per successful qubit.
 """
 class Parameters(NodeParameters):
-    qubits: Optional[List[str]] = ["q3", "q4"]
-    num_shots: int = 50
+    qubits: Optional[List[str]] = ['q1']
+    num_shots: int = 100
     """Number of averages to perform. Default is 50."""
     zeros_before_after_pulse: int = 80
     """Number of zeros before and after the flux pulse to see the rising time. Default is 60ns"""
     z_pulse_amplitude: float = 0.1
     """Amplitude of the Z pulse to detune the qubit in frequency. Default is 0.1V"""
-    flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
+    flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
     use_state_discrimination: bool = True
-    reset_type_active_or_thermal: Literal["active", "thermal"] = "active"
+    reset_type_active_or_thermal: Literal["active", "thermal"] = "thermal"
     timeout: int = 100
-    load_data_id:str = None
+    load_data_id:str = 364
     simulate:str = None
-    multiplexed: bool = True 
+    multiplexed: bool = False 
 
 # Be sure to include [Parameters, Quam] so the node has proper type hinting
 node = QualibrationNode(
@@ -274,7 +274,11 @@ elif node.parameters.load_data_id is None:
 
 if not node.parameters.simulate:
     if node.parameters.load_data_id is not None:
-        ds, machine, json_data, qubits, node.parameters = load_dataset(node.parameters.load_data_id, parameters = node.parameters)
+        loaded_node = node.load_from_id(node.parameters.load_data_id)
+        ds = loaded_node.results["ds_raw"]
+        if loaded_node.namespace.get("qubits"):
+            qubits = loaded_node.namespace["qubits"]
+            node.namespace["qubits"] = qubits
     else:
         # Fetch the data from the OPX and convert it into a xarray with corresponding axes (from most inner to outer loop)
         ds = fetch_results_as_xarray(job.result_handles, qubits, {"relative_time": relative_time, "init_state": ["e", "g"]})
@@ -317,3 +321,5 @@ node.outcomes = {q.name: "successful" for q in qubits}
 node.results["initial_parameters"] = node.parameters.model_dump()
 node.machine = machine
 node.save()
+
+# %%
