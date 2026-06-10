@@ -71,9 +71,9 @@ average_gates_per_2q_layer = None
 
 class Parameters(NodeParameters):
     qubit_pairs: Optional[List[str]] = ["coupler_q4_q5"]#None
-    circuit_lengths: tuple[int] = (1, 2 ,4, 8, 16, 20) # in number of cliffords
-    num_circuits_per_length: int = 2
-    num_averages: int = 50
+    circuit_lengths: tuple[int] = (1, 2 ,4, 8, 12, 16, 20) # in number of cliffords
+    num_circuits_per_length: int = 20
+    num_averages: int = 500
     basis_gates: list[str] = ['rz', 'sx', 'x', 'cz'] 
     readout_mode: Literal["ge", "gef"] = "ge"
     flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
@@ -163,7 +163,7 @@ elif node.parameters.load_data_id is None:
         if node.parameters.use_input_stream:
             num_sequences = len(qua_program_handler.sequence_lengths)
             circuits_as_ints_batched_padded = [batch + [0] * (qua_program_handler.max_current_sequence_length - len(batch)) for batch in qua_program_handler.circuits_as_ints_batched]    
-            
+            node.machine.network['cloud']=False
             if node.machine.network['cloud']:
                 write_sync_hook(circuits_as_ints_batched_padded)
 

@@ -83,11 +83,11 @@ node = QualibrationNode(
         multiplexed=1,
         flux_point_joint_or_independent="joint",
         num_runs=10000*1,
-        reset_type_thermal_or_active = 'thermal',
+        reset_type_thermal_or_active = 'active',
         load_data_id=None,
         simulate=False,
         simulation_duration_ns=1000,
-        use_waveform_report=False
+        use_waveform_repoAsrt=False
     )
 )
 

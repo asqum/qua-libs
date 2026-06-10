@@ -60,7 +60,7 @@ qubit_pair_indexes = [3]  # The indexes of the qubit pairs to measure
 class Parameters(NodeParameters):
 
     qubit_pairs: Optional[List[str]] = ["coupler_q%s_q%s"%(i,i+1) for i in qubit_pair_indexes]
-    num_averages: int = 100
+    num_averages: int = 20
     flux_point_joint_or_independent_or_pairwise: Literal["joint", "independent", "pairwise"] = "joint"
     reset_type: Literal['active', 'thermal'] = "active"
     simulate: bool = False
@@ -236,13 +236,13 @@ if not node.parameters.simulate:
 # %% data processing
 if not node.parameters.simulate:
     def qubit_flux_shift(qp, amp):
-        return amp * qp.gates['Cz'].flux_pulse_control.amplitude
+        return amp * qp.gates[operation_name].flux_pulse_control.amplitude
     def coupler_flux_shift(qp, amp):
-        return amp * qp.gates['Cz'].coupler_flux_pulse.amplitude
+        return amp * qp.gates[operation_name].coupler_flux_pulse.amplitude
     def abs_coupler_amp(qp, amp):
-        return amp * qp.gates['Cz'].coupler_flux_pulse.amplitude + qp.coupler.decouple_offset
+        return amp * qp.gates[operation_name].coupler_flux_pulse.amplitude + qp.coupler.decouple_offset
     def detuning(qp, amp):
-        return -(amp * qp.gates['Cz'].flux_pulse_control.amplitude)**2 * qp.qubit_control.freq_vs_flux_01_quad_term
+        return -(amp * qp.gates[operation_name].flux_pulse_control.amplitude)**2 * qp.qubit_control.freq_vs_flux_01_quad_term
     ds = ds.assign_coords(
         {"flux_qubit": (["qubit", "qubit_amp"], np.array([qubit_flux_shift(qp, ds.qubit_amp) for qp in qubit_pairs]))}
     )

@@ -66,7 +66,7 @@ class Parameters(NodeParameters):
     qubit_pairs: Optional[List[str]] = ["coupler_q4_q5"] #None
     circuit_lengths: tuple[int] = (1, 2 ,4, 6, 8, 12, 16, 20) # in number of cliffords
     num_circuits_per_length: int = 20
-    num_averages: int = 100
+    num_averages: int = 500
     target_gate: str = "cz" # "idle_2q" or "cz" supported 
     basis_gates: list[str] = ['rz', 'sx', 'x', 'cz'] 
     readout_mode: Literal["ge", "gef"] = "ge"
