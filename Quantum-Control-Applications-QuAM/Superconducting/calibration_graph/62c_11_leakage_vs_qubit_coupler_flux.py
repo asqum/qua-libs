@@ -56,7 +56,7 @@ from quam_libs.components.gates.two_qubit_gates import CZGate
 import xarray as xr
 
 # %% {Node_parameters}
-qubit_pair_indexes = [2]  # The indexes of the qubit pairs to measure
+qubit_pair_indexes = [1]  # The indexes of the qubit pairs to measure
 class Parameters(NodeParameters):
 
     qubit_pairs: Optional[List[str]] = ["coupler_q%s_q%s"%(i,i+1) for i in qubit_pair_indexes]
@@ -66,12 +66,12 @@ class Parameters(NodeParameters):
     simulate: bool = False
     timeout: int = 100
     load_data_id: Optional[int] = None
-    qubit_amp_range : float = 0.1
-    qubit_amp_step : float = 0.0025
-    coupler_amp_range : float = 0.1
-    coupler_amp_step : float = 0.0025
+    qubit_amp_range : float = 0.05
+    qubit_amp_step : float = 0.002
+    coupler_amp_range : float = 0.15
+    coupler_amp_step : float = 0.005
     use_state_discrimination: bool = True
-    operation: Literal["Cz_flattop", "Cz_unipolar", "Cz_bipolar"] = "Cz_unipolar"
+    operation: Literal["Cz_flattop", "Cz_unipolar", "Cz_bipolar"] = "Cz_flattop"
     """Type of CZ operation to perform. Options are 'cz_flattop', 'cz_unipolar', or 'cz_bipolar'. Default is 'cz_unipolar'."""
     
     
@@ -109,17 +109,26 @@ if node.parameters.load_data_id is None:
 # Helper functions #
 ####################
 
+operation_name = node.parameters.operation
+
+gate_refs = {}
+for qp in qubit_pairs:
+    gate = qp.gates[operation_name]
+    gate_refs[qp.name] = {
+        "qubit_amplitude": gate.flux_pulse_control.amplitude,
+        "coupler_amplitude": gate.coupler_flux_pulse.amplitude,
+    }
+
 
 # %% {QUA_program}
 n_avg = node.parameters.num_averages  # The number of averages
 
 flux_point = node.parameters.flux_point_joint_or_independent_or_pairwise  # 'independent' or 'joint' or 'pairwise'
-# Loop parameters
+# Scale factors centered at 1.0 → nominal point is the selected gate amplitude
 flux_qubit_amplitudes = np.arange(1-node.parameters.qubit_amp_range, 1+node.parameters.qubit_amp_range, node.parameters.qubit_amp_step)
 flux_coupler_amplitudes = np.arange(1-node.parameters.coupler_amp_range, 1+node.parameters.coupler_amp_range, node.parameters.coupler_amp_step)
     
 reset_coupler_bias = False
-operation_name = node.parameters.operation
 
 with program() as CPhase_Oscillations:
     n = declare(int)
@@ -228,6 +237,13 @@ if not node.parameters.simulate:
         ds = fetch_results_as_xarray(job.result_handles, qubit_pairs, {"qubit_amp": flux_qubit_amplitudes, "coupler_amp": flux_coupler_amplitudes, "N": np.linspace(1, n_avg, n_avg)})
     else:
         ds, machine = load_dataset(node.parameters.load_data_id)
+        gate_refs = {}
+        for qp in qubit_pairs:
+            gate = qp.gates[operation_name]
+            gate_refs[qp.name] = {
+                "qubit_amplitude": gate.flux_pulse_control.amplitude,
+                "coupler_amplitude": gate.coupler_flux_pulse.amplitude,
+            }
         
     node.results = {"ds": ds}
     node.results["results"] = {}
@@ -236,13 +252,16 @@ if not node.parameters.simulate:
 # %% data processing
 if not node.parameters.simulate:
     def qubit_flux_shift(qp, amp):
-        return amp * qp.gates['Cz'].flux_pulse_control.amplitude
+        return amp * gate_refs[qp.name]["qubit_amplitude"]
+
     def coupler_flux_shift(qp, amp):
-        return amp * qp.gates['Cz'].coupler_flux_pulse.amplitude
+        return amp * gate_refs[qp.name]["coupler_amplitude"]
+
     def abs_coupler_amp(qp, amp):
-        return amp * qp.gates['Cz'].coupler_flux_pulse.amplitude + qp.coupler.decouple_offset
+        return amp * gate_refs[qp.name]["coupler_amplitude"] + qp.coupler.decouple_offset
+
     def detuning(qp, amp):
-        return -(amp * qp.gates['Cz'].flux_pulse_control.amplitude)**2 * qp.qubit_control.freq_vs_flux_01_quad_term
+        return -(amp * gate_refs[qp.name]["qubit_amplitude"])**2 * qp.qubit_control.freq_vs_flux_01_quad_term
     ds = ds.assign_coords(
         {"flux_qubit": (["qubit", "qubit_amp"], np.array([qubit_flux_shift(qp, ds.qubit_amp) for qp in qubit_pairs]))}
     )
@@ -312,6 +331,7 @@ for qp in qubit_pairs:
         }
 
 # %% {Plotting}
+
 if not node.parameters.simulate:
     grid_names, qubit_pair_names = grid_pair_names(qubit_pairs)
     grid = QubitPairGrid(grid_names, qubit_pair_names)
@@ -392,24 +412,19 @@ if not node.parameters.simulate:
         if legend_entries:
                 ax.legend(fontsize=7, loc="upper right", frameon=True)
 
-        # overall title per qubit pair
-        grid.fig.suptitle(f'Lekage out of 11 state', y=0.97, fontsize=12)
-        plt.tight_layout()
-        plt.show()
+    # overall title per qubit pair
+    grid.fig.suptitle(f'Lekage out of 11 state', y=0.97, fontsize=12)
+    plt.tight_layout()
+    plt.show()
 
-        # store figure
-        node.results[f"figure_11_leakage"] = grid.fig
-
-
-
+    # store figure
+    node.results[f"figure_11_leakage"] = grid.fig
 
 # %% {Update_state}
 if not node.parameters.simulate:
-    if not node.parameters.simulate:
-        with node.record_state_updates():
-            for qp in qubit_pairs:
-                    qp.extras["CZ_coupler_flux"] = node.results["results"][qp.name]["flux_coupler_max"]
-                    qp.gates[operation_name].coupler_flux_pulse.amplitude = node.results["results"][qp.name]["flux_coupler_max"]
+    with node.record_state_updates():
+        for qp in qubit_pairs:
+            qp.gates[operation_name].coupler_flux_pulse.amplitude = node.results["results"][qp.name]["flux_coupler_max"]
 # %% {Save_results}
 if not node.parameters.simulate:    
     node.outcomes = {q.name: "successful" for q in qubit_pairs}

@@ -58,12 +58,12 @@ from quam_libs.lib.pulses import FluxPulse
 # %% {Node_parameters}
 class Parameters(NodeParameters):
 
-    qubit_pairs: Optional[List[str]] = ["coupler_q3_q4"]
-    circuit: str = "ARBI" # "BELL1", "BELL2", "H", "CX"
-    num_shots: int = 64
+    qubit_pairs: Optional[List[str]] = ["coupler_q1_q2"]
+    circuit: str = "BELL1" # "BELL1", "BELL2", "H", "CX"
+    num_shots: int = 200
     flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
-    reset_type: Literal['active', 'thermal'] = "thermal"
-    simulate: bool = True
+    reset_type: Literal['active', 'thermal'] = "active"
+    simulate: bool = False
     timeout: int = 100
     load_data_id: Optional[int] = None
 
@@ -253,7 +253,7 @@ if not node.parameters.simulate:
         results[qp.name] = np.array(results[qp.name])/node.parameters.num_shots
         
         conf_mat = qp.confusion
-        # corrected_results[qp.name] = np.linalg.inv(conf_mat) @ results[qp.name]
+        corrected_results[qp.name] = np.linalg.inv(conf_mat) @ results[qp.name]
         corrected_results[qp.name] = results[qp.name]
         print(f"{qp.name}: {corrected_results[qp.name]}")
 

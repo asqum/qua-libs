@@ -59,9 +59,9 @@ Prerequisites:
 - Initial estimate of the CZ gate amplitude
 
 State update:
-- The optimal CZ gate amplitude: qubit_pair.gates["Cz"].flux_pulse_control.amplitude
+- The optimal CZ gate amplitude: qubit_pair.gates[operation].flux_pulse_control.amplitude
 """
-qubit_pair_indexes = [2]  # The indexes of the qubit pair to calibrate
+qubit_pair_indexes = [1]  # The indexes of the qubit pair to calibrate
 class Parameters(NodeParameters):
     qubit_pairs: Optional[List[str]] = ["coupler_q%s_q%s"%(i,i+1) for i in qubit_pair_indexes]
     num_averages: int = 50
@@ -74,7 +74,7 @@ class Parameters(NodeParameters):
     """Number of frame rotation points for phase measurement. Default is 10."""
     operation: Literal["Cz_flattop", "Cz_unipolar", "Cz_bipolar"] = "Cz_flattop"
     """Type of CZ operation to perform. Options are 'cz_flattop', 'cz_unipolar', or 'cz_bipolar'. Default is 'cz_unipolar'."""
-    number_of_operations: int = 20
+    number_of_operations: int = 10
     """Number of operations to perform for each amplitude. Default is 10."""
     flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
     load_data_id: Optional[int] = None # 92417
@@ -114,11 +114,19 @@ if node.parameters.load_data_id is None:
 
 node.namespace["qubit_pairs"] = qubit_pairs
 n_avg = node.parameters.num_averages
+# Scale factors centered at 1.0 → nominal point is the selected gate qubit amplitude
 amplitudes = np.arange(1 - node.parameters.amp_range, 1 + node.parameters.amp_range, node.parameters.amp_step)
 frames = np.arange(0, 1, 1 / node.parameters.num_frame_rotations)
 
 operation_name = node.parameters.operation
 num_operations = node.parameters.number_of_operations
+
+gate_refs = {}
+for qp in qubit_pairs:
+    gate_refs[qp.name] = {
+        "qubit_amplitude": qp.gates[operation_name].flux_pulse_control.amplitude,
+    }
+node.namespace["gate_refs"] = gate_refs
 # Register the sweep axes to be added to the dataset when fetching data
 node.namespace["sweep_axes"] = {
     "qubit_pair": xr.DataArray([qp.id for qp in qubit_pairs], attrs={"long_name": "qubit pair index"}),
@@ -158,8 +166,8 @@ with program() as CZ_phase_calibration_error_amp:
         state_c_st = [declare_stream() for _ in range(num_qubit_pairs)]
         state_t_st = [declare_stream() for _ in range(num_qubit_pairs)]
     for i, qp in enumerate(qubit_pairs):
-        qp.gates['Cz'].phase_shift_control = 0.0
-        qp.gates['Cz'].phase_shift_target = 0.0
+        qp.gates[operation_name].phase_shift_control = 0.0
+        qp.gates[operation_name].phase_shift_target = 0.0
         machine.set_all_fluxes(flux_point, qp)
         with for_(n, 0, n < n_avg, n + 1):
             save(n, n_st)
@@ -249,6 +257,17 @@ if not node.parameters.simulate:
         ds = fetch_results_as_xarray(job.result_handles, qubit_pairs, {"control_axis": [0,1], "frame": frames, "amp": amplitudes, "number_of_operations": np.arange(1, num_operations + 1)})
     else:
         ds, machine = load_dataset(node.parameters.load_data_id)
+        if node.parameters.qubit_pairs is None or node.parameters.qubit_pairs == "":
+            qubit_pairs = machine.active_qubit_pairs
+        else:
+            qubit_pairs = [machine.qubit_pairs[qp] for qp in node.parameters.qubit_pairs]
+        node.namespace["qubit_pairs"] = qubit_pairs
+        gate_refs = {}
+        for qp in qubit_pairs:
+            gate_refs[qp.name] = {
+                "qubit_amplitude": qp.gates[operation_name].flux_pulse_control.amplitude,
+            }
+        node.namespace["gate_refs"] = gate_refs
 
     ds = ds.rename({'qubit': 'qubit_pair'})    
     node.results = {"ds_raw": ds}

@@ -38,7 +38,7 @@ import xarray as xr
 
 
 # %% {Node_parameters}
-qubit_pair_indexes = [4]
+qubit_pair_indexes = [1]
 
 
 class Parameters(NodeParameters):
@@ -51,10 +51,10 @@ class Parameters(NodeParameters):
     simulation_duration_ns: int = 10_000
     timeout: int = 100
     num_frames: int = 80
-    frame_span: float = 0.2
+    frame_span: float = 0.4
     number_of_operations: int = 30
     load_data_id: Optional[int] = None
-    operation: Literal["Cz", "Cz_flattop", "Cz_unipolar", "Cz_bipolar", "Cz_flattop_erf"] = "Cz"
+    operation: Literal["Cz", "Cz_flattop", "Cz_unipolar", "Cz_bipolar", "Cz_flattop_erf"] = "Cz_flattop"
 
 
 node = QualibrationNode(name="33b_Cz_1Qphase_calibration_frame_error_amp", parameters=Parameters())
@@ -94,6 +94,17 @@ num_operations = node.parameters.number_of_operations
 half_span = node.parameters.frame_span / 2
 frames = np.arange(-half_span, half_span, node.parameters.frame_span / node.parameters.num_frames)
 operation_axis = np.arange(1, num_operations + 1)
+
+gate_refs = {}
+for qp in qubit_pairs:
+    gate = qp.gates[operation_name]
+    gate_refs[qp.name] = {
+        "qubit_amplitude": gate.flux_pulse_control.amplitude,
+        "coupler_amplitude": gate.coupler_flux_pulse.amplitude,
+        "phase_shift_control": gate.phase_shift_control,
+        "phase_shift_target": gate.phase_shift_target,
+    }
+node.namespace["gate_refs"] = gate_refs
 
 
 # %% {Utility_functions}
@@ -253,6 +264,7 @@ def load_qubit_pair_dataset(serial_number, parameters):
 
 
 # %% {QUA_program}
+# CZ executed at nominal gate parameters (amplitude_scale = 1.0); frame sweep amplifies phase error.
 with program() as CZ_1Q_phase_error_amp:
     frame = declare(fixed)
     n = declare(int)
@@ -400,11 +412,24 @@ if not node.parameters.simulate:
             {"frame": frames, "number_of_operations": operation_axis},
         )
         ds = normalize_pair_dataset(ds)
+        node.results = {"ds": ds, "gate_refs": gate_refs}
     else:
         ds, machine, json_data, qubit_pairs, node.parameters = load_qubit_pair_dataset(
             node.parameters.load_data_id, parameters=node.parameters
         )
-    node.results = {"ds": ds}
+        node.namespace["qubit_pairs"] = qubit_pairs
+        operation_name = node.parameters.operation
+        gate_refs = {}
+        for qp in qubit_pairs:
+            gate = qp.gates[operation_name]
+            gate_refs[qp.name] = {
+                "qubit_amplitude": gate.flux_pulse_control.amplitude,
+                "coupler_amplitude": gate.coupler_flux_pulse.amplitude,
+                "phase_shift_control": gate.phase_shift_control,
+                "phase_shift_target": gate.phase_shift_target,
+            }
+        node.namespace["gate_refs"] = gate_refs
+        node.results = {"ds": ds, "gate_refs": gate_refs}
 
     if not node.parameters.use_state_discrimination:
         ds = convert_pair_IQ_to_V(ds, qubit_pairs)
