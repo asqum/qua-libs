@@ -16,8 +16,6 @@ the two-qubit system.
 Key Features:
     - reduce_to_1q_cliffords: When enabled (default), the Clifford gates are sampled as 1q Cliffords per qubit 
       (this is of course a much smaller subset of the whole 2q Clifford group).
-    - use_input_stream: When enabled (default), the circuit sequences are streamed to the OPX in using the 
-      input stream feature. This allows for dynamic circuit execution and reduces memory usage on the OPX.
 
 Each sequence is played multiple times for averaging, and multiple random sequences are generated for each depth to 
 improve statistical significance. The data is then post-processed to extract the two-qubit Clifford fidelity.
@@ -71,21 +69,19 @@ average_gates_per_2q_layer = None
 
 class Parameters(NodeParameters):
     qubit_pairs: Optional[List[str]] = ["coupler_q4_q5"]#None
-    circuit_lengths: tuple[int] = (1, 2 ,4, 8, 16, 20) # in number of cliffords
-    num_circuits_per_length: int = 2
-    num_averages: int = 50
+    circuit_lengths: tuple[int] = (1, 2 ,4, 8, 12, 16, 22, 26) # in number of cliffords
+    num_circuits_per_length: int = 20
+    num_averages: int = 200
     basis_gates: list[str] = ['rz', 'sx', 'x', 'cz'] 
     readout_mode: Literal["ge", "gef"] = "ge"
     flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
     reset_type_thermal_or_active: Literal["thermal", "active", "active_gef"] = "active"
     reduce_to_1q_cliffords: bool = False
-    use_input_stream: bool = False
     simulate: bool = False
     simulation_duration_ns: int = 10000
     load_data_id: Optional[int] = None
     timeout: int = 600
     seed: int = 0
-    targets_name = "qubit_pairs"
 
 node = QualibrationNode[Parameters, QuAM](name="70b_two_qubit_standard_rb", parameters=Parameters())
 
@@ -160,24 +156,7 @@ elif node.parameters.load_data_id is None:
     date_time = datetime.now(timezone(timedelta(hours=3))).strftime("%Y-%m-%d %H:%M:%S")
     
     with qm_session(node.machine.qmm, config, timeout=node.parameters.timeout) as qm:
-        if node.parameters.use_input_stream:
-            num_sequences = len(qua_program_handler.sequence_lengths)
-            circuits_as_ints_batched_padded = [batch + [0] * (qua_program_handler.max_current_sequence_length - len(batch)) for batch in qua_program_handler.circuits_as_ints_batched]    
-            
-            if node.machine.network['cloud']:
-                write_sync_hook(circuits_as_ints_batched_padded)
-
-                job = qm.execute(rb,
-                        terminal_output=True,options={"sync_hook": "sync_hook.py"})
-            else:
-                job = qm.execute(rb)
-                for id, batch in enumerate(circuits_as_ints_batched_padded):
-                    job.push_to_input_stream("sequence", batch)
-                    print(f"{id}/{num_sequences}: Received ")
-        
-        else:
-            job = qm.execute(rb)
-        
+        job = qm.execute(rb)
         results = fetching_tool(job, ["iteration"], mode="live")
         while results.is_processing():
             # Fetch results
