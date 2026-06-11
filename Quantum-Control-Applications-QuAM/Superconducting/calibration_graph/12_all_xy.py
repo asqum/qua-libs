@@ -19,7 +19,11 @@ from quam_libs.components import QuAM
 from quam_libs.macros import qua_declaration, active_reset, readout_state
 from quam_libs.lib.qua_datasets import convert_IQ_to_V
 from quam_libs.lib.plot_utils import QubitGrid, grid_iter
-from quam_libs.lib.save_utils import fetch_results_as_xarray, load_dataset
+from quam_libs.lib.save_utils import (
+    fetch_results_as_xarray,
+    restore_load_data_id,
+    resolve_qubits_from_node,
+)
 from qualang_tools.results import progress_counter, fetching_tool
 from qualang_tools.loops import from_array
 from qualang_tools.multi_user import qm_session
@@ -360,9 +364,12 @@ if not node.parameters.simulate:
         if not state_discrimination:
             ds = convert_IQ_to_V(ds, qubits)
     else:
-        ds, machine, json_data, qubits, node.parameters = load_dataset(
-            node.parameters.load_data_id, parameters=node.parameters
-        )
+        load_data_id = node.parameters.load_data_id
+        node = node.load_from_id(load_data_id)
+        ds = node.results["ds"]
+        restore_load_data_id(node, load_data_id)
+        machine = node.machine
+        qubits = resolve_qubits_from_node(machine, node)
         ds = add_sequence_labels(ds)
 
     node.results = {"ds": ds}

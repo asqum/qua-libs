@@ -6,7 +6,11 @@ from qualibrate import QualibrationNode, NodeParameters
 from qualibrate import QualibrationNode, NodeParameters
 from quam_libs.components import QuAM
 from quam_libs.macros import active_reset, readout_state, readout_state_gef, active_reset_gef, active_reset_simple
-from quam_libs.lib.save_utils import fetch_results_as_xarray, load_dataset
+from quam_libs.lib.save_utils import (
+    fetch_results_as_xarray,
+    restore_load_data_id,
+    resolve_qubit_pairs_from_node,
+)
 from qualang_tools.results import progress_counter, fetching_tool
 from qualang_tools.loops import from_array
 from qualang_tools.multi_user import qm_session
@@ -338,7 +342,12 @@ if not node.parameters.simulate:
         ds = ds.assign_coords({"flux_qubit_full": (["qubit", "flux_qubit"], flux_qubit_full)})
         ds = ds.assign_coords({"flux_coupler_full": (["qubit", "flux_coupler"], flux_coupler_full)})
     else:
-        ds, machine, _, qubit_pairs = load_dataset(node.parameters.load_data_id)
+        load_data_id = node.parameters.load_data_id
+        node = node.load_from_id(load_data_id)
+        ds = node.results["ds"]
+        restore_load_data_id(node, load_data_id)
+        machine = node.machine
+        qubit_pairs = resolve_qubit_pairs_from_node(machine, node)
         coupler_centers_qp = {}
         for qp in qubit_pairs:
             operation_name, coupler_attr = resolve_operation(qp)
@@ -349,24 +358,53 @@ if not node.parameters.simulate:
 # %% Data processing
 detuning_mode = "quadratic"  # "cosine" or "quadratic"
 if not node.parameters.simulate:
-    if detuning_mode == "quadratic":
-        detuning = np.array(
-            [-fluxes_qp[qp.name] ** 2 * qp.qubit_control.freq_vs_flux_01_quad_term for qp in qubit_pairs]
+    if node.parameters.load_data_id is None:
+        if detuning_mode == "quadratic":
+            detuning = np.array(
+                [-fluxes_qp[qp.name] ** 2 * qp.qubit_control.freq_vs_flux_01_quad_term for qp in qubit_pairs]
+            )
+        elif detuning_mode == "cosine":
+            detuning = np.array(
+                [
+                    oscillation(
+                        fluxes_qubit,
+                        qp.qubit_control.extras["a"],
+                        qp.qubit_control.extras["f"],
+                        qp.qubit_control.extras["phi"],
+                        qp.qubit_control.extras["offset"],
+                    )
+                    for qp in qubit_pairs
+                ]
+            )
+        ds = ds.assign_coords({"detuning": (["qubit", "flux_qubit"], detuning)})
+    elif "detuning" not in ds.coords:
+        fluxes_qubit = np.arange(
+            -node.parameters.qubit_flux_span / 2,
+            node.parameters.qubit_flux_span / 2 + 0.0001,
+            node.parameters.qubit_flux_step,
         )
-    elif detuning_mode == "cosine":
-        detuning = np.array(
-            [
-                oscillation(
-                    fluxes_qubit,
-                    qp.qubit_control.extras["a"],
-                    qp.qubit_control.extras["f"],
-                    qp.qubit_control.extras["phi"],
-                    qp.qubit_control.extras["offset"],
-                )
-                for qp in qubit_pairs
-            ]
-        )
-    ds = ds.assign_coords({"detuning": (["qubit", "flux_qubit"], detuning)})
+        fluxes_qp = {}
+        for qp in qubit_pairs:
+            operation_name, _ = resolve_operation(qp)
+            fluxes_qp[qp.name] = fluxes_qubit + qubit_flux_center(qp, operation_name)
+        if detuning_mode == "quadratic":
+            detuning = np.array(
+                [-fluxes_qp[qp.name] ** 2 * qp.qubit_control.freq_vs_flux_01_quad_term for qp in qubit_pairs]
+            )
+        elif detuning_mode == "cosine":
+            detuning = np.array(
+                [
+                    oscillation(
+                        fluxes_qubit,
+                        qp.qubit_control.extras["a"],
+                        qp.qubit_control.extras["f"],
+                        qp.qubit_control.extras["phi"],
+                        qp.qubit_control.extras["offset"],
+                    )
+                    for qp in qubit_pairs
+                ]
+            )
+        ds = ds.assign_coords({"detuning": (["qubit", "flux_qubit"], detuning)})
     node.results = {"ds": ds}
 
 node.results["results"] = {}
@@ -562,7 +600,7 @@ if not node.parameters.simulate:
 
 
 #  %% {Update_state}
-if not node.parameters.simulate:
+if not node.parameters.simulate and node.parameters.load_data_id is None:
     with node.record_state_updates():
         pulse_length = int(np.ceil(node.parameters.pulse_duration_ns / 4) * 4)
 

@@ -22,7 +22,11 @@ State update:
 from qualibrate import QualibrationNode, NodeParameters
 from quam_libs.components import QuAM
 from quam_libs.macros import active_reset, readout_state
-from quam_libs.lib.save_utils import fetch_results_as_xarray, load_dataset, get_storage_path, find_numbered_folder
+from quam_libs.lib.save_utils import (
+    fetch_results_as_xarray,
+    restore_load_data_id,
+    resolve_qubit_pairs_from_node,
+)
 from qualang_tools.results import progress_counter, fetching_tool
 from qualang_tools.loops import from_array
 from qualang_tools.multi_user import qm_session
@@ -240,29 +244,6 @@ def plot_phase_compensation_with_fit(ds_raw: xr.Dataset, qubit_pairs, ds_fit: xr
     return fig
 
 
-def load_qubit_pair_dataset(serial_number, parameters):
-    try:
-        ds, loaded_machine, json_data, loaded_qubit_pairs, loaded_parameters = load_dataset(
-            serial_number, parameters=parameters
-        )
-        return normalize_pair_dataset(ds), loaded_machine, json_data, loaded_qubit_pairs, loaded_parameters
-    except Exception:
-        base_folder = find_numbered_folder(get_storage_path(), serial_number)
-        h5_files = [f for f in os.listdir(base_folder) if f.endswith(".h5")]
-        filename = "ds.h5" if "ds.h5" in h5_files else h5_files[0]
-        ds = normalize_pair_dataset(xr.open_dataset(os.path.join(base_folder, filename)))
-        with open(os.path.join(base_folder, "data.json"), "r") as f:
-            json_data = json.load(f)
-        loaded_machine = QuAM.load(base_folder + "//quam_state.json")
-        loaded_qubit_pairs = [loaded_machine.qubit_pairs[qname] for qname in ds.qubit.values]
-
-        for param_name, param_value in parameters:
-            if param_name != "load_data_id" and param_name in json_data["initial_parameters"]:
-                setattr(parameters, param_name, json_data["initial_parameters"][param_name])
-
-        return ds, loaded_machine, json_data, loaded_qubit_pairs, parameters
-
-
 # %% {QUA_program}
 # CZ executed at nominal gate parameters (amplitude_scale = 1.0); frame sweep amplifies phase error.
 with program() as CZ_1Q_phase_error_amp:
@@ -414,10 +395,12 @@ if not node.parameters.simulate:
         ds = normalize_pair_dataset(ds)
         node.results = {"ds": ds, "gate_refs": gate_refs}
     else:
-        ds, machine, json_data, qubit_pairs, node.parameters = load_qubit_pair_dataset(
-            node.parameters.load_data_id, parameters=node.parameters
-        )
-        node.namespace["qubit_pairs"] = qubit_pairs
+        load_data_id = node.parameters.load_data_id
+        node = node.load_from_id(load_data_id)
+        ds = normalize_pair_dataset(node.results["ds"])
+        restore_load_data_id(node, load_data_id)
+        machine = node.machine
+        qubit_pairs = resolve_qubit_pairs_from_node(machine, node)
         operation_name = node.parameters.operation
         gate_refs = {}
         for qp in qubit_pairs:
@@ -428,6 +411,7 @@ if not node.parameters.simulate:
                 "phase_shift_control": gate.phase_shift_control,
                 "phase_shift_target": gate.phase_shift_target,
             }
+        node.namespace["qubit_pairs"] = qubit_pairs
         node.namespace["gate_refs"] = gate_refs
         node.results = {"ds": ds, "gate_refs": gate_refs}
 

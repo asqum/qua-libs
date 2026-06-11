@@ -37,7 +37,11 @@ from qualibrate import QualibrationNode, NodeParameters
 from quam_libs.components import QuAM
 from quam_libs.macros import active_reset, readout_state
 
-from quam_libs.lib.save_utils import fetch_results_as_xarray, load_dataset
+from quam_libs.lib.save_utils import (
+    fetch_results_as_xarray,
+    restore_load_data_id,
+    resolve_qubits_from_node,
+)
 from qualang_tools.results import progress_counter, fetching_tool
 from qualang_tools.multi_user import qm_session
 from qualang_tools.units import unit
@@ -221,8 +225,13 @@ if not node.parameters.simulate:
         # Only fetch the 'state' handles, not individual qubit states
         ds = fetch_results_as_xarray(job.result_handles, qubit_groups, axes_dict)
     else:
-        ds, machine = load_dataset(node.parameters.load_data_id)
-
+        load_data_id = node.parameters.load_data_id
+        node = node.load_from_id(load_data_id)
+        ds = node.results["ds"]
+        restore_load_data_id(node, load_data_id)
+        machine = node.machine
+        qubit_objects = [[machine.qubits[q] for q in group] for group in node.parameters.qubit_groups]
+        qubit_groups = [QubitGroup.from_qubits(q) for q in qubit_objects]
     node.results = {"ds": ds}
 
 if not node.parameters.simulate:

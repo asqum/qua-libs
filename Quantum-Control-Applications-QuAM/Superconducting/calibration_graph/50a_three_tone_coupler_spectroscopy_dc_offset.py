@@ -28,7 +28,11 @@ from qualibrate import QualibrationNode, NodeParameters
 from quam_libs.components import QuAM
 from quam_libs.macros import qua_declaration, active_reset_simple, readout_state
 from quam_libs.lib.plot_utils import QubitPairGrid, grid_iter, grid_pair_names
-from quam_libs.lib.save_utils import fetch_results_as_xarray
+from quam_libs.lib.save_utils import (
+    fetch_results_as_xarray,
+    restore_load_data_id,
+    resolve_qubit_pairs_from_node,
+)
 from qualang_tools.results import progress_counter, fetching_tool
 from qualang_tools.loops import from_array
 from qualang_tools.multi_user import qm_session
@@ -246,8 +250,12 @@ elif node.parameters.load_data_id is None:
 if not node.parameters.simulate:
     # Fetch the data from the OPX and convert it into a xarray with corresponding axes (from most inner to outer loop)
     if node.parameters.load_data_id is not None:
-        node = node.load_from_id(node.parameters.load_data_id)
+        load_data_id = node.parameters.load_data_id
+        node = node.load_from_id(load_data_id)
         ds = node.results["ds"]
+        restore_load_data_id(node, load_data_id)
+        machine = node.machine
+        qubit_pairs = resolve_qubit_pairs_from_node(machine, node)
     else:
         ds = fetch_results_as_xarray(job.result_handles, qubit_pairs, {"freq": dfs})
         if not node.parameters.use_state_discrimination:

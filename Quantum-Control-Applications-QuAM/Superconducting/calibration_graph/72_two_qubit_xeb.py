@@ -15,6 +15,7 @@ from qm import SimulationConfig
 from qm.qua import align, wait
 from qualang_tools.units import unit
 from qualibrate import NodeParameters, QualibrationNode
+from quam_libs.lib.save_utils import restore_load_data_id, resolve_qubit_pairs_from_node
 
 from quam_libs.components import QuAM, TransmonPair
 from quam_libs.experiments.two_qubit_xeb import (
@@ -209,10 +210,15 @@ print_xeb_setup(xeb_config, qubit_pairs, target_qubits)
 # %% {Run_or_load}
 if node.parameters.load_data_id is not None:
     print("Loading from previous data")
-    loaded_node = node.load_from_id(node.parameters.load_data_id)
-    if loaded_node is None:
-        raise ValueError(f"Could not load node with id {node.parameters.load_data_id}")
-    node = loaded_node
+    load_data_id = node.parameters.load_data_id
+    node = node.load_from_id(load_data_id)
+    if node is None:
+        raise ValueError(f"Could not load node with id {load_data_id}")
+    restore_load_data_id(node, load_data_id)
+    machine = node.machine
+    qubit_pairs = resolve_qubit_pairs_from_node(machine, node)
+    target_qubits = unique_qubits_from_pairs(qubit_pairs)
+    readout_qubits = target_qubits
 else:
     print("Loading from new data")
     print("Qubits: %s" % ", ".join(qubit_names(target_qubits)))

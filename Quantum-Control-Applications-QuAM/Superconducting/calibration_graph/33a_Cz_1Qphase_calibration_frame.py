@@ -36,7 +36,11 @@ from qualibrate import QualibrationNode, NodeParameters
 from quam_libs.components import QuAM
 from quam_libs.macros import active_reset, readout_state, readout_state_gef, active_reset_gef, active_reset_simple
 from quam_libs.lib.plot_utils import QubitPairGrid, grid_iter, grid_pair_names
-from quam_libs.lib.save_utils import fetch_results_as_xarray, load_dataset
+from quam_libs.lib.save_utils import (
+    fetch_results_as_xarray,
+    restore_load_data_id,
+    resolve_qubit_pairs_from_node,
+)
 from qualang_tools.results import progress_counter, fetching_tool
 from qualang_tools.loops import from_array
 from qualang_tools.multi_user import qm_session
@@ -216,7 +220,12 @@ if not node.parameters.simulate:
         ds = fetch_results_as_xarray(job.result_handles, qubit_pairs, {"frame": frames})
         node.results = {"ds": ds, "gate_refs": gate_refs}
     else:
-        ds, machine = load_dataset(node.parameters.load_data_id)
+        load_data_id = node.parameters.load_data_id
+        node = node.load_from_id(load_data_id)
+        ds = node.results["ds"]
+        restore_load_data_id(node, load_data_id)
+        machine = node.machine
+        qubit_pairs = resolve_qubit_pairs_from_node(machine, node)
         gate_refs = {}
         for qp in qubit_pairs:
             gate = qp.gates[operation_name]

@@ -25,7 +25,11 @@ from qualibrate import QualibrationNode, NodeParameters
 from quam_libs.components import QuAM
 from quam_libs.macros import qua_declaration, active_reset, active_reset_simple
 from quam_libs.lib.plot_utils import QubitGrid, grid_iter
-from quam_libs.lib.save_utils import fetch_results_as_xarray, load_dataset
+from quam_libs.lib.save_utils import (
+    fetch_results_as_xarray,
+    restore_load_data_id,
+    resolve_qubits_from_node,
+)
 from quam_libs.trackable_object import tracked_updates
 from qualang_tools.results import progress_counter, fetching_tool
 from qualang_tools.loops import from_array
@@ -180,7 +184,12 @@ if not node.parameters.simulate:
             {"alpha": (["qubit", "amp"], np.array([q.xy.operations[operation].alpha * amps for q in qubits]))}
         )
     else:
-        ds, machine, json_data, qubits, node.parameters = load_dataset(node.parameters.load_data_id, parameters = node.parameters)
+        load_data_id = node.parameters.load_data_id
+        node = node.load_from_id(load_data_id)
+        ds = node.results["ds"]
+        restore_load_data_id(node, load_data_id)
+        machine = node.machine
+        qubits = resolve_qubits_from_node(machine, node)
     # Add the dataset to the node
     node.results = {"ds": ds}
 

@@ -31,7 +31,11 @@ from qualibrate import QualibrationNode, NodeParameters
 from quam_libs.components import QuAM
 from quam_libs.macros import active_reset_simple, readout_state, readout_state_gef, active_reset_gef
 from quam_libs.lib.plot_utils import QubitPairGrid, grid_iter, grid_pair_names
-from quam_libs.lib.save_utils import fetch_results_as_xarray, load_dataset
+from quam_libs.lib.save_utils import (
+    fetch_results_as_xarray,
+    restore_load_data_id,
+    resolve_qubit_pairs_from_node,
+)
 from quam_libs.lib.fit import fit_oscillation
 from qualang_tools.results import progress_counter, fetching_tool
 from qualang_tools.loops import from_array
@@ -234,16 +238,21 @@ if not node.parameters.simulate:
         ds = fetch_results_as_xarray(job.result_handles, qubit_pairs, {"time": 4*times_cycles, "amp": amplitudes})
         node.results = {"ds": ds, "gate_refs": gate_refs}
     else:
-        ds, loaded_machine = load_dataset(node.parameters.load_data_id)
-        if loaded_machine is not None:
-            machine = loaded_machine
-        gate_refs = {}
-        for qp in qubit_pairs:
-            gate = qp.gates[operation_name]
-            gate_refs[qp.name] = {
-                "qubit_amplitude": gate.flux_pulse_control.amplitude,
-                "coupler_amplitude": gate.coupler_flux_pulse.amplitude,
-            }
+        load_data_id = node.parameters.load_data_id
+        node = node.load_from_id(load_data_id)
+        ds = node.results["ds"]
+        restore_load_data_id(node, load_data_id)
+        machine = node.machine
+        qubit_pairs = resolve_qubit_pairs_from_node(machine, node)
+        gate_refs = node.results.get("gate_refs")
+        if not gate_refs:
+            gate_refs = {}
+            for qp in qubit_pairs:
+                gate = qp.gates[operation_name]
+                gate_refs[qp.name] = {
+                    "qubit_amplitude": gate.flux_pulse_control.amplitude,
+                    "coupler_amplitude": gate.coupler_flux_pulse.amplitude,
+                }
 
     node.results = {"ds": ds, "gate_refs": gate_refs}
 
@@ -254,13 +263,14 @@ if not node.parameters.simulate:
 
     def detuning(qp, amp):
         return -(amp * gate_refs[qp.name]["qubit_amplitude"])**2 * qp.qubit_control.freq_vs_flux_01_quad_term
-    
-    ds = ds.assign_coords(
-        {"amp_full": (["qubit", "amp"], np.array([abs_amp(qp, ds.amp.data) for qp in qubit_pairs]))}
-    )
-    ds = ds.assign_coords(
-        {"detuning": (["qubit", "amp"], np.array([detuning(qp, ds.amp) for qp in qubit_pairs]))}
-    )
+
+    if "amp_full" not in ds.coords or "detuning" not in ds.coords:
+        ds = ds.assign_coords(
+            {"amp_full": (["qubit", "amp"], np.array([abs_amp(qp, ds.amp.data) for qp in qubit_pairs]))}
+        )
+        ds = ds.assign_coords(
+            {"detuning": (["qubit", "amp"], np.array([detuning(qp, ds.amp) for qp in qubit_pairs]))}
+        )
 
 # %%
 if not node.parameters.simulate:

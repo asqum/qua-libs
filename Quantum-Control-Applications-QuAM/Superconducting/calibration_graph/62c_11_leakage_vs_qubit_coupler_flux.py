@@ -37,7 +37,11 @@ from qualibrate import QualibrationNode, NodeParameters
 from quam_libs.components import QuAM
 from quam_libs.macros import active_reset, readout_state, readout_state_gef, active_reset_gef, active_reset_simple
 from quam_libs.lib.plot_utils import QubitPairGrid, grid_iter, grid_pair_names
-from quam_libs.lib.save_utils import fetch_results_as_xarray, load_dataset
+from quam_libs.lib.save_utils import (
+    fetch_results_as_xarray,
+    restore_load_data_id,
+    resolve_qubit_pairs_from_node,
+)
 from qualang_tools.results import progress_counter, fetching_tool
 from qualang_tools.loops import from_array
 from qualang_tools.multi_user import qm_session
@@ -236,44 +240,59 @@ if not node.parameters.simulate:
         # Fetch the data from the OPX and convert it into a xarray with corresponding axes (from most inner to outer loop)
         ds = fetch_results_as_xarray(job.result_handles, qubit_pairs, {"qubit_amp": flux_qubit_amplitudes, "coupler_amp": flux_coupler_amplitudes, "N": np.linspace(1, n_avg, n_avg)})
     else:
-        ds, machine = load_dataset(node.parameters.load_data_id)
-        gate_refs = {}
-        for qp in qubit_pairs:
-            gate = qp.gates[operation_name]
-            gate_refs[qp.name] = {
-                "qubit_amplitude": gate.flux_pulse_control.amplitude,
-                "coupler_amplitude": gate.coupler_flux_pulse.amplitude,
-            }
-        
-    node.results = {"ds": ds}
+        load_data_id = node.parameters.load_data_id
+        node = node.load_from_id(load_data_id)
+        ds = node.results["ds"]
+        restore_load_data_id(node, load_data_id)
+        machine = node.machine
+        qubit_pairs = resolve_qubit_pairs_from_node(machine, node)
+        gate_refs = node.results.get("gate_refs")
+        if not gate_refs:
+            gate_refs = {}
+            for qp in qubit_pairs:
+                gate = qp.gates[operation_name]
+                gate_refs[qp.name] = {
+                    "qubit_amplitude": gate.flux_pulse_control.amplitude,
+                    "coupler_amplitude": gate.coupler_flux_pulse.amplitude,
+                }
+
+    node.results = {"ds": ds, "gate_refs": gate_refs}
     node.results["results"] = {}
 
     
 # %% data processing
 if not node.parameters.simulate:
-    def qubit_flux_shift(qp, amp):
-        return amp * gate_refs[qp.name]["qubit_amplitude"]
+    flux_coords_needed = (
+        "flux_qubit" not in ds.coords
+        or "detuning" not in ds.coords
+        or "flux_coupler_full" not in ds.coords
+        or "flux_coupler" not in ds.coords
+    )
+    if flux_coords_needed:
+        def qubit_flux_shift(qp, amp):
+            return amp * gate_refs[qp.name]["qubit_amplitude"]
 
-    def coupler_flux_shift(qp, amp):
-        return amp * gate_refs[qp.name]["coupler_amplitude"]
+        def coupler_flux_shift(qp, amp):
+            return amp * gate_refs[qp.name]["coupler_amplitude"]
 
-    def abs_coupler_amp(qp, amp):
-        return amp * gate_refs[qp.name]["coupler_amplitude"] + qp.coupler.decouple_offset
+        def abs_coupler_amp(qp, amp):
+            return amp * gate_refs[qp.name]["coupler_amplitude"] + qp.coupler.decouple_offset
 
-    def detuning(qp, amp):
-        return -(amp * gate_refs[qp.name]["qubit_amplitude"])**2 * qp.qubit_control.freq_vs_flux_01_quad_term
-    ds = ds.assign_coords(
-        {"flux_qubit": (["qubit", "qubit_amp"], np.array([qubit_flux_shift(qp, ds.qubit_amp) for qp in qubit_pairs]))}
-    )
-    ds = ds.assign_coords(
-        {"detuning": (["qubit", "qubit_amp"], np.array([detuning(qp, ds.qubit_amp) for qp in qubit_pairs]))}
-    )
-    ds = ds.assign_coords(
-        {"flux_coupler_full": (["qubit", "coupler_amp"], np.array([abs_coupler_amp(qp, ds.coupler_amp) for qp in qubit_pairs]))}
-    )
-    ds = ds.assign_coords(
-        {"flux_coupler": (["qubit", "coupler_amp"], np.array([coupler_flux_shift(qp, ds.coupler_amp) for qp in qubit_pairs]))}
-    )
+        def detuning(qp, amp):
+            return -(amp * gate_refs[qp.name]["qubit_amplitude"])**2 * qp.qubit_control.freq_vs_flux_01_quad_term
+
+        ds = ds.assign_coords(
+            {"flux_qubit": (["qubit", "qubit_amp"], np.array([qubit_flux_shift(qp, ds.qubit_amp) for qp in qubit_pairs]))}
+        )
+        ds = ds.assign_coords(
+            {"detuning": (["qubit", "qubit_amp"], np.array([detuning(qp, ds.qubit_amp) for qp in qubit_pairs]))}
+        )
+        ds = ds.assign_coords(
+            {"flux_coupler_full": (["qubit", "coupler_amp"], np.array([abs_coupler_amp(qp, ds.coupler_amp) for qp in qubit_pairs]))}
+        )
+        ds = ds.assign_coords(
+            {"flux_coupler": (["qubit", "coupler_amp"], np.array([coupler_flux_shift(qp, ds.coupler_amp) for qp in qubit_pairs]))}
+        )
 
 # %%Data analysis
 import scipy.ndimage as nd

@@ -49,7 +49,11 @@ from qualibrate  import NodeParameters, QualibrationNode
 from quam_libs.experiments.rb_standard.circuit_utils import layerize_quantum_circuit, process_circuit_to_integers
 from quam_libs.experiments.rb_standard.qua_utils import QuaProgramHandler
 from quam_libs.lib.plot_utils import plot_samples
-from quam_libs.lib.save_utils import fetch_results_as_xarray
+from quam_libs.lib.save_utils import (
+    fetch_results_as_xarray,
+    restore_load_data_id,
+    resolve_qubit_pairs_from_node,
+)
 
 from quam_libs.components import QuAM
 from quam_libs.experiments.rb_standard.cloud_utils import write_sync_hook
@@ -186,8 +190,12 @@ if node.parameters.load_data_id is None:
         { "sequence": range(node.parameters.num_circuits_per_length), "depths": list(node.parameters.circuit_lengths), "shots": range(node.parameters.num_averages)},
     )
 else:
-    node = node.load_from_id(node.parameters.load_data_id)
+    load_data_id = node.parameters.load_data_id
+    node = node.load_from_id(load_data_id)
     ds = node.results["ds"]
+    restore_load_data_id(node, load_data_id)
+    machine = node.machine
+    qubit_pairs = resolve_qubit_pairs_from_node(machine, node)
 # Add the dataset to the node
 node.results = {"ds": ds}
 # %% {Data_analysis and plotting}

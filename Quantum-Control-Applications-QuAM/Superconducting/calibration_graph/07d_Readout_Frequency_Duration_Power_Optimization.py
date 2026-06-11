@@ -41,7 +41,8 @@ from quam_libs.experiments.readout_optimization_3d.measurement_batching import \
     generate_measurement_batches, get_max_accumulated_readouts
 from quam_libs.trackable_object import tracked_updates
 from quam_libs.components import QuAM
-from quam_libs.experiments.readout_optimization_3d.parameters import Parameters, get_durations
+from quam_libs.experiments.readout_optimization_3d.parameters import Parameters
+from quam_libs.lib.save_utils import restore_load_data_id, resolve_qubits_from_node, get_durations
 from quam_libs.experiments.readout_optimization_3d.parameters import (
     get_frequency_detunings_in_hz,
     get_amplitude_factors
@@ -264,8 +265,10 @@ if not node.parameters.simulate:
     if node.parameters.load_data_id is not None:
         load_data_id = node.parameters.load_data_id
         node = node.load_from_id(load_data_id)
-        node.parameters.load_data_id = load_data_id
         ds = node.results["ds"]
+        restore_load_data_id(node, load_data_id)
+        machine = node.machine
+        qubits = resolve_qubits_from_node(machine, node)
 
     node.results = {"ds": ds}
 

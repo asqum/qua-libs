@@ -16,7 +16,11 @@ from qualang_tools.multi_user import qm_session
 from qualang_tools.results import progress_counter
 from qualang_tools.units import unit
 from qualibrate import QualibrationNode
-from quam_libs.lib.save_utils import fetch_results_as_xarray, load_dataset
+from quam_libs.lib.save_utils import (
+    fetch_results_as_xarray,
+    restore_load_data_id,
+    resolve_qubit_pairs_from_node,
+)
 from qm import SimulationConfig
 from quam_libs.components import QuAM
 from quam_libs.components.gates.two_qubit_gates import CZGate
@@ -256,11 +260,12 @@ if not node.parameters.simulate:
         # Fetch the data from the OPX and convert it into a xarray with corresponding axes (from most inner to outer loop)
         ds = fetch_results_as_xarray(job.result_handles, qubit_pairs, {"control_axis": [0,1], "frame": frames, "amp": amplitudes, "number_of_operations": np.arange(1, num_operations + 1)})
     else:
-        ds, machine = load_dataset(node.parameters.load_data_id)
-        if node.parameters.qubit_pairs is None or node.parameters.qubit_pairs == "":
-            qubit_pairs = machine.active_qubit_pairs
-        else:
-            qubit_pairs = [machine.qubit_pairs[qp] for qp in node.parameters.qubit_pairs]
+        load_data_id = node.parameters.load_data_id
+        node = node.load_from_id(load_data_id)
+        ds = node.results["ds"]
+        restore_load_data_id(node, load_data_id)
+        machine = node.machine
+        qubit_pairs = resolve_qubit_pairs_from_node(machine, node)
         node.namespace["qubit_pairs"] = qubit_pairs
         gate_refs = {}
         for qp in qubit_pairs:

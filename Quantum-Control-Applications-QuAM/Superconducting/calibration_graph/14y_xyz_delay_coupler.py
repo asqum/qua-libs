@@ -16,7 +16,11 @@ from qualang_tools.results import fetching_tool, progress_counter
 from quam_libs.macros import qua_declaration, active_reset
 from qualang_tools.units import unit
 from qualibrate import QualibrationNode, NodeParameters
-from quam_libs.lib.save_utils import fetch_results_as_xarray, load_dataset
+from quam_libs.lib.save_utils import (
+    fetch_results_as_xarray,
+    restore_load_data_id,
+    resolve_qubits_from_node,
+)
 from qm import SimulationConfig
 from quam_libs.components import QuAM
 from qualang_tools.bakery import baking
@@ -302,10 +306,12 @@ elif node.parameters.load_data_id is None:
 
 if not node.parameters.simulate:
     if node.parameters.load_data_id is not None:
-        ds, machine, json_data, qubits, node.parameters = load_dataset(
-            node.parameters.load_data_id, parameters=node.parameters
-        )
-        node.namespace["qubits"] = qubits
+        load_data_id = node.parameters.load_data_id
+        node = node.load_from_id(load_data_id)
+        ds = node.results["ds"]
+        restore_load_data_id(node, load_data_id)
+        machine = node.machine
+        qubits = resolve_qubits_from_node(machine, node)
     else:
         # Fetch the data from the OPX and convert it into a xarray with corresponding axes (from most inner to outer loop)
         ds = fetch_results_as_xarray(job.result_handles, qubits, {"relative_time": relative_time, "init_state": ["e", "g"]})
