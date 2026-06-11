@@ -81,7 +81,7 @@ class Parameters(NodeParameters):
     number_of_operations: int = 10
     """Number of operations to perform for each amplitude. Default is 10."""
     flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
-    load_data_id: Optional[int] = None # 92417
+    load_data_id: Optional[int] = 621 # 92417
     reset_type: Literal["thermal", "active"] = "active"
     use_state_discrimination: bool = True
     simulate: bool = False
@@ -262,7 +262,7 @@ if not node.parameters.simulate:
     else:
         load_data_id = node.parameters.load_data_id
         node = node.load_from_id(load_data_id)
-        ds = node.results["ds"]
+        ds = node.results["ds_raw"]
         restore_load_data_id(node, load_data_id)
         machine = node.machine
         qubit_pairs = resolve_qubit_pairs_from_node(machine, node)
@@ -274,7 +274,8 @@ if not node.parameters.simulate:
             }
         node.namespace["gate_refs"] = gate_refs
 
-    ds = ds.rename({'qubit': 'qubit_pair'})    
+    if "qubit" in ds.dims:
+        ds = ds.rename({"qubit": "qubit_pair"})
     node.results = {"ds_raw": ds}
 
 

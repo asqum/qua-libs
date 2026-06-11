@@ -366,7 +366,8 @@ if not node.parameters.simulate:
     ds['center_freqs'] = center_freqs
     ds['flux_response'] = flux_response
     ds['flux_response_normalized'] = flux_response_normalized
-    
+    node.results["ds"] = ds
+
     fit_results = {}
     for q in qubit_pairs:
         t_data = flux_response_normalized.sel(qubit=q.name).time.values
