@@ -81,7 +81,7 @@ class Parameters(NodeParameters):
     number_of_operations: int = 10
     """Number of operations to perform for each amplitude. Default is 10."""
     flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
-    load_data_id: Optional[int] = 621 # 92417
+    load_data_id: Optional[int] = None # 92417
     reset_type: Literal["thermal", "active"] = "active"
     use_state_discrimination: bool = True
     simulate: bool = False
