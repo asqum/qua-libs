@@ -4,7 +4,7 @@ import numpy as np
 from pydantic import model_validator, Field
 from qualang_tools.units import unit
 from qualibrate import NodeParameters
-from compat import RunnableParameters
+from quam_libs.compat import RunnableParameters
 
 from quam_libs.experiments.node_parameters import (
     QubitsExperimentNodeParameters,

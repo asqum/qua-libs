@@ -1,7 +1,7 @@
 from typing import Literal
 
 from qualibrate import NodeParameters
-from compat import RunnableParameters
+from quam_libs.compat import RunnableParameters
 
 from quam_libs.experiments.node_parameters import (
     QubitsExperimentNodeParameters,

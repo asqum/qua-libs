@@ -2,7 +2,7 @@ from typing import Literal
 
 import numpy as np
 from qualibrate import NodeParameters
-from compat import RunnableParameters
+from quam_libs.compat import RunnableParameters
 
 from quam_libs.experiments.node_parameters import (
     QubitsExperimentNodeParameters,

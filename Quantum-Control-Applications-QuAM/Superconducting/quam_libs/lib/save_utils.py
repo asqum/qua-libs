@@ -1,5 +1,5 @@
-from compat import get_config_path, get_node_dir_path, get_quam_state_path, get_settings
-from compat import LocalStorageManager
+from quam_libs.compat import get_config_path, get_node_dir_path, get_quam_state_path, get_settings
+from quam_libs.compat import LocalStorageManager
 from qualibrate_config.resolvers import get_qualibrate_config_path, get_qualibrate_config
 from qualibrate import QualibrationNode
 from quam_libs.components import QuAM

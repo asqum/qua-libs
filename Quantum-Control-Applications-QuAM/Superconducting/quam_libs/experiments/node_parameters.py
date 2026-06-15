@@ -1,7 +1,7 @@
 from typing import Optional, List, Literal
 
 from pydantic import Field
-from compat import RunnableParameters
+from quam_libs.compat import RunnableParameters
 
 
 class QubitsExperimentNodeParameters(RunnableParameters):

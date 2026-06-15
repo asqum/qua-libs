@@ -1,5 +1,5 @@
 from typing import List, Optional
-from compat import (
+from quam_libs.compat import (
     BasicOrchestrator,
     GraphParameters,
     QualibrationGraph,
