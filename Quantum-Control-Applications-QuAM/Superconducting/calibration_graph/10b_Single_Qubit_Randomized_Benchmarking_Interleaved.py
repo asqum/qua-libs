@@ -44,14 +44,14 @@ class Parameters(NodeParameters):
     qubits: Optional[List[str]] = None
     use_state_discrimination: bool = True
     use_strict_timing: bool = True
-    interleaved_gate_index: int = 2
+    interleaved_gate_index: int = 0
     num_random_sequences: int = 50  # Number of random sequences
     num_averages: int = 20
     max_circuit_depth: int = 1000  # Maximum circuit depth
     delta_clifford: int = 10
     seed: int = 345324
-    flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
-    reset_type_thermal_or_active: Literal["thermal", "active"] = "thermal"
+    flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
+    reset_type_thermal_or_active: Literal["thermal", "active"] = "active"
     simulate: bool = False
     simulation_duration_ns: int = 2500
     timeout: int = 100
@@ -70,10 +70,7 @@ config = machine.generate_config()
 # Open Communication with the QOP
 qmm = machine.connect()
 
-if node.parameters.qubits is None or node.parameters.qubits == "":
-    qubits = machine.active_qubits
-else:
-    qubits = [machine.qubits[q] for q in node.parameters.qubits.replace(" ", "").split(",")]
+qubits = machine.get_qubits_used_in_node(node.parameters)
 num_qubits = len(qubits)
 
 
@@ -335,6 +332,7 @@ def get_rb_interleaved_program(qubit: Transmon):
 
 
 # %% {Simulate_or_execute}
+
 if node.parameters.simulate:
     simulation_config = SimulationConfig(duration=100_000)  # in clock cycles
     job = qmm.simulate(config, get_rb_interleaved_program(qubits[0]), simulation_config)
@@ -452,3 +450,5 @@ else:
 node.results["initial_parameters"] = node.parameters.model_dump()
 node.machine = machine
 node.save()
+
+# %%

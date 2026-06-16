@@ -41,7 +41,7 @@ class Parameters(NodeParameters):
     qubits: Optional[List[str]] = None
     num_averages: int = 50
     operation: str = "x90"
-    min_amp_factor: float = 0.0001
+    min_amp_factor: float = -0.3
     max_amp_factor: float = 2.0
     amp_factor_step: float = 0.005
     max_number_pulses_per_sweep: int = 40

@@ -48,9 +48,9 @@ class Parameters(NodeParameters):
     max_amp_factor: float = 1.8 #2.0
     amp_factor_step: float = 0.01 #005
     max_number_rabi_pulses_per_sweep: int = 1 #1, 40
-    flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
-    reset_type_thermal_or_active: Literal["thermal", "active"] = "thermal"
-    state_discrimination: bool = False
+    flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
+    reset_type_thermal_or_active: Literal["thermal", "active"] = "active"
+    state_discrimination: bool = True
     update_x90: bool = True
     simulate: bool = False
     simulation_duration_ns: int = 1500

@@ -78,7 +78,7 @@ class Parameters(NodeParameters):
     """Span of flux values to sweep in volts. Default is 0.01 V."""
     flux_num: int = 81
     """Number of flux points to sample. Default is 21."""
-    use_state_discrimination: bool = False
+    use_state_discrimination: bool = True
 
     
 

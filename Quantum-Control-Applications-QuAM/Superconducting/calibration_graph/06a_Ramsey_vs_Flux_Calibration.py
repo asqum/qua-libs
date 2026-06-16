@@ -287,10 +287,13 @@ if not node.parameters.simulate:
                         qubit.z.joint_offset += flux_offset[qubit.name]
                         qubit.z.independent_offset = qubit.z.joint_offset - qubit.phi0_voltage / 2 
                 elif flux_point == "joint":
-                    qubit.z.joint_offset += flux_offset[qubit.name]
+                    qubit.z.joint_offset += flux_offset[qubit.name]/2
                 else:
                     raise RuntimeError(f"unknown flux_point")
                 qubit.freq_vs_flux_01_quad_term = float(a[qubit.name])
+                qubit.extras["sweetspot_freq"] = (
+                    qubit.xy.intermediate_frequency + qubit.xy.opx_output.upconverter_frequency
+                )
 
         # %% {Save_results}
         node.outcomes = {q.name: "successful" for q in qubits}

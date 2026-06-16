@@ -43,8 +43,8 @@ import numpy as np
 # %% {Node_parameters}
 class Parameters(NodeParameters):
     qubits: Optional[List[str]] = None
-    num_averages: int = 20
-    operation: Literal["x180", "x90"] = "x180"
+    num_averages: int = 80
+    operation: Literal["x180", "x90"] = "x90"
     frequency_span_in_mhz: float = 20
     frequency_step_in_mhz: float = 0.1
     max_number_pulses_per_sweep: int = 50

@@ -38,10 +38,10 @@ import matplotlib.pyplot as plt
 class Parameters(NodeParameters):
     qubits: Optional[List[str]] = None
     num_averages: int = 500
-    reset_type: Literal["active", "thermal"] = "thermal"
+    reset_type: Literal["active", "thermal"] = "active"
     frequency_detuning_in_mhz: float = 4
     min_wait_time_in_ns: int = 16
-    max_wait_time_in_ns: int = 1016
+    max_wait_time_in_ns: int = 516
     num_time_points: int = 100
     log_or_linear_sweep: Literal["log", "linear"] = "log"
     use_state_discrimination: bool = False
@@ -204,6 +204,7 @@ if not node.parameters.simulate:
             for q in qubits:
                 q.xy.intermediate_frequency -= float(fits[q.name].freq_offset)
                 q.T2ramsey = float(fits[q.name].decay)
+                q.extras["idle_freq"] = q.xy.intermediate_frequency + q.xy.opx_output.upconverter_frequency
 
         # %% {Save_results}
         node.outcomes = {q.name: "successful" for q in qubits}

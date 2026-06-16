@@ -23,15 +23,15 @@ from scipy.stats import norm
 class Parameters(NodeParameters):
     qubits: Optional[List[str]] = None #The qubit to be measured. If None, all active qubits will be measured
     num_averages: int = 2000
-    frequency_detuning_in_mhz:float = 3
+    frequency_detuning_in_mhz:float = 0.3
     min_wait_time_in_ns: int = 16
-    max_wait_time_in_ns: int = 2016
-    flux_point_joint_or_independent_or_arbitrary: Literal['joint', 'independent'] = 'independent'   
+    max_wait_time_in_ns: int = 30016
+    flux_point_joint_or_independent_or_arbitrary: Literal['joint', 'independent'] = 'joint'   
     simulate: bool = False
     timeout: int = 100
-    use_state_discrimination: bool = False
+    use_state_discrimination: bool = True
     time_scale:Literal["linear",'log'] = "linear"
-    reset_type: Literal['active', 'thermal'] = "thermal"
+    reset_type: Literal['active', 'thermal'] = "active"
     load_data_id: Optional[int] = None
     multiplexed: bool = 1
     histo_num:int = 100

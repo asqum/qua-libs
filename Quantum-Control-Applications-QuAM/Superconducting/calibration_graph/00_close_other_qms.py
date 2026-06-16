@@ -33,4 +33,4 @@ qmm = machine.connect() # Use this line if you want to connect to the QOP define
 # qmm = QuantumMachinesManager(host='192.168.1.225', cluster_name='QPX1000_2',port = 9510, log_level="DEBUG")
 
 qmm.close_all_qms()
-#%%
+# %%

@@ -48,6 +48,84 @@ class DragPulseCosine(Pulse):
 
         return I_rot + 1.0j * Q_rot
 
+
+def drag_slepian_pulse_waveforms(
+    amplitude: float,
+    length: int,
+    alpha: float,
+    anharmonicity: float,
+    detuning: float = 0.0,
+    time_bandwidth: float = 4.0,
+    slepian_order: int = 0,
+):
+    """Slepian-envelope DRAG waveforms (leakage + AC-Stark compensation).
+
+    Same DRAG construction as ``drag_cosine_pulse_waveforms``, with a normalized
+    DPSS (Slepian) envelope instead of a cosine lobe.
+    """
+    from scipy.signal.windows import dpss
+
+    length = int(length)
+    if alpha != 0 and anharmonicity == 0:
+        raise ValueError("Cannot create a DRAG pulse with `anharmonicity=0`")
+
+    nw = _effective_dpss_bandwidth(length, time_bandwidth)
+    w = dpss(length, nw, Kmax=slepian_order + 1)[slepian_order]
+    w = w / np.max(np.abs(w))
+
+    slepian_wave = amplitude * w
+    der_wave = amplitude * np.gradient(w, 1e-9)
+
+    t = np.arange(length, dtype=int)
+    z = slepian_wave.astype(complex)
+    if alpha != 0:
+        z += 1j * der_wave * (alpha / (anharmonicity - 2 * np.pi * detuning))
+        z *= np.exp(1j * 2 * np.pi * detuning * t * 1e-9)
+
+    return z.real.tolist(), z.imag.tolist()
+
+
+@quam_dataclass
+class DragPulseSlepian(Pulse):
+    """
+    Slepian-envelope DRAG pulse for XY gates.
+
+    :param float amplitude: The amplitude in volts.
+    :param int length: The pulse length in ns.
+    :param float alpha: The DRAG coefficient.
+    :param float anharmonicity: f_21 - f_10 in Hz.
+    :param float detuning: AC-Stark correction in Hz.
+    :param float time_bandwidth: DPSS half-bandwidth product NW.
+    :param int slepian_order: DPSS sequence index (0 = first-order Slepian).
+    :param float axis_angle: IQ rotation angle in radians.
+    """
+
+    axis_angle: float
+    amplitude: float
+    alpha: float
+    anharmonicity: float
+    detuning: float = 0.0
+    time_bandwidth: float = 4.0
+    slepian_order: int = 0
+
+    def waveform_function(self):
+        I, Q = drag_slepian_pulse_waveforms(
+            amplitude=self.amplitude,
+            length=self.length,
+            alpha=self.alpha,
+            anharmonicity=self.anharmonicity,
+            detuning=self.detuning,
+            time_bandwidth=self.time_bandwidth,
+            slepian_order=self.slepian_order,
+        )
+        I, Q = np.array(I), np.array(Q)
+
+        I_rot = I * np.cos(self.axis_angle) - Q * np.sin(self.axis_angle)
+        Q_rot = I * np.sin(self.axis_angle) + Q * np.cos(self.axis_angle)
+
+        return I_rot + 1.0j * Q_rot
+
+
 @quam_dataclass
 class FluxPulse(Pulse):
     """Flux pulse QuAM component.
