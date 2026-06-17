@@ -31,7 +31,11 @@ from qualibrate import QualibrationNode, NodeParameters
 from quam_libs.components import QuAM
 from quam_libs.macros import active_reset_simple, readout_state, readout_state_gef, active_reset_gef
 from quam_libs.lib.plot_utils import QubitPairGrid, grid_iter, grid_pair_names
-from quam_libs.lib.save_utils import fetch_results_as_xarray, load_dataset
+from quam_libs.lib.save_utils import (
+    fetch_results_as_xarray,
+    restore_load_data_id,
+    resolve_qubit_pairs_from_node,
+)
 from quam_libs.lib.fit import fit_oscillation
 from qualang_tools.results import progress_counter, fetching_tool
 from qualang_tools.loops import from_array
@@ -47,23 +51,22 @@ from qualang_tools.bakery import baking
 from quam_libs.lib.fit import fit_oscillation_decay_exp, oscillation_decay_exp
 from quam_libs.lib.plot_utils import QubitPairGrid, grid_iter, grid_pair_names
 from scipy.optimize import curve_fit
-from quam_libs.components.gates.two_qubit_gates import CZGate
-from quam_libs.lib.pulses import FluxPulse
-
 # %% {Node_parameters}
-qubit_pair_indexes = [1]  # The indexes of the qubit pair in the QuAM
+qubit_pair_indexes = [2]  # The indexes of the qubit pair in the QuAM
 class Parameters(NodeParameters):
 
     qubit_pairs: Optional[List[str]] = ["coupler_q%s_q%s"%(i,i+1) for i in qubit_pair_indexes]
-    num_averages: int = 900
-    max_time_in_ns: int = 1200 #200
+    num_averages: int = 200
+    max_time_in_ns: int = 400 #200
     flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
     reset_type: Literal['active', 'thermal'] = "active"
     simulate: bool = False
     timeout: int = 100
-    amp_range : float = 0.2 #0.1
+    amp_range : float = 0.15 #0.1
     amp_step : float = 0.002
-    load_data_id: Optional[int] = None  
+    load_data_id: Optional[int] = None
+    operation: Literal["Cz_flattop", "Cz_unipolar", "Cz_bipolar"] = "Cz_flattop"
+    """CZ gate variant to calibrate. Sweep is centered on this gate's flux amplitudes."""
 
 node = QualibrationNode(
     name="65a_02_11_oscillations_4nS", parameters=Parameters()
@@ -128,18 +131,23 @@ def fit_rabi_chevron(ds_qp, init_length, init_detuning):
 
     return J, f0, a, offset, tau
 
+
+operation_name = node.parameters.operation
+
+gate_refs = {}
+for qp in qubit_pairs:
+    gate = qp.gates[operation_name]
+    gate_refs[qp.name] = {
+        "qubit_amplitude": gate.flux_pulse_control.amplitude,
+        "coupler_amplitude": gate.coupler_flux_pulse.amplitude,
+    }
+
 # %% {QUA_program}
 n_avg = node.parameters.num_averages  # The number of averages
 
 flux_point = node.parameters.flux_point_joint_or_independent  # 'independent' or 'joint'
 
-# define the amplitudes for the flux pulses
-pulse_amplitudes = {}
-for qp in qubit_pairs:
-    detuning = qp.qubit_control.xy.RF_frequency - qp.qubit_target.xy.RF_frequency - qp.qubit_target.anharmonicity
-    pulse_amplitudes[qp.name] = float(np.sqrt(-detuning/qp.qubit_control.freq_vs_flux_01_quad_term))
-
-# Loop parameters
+# Scale factors centered at 1.0 → nominal point is the selected gate qubit amplitude
 amplitudes = np.arange(1-node.parameters.amp_range, 1+node.parameters.amp_range, node.parameters.amp_step)
 times_cycles = np.arange(4, node.parameters.max_time_in_ns // 4)
 
@@ -159,11 +167,8 @@ with program() as CPhase_Oscillations:
     for i, qp in enumerate(qubit_pairs):
         # Bring the active qubits to the minimum frequency point
         machine.set_all_fluxes(flux_point, qp)
-        assign(comp_flux_coupler, qp.extras["CZ_coupler_flux"])
-        if "coupler_qubit_crosstalk" in qp.extras:
-            assign(comp_flux_qubit, qp.extras["CZ_qubit_flux"]  +  qp.extras["coupler_qubit_crosstalk"] * qp.extras["CZ_coupler_flux"] )
-        else:
-            assign(comp_flux_qubit, qp.extras["CZ_qubit_flux"])        
+        assign(comp_flux_coupler, gate_refs[qp.name]["coupler_amplitude"])
+        assign(comp_flux_qubit, gate_refs[qp.name]["qubit_amplitude"])
         with for_(n, 0, n < n_avg, n + 1):
             save(n, n_st)
             
@@ -231,34 +236,41 @@ if not node.parameters.simulate:
     if node.parameters.load_data_id is None:
         # Fetch the data from the OPX and convert it into a xarray with corresponding axes (from most inner to outer loop)
         ds = fetch_results_as_xarray(job.result_handles, qubit_pairs, {"time": 4*times_cycles, "amp": amplitudes})
+        node.results = {"ds": ds, "gate_refs": gate_refs}
     else:
-        ds, loaded_machine = load_dataset(node.parameters.load_data_id)
-        if loaded_machine is not None:
-            machine = loaded_machine
+        load_data_id = node.parameters.load_data_id
+        node = node.load_from_id(load_data_id)
+        ds = node.results["ds"]
+        restore_load_data_id(node, load_data_id)
+        machine = node.machine
+        qubit_pairs = resolve_qubit_pairs_from_node(machine, node)
+        gate_refs = node.results.get("gate_refs")
+        if not gate_refs:
+            gate_refs = {}
+            for qp in qubit_pairs:
+                gate = qp.gates[operation_name]
+                gate_refs[qp.name] = {
+                    "qubit_amplitude": gate.flux_pulse_control.amplitude,
+                    "coupler_amplitude": gate.coupler_flux_pulse.amplitude,
+                }
 
-    node.results = {"ds": ds}
+    node.results = {"ds": ds, "gate_refs": gate_refs}
 
 # %% {Data_analysis}
 if not node.parameters.simulate:
-    crosstalk = {}
-    for qp in qubit_pairs:  
-        if "coupler_qubit_crosstalk" in qp.extras:
-            crosstalk[qp.name] = qp.extras["coupler_qubit_crosstalk"]
-        else:
-            crosstalk[qp.name] = 0.0
-    
     def abs_amp(qp, amp):
-        return amp * (qp.extras["CZ_qubit_flux"] + crosstalk[qp.name] * qp.extras["CZ_coupler_flux"])
+        return amp * gate_refs[qp.name]["qubit_amplitude"]
 
     def detuning(qp, amp):
-        return -(amp * (qp.extras["CZ_qubit_flux"] + crosstalk[qp.name] * qp.extras["CZ_coupler_flux"]))**2 * qp.qubit_control.freq_vs_flux_01_quad_term
-    
-    ds = ds.assign_coords(
-        {"amp_full": (["qubit", "amp"], np.array([abs_amp(qp, ds.amp.data) for qp in qubit_pairs]))}
-    )
-    ds = ds.assign_coords(
-        {"detuning": (["qubit", "amp"], np.array([detuning(qp, ds.amp) for qp in qubit_pairs]))}
-    )
+        return -(amp * gate_refs[qp.name]["qubit_amplitude"])**2 * qp.qubit_control.freq_vs_flux_01_quad_term
+
+    if "amp_full" not in ds.coords or "detuning" not in ds.coords:
+        ds = ds.assign_coords(
+            {"amp_full": (["qubit", "amp"], np.array([abs_amp(qp, ds.amp.data) for qp in qubit_pairs]))}
+        )
+        ds = ds.assign_coords(
+            {"detuning": (["qubit", "amp"], np.array([detuning(qp, ds.amp) for qp in qubit_pairs]))}
+        )
 
 # %%
 if not node.parameters.simulate:
@@ -387,12 +399,15 @@ if not node.parameters.simulate:
     if node.parameters.load_data_id is None:
         with node.record_state_updates():
             for qp in qubit_pairs:
-                qp.gates['Cz_unipolar'] = CZGate(flux_pulse_control = FluxPulse(length=lengths[qp.name], amplitude=amplitudes[qp.name], zero_padding=zero_paddings[qp.name], id = 'flux_pulse_control_' + qp.qubit_target.name + '_' + qp.qubit_control.name),
-                                                 coupler_flux_pulse = FluxPulse(length=lengths[qp.name], amplitude=qp.extras["CZ_coupler_flux"], zero_padding=zero_paddings[qp.name], id = 'coupler_flux_pulse_' + qp.qubit_target.name + '_' + qp.qubit_control.name))
-                qp.gates['Cz'] = f"#./Cz_unipolar"
-                
+                gate = qp.gates[operation_name]
+                gate.flux_pulse_control.amplitude = amplitudes[qp.name]
+                gate.flux_pulse_control.length = lengths[qp.name]
+                if hasattr(gate.flux_pulse_control, "zero_padding"):
+                    gate.flux_pulse_control.zero_padding = zero_paddings[qp.name]
+                gate.coupler_flux_pulse.length = lengths[qp.name]
+                if hasattr(gate.coupler_flux_pulse, "zero_padding"):
+                    gate.coupler_flux_pulse.zero_padding = zero_paddings[qp.name]
                 qp.J2 = Js[qp.name]
-                # qp.detuning = detunings[qp.name]
                 
 # %% {Save_results}
 if not node.parameters.simulate:

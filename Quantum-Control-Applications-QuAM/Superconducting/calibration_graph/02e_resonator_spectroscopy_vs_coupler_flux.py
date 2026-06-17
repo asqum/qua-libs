@@ -20,7 +20,12 @@ Before proceeding to the next node:
 from qualibrate import QualibrationNode, NodeParameters
 from quam_libs.components import QuAM
 from quam_libs.macros import qua_declaration
-from quam_libs.lib.save_utils import fetch_results_as_xarray
+from quam_libs.lib.save_utils import (
+    fetch_results_as_xarray,
+    restore_load_data_id,
+    resolve_qubit_pairs_from_node,
+    resolve_qubits_from_node,
+)
 from calibration_utils.resonator_vs_coupler_flux.analysis import (
     analyze_decouple_offsets,
     format_decouple_offset_summary,
@@ -66,7 +71,7 @@ class SweepingParameters(NodeParameters):
     simulate: bool = False
     simulation_duration_ns: int = 2500
     timeout: int = 100
-    load_data_id: Optional[int] = 322  # If specified, it will load the data from the given node id instead of executing the QUA program
+    load_data_id: Optional[int] = None  # If specified, it will load the data from the given node id instead of executing the QUA program
 
 
 class FittingParameters(NodeParameters):
@@ -193,8 +198,13 @@ elif node.parameters.load_data_id is None:
 # %% {Data_fetching_and_dataset_creation}
 if not node.parameters.simulate:
     if node.parameters.load_data_id is not None:
-        loaded_node = node.load_from_id(node.parameters.load_data_id)
-        ds = loaded_node.results["ds"]
+        load_data_id = node.parameters.load_data_id
+        node = node.load_from_id(load_data_id)
+        ds = node.results["ds"]
+        restore_load_data_id(node, load_data_id)
+        machine = node.machine
+        qubits = resolve_qubits_from_node(machine, node)
+        qubit_pairs = resolve_qubit_pairs_from_node(machine, node)
         ds, qubit_pairs = match_loaded_qubit_pair_dataset(ds, qubit_pairs)
     else:
         # Fetch the data from the OPX and convert it into a xarray with corresponding axes (from most inner to outer loop)

@@ -36,7 +36,11 @@ from qualibrate import QualibrationNode, NodeParameters
 from quam_libs.components import QuAM
 from quam_libs.macros import active_reset, readout_state, readout_state_gef, active_reset_gef, active_reset_simple
 from quam_libs.lib.plot_utils import QubitPairGrid, grid_iter, grid_pair_names
-from quam_libs.lib.save_utils import fetch_results_as_xarray, load_dataset
+from quam_libs.lib.save_utils import (
+    fetch_results_as_xarray,
+    restore_load_data_id,
+    resolve_qubit_pairs_from_node,
+)
 from qualang_tools.results import progress_counter, fetching_tool
 from qualang_tools.loops import from_array
 from qualang_tools.multi_user import qm_session
@@ -55,7 +59,7 @@ from quam_libs.components.gates.two_qubit_gates import CZGate
 from quam_libs.lib.pulses import FluxPulse
 
 # %% {Node_parameters}
-qubit_pair_indexes = [4]
+qubit_pair_indexes = [1]
 class Parameters(NodeParameters):
 
     qubit_pairs: Optional[List[str]] = ["coupler_q%s_q%s"%(i,i+1) for i in qubit_pair_indexes]
@@ -69,7 +73,7 @@ class Parameters(NodeParameters):
     plot_raw : bool = False
     measure_leak : bool = False
     con_tar_flip:bool = True
-    operation: Literal["Cz_flattop", "Cz_unipolar", "Cz_bipolar"] = "Cz"
+    operation: Literal["Cz_flattop", "Cz_unipolar", "Cz_bipolar"] = "Cz_flattop"
     """Type of CZ operation to perform. Options are 'cz_flattop', 'cz_unipolar', or 'cz_bipolar'. Default is 'cz_unipolar'."""
 
 node = QualibrationNode(
@@ -105,15 +109,26 @@ if node.parameters.load_data_id is None:
 # Helper functions #
 ####################
 
+operation_name = node.parameters.operation
+
+gate_refs = {}
+for qp in qubit_pairs:
+    gate = qp.gates[operation_name]
+    gate_refs[qp.name] = {
+        "qubit_amplitude": gate.flux_pulse_control.amplitude,
+        "coupler_amplitude": gate.coupler_flux_pulse.amplitude,
+        "phase_shift_control": gate.phase_shift_control,
+        "phase_shift_target": gate.phase_shift_target,
+    }
+
 
 # %% {QUA_program}
 n_avg = node.parameters.num_averages  # The number of averages
 
 flux_point = node.parameters.flux_point_joint_or_independent  # 'independent' or 'joint'
 
-# Loop parameters
+# Frame sweep at nominal gate parameters (amplitude_scale = 1.0)
 frames = np.arange(0, 1, 1/node.parameters.num_frames+0.01)
-operation_name = node.parameters.operation
 
 with program() as CPhase_Oscillations:
     amp = declare(fixed)   
@@ -203,11 +218,26 @@ if not node.parameters.simulate:
     if node.parameters.load_data_id is None:
         # Fetch the data from the OPX and convert it into a xarray with corresponding axes (from most inner to outer loop)
         ds = fetch_results_as_xarray(job.result_handles, qubit_pairs, {"frame": frames})
+        node.results = {"ds": ds, "gate_refs": gate_refs}
     else:
-        ds, machine = load_dataset(node.parameters.load_data_id)
+        load_data_id = node.parameters.load_data_id
+        node = node.load_from_id(load_data_id)
+        ds = node.results["ds"]
+        restore_load_data_id(node, load_data_id)
+        machine = node.machine
+        qubit_pairs = resolve_qubit_pairs_from_node(machine, node)
+        gate_refs = {}
+        for qp in qubit_pairs:
+            gate = qp.gates[operation_name]
+            gate_refs[qp.name] = {
+                "qubit_amplitude": gate.flux_pulse_control.amplitude,
+                "coupler_amplitude": gate.coupler_flux_pulse.amplitude,
+                "phase_shift_control": gate.phase_shift_control,
+                "phase_shift_target": gate.phase_shift_target,
+            }
 
         
-    node.results = {"ds": ds}
+    node.results = {"ds": ds, "gate_refs": gate_refs}
     
 
 # %% Analysis

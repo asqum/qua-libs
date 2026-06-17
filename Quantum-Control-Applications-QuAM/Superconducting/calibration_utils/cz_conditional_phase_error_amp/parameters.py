@@ -1,7 +1,7 @@
 from typing import Literal, Optional
 
 from qualibrate import NodeParameters
-from compat import RunnableParameters
+from quam_libs.compat import RunnableParameters
 from qualibration_libs.parameters import CommonNodeParameters, QubitPairExperimentNodeParameters
 
 

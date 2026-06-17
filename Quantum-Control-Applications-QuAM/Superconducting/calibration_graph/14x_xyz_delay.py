@@ -16,7 +16,11 @@ from qualang_tools.results import fetching_tool, progress_counter
 from quam_libs.macros import qua_declaration, active_reset
 from qualang_tools.units import unit
 from qualibrate import QualibrationNode, NodeParameters
-from quam_libs.lib.save_utils import fetch_results_as_xarray, load_dataset
+from quam_libs.lib.save_utils import (
+    fetch_results_as_xarray,
+    restore_load_data_id,
+    resolve_qubits_from_node,
+)
 from qm import SimulationConfig
 from quam_libs.components import QuAM
 from qualang_tools.bakery import baking
@@ -52,7 +56,7 @@ class Parameters(NodeParameters):
     use_state_discrimination: bool = True
     reset_type_active_or_thermal: Literal["active", "thermal"] = "thermal"
     timeout: int = 100
-    load_data_id:str = 364
+    load_data_id:str = None
     simulate:str = None
     multiplexed: bool = False 
 
@@ -274,11 +278,12 @@ elif node.parameters.load_data_id is None:
 
 if not node.parameters.simulate:
     if node.parameters.load_data_id is not None:
-        loaded_node = node.load_from_id(node.parameters.load_data_id)
-        ds = loaded_node.results["ds_raw"]
-        if loaded_node.namespace.get("qubits"):
-            qubits = loaded_node.namespace["qubits"]
-            node.namespace["qubits"] = qubits
+        load_data_id = node.parameters.load_data_id
+        node = node.load_from_id(load_data_id)
+        ds = node.results["ds_raw"]
+        restore_load_data_id(node, load_data_id)
+        machine = node.machine
+        qubits = resolve_qubits_from_node(machine, node)
     else:
         # Fetch the data from the OPX and convert it into a xarray with corresponding axes (from most inner to outer loop)
         ds = fetch_results_as_xarray(job.result_handles, qubits, {"relative_time": relative_time, "init_state": ["e", "g"]})

@@ -23,7 +23,11 @@ from qualibrate import QualibrationNode, NodeParameters
 from quam_libs.components import QuAM
 from quam_libs.macros import qua_declaration, active_reset_simple, readout_state
 from quam_libs.lib.qua_datasets import convert_IQ_to_V
-from quam_libs.lib.save_utils import fetch_results_as_xarray
+from quam_libs.lib.save_utils import (
+    fetch_results_as_xarray,
+    restore_load_data_id,
+    resolve_qubit_pairs_from_node,
+)
 from qualang_tools.results import progress_counter, fetching_tool
 from qualang_tools.loops import from_array
 from qualang_tools.multi_user import qm_session
@@ -291,18 +295,33 @@ elif node.parameters.load_data_id is None:
 if not node.parameters.simulate:
     # Fetch the data from the OPX and convert it into a xarray with corresponding axes (from most inner to outer loop)
     if node.parameters.load_data_id is not None:
-        node = node.load_from_id(node.parameters.load_data_id)
+        load_data_id = node.parameters.load_data_id
+        node = node.load_from_id(load_data_id)
         ds = node.results["ds"]
+        restore_load_data_id(node, load_data_id)
+        machine = node.machine
+        qubit_pairs = resolve_qubit_pairs_from_node(machine, node)
     else:
         ds = fetch_results_as_xarray(job.result_handles, qubit_pairs, {"time": times * 4, "detuning": dfs})
 
     # %% {Process_raw}
     if not node.parameters.use_state_discrimination:
         ds = ds.assign({"IQ_abs": np.sqrt(ds["I"] ** 2 + ds["Q"] ** 2)})
-    RF_freq = np.array([dfs + qp.coupler.RF_frequency - detuning for qp in qubit_pairs])
-    ds = ds.assign_coords({"freq_full_control": (["qubit", "freq"], RF_freq)})
-    detuned_freq = np.array([dfs - detuning for qp in qubit_pairs]) * 1e-6
-    ds = ds.assign_coords({"detunings": (["qubit", "freq"], detuned_freq)})
+    if node.parameters.load_data_id is None:
+        detuning_axis = dfs
+        RF_freq = np.array([detuning_axis + qp.coupler.RF_frequency - detuning for qp in qubit_pairs])
+        ds = ds.assign_coords({"freq_full_control": (["qubit", "detuning"], RF_freq)})
+        detuned_freq = np.array([detuning_axis - detuning for qp in qubit_pairs]) * 1e-6
+        ds = ds.assign_coords({"detunings": (["qubit", "detuning"], detuned_freq)})
+    elif "freq_full_control" not in ds.coords or "detunings" not in ds.coords:
+        detuning_axis = ds.coords["detuning"].values
+        detuning_hz = node.parameters.detuning_in_mhz * 1e6
+        RF_freq = np.array([detuning_axis + qp.coupler.RF_frequency - detuning_hz for qp in qubit_pairs])
+        ds = ds.assign_coords({"freq_full_control": (["qubit", "detuning"], RF_freq)})
+        detuned_freq = np.array([detuning_axis - detuning_hz for qp in qubit_pairs]) * 1e-6
+        ds = ds.assign_coords({"detunings": (["qubit", "detuning"], detuned_freq)})
+    else:
+        detuning_axis = ds.coords["detuning"].values
     ds.freq_full_control.attrs["long_name"] = "Frequency"
     ds.freq_full_control.attrs["units"] = "GHz"
     ds.detunings.attrs["long_name"] = "Detuning"
@@ -316,7 +335,7 @@ if not node.parameters.simulate:
     if node.parameters.use_state_discrimination and "state_target" in ds.data_vars:
         state_da = ds["state_target"].transpose("qubit", "time", "detuning")
         center_freqs = xr.apply_ufunc(
-            lambda states: fit_gaussian(dfs, states),
+            lambda states: fit_gaussian(detuning_axis, states),
             state_da,
             input_core_dims=[["detuning"]],
             output_core_dims=[[]],
@@ -328,7 +347,7 @@ if not node.parameters.simulate:
         # center_freqs = extract_center_freqs_iq(ds, dfs)
         stacked = ds.IQ_abs.transpose("qubit", "time", "detuning")
         center_freqs = xr.apply_ufunc(
-            lambda iq_slice: fit_gaussian(dfs, iq_slice),
+            lambda iq_slice: fit_gaussian(detuning_axis, iq_slice),
             stacked,
             input_core_dims=[["detuning"]],
             output_core_dims=[[]],
@@ -338,7 +357,7 @@ if not node.parameters.simulate:
         )
     
     # Add flux-induced frequency shift to center frequencies
-    center_freqs = center_freqs - detuning
+    center_freqs = center_freqs - node.parameters.detuning_in_mhz * 1e6
     
     # Calculate flux response from frequency shifts
     flux_response = np.sqrt(-1*center_freqs )
@@ -347,7 +366,8 @@ if not node.parameters.simulate:
     ds['center_freqs'] = center_freqs
     ds['flux_response'] = flux_response
     ds['flux_response_normalized'] = flux_response_normalized
-    
+    node.results["ds"] = ds
+
     fit_results = {}
     for q in qubit_pairs:
         t_data = flux_response_normalized.sel(qubit=q.name).time.values

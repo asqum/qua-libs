@@ -1,8 +1,8 @@
 from typing import List
-from compat import BasicOrchestrator
-from compat import GraphParameters
-from compat import QualibrationGraph
-from compat import QualibrationLibrary
+from quam_libs.compat import BasicOrchestrator
+from quam_libs.compat import GraphParameters
+from quam_libs.compat import QualibrationGraph
+from quam_libs.compat import QualibrationLibrary
 from time import time
 """ Try faster than V1 """
 

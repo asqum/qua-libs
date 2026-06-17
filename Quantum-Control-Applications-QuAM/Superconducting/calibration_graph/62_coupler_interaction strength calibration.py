@@ -37,7 +37,11 @@ from qualibrate import QualibrationNode, NodeParameters
 from quam_libs.components import QuAM
 from quam_libs.macros import active_reset, readout_state, readout_state_gef, active_reset_gef, active_reset_simple
 from quam_libs.lib.plot_utils import QubitPairGrid, grid_iter, grid_pair_names
-from quam_libs.lib.save_utils import fetch_results_as_xarray, load_dataset
+from quam_libs.lib.save_utils import (
+    fetch_results_as_xarray,
+    restore_load_data_id,
+    resolve_qubit_pairs_from_node,
+)
 from qualang_tools.results import progress_counter, fetching_tool
 from qualang_tools.loops import from_array
 from qualang_tools.multi_user import qm_session
@@ -249,19 +253,30 @@ if not node.parameters.simulate:
         # Fetch the data from the OPX and convert it into a xarray with corresponding axes (from most inner to outer loop)
         ds = fetch_results_as_xarray(job.result_handles, qubit_pairs, {  "idle_time": idle_times, "flux_coupler": fluxes_coupler})
     else:
-        ds, machine = load_dataset(node.parameters.load_data_id)
-        
+        load_data_id = node.parameters.load_data_id
+        node = node.load_from_id(load_data_id)
+        ds = node.results["ds"]
+        restore_load_data_id(node, load_data_id)
+        machine = node.machine
+        qubit_pairs = resolve_qubit_pairs_from_node(machine, node)
     node.results = {"ds": ds}
 
 # %%
 if not node.parameters.simulate:
-    ds = ds.assign_coords(idle_time = ds.idle_time * 4)
+    if node.parameters.load_data_id is None:
+        ds = ds.assign_coords(idle_time=ds.idle_time * 4)
     if node.parameters.use_state_discrimination:
-        ds = ds.assign({"res_sum" : ds.state_control - ds.state_target})
+        ds = ds.assign({"res_sum": ds.state_control - ds.state_target})
     else:
-        ds = ds.assign({"res_sum" : ds.I_control - ds.I_target})
-    flux_coupler_full = np.array([fluxes_coupler + qp.coupler.decouple_offset for qp in qubit_pairs])
-    ds = ds.assign_coords({"flux_coupler_full": (["qubit", "flux_coupler"], flux_coupler_full)})    
+        ds = ds.assign({"res_sum": ds.I_control - ds.I_target})
+    if "flux_coupler_full" not in ds.coords:
+        fluxes_coupler = np.arange(
+            node.parameters.coupler_flux_min,
+            node.parameters.coupler_flux_max,
+            node.parameters.coupler_flux_step,
+        )
+        flux_coupler_full = np.array([fluxes_coupler + qp.coupler.decouple_offset for qp in qubit_pairs])
+        ds = ds.assign_coords({"flux_coupler_full": (["qubit", "flux_coupler"], flux_coupler_full)})
 # %%
 if not node.parameters.simulate:
     # Add the dominant frequencies to the dataset
@@ -323,7 +338,7 @@ if not node.parameters.simulate:
     node.results['figure_dominant_frequency'] = grid.fig
 
 # %% {Update_state}
-if not node.parameters.simulate:
+if not node.parameters.simulate and node.parameters.load_data_id is None:
     with node.record_state_updates():
         for qp in qubit_pairs:
             gate_time_ns = int(1/ (2 * interaction_max.sel(qubit = qp.name).values)) 
@@ -345,6 +360,7 @@ if not node.parameters.simulate:
 if not node.parameters.simulate:    
     node.outcomes = {q.name: "successful" for q in qubit_pairs}
     node.results['initial_parameters'] = node.parameters.model_dump()
+    node.results["ds"] = ds
     node.machine = machine
     node.save()
 # %%

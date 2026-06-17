@@ -275,13 +275,7 @@ class QuaProgramHandler:
         self.max_sequence_length = max_sequence_length
         self.readout_mode = getattr(self.node.parameters, "readout_mode", "ge")
         self.reset_mode = getattr(self.node.parameters, "reset_type_thermal_or_active", "active")
-        
-        if self.node.parameters.use_input_stream:
-            self.circuits_as_ints_batched = split_list_by_integer_count(self.circuits_as_ints, self.max_sequence_length)
-            self.circuits_as_ints_batched = [list(flatten(batch)) for batch in self.circuits_as_ints_batched]
-            self.sequence_lengths = [len(batch) for batch in self.circuits_as_ints_batched]
-            self.max_current_sequence_length = max(len(seq) for seq in self.circuits_as_ints_batched)
-    
+         
     def _get_qua_program_with_input_stream(self):
         
         with program() as rb:
@@ -389,11 +383,7 @@ class QuaProgramHandler:
     
     
     def get_qua_program(self):
-    
-        if self.node.parameters.use_input_stream:
-            return self._get_qua_program_with_input_stream()
-        else:
-            return self._get_qua_program_without_input_stream()
+        return self._get_qua_program_without_input_stream()
         
 
 circ1 = [0]

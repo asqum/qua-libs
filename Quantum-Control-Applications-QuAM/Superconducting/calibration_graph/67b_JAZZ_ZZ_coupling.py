@@ -36,7 +36,11 @@ from qualibrate import QualibrationNode, NodeParameters
 from quam_libs.components import QuAM
 from quam_libs.macros import active_reset, readout_state, readout_state_gef, active_reset_gef, active_reset_simple
 from quam_libs.lib.plot_utils import QubitPairGrid, grid_iter, grid_pair_names
-from quam_libs.lib.save_utils import fetch_results_as_xarray, load_dataset
+from quam_libs.lib.save_utils import (
+    fetch_results_as_xarray,
+    restore_load_data_id,
+    resolve_qubit_pairs_from_node,
+)
 from qualang_tools.results import progress_counter, fetching_tool
 from qualang_tools.loops import from_array
 from qualang_tools.multi_user import qm_session
@@ -54,6 +58,7 @@ from scipy.optimize import curve_fit
 from quam_libs.components.gates.two_qubit_gates import CZGate
 from quam_libs.lib.pulses import FluxPulse
 from quam_libs.lib.fit import fit_oscillation_decay_exp, oscillation_decay_exp
+import xarray as xr
 
 # %% {Node_parameters}
 qubit_pair_indexes = [4]  # The indexes of the qubit pairs to measure
@@ -259,9 +264,12 @@ if not node.parameters.simulate:
             {"idle_time": idle_times, "flux_coupler": fluxes_coupler},
         )
     else:
-        ds, machine = load_dataset(node.parameters.load_data_id)
-
-
+        load_data_id = node.parameters.load_data_id
+        node = node.load_from_id(load_data_id)
+        ds = node.results["ds"]
+        restore_load_data_id(node, load_data_id)
+        machine = node.machine
+        qubit_pairs = resolve_qubit_pairs_from_node(machine, node)
 # %% {Data_analysis}
 node.results = {"ds": ds}
 node.results["fit_results"] = {}
@@ -273,13 +281,34 @@ if not node.parameters.simulate:
         target_signal_name = "state_target" if "state_target" in ds.data_vars else "I_target"
         print(f"Using '{target_signal_name}' for ZZ analysis.")
 
-        flux_coupler_full = np.array([
-            fluxes_coupler + qp.coupler.decouple_offset for qp in qubit_pairs
-        ])
-        ds = ds.assign_coords({
-            "flux_coupler_full": (["qubit", "flux_coupler"], flux_coupler_full)
-        })
-        ds = ds.assign_coords(idle_time=4 * idle_times / 1e3)
+        if node.parameters.load_data_id is None:
+            flux_coupler_full = np.array([
+                fluxes_coupler + qp.coupler.decouple_offset for qp in qubit_pairs
+            ])
+            ds = ds.assign_coords({
+                "flux_coupler_full": (["qubit", "flux_coupler"], flux_coupler_full)
+            })
+            ds = ds.assign_coords(idle_time=4 * idle_times / 1e3)
+        else:
+            if "flux_coupler_full" not in ds.coords:
+                fluxes_coupler = np.linspace(
+                    -node.parameters.flux_span / 2,
+                    node.parameters.flux_span / 2,
+                    node.parameters.flux_num,
+                )
+                flux_coupler_full = np.array([
+                    fluxes_coupler + qp.coupler.decouple_offset for qp in qubit_pairs
+                ])
+                ds = ds.assign_coords({
+                    "flux_coupler_full": (["qubit", "flux_coupler"], flux_coupler_full)
+                })
+            if "idle_time" not in ds.coords:
+                idle_times = np.arange(
+                    node.parameters.min_wait_time_in_ns // 4,
+                    node.parameters.max_wait_time_in_ns // 4,
+                    node.parameters.wait_time_step_in_ns // 4,
+                )
+                ds = ds.assign_coords(idle_time=4 * idle_times / 1e3)
 
         fit_curve_list = []
         chiZZ_list = []

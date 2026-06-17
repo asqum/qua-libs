@@ -1,5 +1,5 @@
-from compat import get_config_path, get_node_dir_path, get_quam_state_path, get_settings
-from compat import LocalStorageManager
+from quam_libs.compat import get_config_path, get_node_dir_path, get_quam_state_path, get_settings
+from quam_libs.compat import LocalStorageManager
 from qualibrate_config.resolvers import get_qualibrate_config_path, get_qualibrate_config
 from qualibrate import QualibrationNode
 from quam_libs.components import QuAM
@@ -90,6 +90,25 @@ def find_numbered_folder(base_path, number):
     
     return None
 
+
+def restore_load_data_id(node, load_data_id):
+    node.parameters.load_data_id = load_data_id
+
+
+def resolve_qubits_from_node(machine, node):
+    parameters = node.parameters
+    if hasattr(machine, "get_qubits_used_in_node"):
+        return machine.get_qubits_used_in_node(parameters)
+    if parameters.qubits is None or parameters.qubits == "":
+        return machine.active_qubits
+    return [machine.qubits[q] for q in parameters.qubits]
+
+
+def resolve_qubit_pairs_from_node(machine, node):
+    parameters = node.parameters
+    if parameters.qubit_pairs is None or parameters.qubit_pairs == "":
+        return machine.active_qubit_pairs
+    return [machine.qubit_pairs[qp] for qp in parameters.qubit_pairs]
 
 
 def load_dataset(serial_number, target_filename = "ds", parameters = None):

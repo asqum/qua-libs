@@ -649,7 +649,7 @@ if not node.parameters.simulate:
 # %%
 if node.parameters.plot_raw: 
     from qualibrate_config.resolvers import get_qualibrate_config_path, get_qualibrate_config
-    from compat import get_node_dir_path
+    from quam_libs.compat import get_node_dir_path
     import os
     qs = get_qualibrate_config(get_qualibrate_config_path())
     base_path = qs.storage.location

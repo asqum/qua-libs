@@ -36,7 +36,11 @@ from qualibrate import QualibrationNode, NodeParameters
 from quam_libs.components import QuAM
 from quam_libs.macros import active_reset, readout_state, readout_state_gef, active_reset_gef, active_reset_simple
 from quam_libs.lib.plot_utils import QubitPairGrid, grid_iter, grid_pair_names
-from quam_libs.lib.save_utils import fetch_results_as_xarray, load_dataset
+from quam_libs.lib.save_utils import (
+    fetch_results_as_xarray,
+    restore_load_data_id,
+    resolve_qubit_pairs_from_node,
+)
 from qualang_tools.results import progress_counter, fetching_tool
 from qualang_tools.loops import from_array
 from qualang_tools.multi_user import qm_session
@@ -55,7 +59,7 @@ from quam_libs.components.gates.two_qubit_gates import CZGate
 from quam_libs.lib.pulses import FluxPulse
 
 # %% {Node_parameters}
-qubit_pair_indexes = [3]  # The indexes of the qubit pair to calibrate
+qubit_pair_indexes = [1]  # The indexes of the qubit pair to calibrate
 class Parameters(NodeParameters):
 
     qubit_pairs: Optional[List[str]] = ["coupler_q%s_q%s"%(i,i+1) for i in qubit_pair_indexes]
@@ -64,13 +68,13 @@ class Parameters(NodeParameters):
     reset_type: Literal['active', 'thermal'] = "active"
     simulate: bool = False
     timeout: int = 100
-    amp_range : float = 0.2
+    amp_range : float = 0.08
     amp_step : float = 0.002
-    num_frames: int = 10
-    load_data_id: Optional[int] = None # 92417 
-    plot_raw : bool = True
+    num_frames: int = 80
+    load_data_id: Optional[int] = None 
+    plot_raw : bool = False
     measure_leak : bool = True
-    operation: Literal["Cz_flattop", "Cz_unipolar", "Cz_bipolar"] = "Cz_unipolar"
+    operation: Literal["Cz_flattop", "Cz_unipolar", "Cz_bipolar"] = "Cz_flattop"
     """Type of CZ operation to perform. Options are 'cz_flattop', 'cz_unipolar', or 'cz_bipolar'. Default is 'cz_unipolar'."""
 
 
@@ -111,15 +115,23 @@ def tanh_fit(x, a, b, c, d):
     return a * np.tanh(b * x + c) + d
 
 
+operation_name = node.parameters.operation
+
+gate_refs = {}
+for qp in qubit_pairs:
+    gate_refs[qp.name] = {
+        "qubit_amplitude": qp.gates[operation_name].flux_pulse_control.amplitude,
+    }
+
+
 # %% {QUA_program}
 n_avg = node.parameters.num_averages  # The number of averages
 
 flux_point = node.parameters.flux_point_joint_or_independent  # 'independent' or 'joint'
 
-# Loop parameters
+# Scale factors centered at 1.0 → nominal point is the selected gate qubit amplitude
 amplitudes = np.arange(1-node.parameters.amp_range, 1+node.parameters.amp_range, node.parameters.amp_step)
 frames = np.arange(0, 1, 1/node.parameters.num_frames)
-operation_name = node.parameters.operation
 
 with program() as CPhase_Oscillations:
     amp = declare(fixed)   
@@ -135,8 +147,8 @@ with program() as CPhase_Oscillations:
 
     
     for i, qp in enumerate(qubit_pairs):
-        qp.gates['Cz'].phase_shift_control = 0.0
-        qp.gates['Cz'].phase_shift_target = 0.0
+        qp.gates[operation_name].phase_shift_control = 0.0
+        qp.gates[operation_name].phase_shift_target = 0.0
         # Bring the active qubits to the minimum frequency point
         if flux_point == "independent":
             machine.apply_all_flux_to_min()
@@ -230,7 +242,17 @@ if not node.parameters.simulate:
         # Fetch the data from the OPX and convert it into a xarray with corresponding axes (from most inner to outer loop)
         ds = fetch_results_as_xarray(job.result_handles, qubit_pairs, {"control_axis": [0,1], "frame": frames, "amp": amplitudes, "N": np.linspace(1, n_avg, n_avg)})
     else:
-        ds, machine = load_dataset(node.parameters.load_data_id)
+        load_data_id = node.parameters.load_data_id
+        node = node.load_from_id(load_data_id)
+        ds = node.results["ds"]
+        restore_load_data_id(node, load_data_id)
+        machine = node.machine
+        qubit_pairs = resolve_qubit_pairs_from_node(machine, node)
+        gate_refs = {}
+        for qp in qubit_pairs:
+            gate_refs[qp.name] = {
+                "qubit_amplitude": qp.gates[operation_name].flux_pulse_control.amplitude,
+            }
 
         
     node.results = {"ds": ds}
@@ -238,10 +260,10 @@ if not node.parameters.simulate:
 # %% {Data_analysis}
 if not node.parameters.simulate:
     def abs_amp(qp, amp):
-        return amp * qp.gates['Cz'].flux_pulse_control.amplitude
+        return amp * gate_refs[qp.name]["qubit_amplitude"]
 
     def detuning(qp, amp):
-        return -(amp * qp.gates['Cz'].flux_pulse_control.amplitude)**2 * qp.qubit_control.freq_vs_flux_01_quad_term
+        return -(amp * gate_refs[qp.name]["qubit_amplitude"])**2 * qp.qubit_control.freq_vs_flux_01_quad_term
     
     ds = ds.assign_coords(
         {"amp_full": (["qubit", "amp"], np.array([abs_amp(qp, ds.amp) for qp in qubit_pairs]))}
@@ -285,7 +307,7 @@ if not node.parameters.simulate:
             optimal_amp = float(np.abs(phase_diff - 0.5).idxmin("amp"))    
         
         phase_diffs[qp.name] = phase_diff
-        optimal_amps[qp.name] = optimal_amp * qp.gates['Cz'].flux_pulse_control.amplitude
+        optimal_amps[qp.name] = optimal_amp * gate_refs[qp.name]["qubit_amplitude"]
         
         print(f"parameters for {qp.name}: amp={optimal_amps[qp.name]}")
         
@@ -297,8 +319,11 @@ if not node.parameters.simulate:
 # %%
 if not node.parameters.simulate:
     grid_names, qubit_pair_names = grid_pair_names(qubit_pairs)
+    qp_by_name = {qp.name: qp for qp in qubit_pairs}
     grid = QubitPairGrid(grid_names, qubit_pair_names)
     for ax, qubit_pair in grid_iter(grid):
+        qp_plot = qp_by_name[qubit_pair['qubit']]
+        quad_term = qp_plot.qubit_control.freq_vs_flux_01_quad_term
         phase_diffs[qubit_pair['qubit']].plot.line(ax=ax, x = "amp_full")
         if qubit_pair['qubit'] in fitted:
             ax.plot(phase_diffs[qubit_pair['qubit']].amp_full, fitted[qubit_pair['qubit']])
@@ -306,11 +331,11 @@ if not node.parameters.simulate:
         ax.axhline(y=0.5, color='red', linestyle='--',lw=0.5)
         ax.axvline(x=optimal_amps[qubit_pair['qubit']], color='red', linestyle='--',lw=0.5)
         # Add secondary x-axis for detuning in MHz
-        def amp_to_detuning_MHz(amp):
-            return -(amp**2) * qp.qubit_control.freq_vs_flux_01_quad_term / 1e6  # Convert Hz to MHz
+        def amp_to_detuning_MHz(amp, _quad=quad_term):
+            return -(amp**2) * _quad / 1e6  # Convert Hz to MHz
 
-        def detuning_MHz_to_amp(detuning_MHz):
-            return np.sqrt(-detuning_MHz * 1e6 / qp.qubit_control.freq_vs_flux_01_quad_term)
+        def detuning_MHz_to_amp(detuning_MHz, _quad=quad_term):
+            return np.sqrt(-detuning_MHz * 1e6 / _quad)
 
         secax = ax.secondary_xaxis('top', functions=(amp_to_detuning_MHz, detuning_MHz_to_amp))
         secax.set_xlabel('Detuning (MHz)')
@@ -326,19 +351,22 @@ if not node.parameters.simulate:
     if node.parameters.measure_leak:
         grid = QubitPairGrid(grid_names, qubit_pair_names)
         for ax, qubit_pair in grid_iter(grid):
+            qp_plot = qp_by_name[qubit_pair['qubit']]
+            quad_term = qp_plot.qubit_control.freq_vs_flux_01_quad_term
+            nominal_amp = gate_refs[qp_plot.name]["qubit_amplitude"]
             leaks[qubit_pair['qubit']].plot(ax=ax, x = 'amp_full')
             ax.axvline(optimal_amps[qubit_pair['qubit']],color = 'r', linestyle='--',lw=0.5)
-            ax.axvline((qubit_pairs[0].gates['Cz'].flux_pulse_control.amplitude), color='b', linestyle='--', lw = 0.57)
+            ax.axvline(nominal_amp, color='b', linestyle='--', lw = 0.57)
             ax.set_title(qubit_pair['qubit'])
             ax.set_xlabel('Amplitude (V)')
             ax.set_ylabel('Leak probability')
             
             # Add secondary x-axis for detuning in MHz
-            def amp_to_detuning_MHz(amp):
-                return -(amp**2) * qp.qubit_control.freq_vs_flux_01_quad_term / 1e6  # Convert Hz to MHz
+            def amp_to_detuning_MHz(amp, _quad=quad_term):
+                return -(amp**2) * _quad / 1e6  # Convert Hz to MHz
 
-            def detuning_MHz_to_amp(detuning_MHz):
-                return np.sqrt(-detuning_MHz * 1e6 / qp.qubit_control.freq_vs_flux_01_quad_term)
+            def detuning_MHz_to_amp(detuning_MHz, _quad=quad_term):
+                return np.sqrt(-detuning_MHz * 1e6 / _quad)
 
             secax = ax.secondary_xaxis('top', functions=(amp_to_detuning_MHz, detuning_MHz_to_amp))
             secax.set_xlabel('Detuning (MHz)')

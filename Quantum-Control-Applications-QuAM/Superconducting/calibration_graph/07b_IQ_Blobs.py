@@ -34,7 +34,11 @@ from quam_libs.experiments.simulation import simulate_and_plot
 from quam_libs.macros import qua_declaration, active_reset, active_reset_simple, active_reset_gef
 from quam_libs.lib.qua_datasets import convert_IQ_to_V
 from quam_libs.lib.plot_utils import QubitGrid, grid_iter
-from quam_libs.lib.save_utils import fetch_results_as_xarray
+from quam_libs.lib.save_utils import (
+    fetch_results_as_xarray,
+    restore_load_data_id,
+    resolve_qubits_from_node,
+)
 from qualang_tools.analysis.discriminator import two_state_discriminator
 from qualang_tools.results import progress_counter, fetching_tool
 from qualang_tools.multi_user import qm_session
@@ -202,9 +206,12 @@ if not node.parameters.simulate:
         # todo: Write docstring
         ds = fetch_dataset(job, qubits, node.parameters)
     else:
-        node = node.load_from_id(node.parameters.load_data_id)
+        load_data_id = node.parameters.load_data_id
+        node = node.load_from_id(load_data_id)
         ds = node.results["ds"]
-    
+        restore_load_data_id(node, load_data_id)
+        machine = node.machine
+        qubits = resolve_qubits_from_node(machine, node)
     # %% {Data_analysis}
     node.results = {"ds": ds, "figs": {}, "results": {}}
     plot_individual = False

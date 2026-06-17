@@ -2,7 +2,7 @@ from typing import List
 
 from qualang_tools.bakery import baking
 from qualibrate import NodeParameters
-from compat import RunnableParameters
+from quam_libs.compat import RunnableParameters
 from qualibration_libs.parameters import CommonNodeParameters, QubitsExperimentNodeParameters
 
 

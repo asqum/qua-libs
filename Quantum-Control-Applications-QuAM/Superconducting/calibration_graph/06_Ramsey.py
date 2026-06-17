@@ -34,6 +34,7 @@ from qualang_tools.units import unit
 from qm.qua import *
 from typing import Literal, Optional, List
 import matplotlib.pyplot as plt
+from quam_libs.lib.save_utils import restore_load_data_id, resolve_qubits_from_node
 
 class Parameters(NodeParameters):
     qubits: Optional[List[str]] = None
@@ -180,9 +181,12 @@ if not node.parameters.simulate:
         ds = fetch_dataset(job, qubits, node.parameters)
         node.results = {"ds": ds}
     else:
-        node = node.load_from_id(node.parameters.load_data_id)
+        load_data_id = node.parameters.load_data_id
+        node = node.load_from_id(load_data_id)
         ds = node.results["ds"]
-
+        restore_load_data_id(node, load_data_id)
+        machine = node.machine
+        qubits = resolve_qubits_from_node(machine, node)
     # %% {Data_analysis}
     fits = fit_frequency_detuning_and_t2_decay(ds, qubits, node.parameters)
     node.results["fit_results"] = {k: asdict(v) for k, v in fits.items()}

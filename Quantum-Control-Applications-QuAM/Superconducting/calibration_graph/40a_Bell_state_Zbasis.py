@@ -37,7 +37,11 @@ from qualibrate import QualibrationNode, NodeParameters
 from quam_libs.components import QuAM
 from quam_libs.macros import active_reset, readout_state, readout_state_gef, active_reset_gef, active_reset_simple
 from quam_libs.lib.plot_utils import QubitPairGrid, grid_iter, grid_pair_names
-from quam_libs.lib.save_utils import fetch_results_as_xarray, load_dataset
+from quam_libs.lib.save_utils import (
+    fetch_results_as_xarray,
+    restore_load_data_id,
+    resolve_qubit_pairs_from_node,
+)
 from qualang_tools.results import progress_counter, fetching_tool
 from qualang_tools.loops import from_array
 from qualang_tools.multi_user import qm_session
@@ -58,12 +62,12 @@ from quam_libs.lib.pulses import FluxPulse
 # %% {Node_parameters}
 class Parameters(NodeParameters):
 
-    qubit_pairs: Optional[List[str]] = ["coupler_q3_q4"]
-    circuit: str = "ARBI" # "BELL1", "BELL2", "H", "CX"
-    num_shots: int = 64
+    qubit_pairs: Optional[List[str]] = ["coupler_q1_q2"]
+    circuit: str = "BELL1" # "BELL1", "BELL2", "H", "CX"
+    num_shots: int = 200
     flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
     reset_type: Literal['active', 'thermal'] = "active"
-    simulate: bool = True
+    simulate: bool = False
     timeout: int = 100
     load_data_id: Optional[int] = None
 
@@ -236,8 +240,12 @@ if not node.parameters.simulate:
         # Fetch the data from the OPX and convert it into a xarray with corresponding axes (from most inner to outer loop)
         ds = fetch_results_as_xarray(job.result_handles, qubit_pairs, {"N": np.linspace(1, n_shots, n_shots)})
     else:
-        ds, machine = load_dataset(node.parameters.load_data_id)
-        
+        load_data_id = node.parameters.load_data_id
+        node = node.load_from_id(load_data_id)
+        ds = node.results["ds"]
+        restore_load_data_id(node, load_data_id)
+        machine = node.machine
+        qubit_pairs = resolve_qubit_pairs_from_node(machine, node)
     node.results = {"ds": ds}
     
 # %%
@@ -253,7 +261,7 @@ if not node.parameters.simulate:
         results[qp.name] = np.array(results[qp.name])/node.parameters.num_shots
         
         conf_mat = qp.confusion
-        # corrected_results[qp.name] = np.linalg.inv(conf_mat) @ results[qp.name]
+        corrected_results[qp.name] = np.linalg.inv(conf_mat) @ results[qp.name]
         corrected_results[qp.name] = results[qp.name]
         print(f"{qp.name}: {corrected_results[qp.name]}")
 

@@ -36,7 +36,11 @@ from qualibrate import QualibrationNode, NodeParameters
 from quam_libs.components import QuAM
 from quam_libs.macros import active_reset, readout_state, readout_state_gef, active_reset_gef, active_reset_simple
 from quam_libs.lib.plot_utils import QubitPairGrid, grid_iter, grid_pair_names
-from quam_libs.lib.save_utils import fetch_results_as_xarray, load_dataset
+from quam_libs.lib.save_utils import (
+    fetch_results_as_xarray,
+    restore_load_data_id,
+    resolve_qubit_pairs_from_node,
+)
 from qualang_tools.results import progress_counter, fetching_tool
 from qualang_tools.loops import from_array
 from qualang_tools.multi_user import qm_session
@@ -282,18 +286,49 @@ if not node.parameters.simulate:
             },
         )
     else:
-        ds, machine = load_dataset(node.parameters.load_data_id)
-
+        load_data_id = node.parameters.load_data_id
+        node = node.load_from_id(load_data_id)
+        ds = node.results["ds"]
+        restore_load_data_id(node, load_data_id)
+        machine = node.machine
+        qubit_pairs = resolve_qubit_pairs_from_node(machine, node)
     node.results = {"ds": ds}
 
 # %% {Data prcessing}
 if not node.parameters.simulate:
-    detuning = np.array([-fluxes_qp[qp.name] ** 2 * qp.qubit_control.freq_vs_flux_01_quad_term  for qp in qubit_pairs])
-    ds = ds.assign_coords({"detuning": (["qubit", "flux_qubit"], detuning)})
-    flux_coupler_full = np.array([fluxes_coupler + qp.coupler.decouple_offset for qp in qubit_pairs])
-    ds = ds.assign_coords({"flux_coupler_full": (["qubit", "flux_coupler"], flux_coupler_full)})
-    flux_qubit_full = np.array([fluxes_qp[qp.name] for qp in qubit_pairs])
-    ds = ds.assign_coords({"flux_qubit_full": (["qubit", "flux_qubit"], flux_qubit_full)})
+    if node.parameters.load_data_id is None:
+        detuning = np.array(
+            [-fluxes_qp[qp.name] ** 2 * qp.qubit_control.freq_vs_flux_01_quad_term for qp in qubit_pairs]
+        )
+        ds = ds.assign_coords({"detuning": (["qubit", "flux_qubit"], detuning)})
+        flux_coupler_full = np.array([fluxes_coupler + qp.coupler.decouple_offset for qp in qubit_pairs])
+        ds = ds.assign_coords({"flux_coupler_full": (["qubit", "flux_coupler"], flux_coupler_full)})
+        flux_qubit_full = np.array([fluxes_qp[qp.name] for qp in qubit_pairs])
+        ds = ds.assign_coords({"flux_qubit_full": (["qubit", "flux_qubit"], flux_qubit_full)})
+    else:
+        if "detuning" not in ds.coords or "flux_coupler_full" not in ds.coords or "flux_qubit_full" not in ds.coords:
+            fluxes_coupler = np.linspace(
+                node.parameters.coupler_flux_min,
+                node.parameters.coupler_flux_max + 0.0001,
+                node.parameters.coupler_flux_num_points,
+            )
+            fluxes_qubit = np.linspace(
+                node.parameters.qubit_flux_min,
+                node.parameters.qubit_flux_max,
+                node.parameters.qubit_flux_num_points,
+            )
+            fluxes_qp = {qp.name: fluxes_qubit + qp.detuning for qp in qubit_pairs}
+            if "detuning" not in ds.coords:
+                detuning = np.array(
+                    [-fluxes_qp[qp.name] ** 2 * qp.qubit_control.freq_vs_flux_01_quad_term for qp in qubit_pairs]
+                )
+                ds = ds.assign_coords({"detuning": (["qubit", "flux_qubit"], detuning)})
+            if "flux_coupler_full" not in ds.coords:
+                flux_coupler_full = np.array([fluxes_coupler + qp.coupler.decouple_offset for qp in qubit_pairs])
+                ds = ds.assign_coords({"flux_coupler_full": (["qubit", "flux_coupler"], flux_coupler_full)})
+            if "flux_qubit_full" not in ds.coords:
+                flux_qubit_full = np.array([fluxes_qp[qp.name] for qp in qubit_pairs])
+                ds = ds.assign_coords({"flux_qubit_full": (["qubit", "flux_qubit"], flux_qubit_full)})
 
 
 # %% # %% Data analysis
@@ -502,16 +537,16 @@ if not node.parameters.simulate:
     node.results["figure_phase"] = grid.fig
 
 # %% {Update_state}
-if not node.parameters.simulate:
-    if not node.parameters.simulate:
-        with node.record_state_updates():
-            for qp in qubit_pairs:
-                qp.extras["CZ_qubit_flux"] = node.results["results"][qp.name]["optimal_qubit_flux_shift"]
-                qp.gates[operation_name].flux_pulse_control.amplitude = node.results["results"][qp.name]["optimal_qubit_flux_shift"]
+if not node.parameters.simulate and node.parameters.load_data_id is None:
+    with node.record_state_updates():
+        for qp in qubit_pairs:
+            qp.extras["CZ_qubit_flux"] = node.results["results"][qp.name]["optimal_qubit_flux_shift"]
+            qp.gates[operation_name].flux_pulse_control.amplitude = node.results["results"][qp.name]["optimal_qubit_flux_shift"]
 # %% {Save_results}
 if not node.parameters.simulate:
     node.outcomes = {qp.name: "successful" for qp in qubit_pairs}
     node.results["initial_parameters"] = node.parameters.model_dump()
+    node.results["ds"] = ds
     node.machine = machine
     node.save()
 
