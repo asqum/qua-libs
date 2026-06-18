@@ -64,8 +64,8 @@ class Parameters(NodeParameters):
     reset_type: Literal['active', 'thermal'] = "active"
     simulate: bool = False
     timeout: int = 100
-    amp_range : float = 0.01 #0.12
-    amp_step : float = 0.0004
+    amp_range : float = 0.05#0.12
+    amp_step : float = 0.002
     num_frames: int = 13
     num_repeats: int = 12 #12
     load_data_id: Optional[int] = None

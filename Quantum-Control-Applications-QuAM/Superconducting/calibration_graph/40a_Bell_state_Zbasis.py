@@ -62,7 +62,7 @@ from quam_libs.lib.pulses import FluxPulse
 # %% {Node_parameters}
 class Parameters(NodeParameters):
 
-    qubit_pairs: Optional[List[str]] = ["coupler_q1_q2"]
+    qubit_pairs: Optional[List[str]] = ["coupler_q4_q5"]
     circuit: str = "BELL1" # "BELL1", "BELL2", "H", "CX"
     num_shots: int = 200
     flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
