@@ -63,6 +63,7 @@ node = QualibrationNode(
 u = unit(coerce_to_integer=True)
 
 machine = QuAM.load()
+node.machine = machine
 # machine.network["port"] = int(access_port)
 
 # print(f"Machine access port :{access_port}")
@@ -152,7 +153,6 @@ with program() as iq_blobs:
 if node.parameters.simulate:
     samples, fig = simulate_and_plot(qmm, config, iq_blobs, node.parameters)
     node.results = {"figure": fig}
-    node.machine = machine
     node.save()
 
 elif node.parameters.load_data_id is None:
@@ -270,7 +270,6 @@ if not node.parameters.simulate:
 
         node.outcomes = {q.name: "successful" for q in qubits}
         node.results["initial_parameters"] = node.parameters.model_dump()
-        node.machine = machine
         node.save()          
 
         from qualibrate_config.resolvers import get_qualibrate_config_path, get_qualibrate_config

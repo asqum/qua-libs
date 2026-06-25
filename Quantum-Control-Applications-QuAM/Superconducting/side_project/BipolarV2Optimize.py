@@ -67,6 +67,7 @@ node = QualibrationNode(name="BipolarOpimize", parameters=Parameters())
 u = unit(coerce_to_integer=True)
 
 machine = QuAM.load()
+node.machine = machine
 # machine.network["port"] = int(access_port)
 
 # print(f"Machine access port :{access_port}")
@@ -295,5 +296,4 @@ with node.record_state_updates():
 # %% {Save_results}
 node.outcomes = {q.name: "successful" for q in qubits}
 node.results["initial_parameters"] = node.parameters.model_dump()
-node.machine = machine
 node.save()

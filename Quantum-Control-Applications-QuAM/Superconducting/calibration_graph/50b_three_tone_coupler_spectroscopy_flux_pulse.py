@@ -105,6 +105,7 @@ node = QualibrationNode(name="50b_three_tone_coupler_spectroscopy_flux_pulse", p
 u = unit(coerce_to_integer=True)
 # Instantiate the QuAM class from the state file
 machine = QuAM.load()
+node.machine = machine
 
 if node.parameters.qubit_pairs is None or node.parameters.qubit_pairs == "":
     qubit_pairs = machine.active_qubit_pairs
@@ -279,7 +280,6 @@ if node.parameters.simulate:
     node.results = {"figure": plt.gcf()}
     wf_report = job.get_simulated_waveform_report()
     wf_report.create_plot(samples, plot=True, save_path=None)
-    node.machine = machine
     node.save()
 
 elif node.parameters.load_data_id is None:
@@ -361,7 +361,6 @@ if not node.parameters.simulate:
         qp.coupler.RF_frequency = float(min_freqs.sel(qubit=qp.name))
     # %% {Save_results}
     node.results["initial_parameters"] = node.parameters.model_dump()
-    node.machine = machine
     node.save()
 
 # %%

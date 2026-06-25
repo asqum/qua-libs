@@ -364,6 +364,7 @@ node = QualibrationNode(name="07c_Readout_Power_Optimization", parameters=Parame
 u = unit(coerce_to_integer=True)
 # Instantiate the QuAM class from the state file
 machine = QuAM.load()
+node.machine = machine
 # Generate the OPX and Octave configurations
 config = machine.generate_config()
 # Open Communication with the QOP
@@ -424,7 +425,6 @@ if node.parameters.simulate:
     node.results = {"figure": plt.gcf()}
     wf_report = job.get_simulated_waveform_report()
     wf_report.create_plot(samples, plot=True, save_path=None)
-    node.machine = machine
     node.save()
 
 elif node.parameters.load_data_id is None:
@@ -642,7 +642,6 @@ if not node.parameters.simulate:
         # %% {Save_results}
         node.outcomes = {q.name: "successful" for q in qubits}
         node.results["initial_parameters"] = node.parameters.model_dump()
-        node.machine = machine
         node.save()
 
 

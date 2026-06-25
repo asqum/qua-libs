@@ -111,6 +111,7 @@ assert not (
 u = unit(coerce_to_integer=True)
 # Instantiate the QuAM class from the state file
 machine = QuAM.load()
+node.machine = machine
 
 # Get the relevant QuAM components
 if node.parameters.qubit_pairs is None or node.parameters.qubit_pairs == "":
@@ -257,7 +258,6 @@ if node.parameters.simulate:
     wf_report = job.get_simulated_waveform_report()
     wf_report.create_plot(samples, plot=True, save_path=None)
     node.results = {"figure": plt.gcf()}
-    node.machine = machine
     node.save()
 elif node.parameters.load_data_id is None:
     with qm_session(qmm, config, timeout=node.parameters.timeout) as qm:
@@ -547,7 +547,6 @@ if not node.parameters.simulate:
     node.outcomes = {qp.name: "successful" for qp in qubit_pairs}
     node.results["initial_parameters"] = node.parameters.model_dump()
     node.results["ds"] = ds
-    node.machine = machine
     node.save()
 
 # %%

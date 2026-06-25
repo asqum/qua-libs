@@ -26,6 +26,7 @@ node = QualibrationNode(name="01a_Mixer_Calibration", parameters=Parameters())
 u = unit(coerce_to_integer=True)
 # Instantiate the QuAM class from the state file
 machine = QuAM.load()
+node.machine = machine
 
 # Get the relevant QuAM components
 if node.parameters.qubits is None or node.parameters.qubits == "":

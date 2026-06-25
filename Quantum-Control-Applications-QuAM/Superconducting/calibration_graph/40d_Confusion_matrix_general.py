@@ -85,6 +85,7 @@ assert not (node.parameters.simulate and node.parameters.load_data_id is not Non
 u = unit(coerce_to_integer=True)
 # Instantiate the QuAM class from the state file
 machine = QuAM.load()
+node.machine = machine
 
 # Get the relevant QuAM components
 if node.parameters.qubit_groups is None or node.parameters.qubit_groups == "":
@@ -201,7 +202,6 @@ if node.parameters.simulate:
     job = qmm.simulate(config, ConfusionMatrixNQ, simulation_config)
     job.get_simulated_samples().con1.plot()
     node.results = {"figure": plt.gcf()}
-    node.machine = machine
     node.save()
 elif node.parameters.load_data_id is None:
     
@@ -343,7 +343,6 @@ if not node.parameters.simulate:
 if not node.parameters.simulate:
     node.outcomes = {qg.name: "successful" for qg in qubit_groups}
     node.results["initial_parameters"] = node.parameters.model_dump()
-    node.machine = machine
     node.save()
     node.machine.save()
 # %%

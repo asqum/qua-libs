@@ -73,6 +73,7 @@ node = QualibrationNode(name="03e_Qubit_Spectroscopy_vs_Flux_coupler_positioning
 u = unit(coerce_to_integer=True)
 # Instantiate the QuAM class from the state file
 machine = QuAM.load()
+node.machine = machine
 # Generate the OPX and Octave configurations
 config = machine.generate_config()
 # Open Communication with the QOP
@@ -335,7 +336,6 @@ if not node.parameters.simulate:
     node.results["ds"] = ds
     node.outcomes = {q.name: "successful" for q in qubits}
     node.results["initial_parameters"] = node.parameters.model_dump()
-    node.machine = machine
     node.save()
 
 # %%

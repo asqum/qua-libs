@@ -92,6 +92,7 @@ assert not (node.parameters.simulate and node.parameters.load_data_id is not Non
 u = unit(coerce_to_integer=True)
 # Instantiate the QuAM class from the state file
 machine = QuAM.load()
+node.machine = machine
 
 # Get the relevant QuAM components
 if node.parameters.qubit_pairs is None or node.parameters.qubit_pairs == "":
@@ -223,7 +224,6 @@ if node.parameters.simulate:
     job = qmm.simulate(config, CPhase_Oscillations, simulation_config)
     job.get_simulated_samples().con1.plot()
     node.results = {"figure": plt.gcf()}
-    node.machine = machine
     node.save()
 elif node.parameters.load_data_id is None:
     with qm_session(qmm, config, timeout=node.parameters.timeout) as qm:
@@ -340,6 +340,5 @@ if not node.parameters.simulate:
 if not node.parameters.simulate:    
     node.outcomes = {q.name: "successful" for q in qubit_pairs}
     node.results['initial_parameters'] = node.parameters.model_dump()
-    node.machine = machine
     node.save()
 # %%

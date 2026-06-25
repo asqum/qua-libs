@@ -46,6 +46,7 @@ node = QualibrationNode(name=f"100_Gate_Set_Tomography", parameters=Parameters()
 u = unit(coerce_to_integer=True)
 # Instantiate the QuAM class from the state file
 machine = QuAM.load()
+node.machine = machine
 
 # Generate the OPX and Octave configurations
 config = machine.generate_config()
@@ -226,7 +227,6 @@ if node.parameters.simulate:
     waveform_report.create_plot(samples,plot=True,save_path="./")
     # Save the figure
     node.results = {"figure": plt.gcf()}
-    node.machine = machine
     node.save()
     
 elif node.parameters.load_data_id is None:
@@ -365,7 +365,6 @@ if not node.parameters.simulate:
         gst_report_dirname = f"gst_report_{qubit.name}"
         node.results["gst_report_dir"] = gst_report_dirname
         node.results["gst_report_main"] = f"{gst_report_dirname}/main.html"
-        node.machine = machine
         node.save()
 
         qs = get_qualibrate_config(get_qualibrate_config_path())

@@ -49,6 +49,7 @@ node = QualibrationNode(name="01b_Time_of_Flight", parameters=Parameters())
 u = unit(coerce_to_integer=True)
 # Instantiate the QuAM class from the state file
 machine = QuAM.load()
+node.machine = machine
 
 # Get the relevant QuAM components
 if node.parameters.qubits is None or node.parameters.qubits == "":
@@ -247,6 +248,5 @@ else:
     node.outcomes = {rr.name: "successful" for rr in resonators}
     node.results["ds"] = ds
     node.results["initial_parameters"] = node.parameters.model_dump()
-    node.machine = machine
     node.save()
 

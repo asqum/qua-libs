@@ -59,6 +59,7 @@ node = QualibrationNode(name="11e_IQ_Blobs_G_E_F", parameters=Parameters())
 u = unit(coerce_to_integer=True)
 # Instantiate the QuAM class from the state file
 machine = QuAM.load()
+node.machine = machine
 # Generate the OPX and Octave configurations
 config = machine.generate_config()
 octave_config = machine.get_octave_config()
@@ -220,7 +221,6 @@ if node.parameters.simulate:
     job = qmm.simulate(config, iq_blobs, simulation_config)
     job.get_simulated_samples().con1.plot()
     node.results = {"figure": plt.gcf()}
-    node.machine = machine
     node.save()
 
 else:
@@ -402,7 +402,6 @@ if not node.parameters.simulate:
 if not node.parameters.simulate:
     node.outcomes = {q.name: "successful" for q in qubits}
     node.results["initial_parameters"] = node.parameters.model_dump()
-    node.machine = machine
     node.save()
     
 # %%

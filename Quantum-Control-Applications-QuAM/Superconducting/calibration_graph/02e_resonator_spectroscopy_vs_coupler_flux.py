@@ -94,6 +94,7 @@ if node.parameters.qubit_pairs is None:
 u = unit(coerce_to_integer=True)
 # Instantiate the QuAM class from the state file
 machine = QuAM.load()
+node.machine = machine
 # Generate the OPX and Octave configurations
 config = machine.generate_config()
 # Open Communication with the QOP
@@ -182,7 +183,6 @@ if node.parameters.simulate:
     plt.tight_layout()
     # Save the figure
     node.results = {"figure": plt.gcf()}
-    node.machine = machine
     node.save()
 
 elif node.parameters.load_data_id is None:
@@ -233,7 +233,6 @@ if not node.parameters.simulate:
 
     # %% {Update_state}
     if node.parameters.update_coupler_decouple and node.parameters.load_data_id is None:
-        node.machine = machine
         with node.record_state_updates():
             for qp in qubit_pairs:
                 qp.coupler.decouple_offset = decouple_analysis.pairs[qp.name].decouple_offset_V
@@ -242,7 +241,6 @@ if not node.parameters.simulate:
     node.results["ds"] = ds
     node.outcomes = {qp.name: "successful" for qp in qubit_pairs}
     node.results["initial_parameters"] = node.parameters.model_dump()
-    node.machine = machine
     node.save()
 
 # %%

@@ -73,6 +73,7 @@ node = QualibrationNode(name="12_all_xy", parameters=Parameters())
 u = unit(coerce_to_integer=True)
 # Instantiate the QuAM class from the state file
 machine = QuAM.load()
+node.machine = machine
 # Generate the OPX and Octave configurations
 config = machine.generate_config()
 # Open Communication with the QOP
@@ -343,7 +344,6 @@ if node.parameters.simulate:
         plt.title(con)
     plt.tight_layout()
     node.results = {"figure": plt.gcf()}
-    node.machine = machine
     node.save()
 
 elif node.parameters.load_data_id is None:
@@ -438,7 +438,6 @@ if not node.parameters.simulate:
     if node.parameters.load_data_id is None:
         node.outcomes = {q.name: "successful" for q in qubits}
         node.results["initial_parameters"] = node.parameters.model_dump()
-        node.machine = machine
         node.save()
 
 # %%

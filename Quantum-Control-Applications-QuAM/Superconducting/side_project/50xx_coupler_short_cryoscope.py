@@ -432,7 +432,6 @@ if node.parameters.simulate:
     plt.tight_layout()
     # Update the node & save
     node.results = {"figure": plt.gcf()}
-    node.machine = machine
     node.save()
 
 else:
@@ -493,7 +492,6 @@ for q in detector_q:
     q.z.operations['aSWAP'].slope_direction = -1 # always at -1
 node.outcomes = {q.name: "successful" for q in qubits}
 node.results["initial_parameters"] = node.parameters.model_dump()
-node.machine = machine
 node.save()
 
 

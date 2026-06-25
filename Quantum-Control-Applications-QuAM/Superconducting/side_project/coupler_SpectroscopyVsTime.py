@@ -62,6 +62,7 @@ node = QualibrationNode(name="03x_Coupler_Spectroscopy", parameters=Parameters()
 u = unit(coerce_to_integer=True)
 # Instantiate the QuAM class from the state file
 machine = QuAM.load()
+node.machine = machine
 # Generate the OPX and Octave configurations
 
 coupler = [machine.qubit_pairs[node.parameters.couplers]] # currently supports 1 coupler a time only.
@@ -277,7 +278,6 @@ if not node.parameters.simulate:
             q.z.operations['aSWAP'].slope_direction = -1
         node.outcomes = {q.name: "successful" for q in coupler}
         node.results["initial_parameters"] = node.parameters.model_dump()
-        node.machine = machine
         node.save()
 
 

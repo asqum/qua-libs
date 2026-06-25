@@ -61,6 +61,7 @@ node = QualibrationNode(
 u = unit(coerce_to_integer=True)
 
 machine = QuAM.load()
+node.machine = machine
 
 qubits = machine.get_qubits_used_in_node(node.parameters)
 num_qubits = len(qubits)
@@ -160,7 +161,6 @@ with program() as ramsey:
 if node.parameters.simulate:
     samples, fig = simulate_and_plot(qmm, config, ramsey, node.parameters)
     node.results = {"figure": fig}
-    node.machine = machine
     node.save()
 
 elif node.parameters.load_data_id is None:
@@ -209,7 +209,6 @@ if not node.parameters.simulate:
         # %% {Save_results}
         node.outcomes = {q.name: "successful" for q in qubits}
         node.results["initial_parameters"] = node.parameters.model_dump()
-        node.machine = machine
         node.save()
 
 # %%

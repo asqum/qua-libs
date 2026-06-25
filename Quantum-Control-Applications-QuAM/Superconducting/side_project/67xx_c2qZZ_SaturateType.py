@@ -57,6 +57,7 @@ node = QualibrationNode(name="03x_Coupler_Spectroscopy", parameters=Parameters()
 u = unit(coerce_to_integer=True)
 # Instantiate the QuAM class from the state file
 machine = QuAM.load()
+node.machine = machine
 # Generate the OPX and Octave configurations
 config = machine.generate_config()
 # Open Communication with the QOP
@@ -317,7 +318,6 @@ if not node.parameters.simulate:
 
     # %% {Update_state}
     if node.parameters.load_data_id is None:
-        node.machine = machine
         with node.record_state_updates():
             for q in drive_q:
                 print(q.name)

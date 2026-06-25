@@ -187,6 +187,7 @@ u = unit(coerce_to_integer=True)
 if node.parameters.pulse_tot_len_ns >= 32767:
     raise ValueError("Maximum int breaked ! The maximum int must lower than 32767 !")
 machine = QuAM.load()
+node.machine = machine
 # machine.network["port"] = int(access_port)
 
 # print(f"Machine access port :{access_port}")
@@ -261,7 +262,6 @@ samples.con1.plot()
 node.results = {"figure": plt.gcf()}
 wf_report = job.get_simulated_waveform_report()
 wf_report.create_plot(samples, plot=True, save_path=None)
-node.machine = machine
 node.save()
 
 
