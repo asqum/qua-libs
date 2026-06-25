@@ -48,6 +48,84 @@ class DragPulseCosine(Pulse):
 
         return I_rot + 1.0j * Q_rot
 
+
+def drag_slepian_pulse_waveforms(
+    amplitude: float,
+    length: int,
+    alpha: float,
+    anharmonicity: float,
+    detuning: float = 0.0,
+    time_bandwidth: float = 4.0,
+    slepian_order: int = 0,
+):
+    """Slepian-envelope DRAG waveforms (leakage + AC-Stark compensation).
+
+    Same DRAG construction as ``drag_cosine_pulse_waveforms``, with a normalized
+    DPSS (Slepian) envelope instead of a cosine lobe.
+    """
+    from scipy.signal.windows import dpss
+
+    length = int(length)
+    if alpha != 0 and anharmonicity == 0:
+        raise ValueError("Cannot create a DRAG pulse with `anharmonicity=0`")
+
+    nw = _effective_dpss_bandwidth(length, time_bandwidth)
+    w = dpss(length, nw, Kmax=slepian_order + 1)[slepian_order]
+    w = w / np.max(np.abs(w))
+
+    slepian_wave = amplitude * w
+    der_wave = amplitude * np.gradient(w, 1e-9)
+
+    t = np.arange(length, dtype=int)
+    z = slepian_wave.astype(complex)
+    if alpha != 0:
+        z += 1j * der_wave * (alpha / (anharmonicity - 2 * np.pi * detuning))
+        z *= np.exp(1j * 2 * np.pi * detuning * t * 1e-9)
+
+    return z.real.tolist(), z.imag.tolist()
+
+
+@quam_dataclass
+class DragPulseSlepian(Pulse):
+    """
+    Slepian-envelope DRAG pulse for XY gates.
+
+    :param float amplitude: The amplitude in volts.
+    :param int length: The pulse length in ns.
+    :param float alpha: The DRAG coefficient.
+    :param float anharmonicity: f_21 - f_10 in Hz.
+    :param float detuning: AC-Stark correction in Hz.
+    :param float time_bandwidth: DPSS half-bandwidth product NW.
+    :param int slepian_order: DPSS sequence index (0 = first-order Slepian).
+    :param float axis_angle: IQ rotation angle in radians.
+    """
+
+    axis_angle: float
+    amplitude: float
+    alpha: float
+    anharmonicity: float
+    detuning: float = 0.0
+    time_bandwidth: float = 4.0
+    slepian_order: int = 0
+
+    def waveform_function(self):
+        I, Q = drag_slepian_pulse_waveforms(
+            amplitude=self.amplitude,
+            length=self.length,
+            alpha=self.alpha,
+            anharmonicity=self.anharmonicity,
+            detuning=self.detuning,
+            time_bandwidth=self.time_bandwidth,
+            slepian_order=self.slepian_order,
+        )
+        I, Q = np.array(I), np.array(Q)
+
+        I_rot = I * np.cos(self.axis_angle) - Q * np.sin(self.axis_angle)
+        Q_rot = I * np.sin(self.axis_angle) + Q * np.cos(self.axis_angle)
+
+        return I_rot + 1.0j * Q_rot
+
+
 @quam_dataclass
 class FluxPulse(Pulse):
     """Flux pulse QuAM component.
@@ -277,6 +355,69 @@ class CosineFlatTopPulse(Pulse):
             p = p[:L]
 
         # Apply axis angle for IQ output if provided
+        if self.axis_angle is not None:
+            p = p * np.exp(1j * self.axis_angle)
+
+        return p.tolist()
+
+
+def _effective_dpss_bandwidth(length: int, time_bandwidth: float) -> float:
+    """Clip NW so scipy dpss(M, NW) satisfies NW < M/2."""
+    return min(time_bandwidth, length / 2.0 - 1e-9)
+
+
+def _slepian_segment(
+    length: int,
+    time_bandwidth: float,
+    slepian_order: int,
+    rising: bool = True,
+) -> np.ndarray:
+    """First-order (or k-th) DPSS edge: 0 -> 1 (rise) or 1 -> 0 (fall)."""
+    if length <= 0:
+        return np.array([])
+    if length == 1:
+        return np.array([1.0])
+
+    from scipy.signal.windows import dpss
+
+    dpss_length = 2 * length - 1
+    nw = _effective_dpss_bandwidth(dpss_length, time_bandwidth)
+    w_full = dpss(dpss_length, nw, Kmax=slepian_order + 1)[slepian_order]
+    w = w_full[:length].astype(float)
+    w = w / w[-1]
+    if not rising:
+        w = w[::-1]
+    return w
+
+
+@quam_dataclass
+class SlepianPulse(Pulse):
+    """
+    Unipolar flux pulse shaped by the first DPSS (Slepian) sequence.
+
+    Args:
+        length (int): Total pulse duration in samples.
+        amplitude (float): Peak amplitude of the pulse.
+        time_bandwidth (float): DPSS half-bandwidth product NW (concentration).
+            Automatically reduced for short pulses (scipy requires NW < M/2).
+        slepian_order (int): DPSS sequence index. 0 = first-order Slepian.
+        axis_angle (float, optional): IQ axis angle in radians.
+    """
+
+    amplitude: float
+    time_bandwidth: float = 4.0
+    slepian_order: int = 0
+    axis_angle: float = None
+
+    def waveform_function(self):
+        from scipy.signal.windows import dpss
+
+        length = int(self.length)
+        nw = _effective_dpss_bandwidth(length, self.time_bandwidth)
+        w = dpss(length, nw, Kmax=self.slepian_order + 1)[self.slepian_order]
+        w = w / np.max(np.abs(w))
+        p = float(self.amplitude) * w
+
         if self.axis_angle is not None:
             p = p * np.exp(1j * self.axis_angle)
 
