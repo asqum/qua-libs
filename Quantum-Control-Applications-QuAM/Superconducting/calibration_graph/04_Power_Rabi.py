@@ -23,6 +23,12 @@ from qualibrate import QualibrationNode, NodeParameters
 from quam_libs.components import QuAM
 from quam_libs.macros import qua_declaration, active_reset
 from quam_libs.lib.instrument_limits import instrument_limits
+from quam_libs.lib.mw_power_utils import (
+    apply_fitted_pi_amplitude,
+    format_power_settings,
+    is_mw_fem_channel,
+    optimize_xy_sweep_headroom,
+)
 from quam_libs.lib.qua_datasets import convert_IQ_to_V
 from quam_libs.lib.plot_utils import QubitGrid, grid_iter
 from quam_libs.lib.save_utils import (
@@ -48,10 +54,10 @@ class Parameters(NodeParameters):
     qubits: Optional[List[str]] = None
     num_averages: int = 100
     operation_x180_or_any_90: Literal["x180", "x90", "-x90", "y90", "-y90"] = "x180"
-    min_amp_factor: float = 0.0 #0.001
-    max_amp_factor: float = 1.9 #2.0
-    amp_factor_step: float = 0.01 #005
-    max_number_rabi_pulses_per_sweep: int = 1 #1, 40
+    min_amp_factor: float = 0.8 #0.001
+    max_amp_factor: float = 1.2 #2.0
+    amp_factor_step: float = 0.005 #005
+    max_number_rabi_pulses_per_sweep: int = 40 #1, 40
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
     reset_type_thermal_or_active: Literal["thermal", "active"] = "thermal"
     state_discrimination: bool = False
@@ -71,11 +77,6 @@ u = unit(coerce_to_integer=True)
 # Instantiate the QuAM class from the state file
 machine = QuAM.load()
 node.machine = machine
-# Generate the OPX and Octave configurations
-config = machine.generate_config()
-# Open Communication with the QOP
-if node.parameters.load_data_id is None:
-    qmm = machine.connect()
 
 # Get the relevant QuAM components
 if node.parameters.qubits is None or node.parameters.qubits == "":
@@ -83,6 +84,28 @@ if node.parameters.qubits is None or node.parameters.qubits == "":
 else:
     qubits = [machine.qubits[q] for q in node.parameters.qubits]
 num_qubits = len(qubits)
+operation = node.parameters.operation_x180_or_any_90
+
+for qubit in qubits:
+    limits = instrument_limits(qubit.xy)
+    if is_mw_fem_channel(qubit.xy):
+        headroom_settings = optimize_xy_sweep_headroom(
+            qubit,
+            operation,
+            node.parameters.max_amp_factor,
+            max_wf_amplitude=limits.max_wf_amplitude,
+        )
+        if headroom_settings is not None:
+            print(
+                f"{qubit.name}: renormalized {operation} for sweep headroom -> "
+                f"{format_power_settings(headroom_settings)}"
+            )
+
+# Generate the OPX and Octave configurations
+config = machine.generate_config()
+# Open Communication with the QOP
+if node.parameters.load_data_id is None:
+    qmm = machine.connect()
 
 
 # %% {QUA_program}
@@ -92,7 +115,6 @@ flux_point = node.parameters.flux_point_joint_or_independent  # 'independent' or
 reset_type = node.parameters.reset_type_thermal_or_active  # "active" or "thermal"
 state_discrimination = node.parameters.state_discrimination
 operation = node.parameters.operation_x180_or_any_90  # The qubit operation to play
-# Pulse amplitude sweep (as a pre-factor of the qubit pulse amplitude) - must be within [-2; 2)
 amps = np.arange(
     node.parameters.min_amp_factor,
     node.parameters.max_amp_factor,
@@ -257,13 +279,19 @@ if not node.parameters.simulate:
             factor = float(1.0 * (np.pi - phi_fit) / (2 * np.pi * f_fit))
             new_pi_amp = q.xy.operations[operation].amplitude * factor
             limits = instrument_limits(q.xy)
-            if new_pi_amp < limits.max_x180_wf_amplitude:
-                print(f"amplitude for Pi pulse is modified by a factor of {factor:.2f}")
-                print(f"new amplitude is {1e3 * new_pi_amp:.2f} {limits.units} \n")
-                fit_results[q.name]["Pi_amplitude"] = new_pi_amp
-            else:
-                print(f"Fitted amplitude too high, new amplitude is {limits.max_x180_wf_amplitude} \n")
-                fit_results[q.name]["Pi_amplitude"] = limits.max_x180_wf_amplitude
+            fit_results[q.name] = apply_fitted_pi_amplitude(
+                q,
+                operation,
+                new_pi_amp,
+                max_amplitude=limits.max_x180_wf_amplitude,
+                update_x90=False,
+                dry_run=True,
+            )
+            print(f"amplitude for Pi pulse is modified by a factor of {factor:.2f}")
+            print(
+                f"new amplitude is {fit_results[q.name]['Pi_amplitude']:.4f} "
+                f"{limits.units} \n"
+            )
         node.results["fit_results"] = fit_results
 
     elif N_pi > 1:
@@ -280,17 +308,23 @@ if not node.parameters.simulate:
         # Save fitting results
         for q in qubits:
             new_pi_amp = float(ds.abs_amp.sel(qubit=q.name)[data_max_idx.sel(qubit=q.name)].data)
-            fit_results[q.name] = {}
             limits = instrument_limits(q.xy)
-            if new_pi_amp < limits.max_x180_wf_amplitude:
-                fit_results[q.name]["Pi_amplitude"] = new_pi_amp
-                print(
-                    f"amplitude for Pi pulse is modified by a factor of {I_n.idxmax(dim='amp').sel(qubit = q.name):.2f}"
-                )
-                print(f"new amplitude is {1e3 * new_pi_amp:.2f} {limits.units} \n")
-            else:
-                print(f"Fitted amplitude too high, new amplitude is {limits.max_x180_wf_amplitude} \n")
-                fit_results[q.name]["Pi_amplitude"] = limits.max_x180_wf_amplitude
+            fit_results[q.name] = apply_fitted_pi_amplitude(
+                q,
+                operation,
+                new_pi_amp,
+                max_amplitude=limits.max_x180_wf_amplitude,
+                update_x90=False,
+                dry_run=True,
+            )
+            print(
+                f"amplitude for Pi pulse is modified by a factor of "
+                f"{I_n.idxmax(dim='amp').sel(qubit = q.name):.2f}"
+            )
+            print(
+                f"new amplitude is {fit_results[q.name]['Pi_amplitude']:.4f} "
+                f"{limits.units} \n"
+            )
 
     # %% {Plotting}
     grid = QubitGrid(ds, [q.grid_location for q in qubits])
@@ -324,10 +358,14 @@ if not node.parameters.simulate:
     if node.parameters.load_data_id is None:
         with node.record_state_updates():
             for q in qubits:
-                
-                q.xy.operations[operation].amplitude = fit_results[q.name]["Pi_amplitude"]
-                if operation == "x180" and node.parameters.update_x90:
-                    q.xy.operations["x90"].amplitude = fit_results[q.name]["Pi_amplitude"] / 2
+                limits = instrument_limits(q.xy)
+                apply_fitted_pi_amplitude(
+                    q,
+                    operation,
+                    float(fit_results[q.name]["Pi_amplitude"]),
+                    max_amplitude=limits.max_x180_wf_amplitude,
+                    update_x90=node.parameters.update_x90,
+                )
 
         # %% {Save_results}
         node.outcomes = {q.name: "successful" for q in qubits}

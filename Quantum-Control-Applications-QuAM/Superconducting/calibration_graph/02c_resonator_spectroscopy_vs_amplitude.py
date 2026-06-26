@@ -33,6 +33,13 @@ from quam_libs.lib.save_utils import (
     restore_load_data_id,
     resolve_qubits_from_node,
 )
+from quam_libs.lib.mw_power_utils import (
+    MAX_READOUT_WF_AMPLITUDE,
+    apply_shared_readout_port_settings,
+    is_mw_fem_readout,
+    mw_power_settings_to_dict,
+)
+from quam_libs.components.readout_resonator import ReadoutResonatorBase
 from quam_libs.trackable_object import tracked_updates
 from qualang_tools.results import progress_counter, fetching_tool
 from qualang_tools.loops import from_array
@@ -58,7 +65,7 @@ class Parameters(NodeParameters):
     max_power_dbm: int = 5 #-30, -10
     min_power_dbm: int = -30 # -40
     num_power_points: int = 50
-    max_amp: float = 0.9 #0.1
+    max_amp: float = MAX_READOUT_WF_AMPLITUDE
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
     ro_line_attenuation_dB: float = 0
     derivative_crossing_threshold_in_hz_per_dbm: int = int(-50e3)
@@ -87,13 +94,26 @@ num_qubits = len(qubits)
 
 # Update the readout power to match the desired range, this change will be reverted at the end of the node.
 tracked_resonators = []
-for i, qubit in enumerate(qubits):
-    with tracked_updates(qubit.resonator, auto_revert=False, dont_assign_to_none=True) as resonator:
-        resonator.set_output_power(
+for qubit in qubits:
+    tracked_resonator = tracked_updates(
+        qubit.resonator, auto_revert=False, dont_assign_to_none=True
+    )
+    tracked_resonator.__enter__()
+    tracked_resonators.append(tracked_resonator)
+
+if is_mw_fem_readout(resonators[0]):
+    apply_shared_readout_port_settings(
+        qubits,
+        {qubit.name: node.parameters.max_power_dbm for qubit in qubits},
+        max_amplitude=node.parameters.max_amp,
+        operation="readout",
+    )
+else:
+    for qubit in qubits:
+        qubit.resonator.set_output_power(
             power_in_dbm=node.parameters.max_power_dbm,
-            max_amplitude=node.parameters.max_amp
+            max_amplitude=node.parameters.max_amp,
         )
-        tracked_resonators.append(resonator)
 
 # Generate the OPX and Octave configurations
 config = machine.generate_config()
@@ -107,9 +127,14 @@ if node.parameters.load_data_id is None:
 n_avg = node.parameters.num_averages  # The number of averages
 
 # The readout amplitude sweep (as a pre-factor of the readout amplitude) - must be within [-2; 2)
-amp_min = resonators[0].calculate_voltage_scaling_factor(
-    fixed_power_dBm=node.parameters.max_power_dbm,
-    target_power_dBm=node.parameters.min_power_dbm
+sweep_reference_power_dbm = (
+    resonators[0].opx_output.full_scale_power_dbm
+    if is_mw_fem_readout(resonators[0])
+    else node.parameters.max_power_dbm
+)
+amp_min = ReadoutResonatorBase.calculate_voltage_scaling_factor(
+    fixed_power_dBm=sweep_reference_power_dbm,
+    target_power_dBm=node.parameters.min_power_dbm,
 )
 amp_max = 1
 
@@ -309,16 +334,40 @@ if not node.parameters.simulate:
 
     # Save fitting results
     fit_results = {}
-    for q in qubits:
-        fit_results[q.name] = {}
-        if not node.parameters.load_data_id:
-            with node.record_state_updates():
-                if not np.isnan(rr_optimal_power_dbm[q.name]):
-                    power_settings = q.resonator.set_output_power(
-                        power_in_dbm=rr_optimal_power_dbm[q.name].item(),
-                        max_amplitude=0.1
-                    )
-                    fit_results[q.name] = power_settings
+    if not node.parameters.load_data_id:
+        optimal_target_powers = {
+            q.name: float(rr_optimal_power_dbm[q.name].item())
+            for q in qubits
+            if not np.isnan(rr_optimal_power_dbm[q.name])
+        }
+        with node.record_state_updates():
+            if optimal_target_powers and is_mw_fem_readout(qubits[0].resonator):
+                optimized_qubits = [q for q in qubits if q.name in optimal_target_powers]
+                power_settings_by_qubit = apply_shared_readout_port_settings(
+                    optimized_qubits,
+                    optimal_target_powers,
+                    max_amplitude=node.parameters.max_amp,
+                    operation="readout",
+                )
+                for q in qubits:
+                    fit_results[q.name] = {}
+                    if q.name in power_settings_by_qubit:
+                        fit_results[q.name] = mw_power_settings_to_dict(
+                            power_settings_by_qubit[q.name]
+                        )
+            else:
+                for q in qubits:
+                    fit_results[q.name] = {}
+                    if not np.isnan(rr_optimal_power_dbm[q.name]):
+                        power_settings = q.resonator.set_output_power(
+                            power_in_dbm=rr_optimal_power_dbm[q.name].item(),
+                            max_amplitude=node.parameters.max_amp,
+                        )
+                        fit_results[q.name] = power_settings
+
+            for q in qubits:
+                if q.name not in fit_results:
+                    fit_results[q.name] = {}
                 if not np.isnan(rr_optimal_frequencies[q.name]):
                     q.resonator.intermediate_frequency += rr_optimal_frequencies[q.name]
                     fit_results[q.name]["RO_frequency"] = q.resonator.RF_frequency

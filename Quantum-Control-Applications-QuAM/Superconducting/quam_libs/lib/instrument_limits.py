@@ -3,6 +3,10 @@ from typing import Union
 
 from quam.components.channels import IQChannel, MWChannel
 
+NUM_QUBITS_SHARING_MW_READOUT = 5
+MAX_READOUT_WF_AMPLITUDE = 1.0 / NUM_QUBITS_SHARING_MW_READOUT
+OPX1000_FULL_SCALE_POWERS_DBM = tuple(range(-11, 17, 3))
+
 
 @dataclass(frozen=True)
 class InstrumentLimits:
