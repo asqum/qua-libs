@@ -28,12 +28,6 @@ from qualibrate import QualibrationNode, NodeParameters
 
 from quam_libs.components import QuAM
 from quam_libs.lib.instrument_limits import instrument_limits
-from quam_libs.lib.mw_power_utils import (
-    apply_xy_port_settings,
-    is_mw_fem_channel,
-    mw_power_settings_to_dict,
-    power_dbm_from_settings,
-)
 from quam_libs.macros import qua_declaration
 from quam_libs.lib.qua_datasets import convert_IQ_to_V
 from quam_libs.lib.plot_utils import QubitGrid, grid_iter
@@ -357,26 +351,14 @@ if not node.parameters.simulate:
                         factor_cw = float(target_peak_width / result.sel(qubit=q.name).width.values)
                         factor_pi = np.pi / (result.sel(qubit=q.name).width.values * Pi_length * 1e-9)
                         limits = instrument_limits(q.xy)
-                        target_x180_amp = factor_pi * used_amp
+                        # if factor_cw * used_amp / operation_amp < limits.max_wf_amplitude:
+                        #     q.xy.operations["saturation"].amplitude = factor_cw * used_amp / operation_amp
+                        # else:
+                        #     q.xy.operations["saturation"].amplitude = limits.max_wf_amplitude
 
-                        if is_mw_fem_channel(q.xy):
-                            target_powers_dbm = {
-                                "x180": power_dbm_from_settings(
-                                    q.xy.opx_output.full_scale_power_dbm,
-                                    target_x180_amp,
-                                )
-                            }
-                            xy_settings = apply_xy_port_settings(
-                                q,
-                                target_powers_dbm,
-                                max_amplitude=limits.max_x180_wf_amplitude,
-                            )
-                            fit_results[q.name]["x180_power_settings"] = mw_power_settings_to_dict(
-                                xy_settings["x180"]
-                            )
-                        elif target_x180_amp < limits.max_x180_wf_amplitude:
-                            q.xy.operations["x180"].amplitude = target_x180_amp
-                        else:
+                        if factor_pi * used_amp < limits.max_x180_wf_amplitude:
+                            q.xy.operations["x180"].amplitude = factor_pi * used_amp
+                        elif factor_pi * used_amp >= limits.max_x180_wf_amplitude:
                             q.xy.operations["x180"].amplitude = limits.max_x180_wf_amplitude
         node.results["ds"] = ds
 
