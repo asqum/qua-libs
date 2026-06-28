@@ -32,7 +32,7 @@ from quam_libs.macros import (
     readout_state_gef,
 )
 from quam_libs.lib.plot_utils import QubitGrid, grid_iter
-from quam_libs.lib.save_utils import fetch_results_as_xarray, load_dataset
+from quam_libs.lib.save_utils import fetch_results_as_xarray, restore_load_data_id, resolve_qubits_from_node
 from quam_libs.lib.fit import fit_decay_exp, decay_exp
 from qualang_tools.results import progress_counter, fetching_tool
 from qualang_tools.bakery.randomized_benchmark_c1 import c1_table
@@ -82,6 +82,7 @@ class Parameters(
     multiplexed: bool = True
 
 node = QualibrationNode(name="10cx_Single_Qubit_Purity_Benchmarking", parameters=Parameters())
+assert not (node.parameters.simulate and node.parameters.load_data_id is not None), "If simulate is True, load_data_id must be None, and vice versa."
 
 
 # %% {Initialize_QuAM_and_QOP}
@@ -444,7 +445,8 @@ elif node.parameters.load_data_id is None:
             progress_counter(m, num_of_sequences, start_time=results.start_time)
 
 
-    # %% {Data_fetching_and_dataset_creation}
+# %% {Data_fetching_and_dataset_creation}
+if not node.parameters.simulate:
     if node.parameters.load_data_id is None:
         depths = np.arange(0, max_circuit_depth + 0.1, delta_clifford)
         depths[0] = 1
@@ -454,10 +456,17 @@ elif node.parameters.load_data_id is None:
             {"depths": depths, "sequence": np.arange(num_of_sequences)},
         )
     else:
-        ds, machine, json_data, qubits, node.parameters = load_dataset(node.parameters.load_data_id, parameters = node.parameters)
+        load_data_id = node.parameters.load_data_id
+        node = node.load_from_id(load_data_id)
+        ds = node.results["ds"]
+        restore_load_data_id(node, load_data_id)
+        machine = node.machine
+        qubits = resolve_qubits_from_node(machine, node)
     # Add the dataset to the node
     node.results = {"ds": ds}
-    # %% {Data_analysis}
+
+# %% {Data_analysis}
+if not node.parameters.simulate:
     # PURITY: average shots per basis (FPGA), then x^2+y^2+z^2, then average over sequences
     x = 2 * (1 - ds["state_x"]) - 1
     y = 2 * (1 - ds["state_y"]) - 1
@@ -556,7 +565,7 @@ if not node.parameters.simulate:
     successful_fit_qubits = [
         q for q in qubits if node.results["fit_results"].get(q.name, {}).get("fit_successful", False)
     ]
-    if not node.parameters.simulate and successful_fit_qubits:
+    if not node.parameters.simulate and node.parameters.load_data_id is None and successful_fit_qubits:
         with node.record_state_updates():
             for q in successful_fit_qubits:
                 if node.parameters.multiplexed:
