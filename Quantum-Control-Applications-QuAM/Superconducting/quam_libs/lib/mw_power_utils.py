@@ -3,8 +3,9 @@
 On MW-FEM channels, output power is set by two knobs:
     P_out [dBm] = full_scale_power_dbm + 20 * log10(wf_amplitude)
 
-For best SNR, use the lowest allowed full_scale_power_dbm and compensate with
-a higher normalized waveform amplitude.
+For a fixed output power, many (full_scale_power_dbm, amplitude) pairs are valid.
+The optimal combination uses the lowest allowed full_scale_power_dbm and the highest
+amplitude within the allowed cap to reach the same P_out.
 """
 
 from __future__ import annotations
@@ -16,13 +17,10 @@ import numpy as np
 from quam.components.channels import IQChannel, MWChannel
 
 from quam_libs.components import Transmon
-
-# Hard-coded multiplex setup: five qubits share one MW readout port.
-NUM_QUBITS_SHARING_MW_READOUT = 5
-MAX_READOUT_WF_AMPLITUDE = 1.0 / NUM_QUBITS_SHARING_MW_READOUT  # 0.2
-
-OPX1000_FULL_SCALE_POWERS_DBM: tuple[int, ...] = tuple(range(-11, 17, 3))
-FULL_SCALE_POWER_STEP_DBM = 3
+from quam_libs.lib.instrument_limits import (
+    max_readout_wf_amplitude,
+    opx1000_full_scale_powers_dbm,
+)
 
 
 @dataclass(frozen=True)
@@ -68,10 +66,10 @@ def optimal_mw_power_settings(
     *,
     min_full_scale_power_dbm: Optional[int] = None,
 ) -> MWPowerSettings:
-    """Pick the lowest full_scale_power_dbm that reaches target power within max_amplitude."""
+    """Pick the lowest full_scale_power_dbm and highest amplitude (within cap) for target power."""
     allowed = [
         power
-        for power in OPX1000_FULL_SCALE_POWERS_DBM
+        for power in opx1000_full_scale_powers_dbm
         if min_full_scale_power_dbm is None or power >= min_full_scale_power_dbm
     ]
     for full_scale_power_dbm in sorted(allowed):
@@ -121,10 +119,10 @@ def apply_shared_readout_port_settings(
     qubits: Sequence[Transmon],
     target_powers_dbm: dict[str, float],
     *,
-    max_amplitude: float = MAX_READOUT_WF_AMPLITUDE,
+    max_amplitude: float = max_readout_wf_amplitude,
     operation: str = "readout",
 ) -> dict[str, MWPowerSettings]:
-    """Apply SNR-optimal readout settings for qubits sharing one MW readout port."""
+    """Apply optimal readout settings for qubits sharing one MW readout port."""
     per_qubit_optimal = {
         qubit.name: optimal_mw_power_settings(
             target_powers_dbm[qubit.name],
@@ -162,7 +160,7 @@ def scale_readout_powers(
     amplitude_scale_factor: float,
     *,
     operation: str = "readout",
-    max_amplitude: float = MAX_READOUT_WF_AMPLITUDE,
+    max_amplitude: float = max_readout_wf_amplitude,
     dry_run: bool = False,
 ) -> dict[str, MWPowerSettings]:
     """Scale all readout pulse amplitudes and re-optimize shared MW port settings."""
@@ -210,7 +208,7 @@ def apply_xy_port_settings(
     max_amplitude: float = 1.0,
     dry_run: bool = False,
 ) -> dict[str, MWPowerSettings]:
-    """Apply SNR-optimal settings for multiple pulses on one XY MW port."""
+    """Apply optimal settings for multiple pulses on one XY MW port."""
     per_operation_optimal = {
         operation: optimal_mw_power_settings(power_dbm, max_amplitude=max_amplitude)
         for operation, power_dbm in target_powers_dbm.items()
@@ -296,7 +294,7 @@ def optimize_operation_amplitude(
     *,
     max_amplitude: float = 1.0,
 ) -> MWPowerSettings:
-    """Re-split a target normalized amplitude into SNR-optimal MW-FEM settings."""
+    """Re-split a target normalized amplitude into optimal MW-FEM power settings."""
     target_power_dbm = power_dbm_from_settings(
         channel.opx_output.full_scale_power_dbm,
         target_amplitude,
@@ -366,7 +364,7 @@ def apply_fitted_pi_amplitude(
     update_x90: bool = False,
     dry_run: bool = False,
 ) -> dict[str, float | dict[str, float]]:
-    """Apply fitted pi amplitude using SNR-optimal MW settings when available."""
+    """Apply fitted pi amplitude using optimal MW power settings when available."""
     result: dict[str, float | dict[str, float]] = {"Pi_amplitude": fitted_pi_amplitude}
 
     if is_mw_fem_channel(qubit.xy):

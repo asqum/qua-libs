@@ -2,10 +2,11 @@
 import json
 from qualang_tools.units import unit
 from quam_libs.components import QuAM
+from quam_libs.lib.mw_power_utils import optimal_mw_power_settings
 from quam_libs.quam_builder.machine import save_machine
 import numpy as np
 
-path = "D:\\qm_code\\as\\qua-libs\\Quantum-Control-Applications-QuAM\\Superconducting\\configuration\\quam_state\\as_qpu_opx1000"
+path = "YOUR_PATH"
 machine = QuAM.load(path)
 
 # %%                                 QUAM loading and auxiliary functions
@@ -37,41 +38,31 @@ def get_band(freq):
         raise ValueError(f"The specified frequency {freq} Hz is outside of the MW fem bandwidth [50 MHz, 10.5 GHz]")
 
 
-def closest_number(lst, target):
-    return min(lst, key=lambda x: abs(x - target))
-
-
 def get_full_scale_power_dBm_and_amplitude(desired_power: float, max_amplitude: float = 0.5) -> tuple[int, float]:
-    """Get the full_scale_power_dbm and waveform amplitude for the MW FEM to output the specified desired power.
+    """Get full_scale_power_dbm and amplitude for a target output power.
 
-    The keyword `full_scale_power_dbm` is the maximum power of normalized pulse waveforms in [-1,1].
+    Optimal combination: lowest allowed full_scale_power_dbm + highest amplitude within
+    max_amplitude that still gives the desired power.
+
+        P_out [dBm] = full_scale_power_dbm + 20 * log10(wf_amplitude)
+
+    `full_scale_power_dbm` is the MW-FEM output power at normalized waveform amplitude 1.0.
     To convert to voltage:
         power_mw = 10**(full_scale_power_dbm / 10)
         max_voltage_amp = np.sqrt(2 * power_mw * 50 / 1000)
         amp_in_volts = waveform * max_voltage_amp
-        ^ equivalent to OPX+ amp
-    Its range is -11dBm to +16dBm with 3dBm steps.
+
+    Allowed full_scale_power_dbm values are opx1000_full_scale_powers_dbm (1 dBm steps from -11 to +16 dBm).
 
     Args:
-        desired_power (float): Desired output power in dBm.
-        max_amplitude (float, optional): Maximum allowed waveform amplitude in V. Default is 0.5V.
+        desired_power: Desired output power in dBm.
+        max_amplitude: Maximum allowed normalized waveform amplitude. Default is 0.5.
 
     Returns:
-        tuple[float, float]: The full_scale_power_dBm and waveform amplitude realizing the desired power.
+        full_scale_power_dbm and waveform amplitude realizing the desired power.
     """
-    allowed_powers = [-11, -8, -5, -2, 1, 4, 7, 10, 13, 16]
-    resulting_power = desired_power - 20 * np.log10(max_amplitude)
-    if resulting_power < 0:
-        full_scale_power_dBm = closest_number(allowed_powers, max(resulting_power + 3, -11))
-    else:
-        full_scale_power_dBm = closest_number(allowed_powers, min(resulting_power + 3, 16))
-    amplitude = 10 ** ((desired_power - full_scale_power_dBm) / 20)
-    if -11 <= full_scale_power_dBm <= 16 and -1 <= amplitude <= 1:
-        return full_scale_power_dBm, amplitude
-    else:
-        raise ValueError(
-            f"The desired power is outside the specifications ([-11; +16]dBm, [-1; +1]), got ({full_scale_power_dBm}; {amplitude})"
-        )
+    settings = optimal_mw_power_settings(desired_power, max_amplitude=max_amplitude)
+    return settings.full_scale_power_dbm, settings.amplitude
 
 ########################################################################################################################
 # %%
@@ -96,7 +87,7 @@ assert np.all(np.abs(rr_if) < 400 * u.MHz), (
 readout_power = -40 #change
 # Get the full_scale_power_dBm and waveform amplitude corresponding to the desired powers
 rr_full_scale, rr_amplitude = get_full_scale_power_dBm_and_amplitude(
-    readout_power, max_amplitude= 0.5 / len(machine.qubits)
+    readout_power, max_amplitude= 1.0 / len(machine.qubits)
 )
 
 xy_freq = np.array([5108604110.9, 4834229255.6, 5146263353.0, 4674709204.1, 4880175329.7]) #* u.GHz #change
@@ -167,25 +158,25 @@ for qp in machine.qubit_pairs.values():
     qp.coupler.opx_output.output_mode = "amplified"
     qp.coupler.opx_output.upsampling_mode = "pulse"
     qp.coupler.operations["const"].amplitude = 1.25
-    qp.extras["RD"] = {"LO":3e9, "IF":-100e6, "readout_q":qp.name.split["_"][1], "driven_q":qp.name.split["_"][2], "strategy": "aswap", "aswap_supplier": "q"}
+    pair_qubits = qp.name.split("_")[1:]
     qp.extras["T1"] = 30e-6
     qp.extras["T2"] = 5e-6
 
 # %%
 
 # Default: 
-machine.qubits["q1"].xy.thread = "a"
-machine.qubits["q2"].xy.thread = "b"
-machine.qubits["q3"].xy.thread = "c"
-machine.qubits["q4"].xy.thread = "d"
-machine.qubits["q5"].xy.thread = "e"
+machine.qubits["q1"].xy.core = "a"
+machine.qubits["q2"].xy.core = "b"
+machine.qubits["q3"].xy.core = "c"
+machine.qubits["q4"].xy.core = "d"
+machine.qubits["q5"].xy.core = "e"
 
-machine.qubits["q1"].resonator.thread = "a"
-machine.qubits["q2"].resonator.thread = "b"
-machine.qubits["q3"].resonator.thread = "c"
-machine.qubits["q4"].resonator.thread = "d"
-machine.qubits["q5"].resonator.thread = "e"
-        
+machine.qubits["q1"].resonator.core = "a"
+machine.qubits["q2"].resonator.core = "b"
+machine.qubits["q3"].resonator.core = "c"
+machine.qubits["q4"].resonator.core = "d"
+machine.qubits["q5"].resonator.core = "e"
+
 # %%
 # save into state.json
 save_machine(machine, path)
