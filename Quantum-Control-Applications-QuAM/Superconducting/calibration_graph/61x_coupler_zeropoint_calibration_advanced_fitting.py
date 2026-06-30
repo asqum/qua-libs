@@ -108,7 +108,7 @@ class Parameters(NodeParameters):
     """If True, also plot the 1D contrast-cut diagnostic figure."""
 
 
-node = QualibrationNode(name="61x_coupler_zeropoint_calibration", parameters=Parameters())
+node = QualibrationNode(name="61x_coupler_zeropoint_calibration_advanced_fitting", parameters=Parameters())
 assert not (
     node.parameters.simulate and node.parameters.load_data_id is not None
 ), "If simulate is True, load_data_id must be None, and vice versa."
