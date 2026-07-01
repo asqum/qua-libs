@@ -1,0 +1,339 @@
+"""
+        TIME OF FLIGHT
+This sequence involves sending a readout pulse and capturing the raw ADC traces.
+The data undergoes post-processing to calibrate three distinct parameters:
+    - Time of Flight: This represents the internal processing time and the propagation delay of the readout pulse.
+    Its value can be adjusted in the configuration under "time_of_flight".
+    This value is utilized to offset the acquisition window relative to when the readout pulse is dispatched.
+
+    - Analog Inputs Offset: Due to minor impedance mismatches, the signals captured by the OPX might exhibit slight offsets.
+
+    - Analog Inputs Gain: If a signal is constrained by digitization or if it saturates the ADC,
+    the variable gain of the OPX analog input, ranging from -12 dB to 20 dB, can be modified to fit the signal within the ADC range of +/-0.5V.
+"""
+
+from qualibrate import QualibrationNode, NodeParameters
+from quam_libs.components import QuAM
+from quam_libs.lib.plot_utils import QubitGrid, grid_iter
+from quam_libs.lib.save_utils import fetch_results_as_xarray, load_dataset
+from quam_libs.trackable_object import tracked_updates
+from qualang_tools.multi_user import qm_session
+from qualang_tools.units import unit
+from qm import SimulationConfig
+from qm.qua import *
+from typing import Optional, List
+import matplotlib.pyplot as plt
+import numpy as np
+from scipy.signal import savgol_filter
+from scipy.optimize import curve_fit
+
+def robust_fit_exponential(t_data, y_data):
+        """
+        Args:
+            t_data: time, size is compatitable with y_data
+            y_data: Magnitude
+        Returns:
+            popt: the best [A, tau, C]
+            r_squared: fitting accuracy = R^2
+            fit_curve: the curve to plot
+        """
+        def decay_model(t, A, tau, C):
+            return A * np.exp(-t / tau) + C
+
+
+        ### 1. Estimation
+        n_points = len(y_data)
+        tail_len = max(1, int(n_points * 0.1)) 
+        C_guess = np.mean(y_data[-tail_len:])
+        
+        # Amplitude (A): 
+        A_guess = np.max(y_data) - C_guess
+        if A_guess <= 0: A_guess = np.max(y_data) * 0.5 
+        
+        # Time Constant (tau): 
+        total_duration = t_data[-1] - t_data[0]
+        tau_candidates = [
+            total_duration * 0.1,  # decay fast
+            total_duration * 0.3,  # intermediately decay
+            total_duration * 0.6,  # slow
+            total_duration * 1.5   # almost flat
+        ]
+        
+        best_popt = None
+        best_loss = np.inf 
+        
+        ### 2. try every guess
+        for tau_guess in tau_candidates:
+            p0 = [A_guess, tau_guess, C_guess]
+            
+            ##  bounds
+            # bounds = ([0, 0, -np.inf], [np.inf, np.inf, np.inf])
+            
+            try:
+                popt, pcov = curve_fit(
+                    decay_model, t_data, y_data, 
+                    p0=p0, 
+                    maxfev=5000, 
+                    bounds=([0, 0, -np.inf], [np.inf, np.inf, np.inf]) # we force A, tau > 0
+                )
+                
+                # Sum of Squared Residuals
+                residuals = y_data - decay_model(t_data, *popt)
+                loss = np.sum(residuals**2)
+                
+                # if it's better, we kept it.
+                if loss < best_loss:
+                    best_loss = loss
+                    best_popt = popt
+                    
+            except RuntimeError:
+                continue # diverged then skip it
+
+
+        if best_popt is None:
+            raise RuntimeError("All fit attempts failed.")
+        
+        # fit curve to plot
+        fit_curve = decay_model(t_data, *best_popt)
+            
+        # R^2 to estimate the accuracy
+        residuals = y_data - fit_curve
+        ss_res = np.sum(residuals**2)
+        ss_tot = np.sum((y_data - np.mean(y_data))**2)
+        r_squared = 1 - (ss_res / ss_tot)
+
+        return best_popt, r_squared, fit_curve
+
+
+# %% {Node_parameters}
+class Parameters(NodeParameters):
+    qubits: Optional[List[str]] = None
+    num_averages: int = 1000
+    intermediate_frequency_in_mhz: Optional[float] = None
+    readout_amplitude_in_dBm: Optional[float] = -3
+    readout_length_in_ns: Optional[int] = 500
+    simulate: bool = False
+    simulation_duration_ns: int = 15000
+    timeout: int = 100
+
+
+node = QualibrationNode(name="01c_ResonatorRingDown", parameters=Parameters())
+
+
+# %% {Initialize_QuAM_and_QOP}
+# Class containing tools to help handling units and conversions.
+u = unit(coerce_to_integer=True)
+# Instantiate the QuAM class from the state file
+machine = QuAM.load()
+node.machine = machine
+
+# Get the relevant QuAM components
+if node.parameters.qubits is None or node.parameters.qubits == "":
+    qubits = machine.active_qubits
+else:
+    qubits = [machine.qubits[q] for q in node.parameters.qubits]
+resonators = [qubit.resonator for qubit in qubits]
+num_qubits = len(qubits)
+
+tracked_resonators = []
+for q in qubits:
+    resonator = q.resonator
+    # make temporary updates before running the program and revert at the end.
+    with tracked_updates(resonator, auto_revert=False, dont_assign_to_none=True) as resonator:
+        resonator.operations["readout"].length = node.parameters.readout_length_in_ns
+        resonator.set_output_power(node.parameters.readout_amplitude_in_dBm, operation="readout")
+        if node.parameters.intermediate_frequency_in_mhz is not None:
+            resonator.intermediate_frequency = node.parameters.intermediate_frequency_in_mhz * u.MHz
+        tracked_resonators.append(resonator)
+
+# Generate the OPX and Octave configurations
+config = machine.generate_config()
+# Open Communication with the QOP
+qmm = machine.connect()
+
+
+# %% {QUA_program}
+with program() as raw_trace_prog:
+    n = declare(int)  # QUA variable for the averaging loop
+    adc_st = [declare_stream(adc_trace=True) for _ in range(len(resonators))]  # The stream to store the raw ADC trace
+
+    for i, rr in enumerate(resonators):
+        with for_(n, 0, n < node.parameters.num_averages, n + 1):
+            # Reset the phase of the digital oscillator associated to the resonator element. Needed to average the cosine signal.
+            reset_phase(rr.name)
+            ## charge photon by a 10 us square pulse  
+            rr.play("const", amplitude_scale=0.1/rr.operations['const'].amplitude, duration=10_000//4)
+            # Measure the resonator (send a readout pulse and record the raw ADC trace)
+            rr.measure("readout",amplitude_scale=0.0,stream=adc_st[i])
+            # Wait for the resonator to deplete
+            # rr.wait(machine.depletion_time * u.ns)
+        # Measure sequentially
+        align(*[rr.name for rr in resonators])
+
+    with stream_processing():
+        for i in range(num_qubits):
+            # Will save average:
+            adc_st[i].input1().real().average().save(f"adcI{i + 1}")
+            adc_st[i].input1().image().average().save(f"adcQ{i + 1}")
+            # Will save only last run:
+            adc_st[i].input1().real().save(f"adc_single_runI{i + 1}")
+            adc_st[i].input1().image().save(f"adc_single_runQ{i + 1}")
+
+
+# %% {Simulate_or_execute}
+if node.parameters.simulate:
+    # Simulates the QUA program for the specified duration
+    simulation_config = SimulationConfig(duration=node.parameters.simulation_duration_ns//4)  # In clock cycles = 4ns
+    job = qmm.simulate(config, raw_trace_prog, simulation_config)
+    # Get the simulated samples and plot them for all controllers
+
+    samples = job.get_simulated_samples()
+    samples.con1.plot()
+    node.results = {"figure": plt.gcf()}
+    wf_report = job.get_simulated_waveform_report()
+    wf_report.create_plot(samples, plot=True, save_path=None)
+    node.save()
+else:
+    with qm_session(qmm, config, timeout=node.parameters.timeout) as qm:
+        # Send the QUA program to the OPX, which compiles and executes it
+        job = qm.execute(raw_trace_prog)
+        # Creates a result handle to fetch data from the OPX
+        res_handles = job.result_handles
+        # Waits (blocks the Python console) until all results have been acquired
+        res_handles.wait_for_all_values()
+
+    # %% {Data_fetching_and_dataset_creation}
+    # Fetch the data from the OPX and convert it into a xarray with corresponding axes (from most inner to outer loop)
+    time_axis = np.linspace(0, resonators[0].operations["readout"].length, resonators[0].operations["readout"].length)
+    ds = fetch_results_as_xarray(job.result_handles, qubits, {"time": time_axis})
+    # Convert raw ADC traces into volts
+    ds = ds.assign({key: -ds[key] / 2**12 for key in ("adcI", "adcQ", "adc_single_runI", "adc_single_runQ")})
+    ds = ds.assign({"IQ_abs": np.sqrt(ds["adcI"] ** 2 + ds["adcQ"] ** 2)})
+    # Add the dataset to the node
+    node.results = {"ds": ds}
+
+    # %% {Data_analysis}
+    # Filter the data to get the pulse arrival time
+    filtered_adc = savgol_filter(np.abs(ds.IQ_abs), 11, 3)
+    # Detect the arrival of the readout signal
+    delays = []
+    fit_results = {}
+    for q in qubits:
+        fit_results[q.name] = {}
+        # Filter the time trace to easily find the rising edge of the readout pulse
+        filtered_adc = savgol_filter(np.abs(ds.sel(qubit=q.name).IQ_abs), 11, 3)
+        # Get a threshold to detect the rising edge
+        th = (np.mean(filtered_adc[:100]) + np.mean(filtered_adc[:-100])) / 2
+        delay = np.where(filtered_adc > th)[0][0]
+        # Find the closest multiple integer of 4ns
+        delay = np.round(delay / 4) * 4
+        delays.append(delay)
+        fit_results[q.name]["delay_to_add"] = delay
+        fit_results[q.name]["fit_successful"] = True
+    node.results["fit_results"] = fit_results
+    # Add the delays to the dataset
+    ds = ds.assign_coords({"delays": (["qubit"], delays)})
+    ds = ds.assign_coords(
+        {"con": (["qubit"], [machine.qubits[q.name].resonator.opx_input.controller_id for q in qubits])}
+    )
+
+    # %% {Plotting}
+
+    fit_results = {}
+
+    grid = QubitGrid(ds, [q.grid_location for q in qubits])
+    for ax, qubit in grid_iter(grid):
+        q_name = qubit['qubit']  
+        
+        
+        data_I = ds.loc[qubit].adcI.values
+        data_Q = ds.loc[qubit].adcQ.values
+        time = ds.coords['time'].values 
+        
+        
+        magnitude = np.sqrt(data_I**2 + data_Q**2)
+        
+        
+        idx_peak = np.argmax(magnitude)
+        t_peak = time[idx_peak]
+        amp_peak = magnitude[idx_peak]
+        
+        
+        time_fit_segment = time[idx_peak:]
+        mag_fit_segment = magnitude[idx_peak:]
+        
+        
+        time_shifted = time_fit_segment - t_peak
+        
+        
+        try:
+            
+            popt, r2, fitted_curve_segment = robust_fit_exponential(time_shifted, mag_fit_segment)
+            A_fit, tau_fit, C_fit = popt
+            
+            
+            effective_time = t_peak + tau_fit
+            
+            
+            fit_results[q_name] = {
+                'tau': tau_fit,
+                'TOF': t_peak,
+                'RingDown': effective_time
+            }
+            
+            
+            ax.plot(time_fit_segment, fitted_curve_segment, 'k--', lw=2, label='RingDownFit')
+            
+            # 標示 Peak 位置
+            ax.axvline(t_peak, color='k', linestyle=':', alpha=0.9)
+
+        except Exception as e:
+            print(f"Fitting failed for {q_name}: {e}")
+
+      
+        ds.loc[qubit].adcI.plot(ax=ax, x="time", color="b", alpha=0.5)
+        ds.loc[qubit].adcQ.plot(ax=ax, x="time", color="r", alpha=0.5)
+        
+        ax.set_title(f"{q_name}")
+        ax.set_xlabel("Time [ns]")
+        ax.set_ylabel("Readout amplitude [mV]")
+        ax.grid()
+        ax.legend(loc="upper right", fontsize=8)
+
+    grid.fig.suptitle("Cavity Ring Down Fit")
+    plt.tight_layout()
+    plt.show()
+    node.results["RingDownFig"] = grid.fig
+   
+    if len(list(fit_results.keys())) != 0:
+        sorted_by_effective_time = sorted(fit_results.items(), key=lambda x: x[1]['RingDown'], reverse=True)
+        longest_ringdown_time = int(4*(float(sorted_by_effective_time[0][-1]['RingDown'])//4))
+
+    else:
+        longest_ringdown_time = None
+
+    print(f"Longest ring down time will be: {longest_ringdown_time} ns")
+    
+
+
+    # %% {Update_state}
+    with node.record_state_updates():
+        if longest_ringdown_time is not None:
+            for q in qubits:
+                q.resonator.depletion_time = longest_ringdown_time*10 # (10*T1)
+            
+
+    # Revert the change done at the beginning of the node
+    for resonator in tracked_resonators:
+        resonator.revert_changes() #TODO: This doesn't work !!!
+
+    # %% {Save_results}
+    node.outcomes = {rr.name: "successful" for rr in resonators}
+    node.results["ds"] = ds
+    node.results['The_answers'] = fit_results
+    node.results["initial_parameters"] = node.parameters.model_dump()
+    # node.machine = machine
+    node.save()
+
+
+# %%

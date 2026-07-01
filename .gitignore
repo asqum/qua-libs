@@ -1,3 +1,10 @@
 .idea
 __pycache__
 .pytest_cache/
+**.egg-info
+build
+data/
+xeb_data/
+.DS_Store
+NOTE.md
+
