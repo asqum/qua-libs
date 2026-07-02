@@ -447,6 +447,7 @@ assert not (node.parameters.simulate and node.parameters.load_data_id is not Non
 u = unit(coerce_to_integer=True)
 # Instantiate the QuAM class from the state file
 machine = QuAM.load()
+node.machine = machine
 
 
 operation = 'cardinal'
@@ -690,7 +691,6 @@ if not node.parameters.simulate:
 if not node.parameters.simulate:    
     node.outcomes = {q.name: "successful" for q in z_sources}
     node.results['initial_parameters'] = node.parameters.model_dump()
-    node.machine = machine
     node.save()
 
     from qualibrate_config.resolvers import get_qualibrate_config_path, get_qualibrate_config

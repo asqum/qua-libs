@@ -73,6 +73,7 @@ node = QualibrationNode(name="50x_coupler_long_crysocope", parameters=Parameters
 u = unit(coerce_to_integer=True)
 # Instantiate the QuAM class from the state file
 machine = QuAM.load()
+node.machine = machine
 
 # Get the relevant QuAM components
 coupler = [machine.qubit_pairs[node.parameters.coupler]] # currently supports 1 coupler a time only.
@@ -222,7 +223,6 @@ if node.parameters.simulate:
     plt.tight_layout()
     # Save the figure
     node.results = {"figure": plt.gcf()}
-    node.machine = machine
     node.save()
 
 else:
@@ -465,7 +465,6 @@ if  node.parameters.load_data_id is None and not node.parameters.simulate:
             q.z.operations['aSWAP'].slope_direction = -1 # always at -1
         node.outcomes = {q.name: "successful" for q in drive_q}
         node.results["initial_parameters"] = node.parameters.model_dump()
-        node.machine = machine
         node.save()
 
 # %%

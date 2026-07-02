@@ -3,6 +3,12 @@ from typing import Union
 
 from quam.components.channels import IQChannel, MWChannel
 
+# Hard-coded multiplex setup: five qubits share one MW readout port.
+num_qubits_sharing_mw_readout = 5
+max_readout_wf_amplitude = 1.0 / num_qubits_sharing_mw_readout  # 0.2
+
+opx1000_full_scale_powers_dbm: tuple[int, ...] = tuple(range(-11, 17))
+
 
 @dataclass(frozen=True)
 class InstrumentLimits:

@@ -294,7 +294,6 @@ if node.parameters.simulate:
     plt.tight_layout()
     # Save the figure
     node.results = {"figure": plt.gcf()}
-    node.machine = machine
     node.save()
 
 elif node.parameters.load_data_id is None:
@@ -445,7 +444,6 @@ with node.record_state_updates():
 node.results["ds"] = ds
 node.outcomes = {q.name: "successful" for q in qubits}
 node.results["initial_parameters"] = node.parameters.model_dump()
-node.machine = machine
 node.results['peak_results'] = node.results['peak_results'].reset_index('pair')
 node.save()
 

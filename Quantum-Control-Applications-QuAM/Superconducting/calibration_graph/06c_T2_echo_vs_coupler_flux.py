@@ -63,6 +63,7 @@ node = QualibrationNode(name="06c_T2_echo_vs_coupler_flux", parameters=Parameter
 u = unit(coerce_to_integer=True)
 # Instantiate the QuAM class from the state file
 machine = QuAM.load()
+node.machine = machine
 # Generate the OPX and Octave configurations
 config = machine.generate_config()
 # Open Communication with the QOP
@@ -220,7 +221,6 @@ if node.parameters.simulate:
     node.results = {"figure": plt.gcf()}
     wf_report = job.get_simulated_waveform_report()
     wf_report.create_plot(samples, plot=True, save_path=None)
-    node.machine = machine
     node.save()
 
 else:
@@ -377,6 +377,5 @@ if not node.parameters.simulate:
 
 # %%
 node.results["initial_parameters"] = node.parameters.model_dump()
-node.machine = machine
 node.save()
 # %%

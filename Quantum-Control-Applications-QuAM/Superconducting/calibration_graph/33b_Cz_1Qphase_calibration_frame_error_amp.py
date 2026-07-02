@@ -72,6 +72,7 @@ assert not (
 u = unit(coerce_to_integer=True)
 # Instantiate the QuAM class from the state file
 machine = QuAM.load()
+node.machine = machine
 
 # Get the relevant QuAM components
 if node.parameters.qubit_pairs is None or node.parameters.qubit_pairs == "":
@@ -372,7 +373,6 @@ if node.parameters.simulate:
         plt.title(con)
     plt.tight_layout()
     node.results = {"figure": plt.gcf()}
-    node.machine = machine
     node.save()
 
 elif node.parameters.load_data_id is None:
@@ -457,7 +457,6 @@ if not node.parameters.simulate:
         qp.name: ("successful" if fit_results[qp.name]["success"] else "failed") for qp in qubit_pairs
     }
     node.results["initial_parameters"] = node.parameters.model_dump()
-    node.machine = machine
     node.save()
 
 # %%

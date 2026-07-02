@@ -48,6 +48,7 @@ node = QualibrationNode(
 u = unit(coerce_to_integer=True)
 # Instantiate the QuAM class from the state file
 machine = QuAM.load()
+node.machine = machine
 # Generate the OPX and Octave configurations
 config = machine.generate_config()
 # Open Communication with the QOP
@@ -174,7 +175,6 @@ if node.parameters.simulate:
     job = qmm.simulate(config, t1, simulation_config)
     job.get_simulated_samples().con1.plot()
     node.results = {"figure": plt.gcf()}
-    node.machine = machine
     node.save()
 
 else:
@@ -338,6 +338,5 @@ if not node.parameters.simulate:
                     q.extras["T2ramsey_dev"] = float(sig_collection[q.name]) * 1e-6
     # %% {Save data}          
     node.results['initial_parameters'] = node.parameters.model_dump()
-    node.machine = machine
     node.save()
 # %%

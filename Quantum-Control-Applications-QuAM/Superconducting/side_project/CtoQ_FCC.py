@@ -179,6 +179,7 @@ assert not (node.parameters.simulate and node.parameters.load_data_id is not Non
 u = unit(coerce_to_integer=True)
 # Instantiate the QuAM class from the state file
 machine = QuAM.load()
+node.machine = machine
 
 operation = 'const'
 
@@ -362,7 +363,6 @@ if node.parameters.simulate:
     node.results = {"figure": plt.gcf()}
     wf_report = job.get_simulated_waveform_report()
     wf_report.create_plot(samples, plot=True, save_path=None)
-    node.machine = machine
     node.save()
 elif node.parameters.load_data_id is None:
     
@@ -430,6 +430,5 @@ if not node.parameters.simulate:
 if not node.parameters.simulate:    
     node.outcomes = {q.name: "successful" for q in z_sources}
     node.results['initial_parameters'] = node.parameters.model_dump()
-    node.machine = machine
     node.save()
 # %%

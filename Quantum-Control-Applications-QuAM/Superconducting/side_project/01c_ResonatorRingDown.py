@@ -125,6 +125,7 @@ node = QualibrationNode(name="01c_ResonatorRingDown", parameters=Parameters())
 u = unit(coerce_to_integer=True)
 # Instantiate the QuAM class from the state file
 machine = QuAM.load()
+node.machine = machine
 
 # Get the relevant QuAM components
 if node.parameters.qubits is None or node.parameters.qubits == "":
@@ -191,7 +192,6 @@ if node.parameters.simulate:
     node.results = {"figure": plt.gcf()}
     wf_report = job.get_simulated_waveform_report()
     wf_report.create_plot(samples, plot=True, save_path=None)
-    node.machine = machine
     node.save()
 else:
     with qm_session(qmm, config, timeout=node.parameters.timeout) as qm:

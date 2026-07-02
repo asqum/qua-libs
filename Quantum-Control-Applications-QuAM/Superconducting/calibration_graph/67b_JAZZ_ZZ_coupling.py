@@ -61,13 +61,13 @@ from quam_libs.lib.fit import fit_oscillation_decay_exp, oscillation_decay_exp
 import xarray as xr
 
 # %% {Node_parameters}
-qubit_pair_indexes = [4]  # The indexes of the qubit pairs to measure
+qubit_pair_indexes = [1, 2, 3, 4]  # The indexes of the qubit pairs to measure
 class Parameters(NodeParameters):
 
     qubit_pairs: Optional[List[str]] = ["coupler_q%s_q%s"%(i,i+1) for i in qubit_pair_indexes]
     num_averages: int = 20
     flux_point_joint_or_independent_or_pairwise: Literal["joint", "independent", "pairwise"] = "joint"
-    reset_type: Literal['active', 'thermal'] = 'active'
+    reset_type: Literal['active', 'thermal'] = 'thermal'
     simulate: bool = False
     timeout: int = 100
     load_data_id: Optional[int] = None
@@ -83,7 +83,7 @@ class Parameters(NodeParameters):
     """Span of flux values to sweep in volts. Default is 0.01 V."""
     flux_num: int = 81
     """Number of flux points to sample. Default is 21."""
-    use_state_discrimination: bool = True
+    use_state_discrimination: bool = False
 
     
 
@@ -97,6 +97,7 @@ assert not (node.parameters.simulate and node.parameters.load_data_id is not Non
 u = unit(coerce_to_integer=True)
 # Instantiate the QuAM class from the state file
 machine = QuAM.load()
+node.machine = machine
 
 # Get the relevant QuAM components
 if node.parameters.qubit_pairs is None or node.parameters.qubit_pairs == "":
@@ -241,7 +242,6 @@ if node.parameters.simulate:
     node.results = {"figure": plt.gcf()}
     wf_report = job.get_simulated_waveform_report()
     wf_report.create_plot(samples, plot=True, save_path=None)
-    node.machine = machine
     node.save()
 elif node.parameters.load_data_id is None:
     with qm_session(qmm, config, timeout=node.parameters.timeout) as qm:
@@ -545,6 +545,5 @@ if node.parameters.load_data_id is None:
 if not node.parameters.simulate:
     node.outcomes = {q.name: "successful" for q in qubit_pairs}
     node.results['initial_parameters'] = node.parameters.model_dump()
-    node.machine = machine
     node.save()
 # %%

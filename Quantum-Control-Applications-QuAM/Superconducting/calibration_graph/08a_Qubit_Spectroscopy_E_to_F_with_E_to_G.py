@@ -69,6 +69,7 @@ node = QualibrationNode(name="08a_Qubit_Spectroscopy_E_to_F_with_E_to_G", parame
 u = unit(coerce_to_integer=True)
 # Instantiate the QuAM class from the state file
 machine = QuAM.load()
+node.machine = machine
 # Generate the OPX and Octave configurations
 config = machine.generate_config()
 # Open Communication with the QOP
@@ -167,7 +168,6 @@ if node.parameters.simulate:
     job = qmm.simulate(config, qubit_spec, simulation_config)
     job.get_simulated_samples().con1.plot()
     node.results = {"figure": plt.gcf()}
-    node.machine = machine
     node.save()
 
 else:
@@ -274,5 +274,4 @@ else:
     # %% {Save_results}
     node.outcomes = {q.name: "successful" for q in qubits}
     node.results["initial_parameters"] = node.parameters.model_dump()
-    node.machine = machine
     node.save()

@@ -47,38 +47,6 @@ from qm import SimulationConfig
 from qm.qua import *
 
 
-# QC-test port forward test
-# from rcci_client.client import RCCIClient
-
-
-
-# import time
-# start_time = time.time()
-
-# my_token ="c8c57e1d51422ebf724e25076ee565b263395ad3c745ad3195ee36f66c6d9ef4"
-# my_qcsetup = ["qpu1_DR1_OPX1000_5_0"]
-# my_service = "hackthon"
-# my_client = RCCIClient(token=my_token)
-
-# my_old_jobs = my_client.get_job_status()
-# end_get_status_time = time.time()
-# if len(my_old_jobs) > 0:
-#     for old_job in my_old_jobs:
-#         my_client.close_job(job_id=old_job.job_id)
-
-# job_response = my_client.start_event_job(qc_setup_list=my_qcsetup, service_name=my_service)
-# start_event_job_time = time.time()
-
-# job_id = job_response.job_id
-# status = job_response.status
-# if hasattr(job_response, 'message'):
-#     print("message =", job_response.message)
-# print(f"Started job with ID: {job_id}")
-# print(f"Status: {status}")
-# access_port = my_client.wait_until_running(job_id=job_id, timeout=180)
-# print(f"Access port :{access_port}")
-
-
 # %% {Node_parameters}
 node = QualibrationNode(
     name="07b_IQ_Blobs",
@@ -99,6 +67,7 @@ node = QualibrationNode(
 u = unit(coerce_to_integer=True)
 
 machine = QuAM.load()
+node.machine = machine
 # machine.network["port"] = int(access_port)
 
 # print(f"Machine access port :{access_port}")
@@ -188,7 +157,6 @@ with program() as iq_blobs:
 if node.parameters.simulate:
     samples, fig = simulate_and_plot(qmm, config, iq_blobs, node.parameters)
     node.results = {"figure": fig}
-    node.machine = machine
     node.save()
 
 elif node.parameters.load_data_id is None:
@@ -352,7 +320,6 @@ if not node.parameters.simulate:
         # %% {Save_results}
         node.outcomes = {q.name: "successful" for q in qubits}
         node.results["initial_parameters"] = node.parameters.model_dump()
-        node.machine = machine
         node.save()          
 
 

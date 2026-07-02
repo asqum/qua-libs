@@ -257,7 +257,6 @@ if node.parameters.simulate:
     plt.tight_layout()
     # Update the node & save
     node.results = {"figure": plt.gcf()}
-    node.machine = machine
     node.save()
 
 elif node.parameters.load_data_id is None:
@@ -324,7 +323,6 @@ if node.parameters.load_data_id is  None:
 # %% {Save_results}
 node.outcomes = {q.name: "successful" for q in qubits}
 node.results["initial_parameters"] = node.parameters.model_dump()
-node.machine = machine
 node.save()
 
 # %%

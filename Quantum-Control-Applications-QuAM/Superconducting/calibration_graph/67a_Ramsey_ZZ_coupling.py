@@ -69,11 +69,11 @@ from quam_libs.lib.pulses import FluxPulse
 from quam_libs.lib.fit import fit_oscillation_decay_exp, oscillation_decay_exp
 
 # %% {Node_parameters}
-qubit_pair_indexes = [1]  # The indexes of the qubit pairs to measure
+qubit_pair_indexes = [2]  # The indexes of the qubit pairs to measure
 class Parameters(NodeParameters):
 
     qubit_pairs: Optional[List[str]] = ["coupler_q%s_q%s"%(i,i+1) for i in qubit_pair_indexes]
-    num_averages: int = 50
+    num_averages: int = 20
     flux_point_joint_or_independent_or_pairwise: Literal["joint", "independent", "pairwise"] = "joint"
     reset_type: Literal['active', 'thermal'] = "active"
     simulate: bool = False
@@ -83,11 +83,11 @@ class Parameters(NodeParameters):
     """Frequency detuning in MHz. Default is 1.0 MHz."""
     min_wait_time_in_ns: int = 128
     """Minimum wait time in nanoseconds. Default is 16."""
-    max_wait_time_in_ns: int = 2000
+    max_wait_time_in_ns: int = 10000
     """Maximum wait time in nanoseconds. Default is 5000."""
     wait_time_step_in_ns: int = 8
     """Step size for the wait time scan in nanoseconds. Default is 60."""
-    flux_span: float = 0.5
+    flux_span: float = 0.25
     """Span of flux values to sweep in volts. Default is 0.01 V."""
     flux_num: int = 101
     """Number of flux points to sample. Default is 21."""
@@ -105,6 +105,7 @@ assert not (node.parameters.simulate and node.parameters.load_data_id is not Non
 u = unit(coerce_to_integer=True)
 # Instantiate the QuAM class from the state file
 machine = QuAM.load()
+node.machine = machine
 
 # Get the relevant QuAM components
 if node.parameters.qubit_pairs is None or node.parameters.qubit_pairs == "":
@@ -226,7 +227,6 @@ if node.parameters.simulate:
     node.results = {"figure": plt.gcf()}
     wf_report = job.get_simulated_waveform_report()
     wf_report.create_plot(samples, plot=True, save_path=None)
-    node.machine = machine
     node.save()
 elif node.parameters.load_data_id is None:
     with qm_session(qmm, config, timeout=node.parameters.timeout) as qm:
@@ -529,6 +529,5 @@ if not node.parameters.simulate:
     node.outcomes = {q.name: "successful" for q in qubit_pairs}
     node.results['initial_parameters'] = node.parameters.model_dump()
     node.results["ds"] = ds
-    node.machine = machine
     node.save()
 # %%

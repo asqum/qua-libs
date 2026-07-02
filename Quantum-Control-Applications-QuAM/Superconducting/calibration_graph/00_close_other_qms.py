@@ -19,6 +19,7 @@ node = QualibrationNode(name="00_Close_other_QMs", parameters=Parameters())
 
 # Instantiate the QuAM class from the state file
 machine = QuAM.load()
+node.machine = machine
 
 # Generate the OPX and Octave configurations
 config = machine.generate_config()

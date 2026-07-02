@@ -146,6 +146,6 @@ def save_machine(machine: QuAM, quam_state_path: Union[Path, str]):
     machine.save(
         path=quam_state_path,
         content_mapping={
-            "wiring.json": ["network", "wiring"],
+            "wiring.json": ["wiring", "network"],
         },
     )

@@ -65,6 +65,7 @@ node = QualibrationNode(name="10b_Single_Qubit_Randomized_Benchmarking_Interleav
 u = unit(coerce_to_integer=True)
 # Instantiate the QuAM class from the state file
 machine = QuAM.load()
+node.machine = machine
 # Generate the OPX and Octave configurations
 config = machine.generate_config()
 # Open Communication with the QOP
@@ -448,7 +449,6 @@ else:
             plt.show()
 
 node.results["initial_parameters"] = node.parameters.model_dump()
-node.machine = machine
 node.save()
 
 # %%

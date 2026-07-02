@@ -77,6 +77,7 @@ node = QualibrationNode(name="03a_Qubit_Spectroscopy", parameters=Parameters())
 u = unit(coerce_to_integer=True)
 # Instantiate the QuAM class from the state file
 machine = QuAM.load()
+node.machine = machine
 # Generate the OPX and Octave configurations
 config = machine.generate_config()
 # Open Communication with the QOP
@@ -201,7 +202,6 @@ if node.parameters.simulate:
     plt.tight_layout()
     # Save the figure
     node.results = {"figure": plt.gcf()}
-    node.machine = machine
     node.save()
 
 elif node.parameters.load_data_id is None:
@@ -329,7 +329,6 @@ if not node.parameters.simulate:
 
     # %% {Update_state}
     if node.parameters.load_data_id is None:
-        node.machine = machine
         with node.record_state_updates():
             for q in qubits:
                 if not np.isnan(result.sel(qubit=q.name).position.values):
@@ -364,7 +363,6 @@ if not node.parameters.simulate:
         node.results["ds"] = ds
 
         # %% {Save_results}
-        node.machine = machine
         node.outcomes = {q.name: "successful" for q in qubits}
         node.results["initial_parameters"] = node.parameters.model_dump()
         

@@ -64,6 +64,7 @@ node = QualibrationNode(
 u = unit(coerce_to_integer=True)
 
 machine = QuAM.load()
+node.machine = machine
 
 qubits = machine.get_qubits_used_in_node(node.parameters)
 num_qubits = len(qubits)
@@ -215,5 +216,3 @@ if not node.parameters.simulate:
         node.results["initial_parameters"] = node.parameters.model_dump()
         node.machine = machine
         node.save()
-
-# %%

@@ -53,6 +53,7 @@ node = QualibrationNode(name="05_T1", parameters=Parameters())
 u = unit(coerce_to_integer=True)
 # Instantiate the QuAM class from the state file
 machine = QuAM.load()
+node.machine = machine
 # Generate the OPX and Octave configurations
 config = machine.generate_config()
 # Open Communication with the QOP
@@ -152,7 +153,6 @@ if node.parameters.simulation_time is not None:
     node.results = {"figure": plt.gcf()}
     wf_report = job.get_simulated_waveform_report()
     wf_report.create_plot(samples, plot=True, save_path=None)
-    node.machine = machine
     node.save()
 
 else:
@@ -237,7 +237,6 @@ else:
 
     # %% {Save_results}
     node.results["initial_parameters"] = node.parameters.model_dump()
-    node.machine = machine
     node.save()
 
 # %% {run above all}

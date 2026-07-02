@@ -94,6 +94,7 @@ assert not (
 u = unit(coerce_to_integer=True)
 # Instantiate the QuAM class from the state file
 machine = QuAM.load()
+node.machine = machine
 
 # Create qubit groups from parameters.qubit_groups
 # node.parameters.qubit_groups is List[List[str]], e.g., [["qD4","qD3","qC4","qC2","qC1"]]
@@ -257,7 +258,6 @@ if node.parameters.simulate:
     job = qmm.simulate(config, GHZ_tomography, simulation_config)
     job.get_simulated_samples().con1.plot()
     node.results = {"figure": plt.gcf()}
-    node.machine = machine
     node.save()
 elif node.parameters.load_data_id is None:
     with qm_session(qmm, config, timeout=node.parameters.timeout) as qm:
@@ -410,6 +410,5 @@ node.results["figures"] = figures
 if not node.parameters.simulate:
     node.outcomes = {qg.name: "successful" for qg in qubit_groups_for_qua}
     node.results["initial_parameters"] = node.parameters.model_dump()
-    node.machine = machine
     node.save()
 # %%
