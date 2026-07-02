@@ -41,15 +41,16 @@ import numpy as np
 class Parameters(NodeParameters):
 
     qubits: Optional[List[str]] = None
-    num_averages: int = 200 #10
+    num_averages: int = 60 #10
     operation_x180_or_any_90: Literal["x180", "x90", "-x90", "y90", "-y90"] = "x90"
     min_amp_factor: float = 0.95
     max_amp_factor: float = 1.05
-    amp_factor_step: float = 0.002
+    amp_factor_step: float = 0.004
     max_number_rabi_pulses_per_sweep: int = 200
     flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
     reset_type_thermal_or_active: Literal["thermal", "active"] = "active"
     simulate: bool = False
+    update_x90: bool = True
     timeout: int = 100
 
 
@@ -285,6 +286,8 @@ else:
     with node.record_state_updates():
         for q in qubits:
             q.xy.operations[operation].amplitude = fit_results[q.name]["Pi_amplitude"]
+            if operation == "x180" and node.parameters.update_x90:
+                q.xy.operations["x90"].amplitude = fit_results[q.name]["Pi_amplitude"] / 2
 
     # %% {Save_results}
     node.outcomes = {q.name: "successful" for q in qubits}
