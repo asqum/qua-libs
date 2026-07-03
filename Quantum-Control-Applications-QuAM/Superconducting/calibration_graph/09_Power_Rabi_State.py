@@ -50,6 +50,7 @@ class Parameters(NodeParameters):
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
     reset_type_thermal_or_active: Literal["thermal", "active"] = "thermal"
     simulate: bool = False
+    update_x90: bool = True
     timeout: int = 100
 
 
@@ -278,6 +279,8 @@ else:
     with node.record_state_updates():
         for q in qubits:
             q.xy.operations[operation].amplitude = fit_results[q.name]["Pi_amplitude"]
+            if operation == "x180" and node.parameters.update_x90:
+                q.xy.operations["x90"].amplitude = fit_results[q.name]["Pi_amplitude"] / 2
 
     # %% {Save_results}
     node.outcomes = {q.name: "successful" for q in qubits}
