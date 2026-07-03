@@ -688,3 +688,37 @@ class aSWAPPulse(Pulse):
             p = p * np.exp(1j * self.axis_angle)
 
         return p.tolist()
+
+
+@quam_dataclass  
+class ArbWaveformPulse(Pulse):
+    """
+    The Arbitrary waveform pulse shape
+
+    Args:
+        annotation: str, a note for a better remind
+        sn: str, serial number for a better specification
+        I_samples: list,
+        Q_samples: list,
+        axis_angle: float, IQ axis angle in radians.
+    """
+    annotation: str
+    sn:str
+    I_samples: list
+    Q_samples: list
+    axis_angle: float
+
+
+    def waveform_function(self):
+         
+
+
+        I = np.array(self.I_samples)
+        Q = np.array(self.Q_samples)
+
+        I_rot = I * np.cos(self.axis_angle) - Q * np.sin(self.axis_angle)
+        Q_rot = I * np.sin(self.axis_angle) + Q * np.cos(self.axis_angle)
+
+        IQ_signal = I_rot + 1.0j * Q_rot
+
+        return IQ_signal
