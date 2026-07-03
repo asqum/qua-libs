@@ -226,14 +226,15 @@ if not node.parameters.simulate:
             analysis = StateDiscrimination(sq_data)
             analysis._start_analysis()
             models[qubit_name].append(analysis)
-            trained_params[qubit_name] = analysis.analysis_result['trained_params']    # save trained parameters for each qubit
+            trained_params[qubit_name] = analysis.analysis_result['trained_paras']    # save trained parameters for each qubit
             (p00, p01), (p10, p11) = analysis.analysis_result['gaussian_norms']
             RO_fidelity[qubit_name].append(1 - 0.5*(p01+p10))
     
     for q in qubits:
         node.results['results'][q.name] = {}
+        
         node.results['results'][q.name]["RO_fidelity"] = np.average(RO_fidelity[q.name])
-        node.results['results'][q.name]["GMM_mean"] = trained_params[q.name]['mean']
+        node.results['results'][q.name]["GMM_mean"] = trained_params[q.name]['mean'].tolist()
         node.results['results'][q.name]["GMM_std"] = trained_params[q.name]['std']
 
     #%% {Plot}
@@ -273,8 +274,8 @@ if not node.parameters.simulate:
     if node.parameters.load_data_id is None:
         with node.record_state_updates():
             for qubit in qubits:
-                qubit.extras['GMM_mean'] = node.results['results'][q.name]["GMM_mean"]
-                qubit.extras['GMM_std'] = node.results['results'][q.name]["GMM_std"]
+                qubit.extras['GMM_mean'] = node.results['results'][qubit.name]["GMM_mean"]
+                qubit.extras['GMM_std'] = node.results['results'][qubit.name]["GMM_std"]
 
         # %% {Save_results}
         node.outcomes = {q.name: "successful" for q in qubits}
