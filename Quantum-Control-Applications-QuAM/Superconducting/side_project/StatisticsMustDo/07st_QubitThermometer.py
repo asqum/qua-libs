@@ -79,6 +79,26 @@ if node.parameters.load_data_id is None:
 qubits = machine.get_qubits_used_in_node(node.parameters)
 num_qubits = len(qubits)
 
+
+
+original_params = {q.name: {"XY-FSP":0, "x180_amp":0, "x90_amp":0} for q in qubits}
+
+for q in qubits:
+    if q.extras.get("GMM_mean") is None or q.extras.get("GMM_std") is None:
+        raise ValueError(f"Qubit {q.name} is missing GMM parameters. Please run the 'ReadoutGMMCalibration' node first.")
+
+    # Save original driving values
+    original_params[q.name]['XY-FSP'] = q.xy.opx_output.full_scale_power_dbm
+    original_params[q.name]['x180_amp'] = q.xy.operations["x180"].amplitude
+    original_params[q.name]['x90_amp'] = q.xy.operations["x90"].amplitude
+    
+
+    # Set driving to minimum power
+    q.xy.opx_output.full_scale_power_dbm = -11
+    q.xy.operations["x180"].amplitude = 0.0
+    q.xy.operations["x90"].amplitude = 0.0
+
+
 config = machine.generate_config()
 
 # %% {QUA_program}
