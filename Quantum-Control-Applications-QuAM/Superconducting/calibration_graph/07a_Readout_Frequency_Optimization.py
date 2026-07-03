@@ -96,13 +96,15 @@ with program() as ro_freq_opt:
     Q_e_st = [declare_stream() for _ in range(num_qubits)]
     n_st = declare_stream()
 
-    machine.apply_all_couplers_to_min()
+    if not node.parameters.simulate:
+        machine.apply_all_couplers_to_min()
     for i, qubit in enumerate(qubits):
 
-        # Bring the active qubits to the desired frequency point
-        machine.set_all_fluxes(flux_point=flux_point, target=qubit)
-        if "c" in qubit.id: qubit.z.set_dc_offset(qubit.z.joint_offset)
-        qubit.z.settle()
+        if not node.parameters.simulate:
+            # Bring the active qubits to the desired frequency point
+            machine.set_all_fluxes(flux_point=flux_point, target=qubit)
+            if "c" in qubit.id: qubit.z.set_dc_offset(qubit.z.joint_offset)
+            qubit.z.settle()
         qubit.align()
 
 

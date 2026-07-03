@@ -153,23 +153,25 @@ with program() as ConfusionMatrixNQ:
     state_st = [declare_stream() for _ in range(num_qubit_groups)]
 
     for i, qg in enumerate(qubit_groups):
-        if flux_point == "independent":
-            machine.apply_all_flux_to_min()
-        elif flux_point == "joint":
-            machine.apply_all_flux_to_joint_idle()
-        else:
-            machine.apply_all_flux_to_zero()
-        wait(1000)
+        if not node.parameters.simulate:
+            if flux_point == "independent":
+                machine.apply_all_flux_to_min()
+            elif flux_point == "joint":
+                machine.apply_all_flux_to_joint_idle()
+            else:
+                machine.apply_all_flux_to_zero()
+            wait(1000)
 
         with for_(n, 0, n < n_shots, n + 1):
             save(n, n_st)
 
             with nested_binary_loops(init_vars):
-                if node.parameters.reset_type == "active":
-                    for q in qg.qubits:
-                        active_reset(q)
-                else:
-                    wait(5 * qg.max_thermalization_time * u.ns)
+                if not node.parameters.simulate:
+                    if node.parameters.reset_type == "active":
+                        for q in qg.qubits:
+                            active_reset(q)
+                    else:
+                        wait(5 * qg.max_thermalization_time * u.ns)
                 align()
 
                 for idx, q in enumerate(qg.qubits):

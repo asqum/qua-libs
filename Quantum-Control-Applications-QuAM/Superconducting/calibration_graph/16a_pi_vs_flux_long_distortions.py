@@ -186,10 +186,11 @@ with program() as qua_prog:
                 # Time delay loop
                 with for_each_(t_delay, times):
                     
-                    if node.parameters.reset_type_active_or_thermal == "active":
-                        active_reset(qubit)
-                    else:
-                        qubit.wait(qubit.thermalization_time * u.ns)
+                    if not node.parameters.simulate:
+                        if node.parameters.reset_type_active_or_thermal == "active":
+                            active_reset(qubit)
+                        else:
+                            qubit.wait(qubit.thermalization_time * u.ns)
                    
                     if node.parameters.thermal_reset_extra_time_in_us:
                         qubit.wait(node.parameters.thermal_reset_extra_time_in_us * u.us)

@@ -102,14 +102,14 @@ with program() as EF_power_rabi_state:
     count = declare(int)  # QUA variable for counting the qubit pulses
 
     for i, qubit in enumerate(qubits):
-        machine.set_all_fluxes(flux_point=flux_point, target=qubit)
-        if "c" in qubit.id: qubit.z.set_dc_offset(qubit.z.joint_offset) # for coupler-test case
-        qubit.z.settle()
-        qubit.align() 
+        if not node.parameters.simulate:
+            machine.set_all_fluxes(flux_point=flux_point, target=qubit)
+            if "c" in qubit.id: qubit.z.set_dc_offset(qubit.z.joint_offset) # for coupler-test case
+            qubit.z.settle()
 
-        # Wait for the flux bias to settle
-        for qb in qubits:
-            wait(1000, qb.z.name)
+            # Wait for the flux bias to settle
+            for qb in qubits:
+                wait(1000, qb.z.name)
 
         align(*[q.xy.name for q in qubits] +
                [q.resonator.name for q in qubits] +
@@ -120,10 +120,11 @@ with program() as EF_power_rabi_state:
             with for_(*from_array(npi, N_pi_vec)):
                 with for_(*from_array(a, amps)):
                     # Initialize the qubits
-                    if reset_type == "active":
-                        active_reset_gef(qubit)
-                    else:
-                        qubit.wait(qubit.thermalization_time * u.ns)
+                    if not node.parameters.simulate:
+                        if reset_type == "active":
+                            active_reset_gef(qubit)
+                        else:
+                            qubit.wait(qubit.thermalization_time * u.ns)
 
                     qubit.align()
                     qubit.xy.play('x180')

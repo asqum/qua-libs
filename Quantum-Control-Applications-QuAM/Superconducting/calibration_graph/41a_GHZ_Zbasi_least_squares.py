@@ -158,25 +158,28 @@ with program() as GHZ_Zbasis_least_squares:
     state = [declare(int) for _ in range(num_qubit_groups)]
     state_st = [declare_stream() for _ in range(num_qubit_groups)]
     
-    if flux_point == "joint":
-        # Bring the active qubits to the desired frequency point
-        machine.apply_all_flux_to_joint_idle()
-    wait(1000)
+    if not node.parameters.simulate:
+        if flux_point == "joint":
+            # Bring the active qubits to the desired frequency point
+            machine.apply_all_flux_to_joint_idle()
+        wait(1000)
     
     for i, qg in enumerate(qubit_groups_for_qua):
-        # Bring the active qubits to the minimum frequency point
-        if flux_point != "joint":
-            machine.apply_all_flux_to_min()
+        if not node.parameters.simulate:
+            # Bring the active qubits to the minimum frequency point
+            if flux_point != "joint":
+                machine.apply_all_flux_to_min()
         align()
         
         with for_(n, 0, n < n_shots, n + 1):
             save(n, n_st)         
             # reset
-            if node.parameters.reset_type == "active":
-                for q in qg.qubits:
-                    active_reset(q)
-            else:
-                wait(5 * qg.max_thermalization_time * u.ns)
+            if not node.parameters.simulate:
+                if node.parameters.reset_type == "active":
+                    for q in qg.qubits:
+                        active_reset(q)
+                else:
+                    wait(5 * qg.max_thermalization_time * u.ns)
             align()
             
             # GHZ chain preparation generalized for 3-5 qubits.

@@ -112,12 +112,13 @@ with program() as t2_echo_vs_coupler_flux:
             save(n, n_st)
             with for_(*from_array(flux_qubit, fluxes_qubit)):
                 with for_(*from_array(t, idle_times)):
-                    if node.parameters.reset_type == "active":
-                        active_reset(qubit, "readout")
-                        qubit.align()
-                    else:
-                        qubit.resonator.wait(qubit.thermalization_time * u.ns)
-                        qubit.align()
+                    if not node.parameters.simulate:
+                        if node.parameters.reset_type == "active":
+                            active_reset(qubit, "readout")
+                            qubit.align()
+                        else:
+                            qubit.resonator.wait(qubit.thermalization_time * u.ns)
+                            qubit.align()
                     
                     if not node.parameters.use_qubit_flux_pulse:
                         qubit.z.set_dc_offset(flux_qubit)

@@ -107,23 +107,15 @@ with program() as power_rabi:
     count = declare(int)  # QUA variable for counting the qubit pulses
 
     for i, qubit in enumerate(qubits):
-        # Bring the active qubits to the minimum frequency point
-        # if flux_point == "independent":
-        #     machine.apply_all_flux_to_min()
-        #     machine.apply_all_couplers_to_min()
-        #     qubit.z.to_independent_idle()
-        # elif flux_point == "joint":
-        #     machine.apply_all_flux_to_joint_idle()
-        # else:
-        #     machine.apply_all_flux_to_zero()
-        machine.set_all_fluxes(flux_point=flux_point, target=qubit)
-        if "c" in qubit.id: qubit.z.set_dc_offset(qubit.z.joint_offset) # for coupler-test case
-        qubit.z.settle()
-        qubit.align() 
+        if not node.parameters.simulate:
+            # Bring the active qubits to the minimum frequency point
+            machine.set_all_fluxes(flux_point=flux_point, target=qubit)
+            if "c" in qubit.id: qubit.z.set_dc_offset(qubit.z.joint_offset) # for coupler-test case
+            qubit.z.settle()
 
-        # Wait for the flux bias to settle
-        for qb in qubits:
-            wait(1000, qb.z.name)
+            # Wait for the flux bias to settle
+            for qb in qubits:
+                wait(1000, qb.z.name)
 
         align(*[q.xy.name for q in qubits] +
                [q.resonator.name for q in qubits] +
@@ -134,10 +126,11 @@ with program() as power_rabi:
             with for_(*from_array(npi, N_pi_vec)):
                 with for_(*from_array(a, amps)):
                     # Initialize the qubits
-                    if reset_type == "active":
-                        active_reset(qubit)
-                    else:
-                        qubit.wait(qubit.thermalization_time * u.ns)
+                    if not node.parameters.simulate:
+                        if reset_type == "active":
+                            active_reset(qubit)
+                        else:
+                            qubit.wait(qubit.thermalization_time * u.ns)
 
                     qubit.align()
                     # Loop for error amplification (perform many qubit pulses)

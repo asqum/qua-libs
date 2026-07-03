@@ -99,24 +99,27 @@ with program() as t1:
         state = [declare(int) for _ in range(num_qubits)]
         state_st = [declare_stream() for _ in range(num_qubits)]
 
-    machine.apply_all_couplers_to_min()
+    if not node.parameters.simulate:
+        machine.apply_all_couplers_to_min()
     for i, qubit in enumerate(qubits):
 
-        # Bring the active qubits to the desired frequency point
-        machine.set_all_fluxes(flux_point=flux_point, target=qubit)
-        if "c" in qubit.id: qubit.z.set_dc_offset(qubit.z.joint_offset) # for coupler-test case
-        qubit.z.settle()
+        if not node.parameters.simulate:
+            # Bring the active qubits to the desired frequency point
+            machine.set_all_fluxes(flux_point=flux_point, target=qubit)
+            if "c" in qubit.id: qubit.z.set_dc_offset(qubit.z.joint_offset) # for coupler-test case
+            qubit.z.settle()
         qubit.align()
 
         with for_(n, 0, n < n_avg, n + 1):
             save(n, n_st)
             with for_(*from_array(t, idle_times)):
-                if node.parameters.reset_type == "active":
-                    # active_reset(qubit, "readout")
-                    active_reset_simple(qubit, "readout")
-                else:
-                    qubit.resonator.wait(qubit.thermalization_time * u.ns)
-                    qubit.align()
+                if not node.parameters.simulate:
+                    if node.parameters.reset_type == "active":
+                        # active_reset(qubit, "readout")
+                        active_reset_simple(qubit, "readout")
+                    else:
+                        qubit.resonator.wait(qubit.thermalization_time * u.ns)
+                        qubit.align()
 
                 qubit.xy.play("x180")
                 qubit.align()
@@ -194,12 +197,12 @@ if not node.parameters.simulate:
         ds = ds.assign_coords(idle_time=4 * ds.idle_time / u.us)  # convert to µs
         ds.idle_time.attrs = {"long_name": "idle time", "units": "µs"}
     else:
-        load_data_id = node.parameters.load_data_id
-        node = node.load_from_id(load_data_id)
-        ds = node.results["ds"]
-        restore_load_data_id(node, load_data_id)
-        machine = node.machine
-        qubits = resolve_qubits_from_node(machine, node)
+            load_data_id = node.parameters.load_data_id
+            node = node.load_from_id(load_data_id)
+            ds = node.results["ds"]
+            restore_load_data_id(node, load_data_id)
+            machine = node.machine
+            qubits = resolve_qubits_from_node(machine, node)
     # Add the dataset to the node
     node.results = {"ds": ds}
 

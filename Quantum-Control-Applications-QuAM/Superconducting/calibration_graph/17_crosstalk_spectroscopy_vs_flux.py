@@ -229,12 +229,13 @@ with program() as crosstalk_vs_flux:
                         # Update the qubit frequency
                         target_qubit.xy.update_frequency(df + target_qubit.xy.intermediate_frequency + expected_frequency_offset, keep_phase=True)
                         # Wait for the qubits to decay to the ground state
-                        if reset_type == "active":
-                            active_reset(qubit, "readout")
-                        else:
-                            if node.parameters.simulate: qubit.wait(16 * u.ns)
-                            # else: qubit.wait(qubit.thermalization_time * u.ns)
-                            else: qubit.wait(machine.thermalization_time * u.ns)
+                        if not node.parameters.simulate:
+                            if reset_type == "active":
+                                active_reset(qubit, "readout")
+                            else:
+                                if node.parameters.simulate: qubit.wait(16 * u.ns)
+                                # else: qubit.wait(qubit.thermalization_time * u.ns)
+                                else: qubit.wait(machine.thermalization_time * u.ns)
                         # Flux sweeping for a qubit
                         duration = (
                             operation_len * u.ns

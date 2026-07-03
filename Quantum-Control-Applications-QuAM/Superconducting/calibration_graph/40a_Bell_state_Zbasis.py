@@ -135,7 +135,8 @@ with program() as CPhase_Oscillations:
         with for_(n, 0, n < n_shots, n + 1):
             save(n, n_st)         
             # reset
-            if node.parameters.reset_type == "active":
+            if not node.parameters.simulate:
+                if node.parameters.reset_type == "active":
                     # active_reset(qp.qubit_control)
                     # active_reset(qp.qubit_target)
                     # qp.align()
@@ -145,10 +146,7 @@ with program() as CPhase_Oscillations:
                     active_reset_simple(qp.qubit_control)
                     active_reset_simple(qp.qubit_target)                       
             else:
-                if not node.parameters.simulate:
-                    wait(5*qp.qubit_control.thermalization_time * u.ns)
-                else:
-                    wait(16 * u.ns)
+                wait(16 * u.ns)
             qp.align()
             # Bell state
             if node.parameters.circuit == "BELL1":

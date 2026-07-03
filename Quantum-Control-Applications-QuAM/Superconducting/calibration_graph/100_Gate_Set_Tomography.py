@@ -194,8 +194,9 @@ with program() as GST:
         with for_(single_germ_order, 0, single_germ_order < total_germs_num * max_germs_depth, single_germ_order + max_germs_depth):
             with for_(native_gate_order, 0, native_gate_order < max_germs_depth, native_gate_order + 1):
                 assign(single_germ_list[native_gate_order], tokenized_germs_list[single_germ_order + native_gate_order])
-                if reset_type == "active":
-                    active_reset(qubit)
+                if not node.parameters.simulate:
+                    if reset_type == "active":
+                        active_reset(qubit)
                 elif reset_type == "thermal":
                     qubit.wait(qubit.thermalization_time * u.ns)
                     

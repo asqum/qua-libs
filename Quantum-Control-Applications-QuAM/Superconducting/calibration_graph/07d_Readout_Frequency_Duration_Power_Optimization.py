@@ -133,7 +133,8 @@ def readout_optimization_3d_measured_in_batches(n_avg: int, measurement_batch: O
         n_st = declare_stream()
 
         for multiplexed_qubits in qubits.batch():
-            machine.set_all_fluxes(flux_point=flux_point, target=list(multiplexed_qubits.values())[0])
+            if not node.parameters.simulate:
+                machine.set_all_fluxes(flux_point=flux_point, target=list(multiplexed_qubits.values())[0])
 
             with for_(n, 0, n < n_avg, n + 1):
                 save(n, n_st)

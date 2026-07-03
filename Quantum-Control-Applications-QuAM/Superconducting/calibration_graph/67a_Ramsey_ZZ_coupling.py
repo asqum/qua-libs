@@ -169,7 +169,8 @@ with program() as Ramsey_ZZ_coupling:
         machine.set_all_fluxes(flux_point, qp)
         if reset_coupler_bias:
             qp.coupler.set_dc_offset(0.0)
-        wait(1000)
+        if not node.parameters.simulate:
+            wait(1000)
 
         with for_(n, 0, n < n_avg, n + 1):
             save(n, n_st)

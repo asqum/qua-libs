@@ -227,12 +227,13 @@ with program() as qua_prog:
             # Loop over the phase of the second ramsey x90 pulse to reconstruct the qubit phase
             with for_each_(frame, frames):
                 # Qubit initialization
-                if reset_type == "active":
-                    active_reset(qubit)
-                elif reset_type == "thermal":
-                    qubit.wait(qubit.thermalization_time * u.ns)
-                else:
-                    raise ValueError(f"Unrecognized reset type {reset_type}.")
+                if not node.parameters.simulate:
+                    if reset_type == "active":
+                        active_reset(qubit)
+                    elif reset_type == "thermal":
+                        qubit.wait(qubit.thermalization_time * u.ns)
+                    else:
+                        raise ValueError(f"Unrecognized reset type {reset_type}.")
                 
                 align()
                 ################################################################################################

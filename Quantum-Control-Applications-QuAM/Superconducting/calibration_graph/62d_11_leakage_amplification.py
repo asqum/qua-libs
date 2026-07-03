@@ -153,19 +153,21 @@ with program() as leakage_amplification:
         machine.set_all_fluxes(flux_point, qp)
         if reset_coupler_bias:
             qp.coupler.set_dc_offset(0.0)
-        wait(1000)
+        if not node.parameters.simulate:
+            wait(1000)
 
         with for_(n, 0, n < n_avg, n + 1):
             save(n, n_st)
             with for_(n_op, 1, n_op <= num_operations, n_op + 1):         
                 with for_(*from_array(flux_coupler_amp, flux_coupler_amplitudes)):
                             # reset
-                            if node.parameters.reset_type == "active":
-                                active_reset_gef(qp.qubit_control)
-                                active_reset_gef(qp.qubit_target)
-                            else:
-                                wait(qp.qubit_control.thermalization_time * u.ns)
-                                wait(qp.qubit_target.thermalization_time * u.ns)
+                            if not node.parameters.simulate:
+                                if node.parameters.reset_type == "active":
+                                    active_reset_gef(qp.qubit_control)
+                                    active_reset_gef(qp.qubit_target)
+                                else:
+                                    wait(qp.qubit_control.thermalization_time * u.ns)
+                                    wait(qp.qubit_target.thermalization_time * u.ns)
 
                             # state preparation
                             qp.qubit_control.xy.play("x180")

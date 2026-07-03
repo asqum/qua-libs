@@ -201,15 +201,15 @@ with program() as qua_prog:
     npi = declare(int)  # QUA variable for the number of qubit pulses
     count = declare(int)  # QUA variable for counting the qubit pulses
    
-    # Initialize the QPU in terms of flux points (flux tunable transmons and/or tunable couplers)
-    for qubit in qubits:
-        machine.set_all_fluxes(flux_point=flux_point, target=qubit)
-    align()
-    if reset_coupler_bias:
-        coupler.set_dc_offset(0.0)
-    else:
-        coupler.to_decouple_idle()
-    wait(1000)
+    if not node.parameters.simulate:
+        for qubit in qubits:
+            machine.set_all_fluxes(flux_point=flux_point, target=qubit)
+        align()
+        if reset_coupler_bias:
+            coupler.set_dc_offset(0.0)
+        else:
+            coupler.to_decouple_idle()
+        wait(1000)
 
     # --- Batch over qubits (allows time-multiplexed execution respecting hardware constraints)
     for i, qubit in enumerate(qubits):
@@ -224,12 +224,13 @@ with program() as qua_prog:
                 with for_(segment, 0, segment < number_of_segments, segment + 1):
 
                     # 1. Reset qubits to ground state
-                    if reset_type == "active":
-                        active_reset(qubit)
-                    elif reset_type == "thermal":
-                        qubit.wait(4 * qubit.thermalization_time * u.ns)
-                    else:
-                        raise ValueError(f"Unrecognized reset type {reset_type}.")
+                    if not node.parameters.simulate:
+                        if reset_type == "active":
+                            active_reset(qubit)
+                        elif reset_type == "thermal":
+                            qubit.wait(4 * qubit.thermalization_time * u.ns)
+                        else:
+                            raise ValueError(f"Unrecognized reset type {reset_type}.")
 
                     # 2. State preparation: excited (x180) or ground (wait same duration)
                     if init_state == "e":

@@ -126,31 +126,33 @@ with program() as CPhase_Oscillations:
     state_st = [declare_stream() for _ in range(num_qubit_pairs)]
     
     for i, qp in enumerate(qubit_pairs):
-        # Bring the active qubits to the minimum frequency point
-        if flux_point == "independent":
-            machine.apply_all_flux_to_min()
-            # qp.apply_mutual_flux_point()
-        elif flux_point == "joint":
-            machine.apply_all_flux_to_joint_idle()
-        else:
-            machine.apply_all_flux_to_zero()
-        wait(1000)
+        if not node.parameters.simulate:
+            # Bring the active qubits to the minimum frequency point
+            if flux_point == "independent":
+                machine.apply_all_flux_to_min()
+                # qp.apply_mutual_flux_point()
+            elif flux_point == "joint":
+                machine.apply_all_flux_to_joint_idle()
+            else:
+                machine.apply_all_flux_to_zero()
+            wait(1000)
 
         with for_(n, 0, n < n_shots, n + 1):
             save(n, n_st)         
             with for_(*from_array(control_initial, [0,1])):
                 with for_(*from_array(target_initial, [0,1])):
                     # reset
-                    if node.parameters.reset_type == "active":
-                            active_reset(qp.qubit_control)
-                            active_reset(qp.qubit_target)
-                            # wait(2*qp.qubit_control.thermalization_time * u.ns)
-                            # active_reset_simple(qp.qubit_control)
-                            # active_reset_simple(qp.qubit_target)
-                            # active_reset_simple(qp.qubit_control)
-                            # active_reset_simple(qp.qubit_target)                            
-                    else:
-                        wait(5*qp.qubit_control.thermalization_time * u.ns)
+                    if not node.parameters.simulate:
+                        if node.parameters.reset_type == "active":
+                                active_reset(qp.qubit_control)
+                                active_reset(qp.qubit_target)
+                                # wait(2*qp.qubit_control.thermalization_time * u.ns)
+                                # active_reset_simple(qp.qubit_control)
+                                # active_reset_simple(qp.qubit_target)
+                                # active_reset_simple(qp.qubit_control)
+                                # active_reset_simple(qp.qubit_target)                            
+                        else:
+                            wait(5*qp.qubit_control.thermalization_time * u.ns)
                     qp.align()
                     
                     # setting both qubits ot the initial state

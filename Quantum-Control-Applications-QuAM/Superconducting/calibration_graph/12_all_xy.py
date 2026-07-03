@@ -250,18 +250,20 @@ with program() as all_xy:
     state = [declare(int) for _ in range(num_qubits)]
     state_st = [declare_stream() for _ in range(num_qubits)]
 
-    machine.apply_all_couplers_to_min()
+    if not node.parameters.simulate:
+        machine.apply_all_couplers_to_min()
     assign(iteration, 0)
 
     for multiplexed_qubits in qubits.batch():
-        if flux_point == "independent":
-            machine.apply_all_flux_to_min()
-            for qubit in multiplexed_qubits.values():
-                qubit.z.to_independent_idle()
-        elif flux_point == "joint":
-            machine.apply_all_flux_to_joint_idle()
-        else:
-            raise ValueError(f"Unrecognized flux point {flux_point}.")
+        if not node.parameters.simulate:
+            if flux_point == "independent":
+                machine.apply_all_flux_to_min()
+                for qubit in multiplexed_qubits.values():
+                    qubit.z.to_independent_idle()
+            elif flux_point == "joint":
+                machine.apply_all_flux_to_joint_idle()
+            else:
+                raise ValueError(f"Unrecognized flux point {flux_point}.")
 
         align(
             *(
@@ -274,12 +276,13 @@ with program() as all_xy:
         with for_(n, 0, n < n_avg, n + 1):
             with for_(*from_array(sequence_index, sequence_indices)):
                 for qubit in multiplexed_qubits.values():
-                    if reset_type == "active":
-                        active_reset(qubit)
-                    elif reset_type == "thermal":
-                        qubit.wait(qubit.thermalization_time * u.ns)
-                    else:
-                        raise ValueError(f"Unrecognized reset type {reset_type}.")
+                    if not node.parameters.simulate:
+                        if reset_type == "active":
+                            active_reset(qubit)
+                        elif reset_type == "thermal":
+                            qubit.wait(qubit.thermalization_time * u.ns)
+                        else:
+                            raise ValueError(f"Unrecognized reset type {reset_type}.")
 
                 align(
                     *(

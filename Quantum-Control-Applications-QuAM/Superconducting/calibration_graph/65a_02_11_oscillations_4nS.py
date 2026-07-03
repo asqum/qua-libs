@@ -167,7 +167,8 @@ with program() as CPhase_Oscillations:
     
     for i, qp in enumerate(qubit_pairs):
         # Bring the active qubits to the minimum frequency point
-        machine.set_all_fluxes(flux_point, qp)
+        if not node.parameters.simulate:
+            machine.set_all_fluxes(flux_point, qp)
         assign(comp_flux_coupler, gate_refs[qp.name]["coupler_amplitude"])
         assign(comp_flux_qubit, gate_refs[qp.name]["qubit_amplitude"])
         with for_(n, 0, n < n_avg, n + 1):
@@ -177,12 +178,13 @@ with program() as CPhase_Oscillations:
                 # rest of the pulse
                 with for_(*from_array(t, times_cycles)):
                     # reset                    
-                    if node.parameters.reset_type == "active":
-                        active_reset_simple(qp.qubit_control)
-                        active_reset_simple(qp.qubit_target)
-                        qp.align()
-                    else:
-                        wait(qp.qubit_control.thermalization_time * u.ns)
+                    if not node.parameters.simulate:
+                        if node.parameters.reset_type == "active":
+                            active_reset_simple(qp.qubit_control)
+                            active_reset_simple(qp.qubit_target)
+                            qp.align()
+                        else:
+                            wait(qp.qubit_control.thermalization_time * u.ns)
 
                     # set both qubits to the excited state
                     for state,qubit in zip([state_control, state_target], [qp.qubit_control, qp.qubit_target]):
