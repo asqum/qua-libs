@@ -43,8 +43,8 @@ import numpy as np
 # %% {Node_parameters}
 class Parameters(NodeParameters):
 
-    qubits: Optional[List[str]] = ['q9']
-    num_averages: int = 1000
+    qubits: Optional[List[str]] = ['q1']
+    num_averages: int = 100
     operation: str = "saturation"
     operation_amplitude_factor: Optional[float] = 0.013 #0.004, 0.02 # q6:3e-3, q7:1e-2, q8:3e-3, q9:***,
     operation_len_in_ns: Optional[int] = None
@@ -255,21 +255,36 @@ if not node.parameters.simulate:
                 offset = q.z.joint_offset
             else:
                 offset = 0.0
-            print(f"flux offset for qubit {q.name} is {offset*1e3 + flux_shift.sel(qubit = q.name).values*1e3:.0f} mV")
-            print(f"(shift of  {flux_shift.sel(qubit = q.name).values*1e3:.0f} mV)")
+            quad_term = float(coeff.sel(degree=2, qubit=q.name))
+            flux_shift_q = float(flux_shift.sel(qubit=q.name).values)
+            drive_freq = float(freq_shift.sel(qubit=q.name).values)
+            sweetspot_freq = drive_freq + q.xy.RF_frequency
+            sweet_offset = offset + flux_shift_q
+            flux_phase_ratio = np.sqrt(-quad_term / sweetspot_freq * 4)
+            print(f"flux offset for qubit {q.name} is {offset*1e3 + flux_shift_q*1e3:.0f} mV")
+            print(f"(shift of  {flux_shift_q*1e3:.0f} mV)")
             print(
-                f"Drive frequency for {q.name} is {(freq_shift.sel(qubit = q.name).values + q.xy.RF_frequency)/1e9:.3f} GHz"
+                f"Drive frequency for {q.name} is {sweetspot_freq/1e9:.3f} GHz"
             )
-            print(f"(shift of {freq_shift.sel(qubit = q.name).values/1e6:.0f} MHz)")
-            print(f"quad term for qubit {q.name} is {float(coeff.sel(degree = 2, qubit = q.name)/1e9):.3e} GHz/V^2 \n")
-            fit_results[q.name]["flux_shift"] = float(flux_shift.sel(qubit=q.name).values)
-            fit_results[q.name]["drive_freq"] = float(freq_shift.sel(qubit=q.name).values)
-            fit_results[q.name]["quad_term"] = float(coeff.sel(degree=2, qubit=q.name))
+            print(f"(shift of {drive_freq/1e6:.0f} MHz)")
+            print(f"quad term for qubit {q.name} is {quad_term/1e9:.3e} GHz/V^2")
+            print(f"sweetspot_freq for {q.name} is {sweetspot_freq/1e9:.6f} GHz")
+            print(f"sweet_offset for {q.name} is {sweet_offset*1e3:.3f} mV")
+            print(f"flux/phase ratio for {q.name} is {flux_phase_ratio:.6e} \n")
+            fit_results[q.name]["flux_shift"] = flux_shift_q
+            fit_results[q.name]["drive_freq"] = drive_freq
+            fit_results[q.name]["quad_term"] = quad_term
+            fit_results[q.name]["sweetspot_freq"] = sweetspot_freq
+            fit_results[q.name]["sweet_offset"] = sweet_offset
+            fit_results[q.name]["flux_phase_ratio"] = flux_phase_ratio
         else:
             print(f"No fit for qubit {q.name}")
             fit_results[q.name]["flux_shift"] = np.nan
             fit_results[q.name]["drive_freq"] = np.nan
             fit_results[q.name]["quad_term"] = np.nan
+            fit_results[q.name]["sweetspot_freq"] = np.nan
+            fit_results[q.name]["sweet_offset"] = np.nan
+            fit_results[q.name]["flux_phase_ratio"] = np.nan
     node.results["fit_results"] = fit_results
 
     # %% {Plotting}
@@ -296,7 +311,6 @@ if not node.parameters.simulate:
     if node.parameters.load_data_id is None:
         with node.record_state_updates():
             for q in qubits:
-                # if q.name in ['q3', 'q5']:
                 if not np.isnan(flux_shift.sel(qubit=q.name).values):
                     if flux_point == "independent":
                         q.z.independent_offset += fit_results[q.name]["flux_shift"]
@@ -304,9 +318,12 @@ if not node.parameters.simulate:
                             q.z.joint_offset += fit_results[q.name]["flux_shift"]
                             q.z.independent_offset = q.z.joint_offset - q.phi0_voltage / 2 
                     elif flux_point == "joint":
-                        q.z.joint_offset += fit_results[q.name]["flux_shift"]
+                        q.z.joint_offset += fit_results[q.name]["flux_shift"] / 2
                     q.xy.intermediate_frequency += fit_results[q.name]["drive_freq"]
                     q.freq_vs_flux_01_quad_term = fit_results[q.name]["quad_term"]
+                    q.extras["sweetspot_freq"] = fit_results[q.name]["sweetspot_freq"]
+                    q.extras["sweet_offset"] = fit_results[q.name]["sweet_offset"]
+                    q.extras["flux_phase_ratio"] = fit_results[q.name]["flux_phase_ratio"]
 
     # %% {Save_results}
     node.results["ds"] = ds
