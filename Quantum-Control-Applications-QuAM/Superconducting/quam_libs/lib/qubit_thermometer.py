@@ -34,6 +34,25 @@ class FunctionFitting(ABC):
         """Return the model evaluated at x using current parameters."""
         return self.model(x)
 
+def prepare_ground_state_for_qcat(ds):
+    """
+    Only for prepared ground state data.
+
+    Requirements:
+    - The given ds must have variables 'I_g' and 'Q_g' for the ground state measurements.
+    - Have dimensions 'N' and 'prepared_state'.
+    """
+    # 假設新資料中只有 I_g 和 Q_g (或是你把你想測的變數對應到這裡)
+    # 將同一份資料 concat 兩次，創造出 prepared_state = [0, 1] 的假象
+    I = xr.concat([ds.I_g, ds.I_g], dim="prepared_state").assign_coords(prepared_state=[0, 1])
+    Q = xr.concat([ds.Q_g, ds.Q_g], dim="prepared_state").assign_coords(prepared_state=[0, 1])
+    
+    # 建立新的 Dataset 並重命名維度 N 為 shot_idx
+    new_ds = xr.Dataset({"I": I, "Q": Q})
+    new_ds = new_ds.rename({"N": "shot_idx"})
+    
+    return new_ds
+
 
 def prepare_dataset_for_qcat(ds):
     """
