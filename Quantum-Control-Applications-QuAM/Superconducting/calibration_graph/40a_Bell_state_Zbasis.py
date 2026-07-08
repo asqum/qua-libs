@@ -137,16 +137,16 @@ with program() as CPhase_Oscillations:
             # reset
             if not node.parameters.simulate:
                 if node.parameters.reset_type == "active":
-                    # active_reset(qp.qubit_control)
-                    # active_reset(qp.qubit_target)
+                    active_reset(qp.qubit_control)
+                    active_reset(qp.qubit_target)
                     # qp.align()
-                    wait(2*qp.qubit_control.thermalization_time * u.ns)
-                    active_reset_simple(qp.qubit_control)
-                    active_reset_simple(qp.qubit_target)
-                    active_reset_simple(qp.qubit_control)
-                    active_reset_simple(qp.qubit_target)                       
-            else:
-                wait(16 * u.ns)
+                    # wait(2*qp.qubit_control.thermalization_time * u.ns)
+                    # active_reset_simple(qp.qubit_control)
+                    # active_reset_simple(qp.qubit_target)
+                    # active_reset_simple(qp.qubit_control)
+                    # active_reset_simple(qp.qubit_target)                       
+                else:
+                    wait(5*qp.qubit_control.thermalization_time * u.ns)
             qp.align()
             # Bell state
             if node.parameters.circuit == "BELL1":

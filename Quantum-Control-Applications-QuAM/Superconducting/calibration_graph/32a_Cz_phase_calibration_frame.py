@@ -66,7 +66,7 @@ class Parameters(NodeParameters):
     num_averages: int = 100
     flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
     reset_type: Literal['active', 'thermal'] = "active"
-    simulate: bool = True
+    simulate: bool = False
     timeout: int = 100
     amp_range : float = 0.08
     amp_step : float = 0.002

@@ -224,12 +224,12 @@ if not node.parameters.simulate:
             }
         )
     else:
-            load_data_id = node.parameters.load_data_id
-            node = node.load_from_id(load_data_id)
-            ds = node.results["ds"]
-            restore_load_data_id(node, load_data_id)
-            machine = node.machine
-            qubits = resolve_qubits_from_node(machine, node)
+        load_data_id = node.parameters.load_data_id
+        node = node.load_from_id(load_data_id)
+        ds = node.results["ds"]
+        restore_load_data_id(node, load_data_id)
+        machine = node.machine
+        qubits = resolve_qubits_from_node(machine, node)
     # Add the dataset to the node
     node.results = {"ds": ds}
 

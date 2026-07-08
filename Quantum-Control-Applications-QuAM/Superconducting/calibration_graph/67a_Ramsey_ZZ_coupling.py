@@ -166,10 +166,11 @@ with program() as Ramsey_ZZ_coupling:
         q_target = qp.qubit_target
         XY_delay = q_target.xy.opx_output.delay + 4  # Delay to account delayed pulses in the XY channel
         # Bring the active qubits to the minimum frequency point
-        machine.set_all_fluxes(flux_point, qp)
-        if reset_coupler_bias:
-            qp.coupler.set_dc_offset(0.0)
         if not node.parameters.simulate:
+            machine.set_all_fluxes(flux_point, qp)
+            if reset_coupler_bias:
+                qp.coupler.set_dc_offset(0.0)
+        
             wait(1000)
 
         with for_(n, 0, n < n_avg, n + 1):

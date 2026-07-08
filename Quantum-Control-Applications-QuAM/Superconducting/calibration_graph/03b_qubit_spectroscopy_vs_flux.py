@@ -318,7 +318,7 @@ if not node.parameters.simulate:
                             q.z.joint_offset += fit_results[q.name]["flux_shift"]
                             q.z.independent_offset = q.z.joint_offset - q.phi0_voltage / 2 
                     elif flux_point == "joint":
-                        q.z.joint_offset += fit_results[q.name]["flux_shift"] / 2
+                        q.z.joint_offset += fit_results[q.name]["flux_shift"]
                     q.xy.intermediate_frequency += fit_results[q.name]["drive_freq"]
                     q.freq_vs_flux_01_quad_term = fit_results[q.name]["quad_term"]
                     q.extras["sweetspot_freq"] = fit_results[q.name]["sweetspot_freq"]

@@ -197,12 +197,12 @@ if not node.parameters.simulate:
         ds = ds.assign_coords(idle_time=4 * ds.idle_time / u.us)  # convert to µs
         ds.idle_time.attrs = {"long_name": "idle time", "units": "µs"}
     else:
-            load_data_id = node.parameters.load_data_id
-            node = node.load_from_id(load_data_id)
-            ds = node.results["ds"]
-            restore_load_data_id(node, load_data_id)
-            machine = node.machine
-            qubits = resolve_qubits_from_node(machine, node)
+        load_data_id = node.parameters.load_data_id
+        node = node.load_from_id(load_data_id)
+        ds = node.results["ds"]
+        restore_load_data_id(node, load_data_id)
+        machine = node.machine
+        qubits = resolve_qubits_from_node(machine, node)
     # Add the dataset to the node
     node.results = {"ds": ds}
 

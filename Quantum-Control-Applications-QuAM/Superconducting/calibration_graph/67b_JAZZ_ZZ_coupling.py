@@ -155,8 +155,8 @@ with program() as Ramsey_ZZ_coupling:
         q_control = qp.qubit_control
         q_target = qp.qubit_target
         # Bring the active qubits to the minimum frequency point
-        machine.set_all_fluxes(flux_point, qp)
         if not node.parameters.simulate:
+            machine.set_all_fluxes(flux_point, qp)
             wait(1000)
 
         with for_(n, 0, n < n_avg, n + 1):
@@ -292,25 +292,25 @@ if not node.parameters.simulate:
             })
             ds = ds.assign_coords(idle_time=4 * idle_times / 1e3)
         else:
-                if "flux_coupler_full" not in ds.coords:
-                    fluxes_coupler = np.linspace(
-                        -node.parameters.flux_span / 2,
-                        node.parameters.flux_span / 2,
-                        node.parameters.flux_num,
-                    )
-                    flux_coupler_full = np.array([
-                        fluxes_coupler + qp.coupler.decouple_offset for qp in qubit_pairs
-                    ])
-                    ds = ds.assign_coords({
-                        "flux_coupler_full": (["qubit", "flux_coupler"], flux_coupler_full)
-                    })
-                if "idle_time" not in ds.coords:
-                    idle_times = np.arange(
-                        node.parameters.min_wait_time_in_ns // 4,
-                        node.parameters.max_wait_time_in_ns // 4,
-                        node.parameters.wait_time_step_in_ns // 4,
-                    )
-                    ds = ds.assign_coords(idle_time=4 * idle_times / 1e3)
+            if "flux_coupler_full" not in ds.coords:
+                fluxes_coupler = np.linspace(
+                    -node.parameters.flux_span / 2,
+                    node.parameters.flux_span / 2,
+                    node.parameters.flux_num,
+                )
+                flux_coupler_full = np.array([
+                    fluxes_coupler + qp.coupler.decouple_offset for qp in qubit_pairs
+                ])
+                ds = ds.assign_coords({
+                    "flux_coupler_full": (["qubit", "flux_coupler"], flux_coupler_full)
+                })
+            if "idle_time" not in ds.coords:
+                idle_times = np.arange(
+                    node.parameters.min_wait_time_in_ns // 4,
+                    node.parameters.max_wait_time_in_ns // 4,
+                    node.parameters.wait_time_step_in_ns // 4,
+                )
+                ds = ds.assign_coords(idle_time=4 * idle_times / 1e3)
 
         fit_curve_list = []
         chiZZ_list = []
