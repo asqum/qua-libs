@@ -43,7 +43,7 @@ import numpy as np
 # %% {Node_parameters}
 class Parameters(NodeParameters):
 
-    qubits: Optional[List[str]] = ['q1']
+    qubits: Optional[List[str]] = None
     num_averages: int = 100
     operation: str = "saturation"
     operation_amplitude_factor: Optional[float] = 0.013 #0.004, 0.02 # q6:3e-3, q7:1e-2, q8:3e-3, q9:***,

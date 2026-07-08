@@ -172,14 +172,14 @@ with program() as CPhase_Oscillations:
         qp.gates["Cz"].phase_shift_control = 0.0
         qp.gates["Cz"].phase_shift_target = 0.0
         # Bring the active qubits to the minimum frequency point
-        if flux_point == "independent":
-            machine.apply_all_flux_to_min()
-            # qp.apply_mutual_flux_point()
-        elif flux_point == "joint":
-            machine.apply_all_flux_to_joint_idle()
-        else:
-            machine.apply_all_flux_to_zero()
         if not node.parameters.simulate:
+            if flux_point == "independent":
+                machine.apply_all_flux_to_min()
+                # qp.apply_mutual_flux_point()
+            elif flux_point == "joint":
+                machine.apply_all_flux_to_joint_idle()
+            else:
+                machine.apply_all_flux_to_zero()
             wait(1000)
 
         with for_(n, 0, n < n_avg, n + 1):

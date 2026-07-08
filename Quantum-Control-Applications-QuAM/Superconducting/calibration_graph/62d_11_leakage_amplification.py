@@ -150,10 +150,10 @@ with program() as leakage_amplification:
         qp.gates[operation_name].phase_shift_control = 0.0
         qp.gates[operation_name].phase_shift_target = 0.0
         # Bring the active qubits to the minimum frequency point
-        machine.set_all_fluxes(flux_point, qp)
-        if reset_coupler_bias:
-            qp.coupler.set_dc_offset(0.0)
         if not node.parameters.simulate:
+            machine.set_all_fluxes(flux_point, qp)
+            if reset_coupler_bias:
+                qp.coupler.set_dc_offset(0.0)
             wait(1000)
 
         with for_(n, 0, n < n_avg, n + 1):
