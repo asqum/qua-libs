@@ -16,8 +16,10 @@ target gate by comparing the decay rates of the interleaved sequences with refer
 Key Features:
     - reduce_to_1q_cliffords: When enabled (default), the Clifford gates are sampled as 1q Cliffords per qubit 
       (this is of course a much smaller subset of the whole 2q Clifford group).
-    - use_input_stream: When enabled (default), the circuit sequences are streamed to the OPX in using the 
-      input stream feature. This allows for dynamic circuit execution and reduces memory usage on the OPX.
+    - use_input_stream: When enabled, the circuit sequences are streamed to the OPX chunk-by-chunk (one chunk
+      per circuit depth) using the QUA input-stream feature (advance_input_stream) instead of being declared
+      as a single large array. This bypasses the OPX's QUA variable budget cap on declared arrays, enabling
+      longer circuit depths and/or more circuits per depth than the without-input-stream path can support.
 
 Each sequence is played multiple times for averaging, and multiple random sequences are generated for each depth to 
 improve statistical significance. The data is then post-processed to extract both the two-qubit Clifford fidelity and 
@@ -77,6 +79,8 @@ class Parameters(NodeParameters):
     flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
     reset_type_thermal_or_active: Literal["thermal", "active", "active_gef"] = "active"
     reduce_to_1q_cliffords: bool = False
+    use_input_stream: bool = False
+    max_chunk_ints: int = 15000
     simulate: bool = False
     simulation_duration_ns: int = 10000
     load_data_id: Optional[int] = None
@@ -131,6 +135,17 @@ for circuits_per_len in transpiled_circuits_as_ints.values():
         circuit_with_measurement = circuit + [66] # readout
         circuits_as_ints.append(circuit_with_measurement)
 
+total_circuits = len(circuits_as_ints)
+total_circuit_executions = total_circuits * node.parameters.num_averages
+print("=== 2Q Interleaved RB circuit summary ===")
+print(f"Target gate: {node.parameters.target_gate}")
+print(f"Circuit depths: {list(node.parameters.circuit_lengths)}")
+print(f"Circuits per depth: {node.parameters.num_circuits_per_length}")
+print(f"Total number of circuits (per qubit pair): {total_circuits}")
+print(f"Number of averages per circuit: {node.parameters.num_averages}")
+print(f"Total circuit executions (per qubit pair): {total_circuits} x {node.parameters.num_averages} = {total_circuit_executions}")
+print("==========================================")
+
 # %% {QUA_program}
 
 num_pairs = len(qubit_pairs)
@@ -138,6 +153,9 @@ num_pairs = len(qubit_pairs)
 qua_program_handler = QuaProgramHandler(node, num_pairs, circuits_as_ints, node.machine, qubit_pairs)
 
 rb = qua_program_handler.get_qua_program()
+
+if node.parameters.use_input_stream:
+    print(f"Total input-stream pushes (all qubit pairs): {qua_program_handler.n_sub_chunks} x {num_pairs} = {qua_program_handler.total_pushes}")
 
 # %% {Simulate_or_execute}
 if node.parameters.simulate:
@@ -151,13 +169,27 @@ elif node.parameters.load_data_id is None:
     date_time = datetime.now(timezone(timedelta(hours=3))).strftime("%Y-%m-%d %H:%M:%S")
     
     with qm_session(node.machine.qmm, config, timeout=node.parameters.timeout) as qm:
-        job = qm.execute(rb)
+        if node.parameters.use_input_stream:
+            padded_chunks = qua_program_handler.get_all_padded_chunks_for_all_pairs()
+            if node.machine.network.get('cloud', False):
+                write_sync_hook(padded_chunks)
+                job = qm.execute(rb, terminal_output=True, options={"sync_hook": "sync_hook.py"})
+            else:
+                job = qm.execute(rb)
+                qua_program_handler.push_all_chunks(job)
+        else:
+            job = qm.execute(rb)
+
         results = fetching_tool(job, ["iteration"], mode="live")
         while results.is_processing():
-            # Fetch results
             n = results.fetch_all()[0]
-            # Progress bar
-            progress_counter(n, node.parameters.num_averages, start_time=results.start_time)
+            # Progress bar: with input streams, "iteration" counts host pushes
+            # (advance_input_stream calls, i.e. depth/sub-chunk boundaries) across all
+            # qubit pairs. Without input streams, it counts completed averages.
+            if node.parameters.use_input_stream:
+                progress_counter(n, qua_program_handler.total_pushes, start_time=results.start_time)
+            else:
+                progress_counter(n, node.parameters.num_averages, start_time=results.start_time)
 
 # %% {Plot_sequence}
 
@@ -175,10 +207,26 @@ if node.parameters.simulate:
 
  # %% {Data_fetching_and_dataset_creation}
 if node.parameters.load_data_id is None:
+    if node.parameters.use_input_stream:
+        # With input streams, the QUA program advances one (depth) chunk at a time and
+        # replays every shot before advancing, so the raw save order is depth-major,
+        # then shot, then sequence (see QuaProgramHandler._get_qua_program_with_input_stream).
+        # fetch_results_as_xarray reverses the dict order, so pass it reversed here too.
+        measurement_axis = {
+            "sequence": range(node.parameters.num_circuits_per_length),
+            "shots": range(node.parameters.num_averages),
+            "depths": list(node.parameters.circuit_lengths),
+        }
+    else:
+        measurement_axis = {
+            "sequence": range(node.parameters.num_circuits_per_length),
+            "depths": list(node.parameters.circuit_lengths),
+            "shots": range(node.parameters.num_averages),
+        }
     ds = fetch_results_as_xarray(
     job.result_handles,
     qubit_pairs,
-        { "sequence": range(node.parameters.num_circuits_per_length), "depths": list(node.parameters.circuit_lengths), "shots": range(node.parameters.num_averages)},
+        measurement_axis,
     )
 else:
     load_data_id = node.parameters.load_data_id
