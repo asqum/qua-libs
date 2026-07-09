@@ -173,13 +173,14 @@ with program() as CPhase_Oscillations:
             with for_(*from_array(flux_coupler, fluxes_coupler)):
                 with for_(*from_array(idle_time, idle_times)):
                     # reset
-                    if node.parameters.reset_type == "active":
-                            active_reset_simple(qp.qubit_control)
-                            active_reset_simple(qp.qubit_target)
-                            qp.align()
-                    else:
-                        wait(qp.qubit_control.thermalization_time * u.ns)
-                        wait(qp.qubit_target.thermalization_time * u.ns)
+                    if not node.parameters.simulate:
+                        if node.parameters.reset_type == "active":
+                                active_reset_simple(qp.qubit_control)
+                                active_reset_simple(qp.qubit_target)
+                                qp.align()
+                        else:
+                            wait(qp.qubit_control.thermalization_time * u.ns)
+                            wait(qp.qubit_target.thermalization_time * u.ns)
                     
                     
                     if "coupler_qubit_crosstalk" in qp.extras:

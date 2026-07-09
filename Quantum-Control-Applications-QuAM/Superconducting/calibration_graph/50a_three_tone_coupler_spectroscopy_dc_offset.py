@@ -159,14 +159,15 @@ with program() as multi_res_spec_vs_flux:
                 qubit_control = qp.qubit_control
                 qubit_target = qp.qubit_target
 
-                if node.parameters.reset_type == "active":
-                    active_reset_simple(qubit_control)
-                    active_reset_simple(qubit_target)
-                    qp.align()
-                else:
-                    qubit_control.wait(qubit_control.thermalization_time * u.ns)
-                    qubit_target.wait(qubit_target.thermalization_time * u.ns)
-                    qp.align()
+                if not node.parameters.simulate:
+                    if node.parameters.reset_type == "active":
+                        active_reset_simple(qubit_control)
+                        active_reset_simple(qubit_target)
+                        qp.align()
+                    else:
+                        qubit_control.wait(qubit_control.thermalization_time * u.ns)
+                        qubit_target.wait(qubit_target.thermalization_time * u.ns)
+                        qp.align()
 
                 # update the frequency of the control qubit to couler drive frequency
                 qubit_control.xy.update_frequency(df + coupler_IFs[qp.name])

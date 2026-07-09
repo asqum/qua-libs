@@ -99,24 +99,27 @@ with program() as t1:
         state = [declare(int) for _ in range(num_qubits)]
         state_st = [declare_stream() for _ in range(num_qubits)]
 
-    machine.apply_all_couplers_to_min()
+    if not node.parameters.simulate:
+        machine.apply_all_couplers_to_min()
     for i, qubit in enumerate(qubits):
 
-        # Bring the active qubits to the desired frequency point
-        machine.set_all_fluxes(flux_point=flux_point, target=qubit)
-        if "c" in qubit.id: qubit.z.set_dc_offset(qubit.z.joint_offset) # for coupler-test case
-        qubit.z.settle()
+        if not node.parameters.simulate:
+            # Bring the active qubits to the desired frequency point
+            machine.set_all_fluxes(flux_point=flux_point, target=qubit)
+            if "c" in qubit.id: qubit.z.set_dc_offset(qubit.z.joint_offset) # for coupler-test case
+            qubit.z.settle()
         qubit.align()
 
         with for_(n, 0, n < n_avg, n + 1):
             save(n, n_st)
             with for_(*from_array(t, idle_times)):
-                if node.parameters.reset_type == "active":
-                    # active_reset(qubit, "readout")
-                    active_reset_simple(qubit, "readout")
-                else:
-                    qubit.resonator.wait(qubit.thermalization_time * u.ns)
-                    qubit.align()
+                if not node.parameters.simulate:
+                    if node.parameters.reset_type == "active":
+                        # active_reset(qubit, "readout")
+                        active_reset_simple(qubit, "readout")
+                    else:
+                        qubit.resonator.wait(qubit.thermalization_time * u.ns)
+                        qubit.align()
 
                 qubit.xy.play("x180")
                 qubit.align()

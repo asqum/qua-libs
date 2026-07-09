@@ -128,12 +128,13 @@ with program() as t2_echo_vs_coupler_flux:
             save(n, n_st)
             with for_(*from_array(flux_coupler, fluxes_coupler)):
                 with for_(*from_array(t, idle_times)):
-                    if node.parameters.reset_type == "active":
-                        active_reset(qubit, "readout")
-                        qubit_pair.align()
-                    else:
-                        qubit.resonator.wait(qubit.thermalization_time * u.ns)
-                        qubit_pair.align()
+                    if not node.parameters.simulate:
+                        if node.parameters.reset_type == "active":
+                            active_reset(qubit, "readout")
+                            qubit_pair.align()
+                        else:
+                            qubit.resonator.wait(qubit.thermalization_time * u.ns)
+                            qubit_pair.align()
 
                     if "coupler_qubit_crosstalk" in qubit_pair.extras:
                         assign(

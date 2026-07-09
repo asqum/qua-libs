@@ -200,18 +200,20 @@ with program() as GHZ_tomography:
     tomo_axes = [declare(int) for _ in range(num_qubits)]
 
     for i, qg in enumerate(qubit_groups_for_qua):
-        # Bring the active qubits to the minimum frequency point
-        machine.apply_all_flux_to_joint_idle()
-        wait(1000)
+        if not node.parameters.simulate:
+            # Bring the active qubits to the minimum frequency point
+            machine.apply_all_flux_to_joint_idle()
+            wait(1000)
 
         with for_(n, 0, n < n_shots, n + 1):
             save(n, n_st)
             with nested_tomo_loops(tomo_axes):
-                if node.parameters.reset_type == "active":
-                    for q in qg.qubits:
-                        active_reset(q)
-                else:
-                    wait(5 * qg.max_thermalization_time * u.ns)
+                if not node.parameters.simulate:
+                    if node.parameters.reset_type == "active":
+                        for q in qg.qubits:
+                            active_reset(q)
+                    else:
+                        wait(5 * qg.max_thermalization_time * u.ns)
                 align()
 
                 # GHZ state preparation for any number of qubits >= 2.

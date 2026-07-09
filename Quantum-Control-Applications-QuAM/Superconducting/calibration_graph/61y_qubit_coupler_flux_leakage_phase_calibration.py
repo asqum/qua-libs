@@ -127,13 +127,14 @@ with program() as coupler_leakage_phase_calibration:
             with for_(*from_array(amp_coupler, coupler_amp_scales)):
                 with for_(*from_array(amp_qubit, qubit_amp_scales)):
                     # --- Leakage measurement ---
-                    if node.parameters.reset_type == "active":
-                        active_reset(qp.qubit_control)
-                        active_reset(qp.qubit_target)
-                        qp.align()
-                    else:
-                        wait(qp.qubit_control.thermalization_time * u.ns)
-                        wait(qp.qubit_target.thermalization_time * u.ns)
+                    if not node.parameters.simulate:
+                        if node.parameters.reset_type == "active":
+                            active_reset(qp.qubit_control)
+                            active_reset(qp.qubit_target)
+                            qp.align()
+                        else:
+                            wait(qp.qubit_control.thermalization_time * u.ns)
+                            wait(qp.qubit_target.thermalization_time * u.ns)
                     align()
                     qp.qubit_control.xy.play("x180")
                     qp.qubit_target.xy.play("x180")
@@ -152,13 +153,14 @@ with program() as coupler_leakage_phase_calibration:
                     # --- Phase measurement (Ramsey-style) ---
                     with for_(*from_array(frame, frames)):
                         with for_(*from_array(control_initial, [0, 1])):
-                            if node.parameters.reset_type == "active":
-                                active_reset(qp.qubit_control)
-                                active_reset(qp.qubit_target)
-                                qp.align()
-                            else:
-                                wait(qp.qubit_control.thermalization_time * u.ns)
-                                wait(qp.qubit_target.thermalization_time * u.ns)
+                            if not node.parameters.simulate:
+                                if node.parameters.reset_type == "active":
+                                    active_reset(qp.qubit_control)
+                                    active_reset(qp.qubit_target)
+                                    qp.align()
+                                else:
+                                    wait(qp.qubit_control.thermalization_time * u.ns)
+                                    wait(qp.qubit_target.thermalization_time * u.ns)
                             qp.align()
                             reset_frame(qp.qubit_target.xy.name)
                             reset_frame(qp.qubit_control.xy.name)

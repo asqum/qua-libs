@@ -1,34 +1,9 @@
 # %%
 """
-Two-Qubit ZZ Coupling Measurement
+Two-Qubit ZZ Coupling Measurement (JAZZ, differential control-state readout)
 
-This experiment measures the static ZZ interaction (cross-Kerr coupling) between two qubits connected via a tunable coupler. 
-The ZZ coupling quantifies the conditional frequency shift experienced by one qubit depending on the state of the other qubit. 
-For each coupler flux bias, we measure, population of the target qubit as a function of idle time in the JAZZ sequence. 
-The ZZ interaction introduces a relative phase ϕ accumulated on the superposition state of target qubit, |0⟩ + e^iϕ |1⟩, which can be read out, 
-P|0⟩ = (1 − cos ϕ) /2. 
-Therefore, the population is oscillating with the duration t, where t/2 is defined as the pulse duration of the applied Z-pulse.
-The phase can ebe simply expressed as ϕ =  ζ_ZZ t/2 + ϕ0, where the first term arises from the ZZ interaction and second term ϕ0 is due to any detuning between 
-the qubit drive frequency and the qubit frequency (f0). 
-With the frequency f extracted from fitting the the oscillating signal P|0⟩, the ZZ interaction is calculated as ζ = 2(f − f0).
-
-The process involves:
-1. Performing a JAZZ (Joint Amplification of ZZ interaction) pulse sequence (PHYS. REV. X 14, 041050 (2024)).
-2. Repeating the measurement while varying the coupler flux bias.
-
-
-The outcome of this measurement will be used to:
-1. Identify the coupler flux bias point where ζ_ZZ ≈ 0 (the “zero-ZZ” operating point).
-2. Quantify unwanted static interactions affecting single- and two-qubit gate fidelities.
-
-Prerequisites:
-- Calibrated single-qubit X/Y gates for both qubits.
-- Known qubit frequencies.
-- Qubit frq vs coupler flux trend rougnly known.
-
-Outcomes:
-- ζ_ZZ as a function of coupler flux bias.
-- Identification of the zero-ZZ operating point.
+Corrected variant of 67b_JAZZ_ZZ_coupling: sweeps control qubit prepared in |0⟩ and |1⟩,
+then extracts χZZ from the difference of fitted oscillation frequencies divided by 2.
 """
 
 # %% {Imports}
@@ -61,34 +36,34 @@ from quam_libs.lib.fit import fit_oscillation_decay_exp, oscillation_decay_exp
 import xarray as xr
 
 # %% {Node_parameters}
-qubit_pair_indexes = [1, 2, 3, 4]  # The indexes of the qubit pairs to measure
+qubit_pair_indexes = [4]  # The indexes of the qubit pairs to measure
 class Parameters(NodeParameters):
 
     qubit_pairs: Optional[List[str]] = ["coupler_q%s_q%s"%(i,i+1) for i in qubit_pair_indexes]
-    num_averages: int = 20
+    num_averages: int = 200
     flux_point_joint_or_independent_or_pairwise: Literal["joint", "independent", "pairwise"] = "joint"
-    reset_type: Literal['active', 'thermal'] = 'thermal'
+    reset_type: Literal['active', 'thermal'] = 'active'
     simulate: bool = False
     timeout: int = 100
     load_data_id: Optional[int] = None
-    frequency_detuning_in_mhz: float = 3.0
+    frequency_detuning_in_mhz: float = 4.0
     """Frequency detuning in MHz. Default is 1.0 MHz."""
     min_wait_time_in_ns: int = 16
     """Minimum wait time in nanoseconds. Default is 16."""
-    max_wait_time_in_ns: int = 4016
+    max_wait_time_in_ns: int = 816
     """Maximum wait time in nanoseconds. Default is 5000."""
-    wait_time_step_in_ns: int = 40
+    wait_time_step_in_ns: int = 8
     """Step size for the wait time scan in nanoseconds. Default is 60."""
-    flux_span: float = 0.2
+    flux_span: float = 0.6
     """Span of flux values to sweep in volts. Default is 0.01 V."""
-    flux_num: int = 81
+    flux_num: int = 501
     """Number of flux points to sample. Default is 21."""
-    use_state_discrimination: bool = False
+    use_state_discrimination: bool = True
 
     
 
 node = QualibrationNode(
-    name="67b_JAZZ_ZZ_coupling", parameters=Parameters()
+    name="67bx_JAZZ_ZZ_coupling_correct", parameters=Parameters()
 )
 assert not (node.parameters.simulate and node.parameters.load_data_id is not None), "If simulate is True, load_data_id must be None, and vice versa."
 
@@ -97,7 +72,6 @@ assert not (node.parameters.simulate and node.parameters.load_data_id is not Non
 u = unit(coerce_to_integer=True)
 # Instantiate the QuAM class from the state file
 machine = QuAM.load()
-node.machine = machine
 
 # Get the relevant QuAM components
 if node.parameters.qubit_pairs is None or node.parameters.qubit_pairs == "":
@@ -141,7 +115,6 @@ with program() as Ramsey_ZZ_coupling:
     t = declare(int)  # QUA variable for the idle time
     t_half = declare(int)
     phi = declare(fixed)  # QUA variable for dephasing the second pi/2 pulse (virtual Z-rotation)
-    init_state = [declare(int) for _ in range(num_qubit_pairs)]
     current_state = [declare(int) for _ in range(num_qubit_pairs)]
     state_target = [declare(int) for _ in range(num_qubit_pairs)]
     I_target = [declare(float) for _ in range(num_qubit_pairs)]
@@ -163,76 +136,77 @@ with program() as Ramsey_ZZ_coupling:
             save(n, n_st)
             with for_(*from_array(flux_coupler, fluxes_coupler)):
                 with for_(*from_array(t, idle_times)):
-                    # Rotate the frame of the second x90 gate to implement a virtual Z-rotation
-                    # 4*tau because tau was in clock cycles and 1e-9 because tau is ns                    
-                    assign(phi, Cast.mul_fixed_by_int(detuning * 1e-9, 4 * t))
-                    
-                    assign(t_half, t/2)
-                    
-                    if not node.parameters.simulate:
-                        if node.parameters.reset_type == "active":
-                            active_reset(qp.qubit_control)
-                            active_reset(qp.qubit_target)
+                    with for_(*from_array(control_initial, [0, 1])):
+                        # Rotate the frame of the second x90 gate to implement a virtual Z-rotation
+                        # 4*tau because tau was in clock cycles and 1e-9 because tau is ns                    
+                        assign(phi, Cast.mul_fixed_by_int(detuning * 1e-9, 4 * t))
+                        
+                        assign(t_half, t/2)
+                        
+                        if not node.parameters.simulate:
+                            if node.parameters.reset_type == "active":
+                                active_reset(qp.qubit_control)
+                                active_reset(qp.qubit_target)
+                            else:
+                                wait(qp.qubit_control.thermalization_time * u.ns)
+                        qp.align()
+                        
+                        # Reset the frames of both qubits
+                        reset_frame(qp.qubit_target.xy.name)
+                        reset_frame(qp.qubit_control.xy.name)
+
+                        # Prepare control qubit in |1⟩ when control_initial == 1
+                        qp.qubit_control.xy.play("x180", condition=control_initial == 1)
+                        qp.align()
+                        
+                        # pi pulse on target qubit
+                        qp.qubit_target.xy.play("x90")
+                        qp.align()
+                        
+                        # Coupler flux pulse
+                        qp.coupler.play(
+                            "const", amplitude_scale=flux_coupler / qp.coupler.operations["const"].amplitude, duration=t_half
+                        )
+                        qp.qubit_target.xy.wait(t_half)
+                        qp.qubit_control.xy.wait(t_half)
+                        
+                        # Echo pulse
+                        qp.qubit_control.xy.play("x180")
+                        qp.qubit_target.xy.play("x180")
+                        qp.coupler.wait(qp.qubit_target.xy.operations["x180"].length//4)
+                        
+                        # Coupler flux pulse
+                        qp.coupler.play(
+                            "const", amplitude_scale=flux_coupler / qp.coupler.operations["const"].amplitude, duration=t_half
+                        )
+                        qp.qubit_target.xy.wait(t_half)
+                        qp.qubit_control.xy.wait(t_half)
+                        
+                        # rotate the frame
+                        qp.qubit_target.xy.frame_rotation_2pi(phi)
+                        # Tomographic rotation on the target qubit
+                        qp.qubit_target.xy.play("x90")
+                        qp.align() 
+                        
+                        # target qubit readout
+                        if node.parameters.use_state_discrimination:
+                            readout_state(q_target, current_state[i])
+                            save(current_state[i], state_st_target[i])
+                            reset_frame(q_target.xy.name)
                         else:
-                            wait(qp.qubit_control.thermalization_time * u.ns)
-                    qp.align()
-                    
-                    # Reset the frames of both qubits
-                    reset_frame(qp.qubit_target.xy.name)
-                    reset_frame(qp.qubit_control.xy.name)
-                    
-                    # pi pulse on target qubit
-                    qp.qubit_target.xy.play("x90")
-                    qp.align()
-                    
-                    # Coupler flux pulse
-                    qp.coupler.play(
-                        "const", amplitude_scale=flux_coupler / qp.coupler.operations["const"].amplitude, duration=t_half
-                    )
-                    qp.qubit_target.xy.wait(t_half)
-                    qp.qubit_control.xy.wait(t_half)
-                    # qp.align()
-                    
-                    # Echo pulse
-                    qp.qubit_control.xy.play("x180")
-                    qp.qubit_target.xy.play("x180")
-                    qp.coupler.wait(qp.qubit_target.xy.operations["x180"].length//4)
-                    # qp.align()
-                    
-                    # Coupler flux pulse
-                    qp.coupler.play(
-                        "const", amplitude_scale=flux_coupler / qp.coupler.operations["const"].amplitude, duration=t_half
-                    )
-                    qp.qubit_target.xy.wait(t_half)
-                    qp.qubit_control.xy.wait(t_half)
-                    # qp.align()
-                    
-                    # rotate the frame
-                    qp.qubit_target.xy.frame_rotation_2pi(phi)
-                    # Tomographic rotation on the target qubit
-                    qp.qubit_target.xy.play("x90")
-                    qp.align() 
-                    
-                    # target qubit readout
-                    if node.parameters.use_state_discrimination:
-                        readout_state(q_target, current_state[i])
-                        assign(state_target[i], init_state[i] ^ current_state[i])
-                        save(state_target[i], state_st_target[i])
-                        reset_frame(q_target.xy.name)
-                    else:
-                        q_target.resonator.measure("readout", qua_vars=(I_target[i], Q_target[i]))
-                        save(I_target[i], I_st_target[i])
-                        save(Q_target[i], Q_st_target[i])
-                    align()
+                            q_target.resonator.measure("readout", qua_vars=(I_target[i], Q_target[i]))
+                            save(I_target[i], I_st_target[i])
+                            save(Q_target[i], Q_st_target[i])
+                        align()
         
     with stream_processing():
         n_st.save("n")
         for i in range(num_qubit_pairs):
             if node.parameters.use_state_discrimination:
-                state_st_target[i].buffer(len(idle_times)).buffer(len(fluxes_coupler)).average().save(f"state_target{i + 1}")
+                state_st_target[i].buffer(2).buffer(len(idle_times)).buffer(len(fluxes_coupler)).average().save(f"state_target{i + 1}")
             else:
-                I_st_target[i].buffer(len(idle_times)).buffer(len(fluxes_coupler)).average().save(f"I_target{i + 1}")
-                Q_st_target[i].buffer(len(idle_times)).buffer(len(fluxes_coupler)).average().save(f"Q_target{i + 1}")
+                I_st_target[i].buffer(2).buffer(len(idle_times)).buffer(len(fluxes_coupler)).average().save(f"I_target{i + 1}")
+                Q_st_target[i].buffer(2).buffer(len(idle_times)).buffer(len(fluxes_coupler)).average().save(f"Q_target{i + 1}")
 
 # %% {Simulate_or_execute}
 if node.parameters.simulate:
@@ -244,6 +218,7 @@ if node.parameters.simulate:
     node.results = {"figure": plt.gcf()}
     wf_report = job.get_simulated_waveform_report()
     wf_report.create_plot(samples, plot=True, save_path=None)
+    node.machine = machine
     node.save()
 elif node.parameters.load_data_id is None:
     with qm_session(qmm, config, timeout=node.parameters.timeout) as qm:
@@ -263,7 +238,7 @@ if not node.parameters.simulate:
         ds = fetch_results_as_xarray(
             job.result_handles,
             qubit_pairs,
-            {"idle_time": idle_times, "flux_coupler": fluxes_coupler},
+            {"control_state": [0, 1], "idle_time": idle_times, "flux_coupler": fluxes_coupler},
         )
     else:
         load_data_id = node.parameters.load_data_id
@@ -337,12 +312,15 @@ if not node.parameters.simulate:
             )
             fit_curve_list.append(fitted_pair.expand_dims(qubit=[qp.name]))
 
-            chiZZ_pair = 2 * (
-                fit_data.sel(fit_vals="f") * 1e3 - node.parameters.frequency_detuning_in_mhz * 1e3
-            )
+            f0 = fit_data.sel(fit_vals="f", control_state=0)
+            f1 = fit_data.sel(fit_vals="f", control_state=1)
+            chiZZ_pair = (f1 - f0) * 1e3  # MHz → kHz, differential χZZ
             chiZZ_list.append(chiZZ_pair.expand_dims(qubit=[qp.name]))
 
-            chiZZ_std_pair = 1e3 * np.sqrt(fit_data.sel(fit_vals="f_f"))
+            chiZZ_std_pair = 1e3 / 2 * np.sqrt(
+                fit_data.sel(fit_vals="f_f", control_state=0)
+                + fit_data.sel(fit_vals="f_f", control_state=1)
+            )
             chiZZ_std_list.append(chiZZ_std_pair.expand_dims(qubit=[qp.name]))
 
             chiZZ_std_filt = chiZZ_std_pair.where(chiZZ_std_pair < chiZZ_std_pair.median() * 2)
@@ -398,24 +376,25 @@ if not node.parameters.simulate:
         target_signal_name = "state_target" if "state_target" in ds_pair.data_vars else "I_target"
         raw_data_label = "State probability" if target_signal_name == "state_target" else "I quadrature [a.u.]"
 
-        fig, ax = plt.subplots(figsize=(6, 4))
-        data = ds_pair[target_signal_name]
-        im = ax.pcolormesh(
-            flux_mV,
-            idle_time_us,
-            data.transpose(),
-            shading="auto",
-            cmap="viridis",
-            vmin=0 if target_signal_name == "state_target" else None,
-            vmax=1 if target_signal_name == "state_target" else None,
-        )
-        fig.colorbar(im, ax=ax, label=raw_data_label)
-        ax.set_xlabel("Coupler flux [mV]")
-        ax.set_ylabel("Idle time [µs]")
-        ax.set_title(f"{qubit_name} – Raw Ramsey", fontsize=10)
-        plt.tight_layout()
-        node.results[f"figure_raw_{qubit_name}"] = fig
-        plt.show()
+        for ctrl in [0, 1]:
+            fig, ax = plt.subplots(figsize=(6, 4))
+            data = ds_pair[target_signal_name].sel(control_state=ctrl)
+            im = ax.pcolormesh(
+                flux_mV,
+                idle_time_us,
+                data.transpose(),
+                shading="auto",
+                cmap="viridis",
+                vmin=0 if target_signal_name == "state_target" else None,
+                vmax=1 if target_signal_name == "state_target" else None,
+            )
+            fig.colorbar(im, ax=ax, label=raw_data_label)
+            ax.set_xlabel("Coupler flux [mV]")
+            ax.set_ylabel("Idle time [µs]")
+            ax.set_title(f"{qubit_name} – Raw JAZZ (control={ctrl})", fontsize=10)
+            plt.tight_layout()
+            node.results[f"figure_raw_{qubit_name}_ctrl{ctrl}"] = fig
+            plt.show()
 
         if fit_status == "successful" and "chiZZ" in ds:
             print(f"Plotting χZZ analysis for {qubit_name}")
@@ -503,36 +482,37 @@ if not node.parameters.simulate:
                 ("min", flux_val_min, chi_min),
             ]:
                 flux_idx = int((abs(flux_full - flux_val)).argmin(dim="flux_coupler").item())
-                meas = ds_pair[target_signal_name].isel(flux_coupler=flux_idx)
-                fit = ds_pair["target_signal_fit"].isel(flux_coupler=flux_idx)
                 idle_time = ds_pair["idle_time"]
 
-                fig, axes = plt.subplots(1, 2, figsize=(8, 4), sharex=True)
-                axes[0].plot(
-                    idle_time,
-                    meas,
-                    "-",
-                    alpha=0.8,
-                )
-                axes[1].plot(
-                    idle_time,
-                    fit,
-                    "-",
-                    lw=2,
-                )
-                axes[0].set_title(f"Measured ({qubit_name})")
-                axes[1].set_title("Fitted")
-                for ax_ in axes:
-                    ax_.legend()
-                    ax_.set_xlabel("Idle time [µs]")
-                    ax_.set_ylabel("State")
-                fig.suptitle(
-                    f"{qubit_name} ({label} |χZZ|): Flux={flux_val:.3f}, χZZ={chi_val:.2f} kHz",
-                    fontsize=12,
-                )
-                plt.tight_layout(rect=[0, 0, 1, 0.96])
-                node.results[f"figure_fit_{label}_chiZZ_{qubit_name}"] = fig
-                plt.show()
+                for ctrl in [0, 1]:
+                    meas = ds_pair[target_signal_name].isel(flux_coupler=flux_idx).sel(control_state=ctrl)
+                    fit = ds_pair["target_signal_fit"].isel(flux_coupler=flux_idx).sel(control_state=ctrl)
+
+                    fig, axes = plt.subplots(1, 2, figsize=(8, 4), sharex=True)
+                    axes[0].plot(
+                        idle_time,
+                        meas,
+                        "-",
+                        alpha=0.8,
+                    )
+                    axes[1].plot(
+                        idle_time,
+                        fit,
+                        "-",
+                        lw=2,
+                    )
+                    axes[0].set_title(f"Measured ({qubit_name}, ctrl={ctrl})")
+                    axes[1].set_title("Fitted")
+                    for ax_ in axes:
+                        ax_.set_xlabel("Idle time [µs]")
+                        ax_.set_ylabel("State")
+                    fig.suptitle(
+                        f"{qubit_name} ({label} |χZZ|), ctrl={ctrl}: Flux={flux_val:.3f}, χZZ={chi_val:.2f} kHz",
+                        fontsize=12,
+                    )
+                    plt.tight_layout(rect=[0, 0, 1, 0.96])
+                    node.results[f"figure_fit_{label}_chiZZ_{qubit_name}_ctrl{ctrl}"] = fig
+                    plt.show()
 
         else:
             print(f"No χZZ analysis or failed fit for {qubit_name} — only raw data plotted.")
@@ -547,5 +527,6 @@ if node.parameters.load_data_id is None:
 if not node.parameters.simulate:
     node.outcomes = {q.name: "successful" for q in qubit_pairs}
     node.results['initial_parameters'] = node.parameters.model_dump()
+    node.machine = machine
     node.save()
 # %%
