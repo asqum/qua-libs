@@ -186,6 +186,45 @@ class CosineFluxPulse(Pulse):
 
         return waveform
 
+
+@quam_dataclass
+class ParametricFluxPulse(Pulse):
+    """Square-envelope parametric flux pulse: amplitude * cos(2*pi*frequency*t).
+
+    The envelope is flat (square) over the active region, unlike CosineFluxPulse
+    which ramps with a cosine lobe. Intended for parametric coupler modulation.
+
+    Args:
+        length (int): Total pulse length in samples, including zero padding.
+        amplitude (float): Peak amplitude scale of the pulse (V).
+        frequency (float): Modulation frequency in Hz.
+        zero_padding (int): Number of samples at the end set to zero.
+    """
+
+    amplitude: float
+    frequency: float
+    zero_padding: int = 0
+
+    def waveform_function(self):
+        if self.zero_padding > self.length:
+            raise ValueError(
+                f"Flux pulse zero padding ({self.zero_padding} ns) exceeds "
+                f"pulse length ({self.length} ns)."
+            )
+
+        active_length = self.length - self.zero_padding
+        if active_length <= 0:
+            return np.zeros(self.length)
+
+        t_s = np.arange(active_length) * 1e-9
+        waveform = self.amplitude * np.sin(2 * np.pi * self.frequency * t_s)
+
+        if self.zero_padding:
+            waveform = np.concatenate([waveform, np.zeros(self.zero_padding)])
+
+        return waveform
+
+
 @quam_dataclass
 class SNZPulse(Pulse):
     amplitude: float

@@ -461,7 +461,7 @@ elif node.parameters.load_data_id is None:
     x = 2 * (1 - ds["state_x"]) - 1
     y = 2 * (1 - ds["state_y"]) - 1
     z = 2 * (1 - ds["state_z"]) - 1
-    purity_per_sequence = x**2 + y**2 + z**2
+    purity_per_sequence = np.sqrt(x**2 + y**2 + z**2)
     da_purity = purity_per_sequence.mean(dim="sequence")
     da_purity.attrs = {"long_name": "purity (x^2+y^2+z^2 after shot average)"}
     da_purity_std = purity_per_sequence.std(dim="sequence")
