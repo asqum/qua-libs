@@ -4,7 +4,8 @@ from typing import List, Union
 
 from qiskit.circuit import QuantumCircuit
 from qiskit.converters import circuit_to_dag, dag_to_circuit
-from quam_libs.experiments.rb_standard.rb_utils import EPS
+
+EPS = 1e-8
 
 # Gate to integer mapping for single qubit gates
 SINGLE_QUBIT_GATE_MAP = {
@@ -59,6 +60,45 @@ def get_layer_integer(layer: Union[list[int, int], str]) -> int:
         return TWO_QUBIT_GATE_MAP[layer[0]]
     else:
         raise ValueError(f"Unsupported layer : {layer[0]}")
+
+def _qubit_index(qubit) -> int:
+    """Return the qubit wire index across Qiskit versions."""
+    if hasattr(qubit, "_index"):
+        return qubit._index
+    return qubit.index
+
+
+def _layer_graph_to_int(layer_graph) -> int:
+    """Convert a single DAG layer to the integer opcode used by the QUA switch_case."""
+    current_layer = [[7, 7]]
+    for node in layer_graph.topological_op_nodes():
+        instruction = node.op
+        gate_name = get_gate_name(instruction)
+        if gate_name in ("cz", "idle_2q"):
+            if current_layer != [[7, 7]]:
+                raise ValueError(f"{gate_name} gate found with single qubit gates in the layer")
+            current_layer = [gate_name]
+        elif gate_name in SINGLE_QUBIT_GATE_MAP:
+            qubit_index = _qubit_index(node.qargs[0])
+            current_layer[0][qubit_index] = SINGLE_QUBIT_GATE_MAP[gate_name]
+        else:
+            raise ValueError(f"Unsupported gate: {gate_name}")
+
+    if current_layer == [[7, 7]]:
+        raise ValueError("Encountered an empty circuit layer during encoding")
+    return get_layer_integer(current_layer)
+
+
+def circuit_to_layer_ints(qc: QuantumCircuit) -> List[int]:
+    """
+    Convert a transpiled circuit to layer integers in one pass.
+
+    Equivalent to ``process_circuit_to_integers(layerize_quantum_circuit(qc))`` but
+    avoids rebuilding intermediate QuantumCircuit objects for every layer.
+    """
+    dag = circuit_to_dag(qc)
+    return [_layer_graph_to_int(layer["graph"]) for layer in dag.layers()]
+
 
 def process_circuit_to_integers(circuit: QuantumCircuit) -> List[int]:
     """

@@ -36,10 +36,12 @@ Prerequisites:
 # %%
 
 from datetime import datetime, timezone, timedelta
+from pathlib import Path
 from typing import List, Literal, Optional
 from more_itertools import flatten
 from quam_libs.experiments.rb_standard.data_utils import RBResult, InterleavedRBResult
 import xarray as xr
+from tqdm.auto import tqdm
 
 
 from qm.qua import *
@@ -49,7 +51,7 @@ from qualang_tools.multi_user import qm_session
 from qualang_tools.results import progress_counter, fetching_tool
 
 from qualibrate  import NodeParameters, QualibrationNode
-from quam_libs.experiments.rb_standard.circuit_utils import layerize_quantum_circuit, process_circuit_to_integers
+from quam_libs.experiments.rb_standard.circuit_utils import circuit_to_layer_ints
 from quam_libs.experiments.rb_standard.qua_utils import QuaProgramHandler
 from quam_libs.lib.plot_utils import plot_samples
 from quam_libs.lib.save_utils import (
@@ -59,7 +61,7 @@ from quam_libs.lib.save_utils import (
 )
 
 from quam_libs.components import QuAM
-from quam_libs.experiments.rb_standard.rb_utils import InterleavedRB
+from quam_libs.experiments.rb_standard.rb_utils import InterleavedRB, rb_cache_key, rb_save, rb_try_load
 from quam_libs.experiments.rb_standard.plot_utils import gate_mapping
 
 
@@ -69,8 +71,8 @@ from quam_libs.experiments.rb_standard.plot_utils import gate_mapping
 
 class Parameters(NodeParameters):
     qubit_pairs: Optional[List[str]] = ["coupler_q4_q5"] #None
-    circuit_lengths: tuple[int] =  (1, 2 ,4, 8, 12, 16, 20, 25,30, 40, 60) # in number of cliffords
-    num_circuits_per_length: int = 50
+    circuit_lengths: tuple[int] =  (1, 2 ,4, 8, 12, 16, 20, 25,30, 40, 60, 80, 100) # in number of cliffords
+    num_circuits_per_length: int = 100
     num_averages: int = 200
     target_gate: str = "cz" # "idle_2q" or "cz" supported 
     basis_gates: list[str] = ['rz', 'sx', 'x', 'cz'] 
@@ -113,26 +115,57 @@ config = node.machine.generate_config()
 
 # %% {Random circuit generation}
 
-interleaved_RB = InterleavedRB(
+READOUT_OPCODE = 66
+cache_key = rb_cache_key(
+    node.parameters.seed,
+    node.parameters.circuit_lengths,
+    node.parameters.num_circuits_per_length,
     target_gate=node.parameters.target_gate,
-    amplification_lengths=node.parameters.circuit_lengths,
-    num_circuits_per_length=node.parameters.num_circuits_per_length,
-    basis_gates=node.parameters.basis_gates,
-    num_qubits=2,
-    reduce_to_1q_cliffords=node.parameters.reduce_to_1q_cliffords,
-    seed=node.parameters.seed
+)
+cache_dir = Path(__file__).resolve().parent.parent / ".rb_cache"
+cached = rb_try_load(cache_dir, cache_key)
+
+total_cliffords = node.parameters.num_circuits_per_length * sum(node.parameters.circuit_lengths)
+print(
+    f"IRB config ({node.parameters.target_gate}): {len(node.parameters.circuit_lengths)} depths, "
+    f"{node.parameters.num_circuits_per_length} circuits/depth, "
+    f"~{total_cliffords} Cliffords to generate+transpile (first run only; cached after)"
 )
 
-transpiled_circuits = interleaved_RB.transpiled_circuits
-transpiled_circuits_as_ints = {}
-for l, circuits in transpiled_circuits.items():
-    transpiled_circuits_as_ints[l] = [process_circuit_to_integers(layerize_quantum_circuit(qc)) for qc in circuits]
+if cached is not None:
+    circuits_as_ints = cached["circuits_as_ints"]
+    print(f"Loaded {len(circuits_as_ints)} cached IRB circuits (key {cache_key[:12]})")
+else:
+    interleaved_RB = InterleavedRB(
+        target_gate=node.parameters.target_gate,
+        amplification_lengths=node.parameters.circuit_lengths,
+        num_circuits_per_length=node.parameters.num_circuits_per_length,
+        num_qubits=2,
+        seed=node.parameters.seed,
+    )
 
-circuits_as_ints = []
-for circuits_per_len in transpiled_circuits_as_ints.values():
-    for circuit in circuits_per_len:
-        circuit_with_measurement = circuit + [66] # readout
-        circuits_as_ints.append(circuit_with_measurement)
+    transpiled_circuits = interleaved_RB.transpiled_circuits
+    transpiled_circuits_as_ints = {}
+    total_circuits_to_encode = sum(len(circuits) for circuits in transpiled_circuits.values())
+    with tqdm(total=total_circuits_to_encode, desc="Encoding IRB circuits to ints", unit="circ") as pbar:
+        for length, circuits in transpiled_circuits.items():
+            encoded = []
+            for qc in circuits:
+                encoded.append(circuit_to_layer_ints(qc))
+                pbar.update(1)
+            transpiled_circuits_as_ints[length] = encoded
+
+    circuits_as_ints = []
+    for circuits_per_len in transpiled_circuits_as_ints.values():
+        for circuit in circuits_per_len:
+            circuits_as_ints.append(circuit + [READOUT_OPCODE])
+
+    rb_save(
+        cache_dir,
+        cache_key,
+        {"circuits_as_ints": circuits_as_ints},
+    )
+    print(f"Computed and cached {len(circuits_as_ints)} IRB circuits (key {cache_key[:12]})")
 
 total_circuits = len(circuits_as_ints)
 total_circuit_executions = total_circuits * node.parameters.num_averages

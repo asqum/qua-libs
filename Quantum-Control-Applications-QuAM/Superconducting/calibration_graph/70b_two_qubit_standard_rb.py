@@ -35,12 +35,14 @@ Prerequisites:
 # %%
 
 from datetime import datetime, timezone, timedelta
+from pathlib import Path
 from typing import List, Literal, Optional
 from matplotlib import pyplot as plt
 from more_itertools import flatten
 import numpy as np
 from quam_libs.experiments.rb_standard.data_utils import RBResult
 import xarray as xr
+from tqdm.auto import tqdm
 
 
 from qm.qua import *
@@ -50,7 +52,7 @@ from qualang_tools.multi_user import qm_session
 from qualang_tools.results import progress_counter, fetching_tool
 
 from qualibrate  import NodeParameters, QualibrationNode
-from quam_libs.experiments.rb_standard.circuit_utils import layerize_quantum_circuit, process_circuit_to_integers
+from quam_libs.experiments.rb_standard.circuit_utils import circuit_to_layer_ints
 from quam_libs.experiments.rb_standard.qua_utils import QuaProgramHandler
 from quam_libs.lib.plot_utils import plot_samples
 from quam_libs.lib.save_utils import (
@@ -60,7 +62,7 @@ from quam_libs.lib.save_utils import (
 )
 
 from quam_libs.components import QuAM
-from quam_libs.experiments.rb_standard.rb_utils import StandardRB
+from quam_libs.experiments.rb_standard.rb_utils import StandardRB, rb_cache_key, rb_save, rb_try_load
 from quam_libs.experiments.rb_standard.plot_utils import gate_mapping
 from numpy import arange
 
@@ -76,7 +78,7 @@ average_gates_per_2q_layer = None
 
 class Parameters(NodeParameters):
     qubit_pairs: Optional[List[str]] = ["coupler_q4_q5"]#None
-    circuit_lengths: tuple[int] = (1, 2 ,4, 8, 12, 16, 20, 25,30, 40, 60) # in number of cliffords
+    circuit_lengths: tuple[int] = (1, 2 ,4, 8, 12, 16, 20, 25,30, 40, 60, 80, 100, 512, 1024, 2048) # in number of cliffords
     num_circuits_per_length: int = 50
     num_averages: int = 200
     basis_gates: list[str] = ['rz', 'sx', 'x', 'cz'] 
@@ -119,30 +121,67 @@ config = node.machine.generate_config()
 
 # %% {Random circuit generation}
 
-standard_RB = StandardRB(
-    amplification_lengths=node.parameters.circuit_lengths,
-    num_circuits_per_length=node.parameters.num_circuits_per_length,
-    basis_gates=node.parameters.basis_gates,
-    reduce_to_1q_cliffords=node.parameters.reduce_to_1q_cliffords,
-    num_qubits=2,
-    seed=node.parameters.seed
+READOUT_OPCODE = 66
+cache_key = rb_cache_key(
+    node.parameters.seed,
+    node.parameters.circuit_lengths,
+    node.parameters.num_circuits_per_length,
+)
+cache_dir = Path(__file__).resolve().parent.parent / ".rb_cache"
+cached = rb_try_load(cache_dir, cache_key)
+
+total_cliffords = node.parameters.num_circuits_per_length * sum(node.parameters.circuit_lengths)
+print(
+    f"RB config: {len(node.parameters.circuit_lengths)} depths, "
+    f"{node.parameters.num_circuits_per_length} circuits/depth, "
+    f"~{total_cliffords} Cliffords to generate+transpile (first run only; cached after)"
 )
 
-transpiled_circuits = standard_RB.transpiled_circuits
-transpiled_circuits_as_ints = {}
-layerized_circuits = {}
-for l, circuits in transpiled_circuits.items():
-    layerized_circuits[l] = [layerize_quantum_circuit(qc) for qc in circuits]
-    transpiled_circuits_as_ints[l] = [process_circuit_to_integers(qc) for qc in layerized_circuits[l]]
+if cached is not None:
+    circuits_as_ints = cached["circuits_as_ints"]
+    average_layers_per_clifford = cached["average_layers_per_clifford"]
+    print(f"Loaded {len(circuits_as_ints)} cached RB circuits (key {cache_key[:12]})")
+else:
+    standard_RB = StandardRB(
+        amplification_lengths=node.parameters.circuit_lengths,
+        num_circuits_per_length=node.parameters.num_circuits_per_length,
+        num_qubits=2,
+        seed=node.parameters.seed,
+    )
 
-# to calculate the average number of 2q layers per Clifford
-average_layers_per_clifford = np.mean([np.mean([len(circ) for circ in circuits])/np.array(length+1) for length, circuits in transpiled_circuits_as_ints.items() if length > 0])
+    transpiled_circuits = standard_RB.transpiled_circuits
+    transpiled_circuits_as_ints = {}
+    total_circuits_to_encode = sum(len(circuits) for circuits in transpiled_circuits.values())
+    with tqdm(total=total_circuits_to_encode, desc="Encoding RB circuits to ints", unit="circ") as pbar:
+        for length, circuits in transpiled_circuits.items():
+            encoded = []
+            for qc in circuits:
+                encoded.append(circuit_to_layer_ints(qc))
+                pbar.update(1)
+            transpiled_circuits_as_ints[length] = encoded
 
-circuits_as_ints = []
-for circuits_per_len in transpiled_circuits_as_ints.values():
-    for circuit in circuits_per_len:
-        circuit_with_measurement = circuit + [66] # readout
-        circuits_as_ints.append(circuit_with_measurement)
+    average_layers_per_clifford = np.mean(
+        [
+            np.mean([len(circ) for circ in circuits]) / np.array(length + 1)
+            for length, circuits in transpiled_circuits_as_ints.items()
+            if length > 0
+        ]
+    )
+
+    circuits_as_ints = []
+    for circuits_per_len in transpiled_circuits_as_ints.values():
+        for circuit in circuits_per_len:
+            circuits_as_ints.append(circuit + [READOUT_OPCODE])
+
+    rb_save(
+        cache_dir,
+        cache_key,
+        {
+            "circuits_as_ints": circuits_as_ints,
+            "average_layers_per_clifford": float(average_layers_per_clifford),
+        },
+    )
+    print(f"Computed and cached {len(circuits_as_ints)} RB circuits (key {cache_key[:12]})")
 
 total_circuits = len(circuits_as_ints)
 total_circuit_executions = total_circuits * node.parameters.num_averages
