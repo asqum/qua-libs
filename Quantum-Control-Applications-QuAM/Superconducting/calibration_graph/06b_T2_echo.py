@@ -84,29 +84,31 @@ with program() as t1:
     for i, qubit in enumerate(qubits):
 
         # Bring the active qubits to the minimum frequency point
-        if flux_point == "independent":
-            machine.apply_all_flux_to_min()
-            machine.apply_all_couplers_to_min()
-            qubit.z.to_independent_idle()
-        elif flux_point == "joint" or "arbitrary":
-            machine.apply_all_flux_to_joint_idle()
-        else:
-            machine.apply_all_flux_to_zero()
+        if not node.parameters.simulate:
+            if flux_point == "independent":
+                machine.apply_all_flux_to_min()
+                machine.apply_all_couplers_to_min()
+                qubit.z.to_independent_idle()
+            elif flux_point == "joint" or "arbitrary":
+                machine.apply_all_flux_to_joint_idle()
+            else:
+                machine.apply_all_flux_to_zero()
 
-        # Wait for the flux bias to settle
-        for qb in qubits:
-            wait(1000, qb.z.name)
+            # Wait for the flux bias to settle
+            for qb in qubits:
+                wait(1000, qb.z.name)
 
         align()
 
         with for_(n, 0, n < n_avg, n + 1):
             save(n, n_st)
             with for_(*from_array(t, idle_times)):
-                if node.parameters.reset_type == "active":
-                    active_reset(qubit, "readout")
-                else:
-                    qubit.resonator.wait(qubit.thermalization_time * u.ns)
-                    qubit.align()
+                if not node.parameters.simulate:
+                    if node.parameters.reset_type == "active":
+                        active_reset(qubit, "readout")
+                    else:
+                        qubit.resonator.wait(qubit.thermalization_time * u.ns)
+                        qubit.align()
                 
                     
                 qubit.xy.play("x90")
@@ -221,7 +223,6 @@ if not node.parameters.simulate:
     for ax, qubit in grid_iter(grid):
         if node.parameters.use_state_discrimination:
             ds.sel(qubit = qubit['qubit']).state.plot(ax = ax)
-            
             ax.set_ylabel('State')
         else:
             ds.sel(qubit = qubit['qubit']).I.plot(ax = ax)

@@ -132,12 +132,13 @@ with program() as multi_qubit_spec_vs_flux:
                 # Update the qubit frequency
                 qubit.xy.update_frequency(df + qubit.xy.intermediate_frequency)
                 with for_(*from_array(dc, dcs)):
-                    if node.parameters.reset_type == "active":
-                        # active_reset(qubit, "readout")
-                        active_reset_simple(qubit, "readout")
-                    else:
-                        qubit.resonator.wait(qubit.thermalization_time * u.ns)
-                        qubit_pair.align()
+                    if not node.parameters.simulate:
+                        if node.parameters.reset_type == "active":
+                            # active_reset(qubit, "readout")
+                            active_reset_simple(qubit, "readout")
+                        else:
+                            qubit.resonator.wait(qubit.thermalization_time * u.ns)
+                            qubit_pair.align()
                     
                     if "coupler_qubit_crosstalk" in qubit_pair.extras:
                         assign(comp_flux_qubit, qubit_pair.extras["coupler_qubit_crosstalk"] * dc )

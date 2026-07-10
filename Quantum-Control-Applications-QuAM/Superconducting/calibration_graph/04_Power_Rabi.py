@@ -120,12 +120,14 @@ with program() as power_rabi:
     npi = declare(int)  # QUA variable for the number of qubit pulses
     count = declare(int)  # QUA variable for counting the qubit pulses
 
-    machine.apply_all_couplers_to_min()
+    if not node.parameters.simulate:
+        machine.apply_all_couplers_to_min()
     for i, qubit in enumerate(qubits):
-        # Bring the active qubits to the minimum frequency point
-        machine.set_all_fluxes(flux_point=flux_point, target=qubit)
-        if "c" in qubit.id: qubit.z.set_dc_offset(qubit.z.joint_offset) # for coupler-test case
-        qubit.z.settle()
+        if not node.parameters.simulate:
+            # Bring the active qubits to the minimum frequency point
+            machine.set_all_fluxes(flux_point=flux_point, target=qubit)
+            if "c" in qubit.id: qubit.z.set_dc_offset(qubit.z.joint_offset) # for coupler-test case
+            qubit.z.settle()
         qubit.align()
 
         with for_(n, 0, n < n_avg, n + 1):
@@ -133,12 +135,11 @@ with program() as power_rabi:
             with for_(*from_array(npi, N_pi_vec)):
                 with for_(*from_array(a, amps)):
                     # Initialize the qubits
-                    if reset_type == "active":
-                        active_reset(qubit, "readout")
-                    else:
-                        if node.parameters.simulate: qubit.wait(16 * u.ns)
-                        # else: qubit.wait(qubit.thermalization_time * u.ns)
-                        else: qubit.wait(machine.thermalization_time * u.ns)
+                    if not node.parameters.simulate:
+                        if reset_type == "active":
+                            active_reset(qubit, "readout")
+                        else:
+                            qubit.wait(machine.thermalization_time * u.ns)
 
                     # Loop for error amplification (perform many qubit pulses)
                     with for_(count, 0, count < npi, count + 1):

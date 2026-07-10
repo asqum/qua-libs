@@ -189,15 +189,16 @@ with program() as multi_res_spec_vs_flux:
                     # Update the qubit frequency
                     # qubit_control.xy.update_frequency(qubit_control.xy.intermediate_frequency)
                     
-                    if node.parameters.reset_type == "active":
-                        active_reset_simple(qubit_control)
-                        active_reset_simple(qubit_target)
-                        qp.align()
+                    if not node.parameters.simulate:
+                        if node.parameters.reset_type == "active":
+                            active_reset_simple(qubit_control)
+                            active_reset_simple(qubit_target)
+                            qp.align()
 
-                    else:
-                        qubit_control.wait(qubit_control.thermalization_time * u.ns)
-                        qubit_target.wait(qubit_target.thermalization_time * u.ns)
-                        qp.align()
+                        else:
+                            qubit_control.wait(qubit_control.thermalization_time * u.ns)
+                            qubit_target.wait(qubit_target.thermalization_time * u.ns)
+                            qp.align()
 
                     if node.parameters.wait_extra_time:
                         qubit_control.xy.wait(node.parameters.duration_in_ns // 4)

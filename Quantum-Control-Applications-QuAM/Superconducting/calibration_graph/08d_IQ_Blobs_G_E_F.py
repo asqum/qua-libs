@@ -116,8 +116,8 @@ with program() as iq_blobs:
 
     for i, qubit in enumerate(qubits):
 
-        # Bring the active qubits to the minimum frequency point
-        machine.set_all_fluxes(flux_point, qubit)
+        if not node.parameters.simulate:
+            machine.set_all_fluxes(flux_point, qubit)
         wait(4)
         qubit.resonator.update_frequency(
             qubit.resonator.intermediate_frequency + qubit.resonator.GEF_frequency_shift
@@ -130,16 +130,17 @@ with program() as iq_blobs:
             wait(4)
             update_frequency(qubit.xy.name, qubit.xy.intermediate_frequency)
             wait(4)
-            if reset_type == "active":
-                active_reset_gef(qubit)
-                qubit.resonator.update_frequency(
-                    qubit.resonator.intermediate_frequency + qubit.resonator.GEF_frequency_shift
-                )
-                wait(4)
-            elif reset_type == "thermal":
-                wait(4 * qubit.thermalization_time * u.ns)
-            else:
-                raise ValueError(f"Unrecognized reset type {reset_type}.")
+            if not node.parameters.simulate:
+                if reset_type == "active":
+                    active_reset_gef(qubit)
+                    qubit.resonator.update_frequency(
+                        qubit.resonator.intermediate_frequency + qubit.resonator.GEF_frequency_shift
+                    )
+                    wait(4)
+                elif reset_type == "thermal":
+                    wait(4 * qubit.thermalization_time * u.ns)
+                else:
+                    raise ValueError(f"Unrecognized reset type {reset_type}.")
 
             qubit.align()
             wait(4)
@@ -150,16 +151,17 @@ with program() as iq_blobs:
             save(I_g[i], I_g_st[i])
             save(Q_g[i], Q_g_st[i])
 
-            if reset_type == "active":
-                active_reset_gef(qubit)
-                qubit.resonator.update_frequency(
-                    qubit.resonator.intermediate_frequency + qubit.resonator.GEF_frequency_shift
-                )
-                wait(4)
-            elif reset_type == "thermal":
-                wait(4*qubit.thermalization_time * u.ns)
-            else:
-                raise ValueError(f"Unrecognized reset type {reset_type}.")
+            if not node.parameters.simulate:
+                if reset_type == "active":
+                    active_reset_gef(qubit)
+                    qubit.resonator.update_frequency(
+                        qubit.resonator.intermediate_frequency + qubit.resonator.GEF_frequency_shift
+                    )
+                    wait(4)
+                elif reset_type == "thermal":
+                    wait(4*qubit.thermalization_time * u.ns)
+                else:
+                    raise ValueError(f"Unrecognized reset type {reset_type}.")
             wait(4)
             qubit.align()
             wait(4)
@@ -173,16 +175,17 @@ with program() as iq_blobs:
             save(I_e[i], I_e_st[i])
             save(Q_e[i], Q_e_st[i])
 
-            if reset_type == "active":
-                active_reset_gef(qubit)
-                qubit.resonator.update_frequency(
-                    qubit.resonator.intermediate_frequency + qubit.resonator.GEF_frequency_shift
-                )
-                wait(4)
-            elif reset_type == "thermal":
-                wait(4*qubit.thermalization_time * u.ns)
-            else:
-                raise ValueError(f"Unrecognized reset type {reset_type}.")
+            if not node.parameters.simulate:
+                if reset_type == "active":
+                    active_reset_gef(qubit)
+                    qubit.resonator.update_frequency(
+                        qubit.resonator.intermediate_frequency + qubit.resonator.GEF_frequency_shift
+                    )
+                    wait(4)
+                elif reset_type == "thermal":
+                    wait(4*qubit.thermalization_time * u.ns)
+                else:
+                    raise ValueError(f"Unrecognized reset type {reset_type}.")
             wait(4)
             qubit.align()
             wait(4)

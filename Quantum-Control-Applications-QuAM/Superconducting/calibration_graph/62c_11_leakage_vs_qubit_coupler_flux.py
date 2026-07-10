@@ -169,14 +169,15 @@ with program() as CPhase_Oscillations:
             with for_(*from_array(flux_coupler_amp, flux_coupler_amplitudes)):
                 with for_(*from_array(flux_qubit_amp, flux_qubit_amplitudes)):
                         # reset
-                        if node.parameters.reset_type == "active":
-                            # active_reset(qp.qubit_control)
-                            # active_reset(qp.qubit_target)
-                            active_reset_gef(qp.qubit_control)
-                            active_reset_gef(qp.qubit_target)
-                        else:
-                            wait(qp.qubit_control.thermalization_time * u.ns)
-                            wait(qp.qubit_target.thermalization_time * u.ns)
+                        if not node.parameters.simulate:
+                            if node.parameters.reset_type == "active":
+                                # active_reset(qp.qubit_control)
+                                # active_reset(qp.qubit_target)
+                                active_reset_gef(qp.qubit_control)
+                                active_reset_gef(qp.qubit_target)
+                            else:
+                                wait(qp.qubit_control.thermalization_time * u.ns)
+                                wait(qp.qubit_target.thermalization_time * u.ns)
 
                         # state preparation
                         qp.qubit_control.xy.play("x180")

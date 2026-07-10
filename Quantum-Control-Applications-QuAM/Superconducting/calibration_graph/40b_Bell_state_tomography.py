@@ -298,8 +298,8 @@ with program() as CPhase_Oscillations:
     # tomo_axis_target = declare(int)
     
     for i, qp in enumerate(qubit_pairs):
-        # Bring the active qubits to the minimum frequency point
-        machine.set_all_fluxes(flux_point, qp.qubit_control)
+        if not node.parameters.simulate:
+            machine.set_all_fluxes(flux_point, qp.qubit_control)
 
         with for_(n, 0, n < n_shots, n + 1):
             save(n, n_st) 
@@ -308,14 +308,15 @@ with program() as CPhase_Oscillations:
             for tomo_axis_control in [0,1,2]:
                 for tomo_axis_target in [0,1,2]:
                     # reset
-                    if node.parameters.reset_type == "active":
-                            # wait(2*qp.qubit_control.thermalization_time * u.ns)
-                            # active_reset_simple(qp.qubit_control)
-                            # active_reset_simple(qp.qubit_target)
-                            active_reset(qp.qubit_control)
-                            active_reset(qp.qubit_target)   
-                    else:
-                        wait(5*qp.qubit_control.thermalization_time * u.ns)
+                    if not node.parameters.simulate:
+                        if node.parameters.reset_type == "active":
+                                # wait(2*qp.qubit_control.thermalization_time * u.ns)
+                                # active_reset_simple(qp.qubit_control)
+                                # active_reset_simple(qp.qubit_target)
+                                active_reset(qp.qubit_control)
+                                active_reset(qp.qubit_target)   
+                        else:
+                            wait(5*qp.qubit_control.thermalization_time * u.ns)
                     qp.align()
                     # Bell state
                     qp.qubit_control.xy.play("-y90")

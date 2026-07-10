@@ -173,7 +173,8 @@ with program() as CZ_phase_calibration_error_amp:
     for i, qp in enumerate(qubit_pairs):
         qp.gates[operation_name].phase_shift_control = 0.0
         qp.gates[operation_name].phase_shift_target = 0.0
-        machine.set_all_fluxes(flux_point, qp)
+        if not node.parameters.simulate:
+            machine.set_all_fluxes(flux_point, qp)
         with for_(n, 0, n < n_avg, n + 1):
             save(n, n_st)
             with for_(n_op, 1, n_op <= num_operations, n_op + 1):
@@ -181,11 +182,12 @@ with program() as CZ_phase_calibration_error_amp:
                     with for_(*from_array(frame, frames)):
                         with for_(*from_array(control_initial, [0, 1])):
                                 # Reset and align both qubits
-                                if node.parameters.reset_type == "active":
-                                    active_reset_gef(qp.qubit_control)
-                                    active_reset(qp.qubit_target)
-                                else:
-                                    wait(qp.qubit_control.thermalization_time * u.ns)
+                                if not node.parameters.simulate:
+                                    if node.parameters.reset_type == "active":
+                                        active_reset_gef(qp.qubit_control)
+                                        active_reset(qp.qubit_target)
+                                    else:
+                                        wait(qp.qubit_control.thermalization_time * u.ns)
                                 qp.align()
                                 reset_frame(qp.qubit_target.xy.name)
                                 reset_frame(qp.qubit_control.xy.name)

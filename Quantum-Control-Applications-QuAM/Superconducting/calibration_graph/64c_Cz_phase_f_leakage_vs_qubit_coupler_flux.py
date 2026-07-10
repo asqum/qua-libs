@@ -172,14 +172,15 @@ with program() as CPhase_Oscillations:
         qp.gates["Cz"].phase_shift_control = 0.0
         qp.gates["Cz"].phase_shift_target = 0.0
         # Bring the active qubits to the minimum frequency point
-        if flux_point == "independent":
-            machine.apply_all_flux_to_min()
-            # qp.apply_mutual_flux_point()
-        elif flux_point == "joint":
-            machine.apply_all_flux_to_joint_idle()
-        else:
-            machine.apply_all_flux_to_zero()
-        wait(1000)
+        if not node.parameters.simulate:
+            if flux_point == "independent":
+                machine.apply_all_flux_to_min()
+                # qp.apply_mutual_flux_point()
+            elif flux_point == "joint":
+                machine.apply_all_flux_to_joint_idle()
+            else:
+                machine.apply_all_flux_to_zero()
+            wait(1000)
 
         with for_(n, 0, n < n_avg, n + 1):
             save(n, n_st)
@@ -188,13 +189,14 @@ with program() as CPhase_Oscillations:
                     with for_(*from_array(frame, frames)):
                         with for_(*from_array(control_initial, [0, 1])):
                             # reset
-                            if node.parameters.reset_type == "active":
-                                active_reset_gef(qp.qubit_control)
-                                active_reset(qp.qubit_target)
-                                # active_reset_simple(qp.qubit_control)
-                                # active_reset_simple(qp.qubit_target)
-                            else:
-                                wait(qp.qubit_control.thermalization_time * u.ns)
+                            if not node.parameters.simulate:
+                                if node.parameters.reset_type == "active":
+                                    active_reset_gef(qp.qubit_control)
+                                    active_reset(qp.qubit_target)
+                                    # active_reset_simple(qp.qubit_control)
+                                    # active_reset_simple(qp.qubit_target)
+                                else:
+                                    wait(qp.qubit_control.thermalization_time * u.ns)
                             qp.align()
                             if "coupler_qubit_crosstalk" in qp.extras:
                                 assign(comp_flux_qubit, flux_qubit + qp.extras["coupler_qubit_crosstalk"] * flux_coupler)

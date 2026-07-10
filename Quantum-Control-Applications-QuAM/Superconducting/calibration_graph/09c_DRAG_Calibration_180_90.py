@@ -108,11 +108,13 @@ with program() as drag_calibration:
     npi = declare(int)  # QUA variable for the number of qubit pulses
     count = declare(int)  # QUA variable for counting the qubit pulses
 
-    machine.apply_all_couplers_to_min()
+    if not node.parameters.simulate:
+        machine.apply_all_couplers_to_min()
     for i, qubit in enumerate(qubits):
-        # Bring the active qubits to the desired frequency point
-        machine.set_all_fluxes(flux_point=flux_point, target=qubit)
-        qubit.z.settle()
+        if not node.parameters.simulate:
+            # Bring the active qubits to the desired frequency point
+            machine.set_all_fluxes(flux_point=flux_point, target=qubit)
+            qubit.z.settle()
         qubit.align()
 
 
@@ -121,10 +123,11 @@ with program() as drag_calibration:
             for option in [0, 1]:
                 with for_(*from_array(a, amps)):
                     # Initialize the qubits
-                    if reset_type == "active":
-                        active_reset_simple(qubit, "readout")
-                    else:
-                        qubit.wait(machine.thermalization_time * u.ns)
+                    if not node.parameters.simulate:
+                        if reset_type == "active":
+                            active_reset_simple(qubit, "readout")
+                        else:
+                            qubit.wait(machine.thermalization_time * u.ns)
 
                     if option == 0:
                         play("x180" * amp(1, 0, 0, a), qubit.xy.name)

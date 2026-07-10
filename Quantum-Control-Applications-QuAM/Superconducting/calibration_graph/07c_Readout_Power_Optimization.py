@@ -97,13 +97,15 @@ with program() as iq_blobs:
     I_e, I_e_st, Q_e, Q_e_st, _, _ = qua_declaration(num_qubits=num_qubits)
     a = declare(fixed)
 
-    machine.apply_all_couplers_to_min()
+    if not node.parameters.simulate:
+        machine.apply_all_couplers_to_min()
     for i, qubit in enumerate(qubits):
 
-        # Bring the active qubits to the desired frequency point
-        machine.set_all_fluxes(flux_point=flux_point, target=qubit)
-        if "c" in qubit.id: qubit.z.set_dc_offset(qubit.z.joint_offset) # for coupler-test case
-        qubit.z.settle()
+        if not node.parameters.simulate:
+            # Bring the active qubits to the desired frequency point
+            machine.set_all_fluxes(flux_point=flux_point, target=qubit)
+            if "c" in qubit.id: qubit.z.set_dc_offset(qubit.z.joint_offset) # for coupler-test case
+            qubit.z.settle()
         qubit.align()
         # align() # True multiplexed       
 
@@ -111,12 +113,13 @@ with program() as iq_blobs:
             # ground iq blobs for all qubits
             save(n, n_st)
             with for_(*from_array(a, amps)):
-                if reset_type == "active":
-                    active_reset_simple(qubit, "readout")
-                elif reset_type == "thermal":
-                    qubit.wait(qubit.thermalization_time * u.ns)
-                else:
-                    raise ValueError(f"Unrecognized reset type {reset_type}.")
+                if not node.parameters.simulate:
+                    if reset_type == "active":
+                        active_reset_simple(qubit, "readout")
+                    elif reset_type == "thermal":
+                        qubit.wait(qubit.thermalization_time * u.ns)
+                    else:
+                        raise ValueError(f"Unrecognized reset type {reset_type}.")
 
                 qubit.align()
                 # align() # True multiplexed
@@ -127,12 +130,13 @@ with program() as iq_blobs:
                 save(I_g[i], I_g_st[i])
                 save(Q_g[i], Q_g_st[i])
 
-                if reset_type == "active":
-                    active_reset_simple(qubit, "readout")
-                elif reset_type == "thermal":
-                    qubit.wait(qubit.thermalization_time * u.ns)
-                else:
-                    raise ValueError(f"Unrecognized reset type {reset_type}.")
+                if not node.parameters.simulate:
+                    if reset_type == "active":
+                        active_reset_simple(qubit, "readout")
+                    elif reset_type == "thermal":
+                        qubit.wait(qubit.thermalization_time * u.ns)
+                    else:
+                        raise ValueError(f"Unrecognized reset type {reset_type}.")
                 qubit.align()
                 # align() # True multiplexed
                 qubit.xy.play("x180")

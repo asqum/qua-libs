@@ -231,13 +231,14 @@ with program() as coupler_zero_point_calibration:
             with for_each_(flux_coupler, fluxes_coupler_qp[qp.name]):
                 with for_each_(flux_qubit, fluxes_qp[qp.name]):
                     # reset
-                    if node.parameters.reset_type == "active":
-                        active_reset(qp.qubit_control)
-                        active_reset(qp.qubit_target)
-                        qp.align()
-                    else:
-                        wait(qp.qubit_control.thermalization_time * u.ns)
-                        wait(qp.qubit_target.thermalization_time * u.ns)
+                    if not node.parameters.simulate:
+                        if node.parameters.reset_type == "active":
+                            active_reset(qp.qubit_control)
+                            active_reset(qp.qubit_target)
+                            qp.align()
+                        else:
+                            wait(qp.qubit_control.thermalization_time * u.ns)
+                            wait(qp.qubit_target.thermalization_time * u.ns)
                     align()
                     if "coupler_qubit_crosstalk" in qp.extras:
                         assign(comp_flux_qubit, flux_qubit + qp.extras["coupler_qubit_crosstalk"] * flux_coupler)
