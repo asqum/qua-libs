@@ -60,7 +60,6 @@ from quam_libs.lib.save_utils import (
 )
 
 from quam_libs.components import QuAM
-from quam_libs.experiments.rb_standard.cloud_utils import write_sync_hook
 from quam_libs.experiments.rb_standard.rb_utils import StandardRB
 from quam_libs.experiments.rb_standard.plot_utils import gate_mapping
 from numpy import arange
@@ -77,7 +76,7 @@ average_gates_per_2q_layer = None
 
 class Parameters(NodeParameters):
     qubit_pairs: Optional[List[str]] = ["coupler_q4_q5"]#None
-    circuit_lengths: tuple[int] = (1, 2 ,4, 8, 16, 30, 40, 60, 80) # in number of cliffords
+    circuit_lengths: tuple[int] = (1, 2 ,4, 8, 12, 16, 20, 25,30, 40, 60) # in number of cliffords
     num_circuits_per_length: int = 50
     num_averages: int = 200
     basis_gates: list[str] = ['rz', 'sx', 'x', 'cz'] 
@@ -86,7 +85,7 @@ class Parameters(NodeParameters):
     reset_type_thermal_or_active: Literal["thermal", "active", "active_gef"] = "active"
     reduce_to_1q_cliffords: bool = False
     use_input_stream: bool = True
-    max_chunk_ints: int = 15000
+    max_chunk_ints: int = 16000
     simulate: bool = False
     simulation_duration_ns: int = 10000
     load_data_id: Optional[int] = None
@@ -180,13 +179,8 @@ elif node.parameters.load_data_id is None:
     
     with qm_session(node.machine.qmm, config, timeout=node.parameters.timeout) as qm:
         if node.parameters.use_input_stream:
-            padded_chunks = qua_program_handler.get_all_padded_chunks_for_all_pairs()
-            if node.machine.network.get('cloud', False):
-                write_sync_hook(padded_chunks)
-                job = qm.execute(rb, terminal_output=True, options={"sync_hook": "sync_hook.py"})
-            else:
-                job = qm.execute(rb)
-                qua_program_handler.push_all_chunks(job)
+            job = qm.execute(rb)
+            qua_program_handler.push_all_chunks(job)
         else:
             job = qm.execute(rb)
 
