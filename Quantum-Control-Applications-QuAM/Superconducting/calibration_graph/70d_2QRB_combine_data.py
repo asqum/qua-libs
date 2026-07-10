@@ -65,7 +65,7 @@ from quam_libs.experiments.rb_standard.plot_utils import gate_mapping
 # %% {Node_parameters}
 
 class Parameters(NodeParameters):
-    qubit_pairs: Optional[List[str]] = ["coupler_q1_q2"]#None
+    qubit_pairs: Optional[List[str]] = None
     circuit_lengths: tuple[int] = (0,) # in number of cliffords
     num_circuits_per_length: int = 1
     num_averages: int =1
@@ -73,8 +73,8 @@ class Parameters(NodeParameters):
     basis_gates: list[str] = [] 
     readout_mode: Literal["ge", "gef"] = "ge"
     reset_type_thermal_or_active: Literal["thermal", "active", "active_gef"] = "active"
-    load_data_id_SRB: Optional[int] = 112 #put the data id of the standard RB here
-    load_data_id_IRB: Optional[int] = 113 #put the data id of the interleaved RB here
+    load_data_id_SRB: Optional[int] = 2920 #put the data id of the standard RB here
+    load_data_id_IRB: Optional[int] = 2921 #put the data id of the interleaved RB here
     reduce_to_1q_cliffords: bool = False
     timeout: int = 100
     seed: int = 0
@@ -85,16 +85,6 @@ node = QualibrationNode(name="70d_combine_rb", parameters=Parameters())
 
 # Instantiate the QuAM class from the state file
 node.machine = QuAM.load()
-
-# # Get the relevant QuAM components
-if node.parameters.qubit_pairs is None or node.parameters.qubit_pairs == "":
-    qubit_pairs = node.machine.active_qubit_pairs
-else:
-    qubit_pairs = [node.machine.qubit_pairs[qp] for qp in node.parameters.qubit_pairs]
-
-if len(qubit_pairs) == 0:
-    raise ValueError("No qubit pairs selected")
-
 
 config = node.machine.generate_config()
 
@@ -139,64 +129,85 @@ average_layers_per_clifford = np.mean([np.mean([len(circ) for circ in circuits])
 ds_transposed_SRB = ds_SRB.rename({"shots": "average", "sequence": "repeat", "depths": "circuit_depth"})
 ds_transposed_SRB = ds_transposed_SRB.transpose("qubit", "repeat", "circuit_depth", "average")
 
+srb_qubit_keys = set(ds_SRB.qubit.values)
+irb_qubit_keys = set(ds_IRB.qubit.values)
+common_qubit_keys = srb_qubit_keys & irb_qubit_keys
+if not common_qubit_keys:
+    raise ValueError(
+        "No common qubit pairs between SRB and IRB datasets. "
+        f"SRB qubits: {sorted(srb_qubit_keys)}, IRB qubits: {sorted(irb_qubit_keys)}"
+    )
+
+if node.parameters.qubit_pairs is None or node.parameters.qubit_pairs == "":
+    qubit_keys = sorted(common_qubit_keys)
+else:
+    qubit_keys = []
+    for qubit_key in node.parameters.qubit_pairs:
+        if qubit_key not in common_qubit_keys:
+            raise ValueError(
+                f"Qubit pair '{qubit_key}' not found in both loaded RB datasets. "
+                f"Available in both: {sorted(common_qubit_keys)}"
+            )
+        qubit_keys.append(qubit_key)
+
 rb_result_IRB = {}
 rb_result_SRB = {}
 
 # %% {Data_analysis and plotting}
-for qp in qubit_pairs:
+for qubit_key in qubit_keys:
 
-    rb_result_SRB[qp.id] = RBResult(
+    rb_result_SRB[qubit_key] = RBResult(
         circuit_depths=circuit_depths_SRB,
         num_repeats=num_repeats_SRB,
         num_averages=num_averages_SRB,
-        state=ds_transposed_SRB.sel(qubit=qp.name).state.data
+        state=ds_transposed_SRB.sel(qubit=qubit_key).state.data
     )
     
     # Fit the data and calculate all error and fidelity metrics
-    rb_result_SRB[qp.id].fit(
+    rb_result_SRB[qubit_key].fit(
         average_layers_per_clifford=average_layers_per_clifford,
         average_gates_per_2q_layer=None
     )
     
     # Plot the results
-    fig_SRB = rb_result_SRB[qp.id].plot_with_fidelity()
+    fig_SRB = rb_result_SRB[qubit_key].plot_with_fidelity()
     
-    fig_SRB.suptitle(f"2Q Randomized Benchmarking - {qp.name}")
+    fig_SRB.suptitle(f"2Q Randomized Benchmarking - {qubit_key}")
     # node.add_node_info_subtitle(fig)
     fig_SRB.show()
     
-    node.results[f"{qp.id}_figure_RB_decay"] = fig_SRB
+    node.results[f"{qubit_key}_figure_RB_decay"] = fig_SRB
 
-    rb_result_IRB[qp.id] = InterleavedRBResult(
-        # standard_rb_alpha=node.machine.qubit_pairs[qp.id].macros["cz"].fidelity.get("StandardRB", 1).get("alpha", 1),
-        standard_rb_alpha=rb_result_SRB[qp.id].alpha, # if "StandardRB" in qp.extras else 1,
+    rb_result_IRB[qubit_key] = InterleavedRBResult(
+        # standard_rb_alpha=node.machine.qubit_pairs[qubit_key].macros["cz"].fidelity.get("StandardRB", 1).get("alpha", 1),
+        standard_rb_alpha=rb_result_SRB[qubit_key].alpha, # if "StandardRB" in qp.extras else 1,
         circuit_depths=circuit_depths_IRB,
         num_repeats=num_repeats_IRB ,
         num_averages=num_averages_IRB ,
-        state=ds_transposed_IRB.sel(qubit=qp.name).state.data
+        state=ds_transposed_IRB.sel(qubit=qubit_key).state.data
     )
 
     # Fit the data and calculate all error and fidelity metrics
-    rb_result_IRB[qp.id].fit()
+    rb_result_IRB[qubit_key].fit()
     
     # Plot the results
-    fig_IRB = rb_result_IRB[qp.id].plot_with_fidelity()
-    fig_IRB.suptitle(f"2Q Interleaved Randomized Benchmarking - {qp.name}")
+    fig_IRB = rb_result_IRB[qubit_key].plot_with_fidelity()
+    fig_IRB.suptitle(f"2Q Interleaved Randomized Benchmarking - {qubit_key}")
     # node.add_node_info_subtitle(fig)
     fig_IRB.show()
     
-    node.results[f"{qp.id}_figure_IRB_decay"] = fig_IRB
+    node.results[f"{qubit_key}_figure_IRB_decay"] = fig_IRB
 
     fig_combined = plot_combined_rb(
-        qp.name,
-        rb_result_SRB[qp.id],
-        rb_result_IRB[qp.id],
+        qubit_key,
+        rb_result_SRB[qubit_key],
+        rb_result_IRB[qubit_key],
         target_gate=target_gate.upper()
     )
 
     fig_combined.show()
 
-    node.results[f"{qp.id}_figure_combined_RB_decay"] = fig_combined
+    node.results[f"{qubit_key}_figure_combined_RB_decay"] = fig_combined
 # %% {Update_state}
 # with node.record_state_updates():
 #     for qp in qubit_pairs:
