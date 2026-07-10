@@ -44,15 +44,15 @@ from scipy.signal import find_peaks
 # %% {Node_parameters}
 class Parameters(NodeParameters):
 
-    qubits: Optional[List[str]] = ["q1","q2"]
-    qubit_pair: str = "coupler_q1_q2"
-    num_averages: int = 25
+    qubits: Optional[List[str]] = ["q2", "q3"]
+    qubit_pair: str = "coupler_q2_q3"
+    num_averages: int = 2000
     operation: str = "saturation"
     operation_amplitude_factor: Optional[float] = 0.05
     operation_len_in_ns: Optional[int] = None
     frequency_span_in_mhz: float = 100
     frequency_step_in_mhz: float = 0.5
-    min_flux_offset_in_v: float = -0.4
+    min_flux_offset_in_v: float = -0.3
     max_flux_offset_in_v: float = 0.4
     reset_type: Literal["active", "thermal"] = "thermal"
     num_flux_points: int = 51

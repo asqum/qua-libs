@@ -41,11 +41,11 @@ import numpy as np
 # %% {Node_parameters}
 class Parameters(NodeParameters):
 
-    qubits: Optional[List[str]] = None
-    num_averages: int = 350 #150
-    frequency_span_in_mhz: float = 25
-    frequency_step_in_mhz: float = 0.1
-    flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
+    qubits: Optional[List[str]] = ['q4']
+    num_averages: int = 1000 #150
+    frequency_span_in_mhz: float = 5
+    frequency_step_in_mhz: float = 0.02
+    flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
     simulate: bool = False
     simulation_duration_ns: int = 2500
     timeout: int = 100

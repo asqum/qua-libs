@@ -54,10 +54,10 @@ class Parameters(NodeParameters):
     qubits: Optional[List[str]] = None
     num_averages: int = 100
     operation: str = "saturation"
-    operation_amplitude_factor: Optional[float] = 0.02    #0.004, 0.0004
+    operation_amplitude_factor: Optional[float] = 0.1    #0.004, 0.0004
     operation_len_in_ns: Optional[int] = 50_000
-    frequency_span_in_mhz: float = 300 #200, 4, 800
-    frequency_step_in_mhz: float = 1 #0.25, 0.01
+    frequency_span_in_mhz: float = 100 #200, 4, 800
+    frequency_step_in_mhz: float = 0.5 #0.25, 0.01
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
     target_peak_width: Optional[float] = 1e6 #1e6
     arbitrary_flux_bias: Optional[float] = None
@@ -66,7 +66,7 @@ class Parameters(NodeParameters):
     simulation_duration_ns: int = 2500
     timeout: int = 100
     load_data_id: Optional[int] = None
-    multiplexed: bool = False
+    multiplexed: bool = True
 
 
 node = QualibrationNode(name="03a_Qubit_Spectroscopy", parameters=Parameters())

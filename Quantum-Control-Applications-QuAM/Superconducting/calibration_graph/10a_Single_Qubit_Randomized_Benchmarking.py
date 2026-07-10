@@ -76,12 +76,12 @@ class Parameters(
     delta_clifford: int = 40
     seed: Optional[int] = None
     reset_type_thermal_or_active: Literal["thermal", "active", "active_gef"] =  "active"
-    flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
+    flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
     simulate: bool = False
     simulation_duration_ns: int = 2500
     timeout: int = 100
     load_data_id: Optional[int] = None
-    multiplexed: bool = False
+    multiplexed: bool = True
 
 node = QualibrationNode(name="10a_Single_Qubit_Randomized_Benchmarking", parameters=Parameters())
 
