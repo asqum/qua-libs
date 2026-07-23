@@ -321,9 +321,8 @@ if not node.parameters.simulate:
                         q.z.joint_offset += fit_results[q.name]["flux_shift"]
                     q.xy.intermediate_frequency += fit_results[q.name]["drive_freq"]
                     q.freq_vs_flux_01_quad_term = fit_results[q.name]["quad_term"]
+                    q.extras["idle_freq"] = q.xy.intermediate_frequency + q.xy.opx_output.upconverter_frequency
                     q.extras["sweetspot_freq"] = fit_results[q.name]["sweetspot_freq"]
-                    q.extras["sweet_offset"] = fit_results[q.name]["sweet_offset"]
-                    q.extras["flux_phase_ratio"] = fit_results[q.name]["flux_phase_ratio"]
 
     # %% {Save_results}
     node.results["ds"] = ds

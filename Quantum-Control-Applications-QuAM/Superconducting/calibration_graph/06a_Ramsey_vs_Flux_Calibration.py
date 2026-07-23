@@ -303,6 +303,7 @@ if not node.parameters.simulate:
                 qubit.extras["sweetspot_freq"] = (
                     qubit.xy.intermediate_frequency + qubit.xy.opx_output.upconverter_frequency
                 )
+                qubit.extras["idle_freq"] = qubit.xy.intermediate_frequency + qubit.xy.opx_output.upconverter_frequency
 
         # %% {Save_results}
         node.outcomes = {q.name: "successful" for q in qubits}

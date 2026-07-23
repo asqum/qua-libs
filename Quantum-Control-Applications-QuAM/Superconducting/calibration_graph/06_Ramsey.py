@@ -48,7 +48,7 @@ class Parameters(NodeParameters):
     use_state_discrimination: bool = False
     flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
     load_data_id: Optional[int] = None
-    multiplexed: bool = True
+    multiplexed: bool = False
     use_waveform_report: bool = True
     simulate: bool = False
     simulation_duration_ns: int = 2500

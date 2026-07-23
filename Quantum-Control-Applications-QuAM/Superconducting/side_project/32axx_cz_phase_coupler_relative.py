@@ -59,25 +59,23 @@ qubit_pair_indexes = [4]  # The indexes of the qubit pair to calibrate
 class Parameters(NodeParameters):
 
     qubit_pairs: Optional[List[str]] = ["coupler_q%s_q%s"%(i,i+1) for i in qubit_pair_indexes]
-    num_averages: int = 300
+    num_averages: int = 200
     flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
     reset_type: Literal['active', 'thermal'] = "active"
-    simulate: bool = False
+    simulate: bool = True
     timeout: int = 100
-    amp_min : float = -0.15
-    amp_max : float = -0.1
-    or_span:float|None = None
-    amp_pts:int = 100
-    num_frames: int = 11
+    amp_range: float = 0.5
+    amp_step: float = 0.01
+    num_frames: int = 10
     load_data_id: Optional[int] = None # 92417 
     plot_raw : bool = False
-    measure_leak:bool = True
+    measure_leak:bool = False
     operation: Literal["Cz"] = "Cz"
     
 
 
 node = QualibrationNode(
-    name="32ax_adiabaticCz_phase_calibration_frame", parameters=Parameters()
+    name="32axx_Adiabatic_cz_phase_coupler_relative", parameters=Parameters()
 )
 assert not (node.parameters.simulate and node.parameters.load_data_id is not None), "If simulate is True, load_data_id must be None, and vice versa."
 
@@ -123,8 +121,8 @@ n_avg = node.parameters.num_averages  # The number of averages
 
 flux_point = node.parameters.flux_point_joint_or_independent  # 'independent' or 'joint'
 
-# Loop parameters
-amplitudes = np.linspace(node.parameters.amp_min, node.parameters.amp_max, node.parameters.amp_pts)
+# Loop parameters (relative amplitude scale around 1.0)
+amplitudes = np.arange(1 - node.parameters.amp_range, 1 + node.parameters.amp_range, node.parameters.amp_step)
 frames = np.arange(0, 1, 1/node.parameters.num_frames)
 operation_name = node.parameters.operation
 
@@ -138,8 +136,6 @@ with program() as CPhase_Oscillations:
     state_target = [declare(int) for _ in range(num_qubit_pairs)]
     state_st_control = [declare_stream() for _ in range(num_qubit_pairs)]
     state_st_target = [declare_stream() for _ in range(num_qubit_pairs)]
-    
-
     
     for i, qp in enumerate(qubit_pairs):
         qp.gates['Cz'].phase_shift_control = 0.0
@@ -160,13 +156,14 @@ with program() as CPhase_Oscillations:
                 with for_(*from_array(frame, frames)):
                     with for_(*from_array(control_initial, [0,1])):
                         # reset
-                        if node.parameters.reset_type == "active":
-                            active_reset(qp.qubit_control)
-                            active_reset(qp.qubit_target)
-                            # active_reset_simple(qp.qubit_control)
-                            # active_reset_simple(qp.qubit_target)
-                        else:
-                            wait(qp.qubit_control.thermalization_time * u.ns)
+                        if not node.parameters.simulate:
+                            if node.parameters.reset_type == "active":
+                                active_reset(qp.qubit_control)
+                                active_reset(qp.qubit_target)
+                                # active_reset_simple(qp.qubit_control)
+                                # active_reset_simple(qp.qubit_target)
+                            else:
+                                wait(qp.qubit_control.thermalization_time * u.ns)
                         qp.align()
                         reset_frame(qp.qubit_target.xy.name)
                         reset_frame(qp.qubit_control.xy.name)                   
@@ -178,7 +175,7 @@ with program() as CPhase_Oscillations:
                         qp.align()
 
                         #play the CZ gate
-                        qp.gates[operation_name].execute(coupler_amplitude_scale = amp/qp.gates[operation_name].coupler_flux_pulse.amplitude)
+                        qp.gates[operation_name].execute(coupler_amplitude_scale = amp)
                         
                         #rotate the frame
                         frame_rotation_2pi(frame, qp.qubit_target.xy.name)
@@ -202,7 +199,7 @@ with program() as CPhase_Oscillations:
 # %% {Simulate_or_execute
 if node.parameters.simulate:
     # Simulates the QUA program for the specified duration
-    simulation_config = SimulationConfig(duration=10_000//4)  # In clock cycles = 4ns
+    simulation_config = SimulationConfig(duration=30_000//4)  # In clock cycles = 4ns
     job = qmm.simulate(config, CPhase_Oscillations, simulation_config)
     samples = job.get_simulated_samples()
     fig, ax = plt.subplots(nrows=len(samples.keys()), sharex=True)
@@ -238,20 +235,6 @@ if not node.parameters.simulate:
         
     node.results = {"ds": ds}
 
-# %% {Data_analysis}
-if not node.parameters.simulate:
-    def abs_amp(qp, amp):
-        return amp
-
-    def detuning(qp, amp):
-        return -(amp * qp.gates[operation_name].flux_pulse_control.amplitude)**2 * qp.qubit_control.freq_vs_flux_01_quad_term
-    
-    ds = ds.assign_coords(
-        {"amp_full": (["qubit", "amp"], np.array([abs_amp(qp, ds.amp) for qp in qubit_pairs]))}
-    )
-    # ds = ds.assign_coords(
-    #     {"detuning": (["qubit", "amp"], np.array([detuning(qp, ds.amp) for qp in qubit_pairs]))}
-    # )
 # %% Analysis
 if not node.parameters.simulate:
 
@@ -299,23 +282,23 @@ if not node.parameters.simulate:
                 # 判斷哪一個解落在我們的掃描範圍內
                 min_amp, max_amp = min(phase_diff.amp), max(phase_diff.amp)
                 if min_amp <= root1 <= max_amp:
-                    optimal_amp = root1
+                    optimal_amp_rel = root1
                 else:
-                    optimal_amp = root2
+                    optimal_amp_rel = root2
             else:
                 # 萬一真的沒有實數解的防呆機制
-                optimal_amp = float(np.abs(phase_diff - 0.5).idxmin("amp"))
+                optimal_amp_rel = float(np.abs(phase_diff - 0.5).idxmin("amp"))
                 
             # 3. 產生平滑的擬合曲線以供畫圖
             fitted[qp.name] = np.polyval(coeffs, phase_diff.amp)
         except:
             print(f"Fitting failed for {qp.name}")
-            optimal_amp = float(np.abs(phase_diff - 0.5).idxmin("amp"))    
+            optimal_amp_rel = float(np.abs(phase_diff - 0.5).idxmin("amp"))    
         
+        optimal_amps[qp.name] = optimal_amp_rel
         phase_diffs[qp.name] = phase_diff
-        optimal_amps[qp.name] = optimal_amp
         
-        print(f"parameters for {qp.name}: amp={optimal_amps[qp.name]}")
+        print(f"parameters for {qp.name}: amp_scale={optimal_amps[qp.name]}")
         
         if node.parameters.measure_leak:
             ds_selected = ds.isel(control_axis=1)
@@ -329,26 +312,18 @@ if not node.parameters.simulate:
     grid_names, qubit_pair_names = grid_pair_names(qubit_pairs)
     grid = QubitPairGrid(grid_names, qubit_pair_names)
     for ax, qubit_pair in grid_iter(grid):
-        phase_diffs[qubit_pair['qubit']].plot.line(ax=ax, x = "amp_full")
+        phase_diffs[qubit_pair['qubit']].plot.line(ax=ax, x="amp")
         if qubit_pair['qubit'] in fitted:
-            ax.plot(phase_diffs[qubit_pair['qubit']].amp_full, fitted[qubit_pair['qubit']])
-        ax.plot([optimal_amps[qubit_pair['qubit']]], [0.5], marker = 'o', color = 'red')
-        ax.axhline(y=0.5, color='red', linestyle='--',lw=0.5)
-        ax.axvline(x=optimal_amps[qubit_pair['qubit']], color='red', linestyle='--',lw=0.5)
-        # Add secondary x-axis for detuning in MHz
-        def amp_to_detuning_MHz(amp):
-            return -(amp**2) * qp.qubit_control.freq_vs_flux_01_quad_term / 1e6  # Convert Hz to MHz
-
-        def detuning_MHz_to_amp(detuning_MHz):
-            return np.sqrt(-detuning_MHz * 1e6 / qp.qubit_control.freq_vs_flux_01_quad_term)
-
-        # secax = ax.secondary_xaxis('top', functions=(amp_to_detuning_MHz, detuning_MHz_to_amp))
-        # secax.set_xlabel('Detuning (MHz)')
+            ax.plot(phase_diffs[qubit_pair['qubit']].amp, fitted[qubit_pair['qubit']])
+        ax.plot([optimal_amps[qubit_pair['qubit']]], [0.5], marker='o', color='red')
+        ax.axhline(y=0.5, color='red', linestyle='--', lw=0.5)
+        ax.axvline(x=optimal_amps[qubit_pair['qubit']], color='red', linestyle='--', lw=0.5)
+        ax.axvline(x=1.0, color='b', linestyle='--', lw=0.5)
         ax.set_title(qubit_pair['qubit'])
-        ax.set_xlabel('Amplitude (V)')
+        ax.set_xlabel('Amplitude scale')
         ax.set_ylabel('Phase difference')
         
-    plt.suptitle('Cz phase calibration', y=0.95)
+    plt.suptitle('Cz phase calibration (relative amp scan)', y=0.95)
     plt.tight_layout()
     plt.show()
     node.results["figure_phase"] = grid.fig
@@ -359,8 +334,8 @@ if not node.parameters.simulate:
             plot_data = populations.sel(qubit=qubit_pair['qubit'])
             ax.scatter(plot_data.amp, 100*(0.5 - plot_data.values), alpha=0.6, edgecolors='w')
             ax.set_title(f'{qubit_pair["qubit"]}')
-            ax.axvline(x=optimal_amps[qubit_pair['qubit']], color='red', linestyle='--',lw=0.5)
-            ax.set_xlabel('Amplitude (amp)')
+            ax.axvline(x=optimal_amps[qubit_pair['qubit']], color='red', linestyle='--', lw=0.5)
+            ax.set_xlabel('Amplitude scale')
             ax.set_ylabel(f'Leak population [%]')         
             ax.grid()
         plt.suptitle(r' Leak probability', y=0.95)
@@ -373,7 +348,7 @@ if not node.parameters.simulate:
     if node.parameters.load_data_id is None:
         with node.record_state_updates():
             for qp in qubit_pairs:
-                qp.gates[operation_name].coupler_flux_pulse.amplitude = optimal_amps[qp.name]          
+                qp.gates[operation_name].coupler_flux_pulse.amplitude *= optimal_amps[qp.name]          
 # %% {Save_results}
 if not node.parameters.simulate:
     node.outcomes = {qp.name: "successful" for qp in qubit_pairs}
