@@ -39,7 +39,7 @@ class Parameters(NodeParameters):
     qubits: Optional[List[str]] = None
     num_averages: int = 150
     min_wait_time_in_ns: int = 16
-    max_wait_time_in_ns: int = 250016
+    max_wait_time_in_ns: int = 200016
     flux_point_joint_or_independent_or_arbitrary: Literal["joint", "independent"] = "independent"
     reset_type: Literal["active", "thermal"] = "active"
     time_scale:Literal["log","lin"] = "log"
@@ -49,7 +49,7 @@ class Parameters(NodeParameters):
     timeout: int = 100
     load_data_id: Optional[int] = None
     multiplexed: bool = True
-    histo_num:int = 1 # 
+    histo_num:int = 100 # 
 node = QualibrationNode(name="05st_T1_histogram", parameters=Parameters())
 
 

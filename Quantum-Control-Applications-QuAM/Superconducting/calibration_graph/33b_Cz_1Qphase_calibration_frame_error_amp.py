@@ -42,7 +42,7 @@ import xarray as xr
 
 
 # %% {Node_parameters}
-qubit_pair_indexes = [1]
+qubit_pair_indexes = [4]
 
 
 class Parameters(NodeParameters):

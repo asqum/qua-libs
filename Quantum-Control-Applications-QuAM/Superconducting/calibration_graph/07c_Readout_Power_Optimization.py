@@ -47,12 +47,12 @@ from sklearn.mixture import GaussianMixture
 # %% {Node_parameters}
 class Parameters(NodeParameters):
 
-    qubits: Optional[List[str]] = None
-    num_runs: int = 2000
-    reset_type_thermal_or_active: Literal["thermal", "active"] = "thermal"
-    flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
+    qubits: Optional[List[str]] = ['q4']
+    num_runs: int = 8000
+    reset_type_thermal_or_active: Literal["thermal", "active"] = "active"
+    flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
     start_amp: float = 0.02
-    end_amp: float = 1.2
+    end_amp: float = 1.5
     num_amps: int = 100
     outliers_threshold: float = 0.98
     plot_raw: bool = False
@@ -60,7 +60,7 @@ class Parameters(NodeParameters):
     simulation_duration_ns: int = 2500
     timeout: int = 100
     load_data_id: Optional[int] = None
-    multiplexed: bool = False
+    multiplexed: bool = True
 
 
 node = QualibrationNode(name="07c_Readout_Power_Optimization", parameters=Parameters())

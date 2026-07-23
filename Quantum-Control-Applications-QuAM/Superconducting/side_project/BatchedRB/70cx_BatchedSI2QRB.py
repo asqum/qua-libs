@@ -13,10 +13,10 @@ from quam_libs.experiments.batched_SI2QRB import run_batched_rb
 from numpy import mean, std
 # %%
 # # 20 random circuits takes 10 mins
-couplers = ['coupler_q3_q4']
+couplers = ['coupler_q4_q5']
 target_operation:Literal['cz', 'idle_2q'] = 'cz'
 random_gates_per_depth:int = 30                  # If CZ is good, you may increase it to 198 with depth_rank = 'long' and give it like 1 hrs to run.
-repeat_num:int = 1
+repeat_num:int = 100
 depth_rank:Literal["short", "standard", "long"] = "short"
 job_id:int|None = None
 remove_zero_to_analyze:bool = False # Always False
