@@ -78,8 +78,8 @@ average_gates_per_2q_layer = None
 
 class Parameters(NodeParameters):
     qubit_pairs: Optional[List[str]] = ["coupler_q4_q5"]#None
-    circuit_lengths: tuple[int] = (1, 2 ,4, 8, 12, 16, 20, 25,30, 40, 60, 80, 100, 512, 1024, 2048) # in number of cliffords
-    num_circuits_per_length: int = 50
+    circuit_lengths: tuple[int] = (1, 2 ,4, 8, 12, 16, 20, 25, 30, 40, 60) # in number of cliffords
+    num_circuits_per_length: int = 30
     num_averages: int = 200
     basis_gates: list[str] = ['rz', 'sx', 'x', 'cz'] 
     readout_mode: Literal["ge", "gef"] = "ge"

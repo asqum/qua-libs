@@ -71,8 +71,8 @@ from quam_libs.experiments.rb_standard.plot_utils import gate_mapping
 
 class Parameters(NodeParameters):
     qubit_pairs: Optional[List[str]] = ["coupler_q4_q5"] #None
-    circuit_lengths: tuple[int] =  (1, 2 ,4, 8, 12, 16, 20, 25,30, 40, 60, 80, 100) # in number of cliffords
-    num_circuits_per_length: int = 100
+    circuit_lengths: tuple[int] =  (1, 2 ,4, 8, 12, 16, 20, 25, 30, 40, 60) # in number of cliffords
+    num_circuits_per_length: int = 30
     num_averages: int = 200
     target_gate: str = "cz" # "idle_2q" or "cz" supported 
     basis_gates: list[str] = ['rz', 'sx', 'x', 'cz'] 
