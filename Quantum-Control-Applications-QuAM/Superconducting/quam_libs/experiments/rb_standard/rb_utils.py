@@ -1,4 +1,8 @@
 import copy
+import hashlib
+import json
+import pickle
+from pathlib import Path
 from typing import Literal
 from matplotlib import pyplot as plt
 import numpy as np
@@ -15,8 +19,43 @@ from more_itertools import flatten
 
 from scipy.optimize import curve_fit
 import xarray
+from tqdm.auto import tqdm
 
 EPS = 1e-8
+
+
+def rb_cache_key(
+    seed: int,
+    circuit_lengths: list[int] | tuple[int, ...],
+    num_circuits_per_length: int,
+    *,
+    target_gate: str | None = None,
+) -> str:
+    """Match qualibration_graphs two_qubit_interleaved_rb cache key format."""
+    payload = {
+        "seed": seed,
+        "circuit_lengths": sorted(circuit_lengths),
+        "num_circuits_per_length": num_circuits_per_length,
+    }
+    if target_gate is not None:
+        payload["target_gate"] = target_gate
+    return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
+
+
+def rb_try_load(cache_dir: Path, key: str) -> dict | None:
+    cache_path = cache_dir / f"{key}.pkl"
+    if not cache_path.exists():
+        return None
+    with cache_path.open("rb") as handle:
+        return pickle.load(handle)
+
+
+def rb_save(cache_dir: Path, key: str, payload: dict) -> None:
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    cache_path = cache_dir / f"{key}.pkl"
+    with cache_path.open("wb") as handle:
+        pickle.dump(payload, handle)
+
 
 def rb_decay_curve(x, A, alpha, B):
     """
@@ -37,7 +76,8 @@ def rb_decay_curve(x, A, alpha, B):
 class RBBase:
     
     def __init__(self, circuit_lengths: list[int], num_circuits_per_length: int, basis_gates: list[str] = ['cz', 'rz', 'sx', 'x'], 
-                 num_qubits: int = 2, reduce_to_1q_cliffords: bool = False, seed: int | None = None):
+                 num_qubits: int = 2, reduce_to_1q_cliffords: bool = False, seed: int | None = None,
+                 show_progress: bool = True):
         
         self.num_qubits = num_qubits
         self.circuit_lengths = circuit_lengths
@@ -47,13 +87,19 @@ class RBBase:
         self.seed = seed if seed is not None else np.random.randint(0, 1000000)
         self.rolling_seed = copy.deepcopy(self.seed)
         self.reduce_to_1q_cliffords = reduce_to_1q_cliffords
+        self.show_progress = show_progress
     
     def generate_circuits_and_transpile(self, interleaved: bool = False):
         
         self.circuits = self.generate_circuits(interleaved)
-        self.transpiled_circuits = {l : self.transpile_per_clifford(circuits) for l, circuits in self.circuits.items()}
+        items = self.circuits.items()
+        if self.show_progress:
+            items = tqdm(items, total=len(self.circuits), desc="Transpiling RB circuit depths", unit="depth")
+        self.transpiled_circuits = {
+            length: self.transpile_circuits(circuits, depth=length) for length, circuits in items
+        }
         
-    def generate_circuits_per_length(self, length: int, interleaved: bool = False) -> list[QuantumCircuit]:
+    def generate_circuits_per_length(self, length: int, interleaved: bool = False, progress=None) -> list[QuantumCircuit]:
         
         circuits = []
         
@@ -86,6 +132,8 @@ class RBBase:
                     cliff = Clifford(self.target_gate_instruction) @ cliff
                 
                 clifford_product = cliff @ clifford_product  # Update the total Clifford
+                if progress is not None:
+                    progress.update(1)
             
             if length > 0:
                 # Append the inverse Clifford
@@ -105,15 +153,35 @@ class RBBase:
     
     def generate_circuits(self, interleaved: bool = False) -> dict[int, list[QuantumCircuit]]:
         
-        circuits = {}
-        for len in self.circuit_lengths:
-            circuits_per_len = self.generate_circuits_per_length(len, interleaved)
-            circuits[len] = circuits_per_len
-        
-        return circuits
+        total_cliffords = self.num_circuits_per_length * sum(self.circuit_lengths)
+        pbar = (
+            tqdm(total=total_cliffords, desc="Generating RB Cliffords", unit="cliff")
+            if self.show_progress
+            else None
+        )
+        try:
+            circuits = {}
+            for length in self.circuit_lengths:
+                circuits[length] = self.generate_circuits_per_length(length, interleaved, progress=pbar)
+            return circuits
+        finally:
+            if pbar is not None:
+                pbar.close()
     
+    def transpile_circuits(self, circuits: list[QuantumCircuit], depth: int | None = None) -> list[QuantumCircuit]:
+        """Transpile full RB circuits in one Qiskit call per circuit (much faster than per-Clifford)."""
+        circuit_iter = circuits
+        if self.show_progress:
+            label = f"Transpiling depth={depth}" if depth is not None else "Transpiling RB circuits"
+            circuit_iter = tqdm(circuits, desc=label, leave=False, unit="circ")
+
+        return [
+            transpile(qc, basis_gates=self.basis_gates, optimization_level=1)
+            for qc in circuit_iter
+        ]
+
     def transpile_per_clifford(self, circuits: list[QuantumCircuit]) -> list[QuantumCircuit]:
-         
+        """Legacy path: transpile each Clifford gate separately (slow, kept for reference)."""
         transpiled_circuits = []
         
         for qc in circuits:
@@ -206,21 +274,23 @@ class RBBase:
 class StandardRB(RBBase):
     
     def __init__(self, amplification_lengths: list[int], num_circuits_per_length: int, basis_gates: list[str] = ['cz', 'rz', 'sx', 'x'], 
-                 num_qubits: int = 2, reduce_to_1q_cliffords: bool = False, seed: int | None = None):
+                 num_qubits: int = 2, reduce_to_1q_cliffords: bool = False, seed: int | None = None,
+                 show_progress: bool = True):
         
-        super().__init__(amplification_lengths, num_circuits_per_length, basis_gates, num_qubits, reduce_to_1q_cliffords, seed)
+        super().__init__(amplification_lengths, num_circuits_per_length, basis_gates, num_qubits, reduce_to_1q_cliffords, seed, show_progress)
         
         self.generate_circuits_and_transpile()
 
 class InterleavedRB(RBBase):
     
     def __init__(self, target_gate: Literal['cz', 'idle_2q'], amplification_lengths: list[int], num_circuits_per_length: int, basis_gates: list[str] = ['cz', 'rz', 'sx', 'x'], 
-                 num_qubits: int = 2, reduce_to_1q_cliffords: bool = False, seed: int | None = None):
+                 num_qubits: int = 2, reduce_to_1q_cliffords: bool = False, seed: int | None = None,
+                 show_progress: bool = True):
         
         self.target_gate = target_gate
         self.target_gate_instruction = self.target_gate_to_instruction()
         
-        super().__init__(amplification_lengths, num_circuits_per_length, basis_gates, num_qubits, reduce_to_1q_cliffords, seed)
+        super().__init__(amplification_lengths, num_circuits_per_length, basis_gates, num_qubits, reduce_to_1q_cliffords, seed, show_progress)
         
         self.generate_circuits_and_transpile(interleaved=True)
     
