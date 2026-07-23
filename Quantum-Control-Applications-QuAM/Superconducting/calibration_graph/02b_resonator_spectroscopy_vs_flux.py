@@ -326,6 +326,8 @@ if not node.parameters.simulate:
                     if update_flux_min:
                         q.z.min_offset = float(flux_min.sel(qubit=q.name).data)
                 q.resonator.intermediate_frequency += float(rel_freq_shift.sel(qubit=q.name).data)
+                q.extras["dressed_resonator_freq"] = q.resonator.intermediate_frequency + q.resonator.RF_frequency
+                q.extras["FluxPeriodV"] = 1 / fit_osc.sel(fit_vals="f", qubit=q.name).values
                 q.phi0_voltage = fit_results[q.name]["dv_phi0"]
                 q.phi0_current = (
                     fit_results[q.name]["dv_phi0"] * node.parameters.input_line_impedance_in_ohm * attenuation_factor

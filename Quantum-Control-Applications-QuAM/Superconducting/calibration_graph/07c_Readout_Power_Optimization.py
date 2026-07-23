@@ -417,7 +417,7 @@ if not node.parameters.simulate:
                 )
                 qubit.resonator.operations["readout"].amplitude = float(node.results["results"][qubit.name]["best_amp"])
                 qubit.resonator.confusion_matrix = node.results["results"][qubit.name]["confusion_matrix"].tolist()
-
+                qubit.extras["readout_fidelity"] = float(node.results["results"][qubit.name]["fidelity"])
 
         # %% {Save_results}
         node.outcomes = {q.name: "successful" for q in qubits}
