@@ -16,8 +16,10 @@ target gate by comparing the decay rates of the interleaved sequences with refer
 Key Features:
     - reduce_to_1q_cliffords: When enabled (default), the Clifford gates are sampled as 1q Cliffords per qubit 
       (this is of course a much smaller subset of the whole 2q Clifford group).
-    - use_input_stream: When enabled (default), the circuit sequences are streamed to the OPX in using the 
-      input stream feature. This allows for dynamic circuit execution and reduces memory usage on the OPX.
+    - use_input_stream: When enabled, the circuit sequences are streamed to the OPX chunk-by-chunk (one chunk
+      per circuit depth) using the QUA input-stream feature (advance_input_stream) instead of being declared
+      as a single large array. This bypasses the OPX's QUA variable budget cap on declared arrays, enabling
+      longer circuit depths and/or more circuits per depth than the without-input-stream path can support.
 
 Each sequence is played multiple times for averaging, and multiple random sequences are generated for each depth to 
 improve statistical significance. The data is then post-processed to extract both the two-qubit Clifford fidelity and 
@@ -34,10 +36,12 @@ Prerequisites:
 # %%
 
 from datetime import datetime, timezone, timedelta
+from pathlib import Path
 from typing import List, Literal, Optional
 from more_itertools import flatten
 from quam_libs.experiments.rb_standard.data_utils import RBResult, InterleavedRBResult
 import xarray as xr
+from tqdm.auto import tqdm
 
 
 from qm.qua import *
@@ -47,7 +51,7 @@ from qualang_tools.multi_user import qm_session
 from qualang_tools.results import progress_counter, fetching_tool
 
 from qualibrate  import NodeParameters, QualibrationNode
-from quam_libs.experiments.rb_standard.circuit_utils import layerize_quantum_circuit, process_circuit_to_integers
+from quam_libs.experiments.rb_standard.circuit_utils import circuit_to_layer_ints
 from quam_libs.experiments.rb_standard.qua_utils import QuaProgramHandler
 from quam_libs.lib.plot_utils import plot_samples
 from quam_libs.lib.save_utils import (
@@ -57,8 +61,7 @@ from quam_libs.lib.save_utils import (
 )
 
 from quam_libs.components import QuAM
-from quam_libs.experiments.rb_standard.cloud_utils import write_sync_hook
-from quam_libs.experiments.rb_standard.rb_utils import InterleavedRB
+from quam_libs.experiments.rb_standard.rb_utils import InterleavedRB, rb_cache_key, rb_save, rb_try_load
 from quam_libs.experiments.rb_standard.plot_utils import gate_mapping
 
 
@@ -68,8 +71,8 @@ from quam_libs.experiments.rb_standard.plot_utils import gate_mapping
 
 class Parameters(NodeParameters):
     qubit_pairs: Optional[List[str]] = ["coupler_q4_q5"] #None
-    circuit_lengths: tuple[int] =  (1, 2 ,4, 8, 16, 22, 30) # in number of cliffords
-    num_circuits_per_length: int = 20
+    circuit_lengths: tuple[int] =  (1, 2 ,4, 8, 12, 16, 20, 25, 30, 40, 60) # in number of cliffords
+    num_circuits_per_length: int = 30
     num_averages: int = 200
     target_gate: str = "cz" # "idle_2q" or "cz" supported 
     basis_gates: list[str] = ['rz', 'sx', 'x', 'cz'] 
@@ -77,6 +80,8 @@ class Parameters(NodeParameters):
     flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
     reset_type_thermal_or_active: Literal["thermal", "active", "active_gef"] = "active"
     reduce_to_1q_cliffords: bool = False
+    use_input_stream: bool = True
+    max_chunk_ints: int = 16000
     simulate: bool = False
     simulation_duration_ns: int = 10000
     load_data_id: Optional[int] = None
@@ -110,26 +115,68 @@ config = node.machine.generate_config()
 
 # %% {Random circuit generation}
 
-interleaved_RB = InterleavedRB(
+READOUT_OPCODE = 66
+cache_key = rb_cache_key(
+    node.parameters.seed,
+    node.parameters.circuit_lengths,
+    node.parameters.num_circuits_per_length,
     target_gate=node.parameters.target_gate,
-    amplification_lengths=node.parameters.circuit_lengths,
-    num_circuits_per_length=node.parameters.num_circuits_per_length,
-    basis_gates=node.parameters.basis_gates,
-    num_qubits=2,
-    reduce_to_1q_cliffords=node.parameters.reduce_to_1q_cliffords,
-    seed=node.parameters.seed
+)
+cache_dir = Path(__file__).resolve().parent.parent / ".rb_cache"
+cached = rb_try_load(cache_dir, cache_key)
+
+total_cliffords = node.parameters.num_circuits_per_length * sum(node.parameters.circuit_lengths)
+print(
+    f"IRB config ({node.parameters.target_gate}): {len(node.parameters.circuit_lengths)} depths, "
+    f"{node.parameters.num_circuits_per_length} circuits/depth, "
+    f"~{total_cliffords} Cliffords to generate+transpile (first run only; cached after)"
 )
 
-transpiled_circuits = interleaved_RB.transpiled_circuits
-transpiled_circuits_as_ints = {}
-for l, circuits in transpiled_circuits.items():
-    transpiled_circuits_as_ints[l] = [process_circuit_to_integers(layerize_quantum_circuit(qc)) for qc in circuits]
+if cached is not None:
+    circuits_as_ints = cached["circuits_as_ints"]
+    print(f"Loaded {len(circuits_as_ints)} cached IRB circuits (key {cache_key[:12]})")
+else:
+    interleaved_RB = InterleavedRB(
+        target_gate=node.parameters.target_gate,
+        amplification_lengths=node.parameters.circuit_lengths,
+        num_circuits_per_length=node.parameters.num_circuits_per_length,
+        num_qubits=2,
+        seed=node.parameters.seed,
+    )
 
-circuits_as_ints = []
-for circuits_per_len in transpiled_circuits_as_ints.values():
-    for circuit in circuits_per_len:
-        circuit_with_measurement = circuit + [66] # readout
-        circuits_as_ints.append(circuit_with_measurement)
+    transpiled_circuits = interleaved_RB.transpiled_circuits
+    transpiled_circuits_as_ints = {}
+    total_circuits_to_encode = sum(len(circuits) for circuits in transpiled_circuits.values())
+    with tqdm(total=total_circuits_to_encode, desc="Encoding IRB circuits to ints", unit="circ") as pbar:
+        for length, circuits in transpiled_circuits.items():
+            encoded = []
+            for qc in circuits:
+                encoded.append(circuit_to_layer_ints(qc))
+                pbar.update(1)
+            transpiled_circuits_as_ints[length] = encoded
+
+    circuits_as_ints = []
+    for circuits_per_len in transpiled_circuits_as_ints.values():
+        for circuit in circuits_per_len:
+            circuits_as_ints.append(circuit + [READOUT_OPCODE])
+
+    rb_save(
+        cache_dir,
+        cache_key,
+        {"circuits_as_ints": circuits_as_ints},
+    )
+    print(f"Computed and cached {len(circuits_as_ints)} IRB circuits (key {cache_key[:12]})")
+
+total_circuits = len(circuits_as_ints)
+total_circuit_executions = total_circuits * node.parameters.num_averages
+print("=== 2Q Interleaved RB circuit summary ===")
+print(f"Target gate: {node.parameters.target_gate}")
+print(f"Circuit depths: {list(node.parameters.circuit_lengths)}")
+print(f"Circuits per depth: {node.parameters.num_circuits_per_length}")
+print(f"Total number of circuits (per qubit pair): {total_circuits}")
+print(f"Number of averages per circuit: {node.parameters.num_averages}")
+print(f"Total circuit executions (per qubit pair): {total_circuits} x {node.parameters.num_averages} = {total_circuit_executions}")
+print("==========================================")
 
 # %% {QUA_program}
 
@@ -138,6 +185,9 @@ num_pairs = len(qubit_pairs)
 qua_program_handler = QuaProgramHandler(node, num_pairs, circuits_as_ints, node.machine, qubit_pairs)
 
 rb = qua_program_handler.get_qua_program()
+
+if node.parameters.use_input_stream:
+    print(f"Total input-stream pushes (all qubit pairs): {qua_program_handler.n_sub_chunks} x {num_pairs} = {qua_program_handler.total_pushes}")
 
 # %% {Simulate_or_execute}
 if node.parameters.simulate:
@@ -151,13 +201,22 @@ elif node.parameters.load_data_id is None:
     date_time = datetime.now(timezone(timedelta(hours=3))).strftime("%Y-%m-%d %H:%M:%S")
     
     with qm_session(node.machine.qmm, config, timeout=node.parameters.timeout) as qm:
-        job = qm.execute(rb)
+        if node.parameters.use_input_stream:
+            job = qm.execute(rb)
+            qua_program_handler.push_all_chunks(job)
+        else:
+            job = qm.execute(rb)
+
         results = fetching_tool(job, ["iteration"], mode="live")
         while results.is_processing():
-            # Fetch results
             n = results.fetch_all()[0]
-            # Progress bar
-            progress_counter(n, node.parameters.num_averages, start_time=results.start_time)
+            # Progress bar: with input streams, "iteration" counts host pushes
+            # (advance_input_stream calls, i.e. depth/sub-chunk boundaries) across all
+            # qubit pairs. Without input streams, it counts completed averages.
+            if node.parameters.use_input_stream:
+                progress_counter(n, qua_program_handler.total_pushes, start_time=results.start_time)
+            else:
+                progress_counter(n, node.parameters.num_averages, start_time=results.start_time)
 
 # %% {Plot_sequence}
 
@@ -175,10 +234,26 @@ if node.parameters.simulate:
 
  # %% {Data_fetching_and_dataset_creation}
 if node.parameters.load_data_id is None:
+    if node.parameters.use_input_stream:
+        # With input streams, the QUA program advances one (depth) chunk at a time and
+        # replays every shot before advancing, so the raw save order is depth-major,
+        # then shot, then sequence (see QuaProgramHandler._get_qua_program_with_input_stream).
+        # fetch_results_as_xarray reverses the dict order, so pass it reversed here too.
+        measurement_axis = {
+            "sequence": range(node.parameters.num_circuits_per_length),
+            "shots": range(node.parameters.num_averages),
+            "depths": list(node.parameters.circuit_lengths),
+        }
+    else:
+        measurement_axis = {
+            "sequence": range(node.parameters.num_circuits_per_length),
+            "depths": list(node.parameters.circuit_lengths),
+            "shots": range(node.parameters.num_averages),
+        }
     ds = fetch_results_as_xarray(
     job.result_handles,
     qubit_pairs,
-        { "sequence": range(node.parameters.num_circuits_per_length), "depths": list(node.parameters.circuit_lengths), "shots": range(node.parameters.num_averages)},
+        measurement_axis,
     )
 else:
     load_data_id = node.parameters.load_data_id

@@ -48,15 +48,15 @@ import numpy as np
 # %% {Node_parameters}
 class Parameters(NodeParameters):
 
-    qubits: Optional[List[str]] = ['q5','q6']
-    num_averages: int = 100
-    frequency_span_in_mhz: float = 10 #15
-    frequency_step_in_mhz: float = 0.05
+    qubits: Optional[List[str]] = None
+    num_averages: int = 200
+    frequency_span_in_mhz: float = 2 #15
+    frequency_step_in_mhz: float = 0.03
     simulate: bool = False
     simulation_duration_ns: int = 2500
     timeout: int = 100
-    max_power_dbm: int = -20 #-30, -10
-    min_power_dbm: int = -50 # -40
+    max_power_dbm: int = 5 #-30, -10
+    min_power_dbm: int = -30 # -40
     num_power_points: int = 50
     max_amp: float = 0.9 #0.1
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
@@ -64,7 +64,7 @@ class Parameters(NodeParameters):
     derivative_crossing_threshold_in_hz_per_dbm: int = int(-50e3)
     derivative_smoothing_window_num_points: int = 30
     moving_average_filter_window_num_points: int = 30
-    multiplexed: bool = True
+    multiplexed: bool = False
     load_data_id: Optional[int] = None
 
 node = QualibrationNode(name="02c_Resonator_Spectroscopy_vs_Amplitude", parameters=Parameters())
@@ -321,7 +321,7 @@ if not node.parameters.simulate:
                     fit_results[q.name] = power_settings
                 if not np.isnan(rr_optimal_frequencies[q.name]):
                     q.resonator.intermediate_frequency += rr_optimal_frequencies[q.name]
-                    q.extras["dressed_resonator_freq"] = q.resonator.intermediate_frequency + q.resonator.RF_frequency
+                    q.extras["dressed_resonator_freq"] = q.resonator.RF_frequency
                     fit_results[q.name]["RO_frequency"] = q.resonator.RF_frequency
     node.results["fit_results"] = fit_results
 

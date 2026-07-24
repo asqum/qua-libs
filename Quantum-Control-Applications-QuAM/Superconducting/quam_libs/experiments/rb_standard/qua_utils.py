@@ -10,6 +10,105 @@ from qualibrate import NodeParameters, QualibrationNode
 from quam_libs.components import QuAM
 from qualang_tools.units import unit
 
+# Padding value used to fill input-stream chunks up to the declared array size.
+# case_(63) is an idle wait(20ns) on both qubits in play_gate (see below) -- a safe
+# no-op, so an off-by-one under switch_case(..., unsafe=True) lands on a harmless
+# idle instead of undefined behavior.
+INPUT_STREAM_PAD_VALUE = 63
+
+# Rough OPX QUA variable budget; leave headroom for streams, counters, sub-chunk
+# length arrays, etc. when sizing input-stream chunks / the non-input-stream array.
+OPX_QUA_VARIABLE_BUDGET = 16000
+
+
+def build_single_depth_chunks(
+    circuits_as_ints: list[list[int]],
+    circuit_lengths: list[int],
+    num_circuits_per_length: int,
+    max_chunk_ints: int,
+) -> tuple[list[list[list[int]]], int]:
+    """
+    Pack RB circuits into per-depth sub-chunks for the input-stream QUA path.
+
+    Circuits are grouped strictly by circuit depth: a sub-chunk never mixes circuits
+    coming from two different depths. For each depth, its ``num_circuits_per_length``
+    circuits are greedily packed into sub-chunks so that each sub-chunk's total int
+    count stays <= ``max_chunk_ints``. This keeps the on-OPX save order aligned with
+    depth boundaries, which is required for the ``.buffer(...)`` reshape done in
+    ``_get_qua_program_with_input_stream``.
+
+    Args:
+        circuits_as_ints: Flat list of circuits (each a list of ints terminated by
+            the readout opcode), ordered depth-major then circuit-index (as built
+            in the calibration node scripts).
+        circuit_lengths: Ordered circuit depths (Cliffords) being benchmarked.
+        num_circuits_per_length: Number of random circuits sampled per depth.
+        max_chunk_ints: Maximum number of ints allowed per sub-chunk (should stay
+            comfortably below the OPX QUA variable budget).
+
+    Returns:
+        chunks_per_depth: One entry per depth; each entry is a list of sub-chunks
+            (each sub-chunk a flat ``list[int]`` of one or more concatenated circuits).
+        declared_size: The max sub-chunk length across all depths. This sizes the
+            ``declare_input_stream`` array; shorter sub-chunks are padded to it before
+            being pushed.
+    """
+    expected = len(circuit_lengths) * num_circuits_per_length
+    if len(circuits_as_ints) != expected:
+        raise ValueError(
+            f"circuits_as_ints length ({len(circuits_as_ints)}) does not match "
+            f"circuit_lengths x num_circuits_per_length ({len(circuit_lengths)} x "
+            f"{num_circuits_per_length} = {expected})."
+        )
+
+    chunks_per_depth: list[list[list[int]]] = []
+    declared_size = 0
+
+    for depth_idx, depth in enumerate(circuit_lengths):
+        start = depth_idx * num_circuits_per_length
+        end = start + num_circuits_per_length
+        circuits_for_depth = circuits_as_ints[start:end]
+
+        sub_chunks: list[list[int]] = []
+        current_chunk: list[int] = []
+
+        for circ_idx, circuit in enumerate(circuits_for_depth):
+            if len(circuit) > max_chunk_ints:
+                raise ValueError(
+                    f"Single circuit too large for an input-stream chunk: depth={depth} "
+                    f"Cliffords, circuit_index={circ_idx}, circuit_ints={len(circuit)}, "
+                    f"max_chunk_ints={max_chunk_ints}. Reduce the depth, raise max_chunk_ints "
+                    "(must stay below the OPX QUA variable budget), or reduce num_circuits_per_length."
+                )
+            if current_chunk and len(current_chunk) + len(circuit) > max_chunk_ints:
+                sub_chunks.append(current_chunk)
+                current_chunk = []
+            current_chunk.extend(circuit)
+
+        if current_chunk:
+            sub_chunks.append(current_chunk)
+
+        for sub_chunk in sub_chunks:
+            declared_size = max(declared_size, len(sub_chunk))
+
+        chunks_per_depth.append(sub_chunks)
+
+    return chunks_per_depth, declared_size
+
+
+def validate_without_input_stream_budget(circuits_as_ints: list[list[int]], max_chunk_ints: int) -> None:
+    """Fail fast (before QUA compilation) if the flattened sequence would exceed the OPX budget."""
+    total_ints = sum(len(circuit) for circuit in circuits_as_ints)
+    if total_ints <= max_chunk_ints:
+        return
+    raise ValueError(
+        f"Flattened RB sequence has {total_ints} ints, which exceeds the budget for the "
+        f"non-input-stream path (max_chunk_ints={max_chunk_ints}, OPX QUA variable budget "
+        f"~{OPX_QUA_VARIABLE_BUDGET}). Set use_input_stream=True in the node parameters, "
+        "reduce circuit_lengths, or reduce num_circuits_per_length."
+    )
+
+
 def reset_qubits(node, control: Transmon, target: Transmon, thermalization_time: float | None = None):
     reset_mode = getattr(node.parameters, "reset_type_thermal_or_active", "active")
     if reset_mode == "active":
@@ -240,7 +339,7 @@ def play_gate(gate: QuaVariable, qubit_pair: TransmonPair, state: QuaVariable, s
             
             measure_two_qubit_state(node, qubit_pair, state, state_control, state_target)
             save(state, state_st)
-            
+
             # Initialize the qubits
             if reset_type == "active":
                 active_reset(qubit_pair.qubit_control, "readout")
@@ -275,23 +374,71 @@ class QuaProgramHandler:
         self.max_sequence_length = max_sequence_length
         self.readout_mode = getattr(self.node.parameters, "readout_mode", "ge")
         self.reset_mode = getattr(self.node.parameters, "reset_type_thermal_or_active", "active")
+        self.use_input_stream = getattr(self.node.parameters, "use_input_stream", False)
+        self.max_chunk_ints = getattr(self.node.parameters, "max_chunk_ints", 15000)
+
+        # Total number of distinct RB circuits (across all depths) played per qubit pair.
+        self.total_circuits = len(self.circuits_as_ints)
+
+        self.chunks_per_depth = None
+        self.declared_size = None
+        # Number of sub-chunks pushed via advance_input_stream, per qubit pair. Only
+        # meaningful when use_input_stream=True; used to size the progress bar (which
+        # tracks host pushes, i.e. depth/sub-chunk boundaries) instead of averages.
+        self.n_sub_chunks = None
+
+        if self.use_input_stream:
+            self.chunks_per_depth, self.declared_size = build_single_depth_chunks(
+                circuits_as_ints=self.circuits_as_ints,
+                circuit_lengths=list(self.node.parameters.circuit_lengths),
+                num_circuits_per_length=self.node.parameters.num_circuits_per_length,
+                max_chunk_ints=self.max_chunk_ints,
+            )
+            self.n_sub_chunks = sum(len(depth_chunks) for depth_chunks in self.chunks_per_depth)
+        else:
+            validate_without_input_stream_budget(self.circuits_as_ints, self.max_chunk_ints)
+
+    @property
+    def total_pushes(self) -> int:
+        """Total number of advance_input_stream calls across all qubit pairs (progress bar total)."""
+        if self.n_sub_chunks is None:
+            raise RuntimeError("total_pushes is only defined when use_input_stream is True.")
+        return self.n_sub_chunks * self.num_pairs
          
     def _get_qua_program_with_input_stream(self):
-        
+
+        # Flatten chunks_per_depth into a single ordered list of sub-chunks: depth-major,
+        # then sub-chunk-index within depth -- the same order the QUA program consumes
+        # them (via advance_input_stream) and the order push_all_chunks() pushes them in.
+        flat_sub_chunks = [sub_chunk for depth_chunks in self.chunks_per_depth for sub_chunk in depth_chunks]
+        sub_chunk_lengths = [len(sub_chunk) for sub_chunk in flat_sub_chunks]
+        n_sub_chunks = len(flat_sub_chunks)
+
         with program() as rb:
-    
-            n = declare(int)
+
             n_st = declare_stream()
-            
-            sequence = declare_input_stream(int, name=f"sequence", size=self.max_current_sequence_length)
-            
-            # The relevant streams
-            state_control = declare(int)
-            state_target = declare(int)
-            state = declare(int)
+
+            # sub_lens lives in a tiny QUA array (one int per sub-chunk) so the play_gate
+            # switch_case body is compiled once per qubit pair, not once per sub-chunk.
+            sub_lens = declare(int, value=sub_chunk_lengths)
+
+            sequence = declare_input_stream(int, name="sequence", size=self.declared_size)
+
             state_st = [declare_stream() for _ in range(self.num_pairs)]
 
+            # Counts host pushes (advance_input_stream calls) across all qubit pairs, so
+            # "iteration" reports progress in terms of pushed sub-chunks/depths instead of
+            # raw shots -- avoids the progress bar being scaled by num_averages.
+            push_counter = declare(int, value=0)
+
             for i, qubit_pair in enumerate(self.qubit_pairs):
+
+                n = declare(int)
+                j = declare(int)
+                k = declare(int)
+                state_control = declare(int)
+                state_target = declare(int)
+                state = declare(int)
 
                 # Bring the active qubits to the desired frequency point
                 self.machine.set_all_fluxes(flux_point=self.node.parameters.flux_point_joint_or_independent, target=qubit_pair.qubit_control)
@@ -304,29 +451,67 @@ class QuaProgramHandler:
                     active_reset_gef(qubit_pair.qubit_control, "readout")
                     active_reset_gef(qubit_pair.qubit_target, "readout")
                 else:
-                    # qubit_pair.qubit_control.resonator.wait(4)
                     qubit_pair.qubit_control.resonator.wait(qubit_pair.qubit_control.thermalization_time * self.u.ns)
                     qubit_pair.qubit_target.resonator.wait(qubit_pair.qubit_target.thermalization_time * self.u.ns)
-                
+
                 # Align the two elements to play the sequence after qubit initialization
                 align()
-                
-                for l in self.sequence_lengths:
+
+                # Chunk outer, shot inner: one advance (one host push) per sub-chunk;
+                # all shots replay the same sub-chunk on the OPX without extra host pushes.
+                with for_(j, 0, j < n_sub_chunks, j + 1):
                     advance_input_stream(sequence)
 
+                    # One push happened; report it immediately so the progress bar advances
+                    # as soon as each sub-chunk lands on the OPX, before its averages run.
+                    assign(push_counter, push_counter + 1)
+                    save(push_counter, n_st)
+
                     with for_(n, 0, n < self.node.parameters.num_averages, n + 1):
-                        
-                        play_sequence(sequence, l, qubit_pair, state, state_control, state_target, state_st[i], self.reset_mode, self.readout_mode, self.node)
-                                    
-                        save(n, n_st)
+
+                        with for_(k, 0, k < sub_lens[j], k + 1):
+                            play_gate(sequence[k], qubit_pair, state, state_control, state_target, state_st[i], self.reset_mode, self.readout_mode, self.node)
+
+                align()  # align between pairs. No multiplexing support for the moment.
 
             with stream_processing():
                 n_st.save("iteration")
                 for i in range(len(self.qubit_pairs)):
-                    state_st[i].buffer(self.node.parameters.num_circuits_per_length).buffer(len(self.node.parameters.circuit_lengths)).buffer(self.node.parameters.num_averages).save(
+                    # Input-stream save order is depth-major (outer) -> shot (middle) ->
+                    # circuit-within-depth (inner), unlike the without-input-stream path
+                    # which is shot-major. See the Data_fetching section of the calling
+                    # node script, which builds the sweep axes accordingly.
+                    state_st[i].buffer(self.node.parameters.num_circuits_per_length).buffer(self.node.parameters.num_averages).buffer(len(self.node.parameters.circuit_lengths)).save(
                         f"state{i + 1}"
                     )
         return rb
+
+    def _padded_chunks(self) -> list[list[int]]:
+        """Flat depth-major list of sub-chunks, each padded with INPUT_STREAM_PAD_VALUE up to declared_size."""
+        declared_size = self.declared_size
+        return [
+            sub_chunk + [INPUT_STREAM_PAD_VALUE] * (declared_size - len(sub_chunk))
+            for depth_chunks in self.chunks_per_depth
+            for sub_chunk in depth_chunks
+        ]
+
+    def get_all_padded_chunks_for_all_pairs(self) -> list[list[int]]:
+        """
+        Padded sub-chunks repeated once per qubit pair, in the exact order the QUA
+        program consumes/pushes them (qubit pairs run sequentially, not multiplexed).
+        Used both by push_all_chunks() and to generate the cloud sync_hook script.
+        """
+        if not self.use_input_stream:
+            raise RuntimeError(
+                "get_all_padded_chunks_for_all_pairs called but use_input_stream is False; "
+                "the QUA program does not declare an input stream."
+            )
+        return self._padded_chunks() * len(self.qubit_pairs)
+
+    def push_all_chunks(self, job) -> None:
+        """Push input-stream chunks to a running job, in the order the QUA program consumes them."""
+        for chunk in self.get_all_padded_chunks_for_all_pairs():
+            job.push_to_input_stream("sequence", chunk)
     
     def _get_qua_program_without_input_stream(self):
         
@@ -368,7 +553,6 @@ class QuaProgramHandler:
                 with for_(n, 0, n < self.node.parameters.num_averages, n + 1):
                     
                     play_sequence(job_sequence_qua, sequence_length, qubit_pair, state, state_control, state_target, state_st[i], self.reset_mode, self.readout_mode, self.node)
-                                
                     save(n, n_st)
                     
                 align() # align between pairs. No multiplexing support for the moment.
@@ -383,6 +567,8 @@ class QuaProgramHandler:
     
     
     def get_qua_program(self):
+        if self.use_input_stream:
+            return self._get_qua_program_with_input_stream()
         return self._get_qua_program_without_input_stream()
         
 
