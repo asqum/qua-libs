@@ -1,0 +1,26 @@
+{
+    "wiring": {
+        "qubits": {
+            "q1": {
+                "rr": {
+                    "opx_input": "#/ports/mw_inputs/con1/6/1",
+                    "opx_output": "#/ports/mw_outputs/con1/6/1"
+                },
+                "xy": {
+                    "opx_output": "#/ports/mw_outputs/con1/6/2"
+                },
+                "z": {
+                    "opx_output": "#/ports/analog_outputs/con1/1/1"
+                }
+            }
+        },
+        "qubit_pairs": {}
+    },
+    "network": {
+        "host": "10.21.19.201",
+        "port": 9511,
+        "cluster_name": "QPX1000_1",
+        "octave_ips": [],
+        "octave_ports": []
+    }
+}

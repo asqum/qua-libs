@@ -59,19 +59,18 @@ qubit_pair_indexes = [4]  # The indexes of the qubit pair to calibrate
 class Parameters(NodeParameters):
 
     qubit_pairs: Optional[List[str]] = ["coupler_q%s_q%s"%(i,i+1) for i in qubit_pair_indexes]
-    num_averages: int = 300
+    num_averages: int = 200
     flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
     reset_type: Literal['active', 'thermal'] = "active"
-    simulate: bool = False
+    simulate: bool = True
     timeout: int = 100
-    amp_min : float = -0.15
-    amp_max : float = -0.1
-    or_span:float|None = None
+    amp_min : float = -0.27
+    amp_max : float = -0.15
     amp_pts:int = 100
-    num_frames: int = 11
+    num_frames: int = 10
     load_data_id: Optional[int] = None # 92417 
-    plot_raw : bool = False
-    measure_leak:bool = True
+    plot_raw : bool = True
+    measure_leak:bool = False
     operation: Literal["Cz"] = "Cz"
     
 
@@ -139,8 +138,6 @@ with program() as CPhase_Oscillations:
     state_st_control = [declare_stream() for _ in range(num_qubit_pairs)]
     state_st_target = [declare_stream() for _ in range(num_qubit_pairs)]
     
-
-    
     for i, qp in enumerate(qubit_pairs):
         qp.gates['Cz'].phase_shift_control = 0.0
         qp.gates['Cz'].phase_shift_target = 0.0
@@ -203,7 +200,7 @@ with program() as CPhase_Oscillations:
 # %% {Simulate_or_execute
 if node.parameters.simulate:
     # Simulates the QUA program for the specified duration
-    simulation_config = SimulationConfig(duration=10_000//4)  # In clock cycles = 4ns
+    simulation_config = SimulationConfig(duration=30_000//4)  # In clock cycles = 4ns
     job = qmm.simulate(config, CPhase_Oscillations, simulation_config)
     samples = job.get_simulated_samples()
     fig, ax = plt.subplots(nrows=len(samples.keys()), sharex=True)
