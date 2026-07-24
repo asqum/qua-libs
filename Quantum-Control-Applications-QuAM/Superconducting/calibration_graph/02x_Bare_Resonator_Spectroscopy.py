@@ -18,6 +18,7 @@ Before proceeding to the next node:
 """
 
 # %% {Imports}
+from tkinter import N
 from qualibrate import QualibrationNode, NodeParameters
 from quam_libs.components import QuAM
 from quam_libs.macros import qua_declaration
@@ -29,6 +30,7 @@ from quam_libs.lib.save_utils import (
     restore_load_data_id,
     resolve_qubits_from_node,
 )
+from quam_libs.trackable_object import tracked_updates
 from qualang_tools.results import progress_counter, fetching_tool
 from qualang_tools.loops import from_array
 from qualang_tools.multi_user import qm_session
@@ -45,8 +47,8 @@ class Parameters(NodeParameters):
 
     qubits: Optional[List[str]] = None
     num_averages: int = 300
-    frequency_span_in_mhz: float = 40 #20.0
-    frequency_step_in_mhz: float = 0.1
+    frequency_span_in_mhz: float = 20 #20.0
+    frequency_step_in_mhz: float = 0.05
     simulate: bool = False
     simulation_duration_ns: int = 2500
     timeout: int = 100
@@ -54,7 +56,7 @@ class Parameters(NodeParameters):
     multiplexed: bool = False
 
 
-node = QualibrationNode(name="02a_Resonator_Spectroscopy", parameters=Parameters())
+node = QualibrationNode(name="02x_Bare_Resonator_Spectroscopy", parameters=Parameters())
 assert not (
     node.parameters.simulate and node.parameters.load_data_id is not None
 ), "If simulate is True, load_data_id must be None, and vice versa."
@@ -65,11 +67,6 @@ u = unit(coerce_to_integer=True)
 # Instantiate the QuAM class from the state file
 machine = QuAM.load()
 node.machine = machine
-# Generate the OPX and Octave configurations
-config = machine.generate_config()
-# Open Communication with the QOP
-if node.parameters.load_data_id is None:
-    qmm = machine.connect()
 
 # Get the relevant QuAM components
 if node.parameters.qubits is None or node.parameters.qubits == "":
@@ -78,6 +75,20 @@ else:
     qubits = [machine.qubits[q] for q in node.parameters.qubits]
 resonators = [qubit.resonator for qubit in qubits]
 num_qubits = len(qubits)
+
+# Low probe power (0.1 V peak) for bare resonator spectroscopy; reverted right after acquisition.
+tracked_resonators = []
+bare_readout_power_dbm = u.volts2dBm(0.1)
+for qubit in qubits:
+    with tracked_updates(qubit.resonator, auto_revert=False, dont_assign_to_none=True) as resonator:
+        resonator.set_output_power(bare_readout_power_dbm, operation="readout")
+        tracked_resonators.append(resonator)
+
+# Generate the OPX and Octave configurations
+config = machine.generate_config()
+# Open Communication with the QOP
+if node.parameters.load_data_id is None:
+    qmm = machine.connect()
 
 
 # %% {QUA_program}
@@ -137,6 +148,8 @@ if node.parameters.simulate:
     # Update the node & save
     node.results = {"figure": plt.gcf()}
     node.save()
+    for tracked_resonator in tracked_resonators:
+        tracked_resonator.revert_changes()
 
 elif node.parameters.load_data_id is None:
     # Open a quantum machine to execute the QUA program
@@ -148,6 +161,8 @@ elif node.parameters.load_data_id is None:
             n = results.fetch_all()[0]
             # Progress bar
             progress_counter(n, n_avg, start_time=results.start_time)
+    for tracked_resonator in tracked_resonators:
+        tracked_resonator.revert_changes()
 
 # %% {Data_fetching_and_dataset_creation}
 if not node.parameters.simulate:
@@ -202,6 +217,7 @@ if not node.parameters.simulate:
         print(f"Qi for {q.name} is {Qi:,.0f} \n")
 
     # %% {Plotting}
+    print(qubits)
     grid = QubitGrid(ds, [q.grid_location for q in qubits])
     for ax, qubit in grid_iter(grid):
         (ds.assign_coords(freq_MHz=ds.freq / 1e6).loc[qubit].IQ_abs * 1e3).plot(ax=ax, x="freq_MHz")
@@ -242,8 +258,7 @@ if not node.parameters.simulate:
     if node.parameters.load_data_id is None:
         with node.record_state_updates():
             for index, q in enumerate(qubits):
-                q.resonator.intermediate_frequency += int(fits[q.name].params["omega_r"].value)
-                q.extras["dressed_resonator_freq"] = q.resonator.RF_frequency
+                q.extras["bare_resonator_freq"] = int(fits[q.name].params["omega_r"].value) + q.resonator.RF_frequency
 
         # %% {Save_results}
         node.outcomes = {q.name: "successful" for q in qubits}

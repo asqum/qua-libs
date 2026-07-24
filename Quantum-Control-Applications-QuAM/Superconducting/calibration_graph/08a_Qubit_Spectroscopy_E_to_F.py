@@ -267,6 +267,7 @@ else:
             fit_results[q.name] = {}
             if not np.isnan(result.sel(qubit=q.name).position.values):
                 q.anharmonicity = int(anharmonicities[q.name])
+                q.extras["anharmonicity"] = q.anharmonicity
 
     # %% {Save_results}
     node.outcomes = {q.name: "successful" for q in qubits}
