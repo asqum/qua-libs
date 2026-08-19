@@ -24,8 +24,13 @@ def decay_exp(t, a, offset, decay, **kwargs):
 
 def fit_decay_exp(da, dim):
     def get_decay(dat):
+        x = np.asarray(da[dim].values if hasattr(da[dim], "values") else da[dim])
+
         def oed(d):
-            return ca.guess.exp_decay(da[dim], d)
+            guess = ca.guess.exp_decay(x, d)
+            if guess is None or not np.isfinite(guess):
+                return -1e-3
+            return float(guess)
 
         return np.apply_along_axis(oed, -1, dat)
 
@@ -42,18 +47,19 @@ def fit_decay_exp(da, dim):
     min_guess = xr.apply_ufunc(get_min, da, input_core_dims=[[dim]]).rename("min guess")
 
     def apply_fit(x, y, a, offset, decay):
+        nan_result = np.full(12, np.nan)
         try:
             # fit = curve_fit(decay_exp, x, y, p0=[a, offset, decay], bounds=(0, [1, 1., -1]))[0]
             fit, residuals = curve_fit(decay_exp, x, y, p0=[a, offset, decay])
             return np.array(fit.tolist() + np.array(residuals).flatten().tolist())
             # return np.array([fit.values[k] for k in ["a", "offset", "decay"]])
-        except RuntimeError as e:
+        except (RuntimeError, ValueError, TypeError):
             print("Fit failed:")
             print(f"{a=}, {offset=}, {decay=}")
             plt.plot(x, decay_exp(x, a, offset, decay))
             plt.plot(x, y)
             plt.show()
-            # raise e
+            return nan_result
 
     fit_res = xr.apply_ufunc(
         apply_fit,
