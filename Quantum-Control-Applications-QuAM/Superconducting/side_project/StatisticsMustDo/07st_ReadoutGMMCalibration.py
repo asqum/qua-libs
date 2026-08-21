@@ -24,6 +24,7 @@ Next steps before going to the next node:
 # %% {Imports}
 import matplotlib.pyplot as plt
 import numpy as np
+import math
 import xarray as xr
 from typing import List, Literal, Optional
 from qualibrate import QualibrationNode, NodeParameters
@@ -49,15 +50,15 @@ from quam_libs.lib.qubit_thermometer import repetition_data, StateDiscrimination
 
 # %% {Node_parameters}
 class Parameters(NodeParameters):
-    qubits: Optional[List[str]] = None #The qubit to be measured. If None, all active qubits will be measured
+    qubits: Optional[List[str]] = ['q1'] #The qubit to be measured. If None, all active qubits will be measured
     num_runs: int = 2048*2
     flux_point_joint_or_independent_or_arbitrary: Literal['joint', 'independent'] = 'independent'   
     simulate: bool = False
     timeout: int = 100
-    use_state_discrimination: bool = True
+    use_state_discrimination: bool = False
     reset_type: Literal['thermal'] = "thermal"
     load_data_id: Optional[int] = None
-    multiplexed: bool = 1
+    multiplexed: bool = 0
     
     
 
@@ -229,13 +230,24 @@ if not node.parameters.simulate:
             trained_params[qubit_name] = analysis.analysis_result['trained_paras']    # save trained parameters for each qubit
             (p00, p01), (p10, p11) = analysis.analysis_result['gaussian_norms']
             RO_fidelity[qubit_name].append(1 - 0.5*(p01+p10))
+
     
     for q in qubits:
         node.results['results'][q.name] = {}
         
         node.results['results'][q.name]["RO_fidelity"] = np.average(RO_fidelity[q.name])
         node.results['results'][q.name]["GMM_mean"] = trained_params[q.name]['mean'].tolist()
+        
         node.results['results'][q.name]["GMM_std"] = trained_params[q.name]['std']
+        # calc Overlap error
+        means = np.array(trained_params[q.name]['mean'])
+        std = trained_params[q.name]['std']
+        d = np.linalg.norm(means[1] - means[0])
+        snr = d / std
+        overlap_error = 0.5 * math.erfc(snr / (2 * math.sqrt(2)))
+        node.results['results'][q.name]['overlap_error'] = float(overlap_error)
+
+        
 
     #%% {Plot}
     mu_collection, sig_collection = {}, {}
@@ -268,6 +280,14 @@ if not node.parameters.simulate:
     plt.tight_layout()
     plt.show()
     node.results["Outliers_Detection"] = grid_3.fig
+
+    ## error breakdown
+    grid_4 = QubitGrid(ds, [q.grid_location for q in qubits])
+    for ax, qubit in grid_iter(grid_4): 
+        models[qubit['qubit']][0].show_error_analysis(qubit['qubit'], ax)
+    
+    plt.show()
+    node.results["Error_source"] = grid_4.fig
     
 
     # %% {Update_state}

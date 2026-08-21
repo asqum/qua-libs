@@ -1,7 +1,7 @@
 """ Copied from repo LCH-QCAT """
 import numpy as np
 import xarray as xr
-import os
+import os, math
 from scipy import special
 from scipy.integrate import quad
 from lmfit import Model,Parameter
@@ -998,9 +998,10 @@ class StateDiscrimination():
         q_data = self.data['Q'].values.flatten()
         labels = self.analysis_result['state_label'].flatten()
         trained_paras = self.analysis_result['trained_paras']
+        
         means = trained_paras['mean'] 
         std = trained_paras['std']
-
+        
         # 2. 繪製散佈圖 
         # 增加 s (點大小) 到 0.8，alpha (不透明度) 到 0.3，讓顏色更紮實
         # 使用 'RdYlBu_r' 或 'coolwarm' 會有較明顯的藍紅對比
@@ -1109,3 +1110,98 @@ class StateDiscrimination():
         if len(means) > 0:
             all_i = [m[0] for m in means]
             ax.set_xlim(min(all_i) - 10*std, max(all_i) + 10*std)
+
+    def show_error_analysis(self, qubit_name, ax:Axes):
+        # 1. 取得資料與分析結果
+        i_data = self.data['I'].values.flatten()
+        q_data = self.data['Q'].values.flatten()
+        labels = self.analysis_result['state_label'].flatten()
+        trained_paras = self.analysis_result['trained_paras']
+        (p00, p01), (p10, p11) = self.analysis_result['gaussian_norms']
+        means = trained_paras['mean'] 
+        std = trained_paras['std']
+        d = np.linalg.norm(means[1] - means[0])
+        snr = d / std
+
+        # error cata
+        overlap_error = 0.5 * math.erfc(snr / (2 * math.sqrt(2)))
+        ro_error = 0.5*(p01+p10)
+        
+        transition_error_up = p01 
+        transition_error_dn = p10 
+
+        if transition_error_up < 0 or transition_error_dn < 0:
+            warnings = "Overlap error too high !"
+        else:
+            warnings = None
+
+
+        error_dict = {
+        r"$\epsilon_{RO}$": ro_error * 100,
+        r"$\epsilon_{overlap}$": overlap_error * 100,
+        r"$\epsilon_{0 \to 1}$": transition_error_up * 100,
+        r"$\epsilon_{1 \to 0}$": transition_error_dn * 100,
+        }
+
+        labels = list(error_dict.keys())
+        values = list(error_dict.values())
+        colors = ["#4c72b0", "#dd8452", "#55a868", "#c44e52"]
+        ax.set_aspect('auto')
+        # 5. 繪製 Bar Chart
+        bars = ax.bar(
+            labels,
+            values,
+            color=colors,
+            alpha=0.85,
+            edgecolor="black",
+            linewidth=0.8,
+            zorder=3,
+        )
+
+        # 在各個柱狀圖頂端標示百分比數值
+        for bar in bars:
+            height = bar.get_height()
+            if height >= 0:
+                xy_nota = (bar.get_x() + bar.get_width() / 2, height)
+                va_setting = "bottom"
+                offset = (0, 3)
+            else:
+                xy_nota = (bar.get_x() + bar.get_width() / 2, height)
+                va_setting = "top"
+                offset = (0, -3)
+            ax.annotate(
+                f"{height:.2f}%",
+                xy=xy_nota,
+                xytext=offset,  # 向上偏移 3pt
+                textcoords="offset points",
+                ha="center",
+                va=va_setting,
+                fontsize=9,
+                fontweight="bold",
+            )
+
+        # 6. 圖表美化與細節調整
+        ax.set_title(
+            f"{qubit_name}\n SNR ~ {round(20 * np.log10(snr),1)} dB", fontsize=11, fontweight="bold"
+        )
+        ax.set_ylabel("Error Rate (%)", fontsize=10)
+        y_min = min(values) * 1.8 if min(values) < 0 else 0
+        y_max = max(values) * 1.4 if max(values) > 0 else 1
+        ax.set_ylim(y_min, y_max)
+        ax.grid(True, axis="y", linestyle="--", alpha=0.5, zorder=0)
+        ax.tick_params(axis="both", labelsize=9)
+        ax.get_figure().suptitle("Readout Error Breakdown")
+
+        ax.get_figure().tight_layout(rect=[0, 0.12, 1, 1])
+        if warnings is not None:
+            ax.text(
+                0.5,
+                -0.25,
+                warnings,
+                transform=ax.transAxes,
+                ha="center",
+                va="top",
+                fontsize=8,
+                color="gray",
+            )
+      
