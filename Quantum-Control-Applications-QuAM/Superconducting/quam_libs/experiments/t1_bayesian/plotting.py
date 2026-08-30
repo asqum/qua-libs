@@ -9,8 +9,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import xarray as xr
 from scipy.stats import gamma as gamma_dist
-from scipy.stats import invgamma
-
+from scipy.stats import invgamma, norm, lognorm, kstest
+from scipy.signal import welch
+from scipy.optimize import curve_fit
 from quam_libs.lib.fit import decay_exp, fit_decay_exp
 from quam_libs.lib.plot_utils import QubitGrid, grid_iter
 
@@ -35,6 +36,7 @@ def plot_bayesian_results(
     ds_t1_evol,
     lin_times_clocks,
     t1_prior_by_name,
+    fig_size:float=3
 ):
     parameters = node.parameters
     ci = parameters.credible_interval
@@ -42,7 +44,7 @@ def plot_bayesian_results(
     keep_shot_data = parameters.keep_shot_data
     figures = {}
 
-    grid_t1 = QubitGrid(ds, [q.grid_location for q in qubit_list])
+    grid_t1 = QubitGrid(ds, [q.grid_location for q in qubit_list], size=fig_size)
     for ax, qubit in grid_iter(grid_t1):
         qname = qubit["qubit"]
         t_axis = time_stamp.sel(qubit=qname).values
@@ -52,15 +54,68 @@ def plot_bayesian_results(
         dt_est = np.diff(t_axis)
         est_time_ms = float(np.mean(dt_est)) * 1e3 if dt_est.size else np.nan
         ax.plot(t_axis, y, "o-", alpha=0.6, markersize=3, label="T1 estimate")
+        ax.hlines(np.mean(y), min(t_axis), max(t_axis), label="T1 mean", linestyle='-', color='r')
+        ax.hlines(np.mean(y)-np.std(y), min(t_axis), max(t_axis), linestyle='--', color='r')
+        ax.hlines(np.mean(y)+np.std(y), min(t_axis), max(t_axis), linestyle='--', color='r')
         ax.fill_between(t_axis, lo, hi, alpha=0.25, label=f"{int(ci * 100)}% CI")
         ax.set_xlabel("time (s)")
         ax.set_ylabel("T1 (µs)")
-        ax.set_title(f"{qname}\nestimation time = {est_time_ms:.3f} ms")
+        ax.set_title(f"{qname} T1 ~ {round(np.mean(y),1)} $\pm$ {round(100*np.std(y)/np.mean(y))}%\n #={len(y)} \nestimation time = {est_time_ms:.3f} ms")
         ax.legend(fontsize=8)
         ax.grid(True, alpha=0.3)
     grid_t1.fig.suptitle("Adaptive Bayesian T1 trace (u = 1/k)")
     grid_t1.fig.tight_layout()
     figures["t1_trace"] = grid_t1.fig
+
+    grid_t1_2 = QubitGrid(ds, [q.grid_location for q in qubit_list], size=fig_size)
+    for ax, qubit in grid_iter(grid_t1_2):
+        qname = qubit["qubit"]
+        t_axis = time_stamp.sel(qubit=qname).values
+        y = ds_estimated_t1.estimated_t1.sel(qubit=qname).values
+        counts, bins, _ = ax.hist(y, bins='auto', color='skyblue', edgecolor='white', label='Counts')
+        bin_width = bins[1] - bins[0]
+        scaling_factor = len(y) * bin_width
+        exp_time = round(t_axis[-1]-t_axis[0],1) if t_axis[-1]-t_axis[0] > 1 else round(t_axis[-1]-t_axis[0],3)
+
+        # --- 1. 自動擬合兩種模型 ---
+        mu_norm, sigma_norm = norm.fit(y)
+        shape_log, loc_log, scale_log = lognorm.fit(y)
+        
+        # --- 2. 讓 KS 檢定自動評分 (statistic 越小代表擬合越準確) ---
+        ks_norm = kstest(y, 'norm', args=(mu_norm, sigma_norm))
+        ks_lognorm = kstest(y, 'lognorm', args=(shape_log, loc_log, scale_log))
+        
+        # 準備 X 軸
+        x = np.linspace(min(y), max(y), 100)
+        
+        # --- 3. 完全自動判斷邏輯 ---
+        if ks_norm.statistic < ks_lognorm.statistic:
+            # 判斷結果：常態分佈比較準
+            p = norm.pdf(x, mu_norm, sigma_norm)*scaling_factor
+            ax.plot(x, p, 'r-', lw=2, label='Normal Fit')
+            
+            # 取得要顯示的數據
+            mu_display, sigma_display = mu_norm, sigma_norm
+            fit_type = "Normal"
+        else:
+            # 判斷結果：對數常態分佈 (Lognormal) 比較準
+            p = lognorm.pdf(x, shape_log, loc=loc_log, scale=scale_log)*scaling_factor
+            ax.plot(x, p, 'r-', lw=2, label='Lognorm Fit')
+            mu_display = loc_log + scale_log * np.exp(-shape_log**2)
+            sigma_display = lognorm.std(shape_log, loc=loc_log, scale=scale_log)
+            fit_type = "Lognorm"
+
+
+        ax.set_title(f"{qubit['qubit']}\n $T_{{1}} = {mu_display:.1f} \pm {sigma_display:.2f}  \mu$s")
+        ax.set_xlabel("T1 (µs)")
+        ax.set_ylabel("Counts")
+        ax.grid(axis='y', alpha=0.3)
+
+    grid_t1_2.fig.suptitle(f" T1 Statistics, #={len(y)}\n tracking time={exp_time}s", fontsize=16, y=1.02)
+    grid_t1_2.fig.tight_layout()
+    figures["figure_histogram"] = grid_t1_2.fig
+
+
 
     if ds_k_evol is not None and ds_t1_evol is not None:
         t1_grid_us = np.linspace(
@@ -69,7 +124,7 @@ def plot_bayesian_results(
             400,
         )
         probe_axis = ds_t1_evol.probe.values
-        grid_conv = QubitGrid(ds_t1_evol, [q.grid_location for q in qubit_list])
+        grid_conv = QubitGrid(ds_t1_evol, [q.grid_location for q in qubit_list], size=fig_size)
         for ax, qubit in grid_iter(grid_conv):
             qname = qubit["qubit"]
             k_ev = ds_k_evol.k_evol.sel(qubit=qname).values
@@ -93,7 +148,7 @@ def plot_bayesian_results(
 
         g1_max = 1.0 / parameters.t1_min_us
         g1_grid = np.linspace(1e-4, g1_max, 500)
-        grid_gam = QubitGrid(ds_t1_evol, [q.grid_location for q in qubit_list])
+        grid_gam = QubitGrid(ds_t1_evol, [q.grid_location for q in qubit_list], size=fig_size)
         for ax, qubit in grid_iter(grid_gam):
             qname = qubit["qubit"]
             k_ev = ds_k_evol.k_evol.sel(qubit=qname).values
@@ -114,22 +169,95 @@ def plot_bayesian_results(
         grid_gam.fig.tight_layout()
         figures["gamma_pdf_evolution"] = grid_gam.fig
 
+   
     if ds_welch is not None:
-        grid_welch = QubitGrid(ds_welch.to_dataset(name="t1_welch_psd"), [q.grid_location for q in qubit_list])
+        # 1. 定義 Lorentzian + White Noise 模型
+        def lorentzian_model(f, A, fc, C):
+            return A / (1 + (f / fc)**2) + C
+        def log_lorentzian_model(f, A, fc, C):
+            val = lorentzian_model(f, A, fc, C)
+            return np.log10(np.maximum(val, 1e-12))
+            
+        grid_welch = QubitGrid(ds_welch.to_dataset(name="t1_welch_psd"), [q.grid_location for q in qubit_list], size=fig_size)
         for ax, qubit in grid_iter(grid_welch):
             qname = qubit["qubit"]
-            ds_welch.sel(qubit=qname).plot(ax=ax)
+            
+            # 繪製原始 PSD 數據
+            psd_sub = ds_welch.sel(qubit=qname)
+            psd_sub.plot(ax=ax, label='Welch PSD')
+            
+            # 2. 自動提取 xarray 的頻率座標與 PSD 陣列
+            freq_dim = [d for d in psd_sub.dims if d != 'qubit'][0]
+            f_data = psd_sub[freq_dim].values
+            psd_data = psd_sub.values
+            
+            # 過濾非正數與 NaN 值
+            valid_mask = (f_data > 0) & (~np.isnan(psd_data))
+            f_valid = f_data[valid_mask]
+            psd_valid = psd_data[valid_mask]
+            
+            # 3. 進行 Fitting 與定量分析
+            try:
+                # 2. 對數重採樣：在 Log 頻率軸上均勻取 50 個點 (平衡高低頻點密度)
+                f_log = np.logspace(np.log10(f_valid[0]), np.log10(f_valid[-1]), 50)
+                psd_log = np.interp(f_log, f_valid, psd_valid) # 內插 PSD 數值
+
+                # initially guess
+                C_guess = max(np.median(psd_log[-10:]), 1e-6)
+                A_guess = max(psd_log[0] - C_guess, 1e-6)
+                mid_psd_log = 10 ** ((np.log10(psd_log[0]) + np.log10(C_guess)) / 2)
+                idx_fc = np.argmin(np.abs(psd_log - mid_psd_log))
+                fc_guess = f_log[idx_fc]
+                
+                
+                p0 = [A_guess, fc_guess, C_guess]
+                bounds = (0, [np.inf, np.max(f_log), np.inf])
+                
+                # 4. 在 Log 空間進行 Fitting
+                popt, _ = curve_fit(
+                    log_lorentzian_model, 
+                    f_log, 
+                    np.log10(psd_log), 
+                    p0=p0, 
+                    bounds=bounds
+                )
+                A_fit, fc_fit, C_fit = popt
+                
+                # 計算 TLS 特徵翻轉時間 tau (ms)
+                tau_ms = (1.0 / (2 * np.pi * fc_fit)) * 1000
+                # T1 sigma due to TLS
+                sigma_TLS = round(np.sqrt(np.pi*A_fit*fc_fit*0.5), 2)
+
+                
+                # 生成平滑擬合曲線
+                f_dense = np.logspace(np.log10(f_valid[0]), np.log10(f_valid[-1]), 200)
+                psd_fit = lorentzian_model(f_dense, *popt)
+                
+                # 4. 畫出 Fitting 紅色虛線與圖例
+                fit_label = f"$f_c={fc_fit:.2f}$ Hz\n$A={A_fit:.3f}$\n$C={C_fit:.3f}$"
+                ax.plot(f_dense, psd_fit, 'r--', lw=1.8, label=fit_label)
+                ax.legend(fontsize='small', loc='upper right')
+            except Exception:
+                sigma_TLS = "NaN"
+
+            # 5. 座標軸設定
             ax.set_xscale("log")
             ax.set_yscale("log")
+            ax.grid()
             ax.set_xlabel("Frequency (Hz)")
             ax.set_ylabel("Welch PSD of T1")
-            ax.set_title(qname)
-        grid_welch.fig.suptitle("T1 fluctuation Welch PSD")
+            ax.set_title(
+                f"{qname}\n"
+                f"$\\sigma_{{TLS}} = {sigma_TLS}\\ \\mu s$\n"
+                f"$\\tau_{{TLS}} = {round(tau_ms, 1)}\\text{{ ms}}$"
+            )
+            
+        grid_welch.fig.suptitle("T1 fluctuation Welch PSD & Lorentzian Fit")
         grid_welch.fig.tight_layout()
         figures["welch_psd"] = grid_welch.fig
 
     if ds_allan is not None:
-        grid_allan = QubitGrid(ds_allan, [q.grid_location for q in qubit_list])
+        grid_allan = QubitGrid(ds_allan, [q.grid_location for q in qubit_list], size=fig_size)
         for ax, qubit in grid_iter(grid_allan):
             qname = qubit["qubit"]
             tau_a = ds_allan.allan_tau.sel(qubit=qname).values
@@ -145,7 +273,7 @@ def plot_bayesian_results(
         figures["allan_deviation"] = grid_allan.fig
 
     if keep_shot_data and ds_state is not None and ds_tau is not None:
-        grid_shot = QubitGrid(ds, [q.grid_location for q in qubit_list])
+        grid_shot = QubitGrid(ds, [q.grid_location for q in qubit_list], size=fig_size)
         for ax, qubit in grid_iter(grid_shot):
             qname = qubit["qubit"]
             tau_vals = np.maximum(ds_tau.tau_us.sel(qubit=qname).values, 0.0)
@@ -176,7 +304,7 @@ def plot_bayesian_results(
                 raise ValueError("interleaved validation exponential fit did not converge")
             tau_fit = -1 / decay_vals
 
-            grid_val = QubitGrid(ds_state_lin, [q.grid_location for q in qubit_list])
+            grid_val = QubitGrid(ds_state_lin, [q.grid_location for q in qubit_list], size=fig_size)
             for ax, qubit in grid_iter(grid_val):
                 qname = qubit["qubit"]
                 p = p_exc_lin.sel(qubit=qname).values
