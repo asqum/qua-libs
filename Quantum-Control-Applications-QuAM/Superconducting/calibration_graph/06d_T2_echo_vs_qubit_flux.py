@@ -4,40 +4,44 @@ from typing import Optional, Literal, List
 from qm.qua import *
 from qm import SimulationConfig
 from qualang_tools.results import progress_counter, fetching_tool
-from qualang_tools.plot import interrupt_on_close
-from qualang_tools.loops import from_array, get_equivalent_log_array
+from qualang_tools.loops import from_array
 from qualang_tools.multi_user import qm_session
 from qualang_tools.units import unit
 from quam_libs.components import QuAM
-from quam_libs.macros import qua_declaration, multiplexed_readout, node_save, active_reset, readout_state
+from quam_libs.macros import qua_declaration, active_reset, readout_state
 
 import matplotlib.pyplot as plt
 import numpy as np
+import xarray as xr
 
-import matplotlib
 from quam_libs.lib.plot_utils import QubitGrid, grid_iter
 from quam_libs.lib.save_utils import fetch_results_as_xarray
-from quam_libs.lib.fit import fit_decay_exp, decay_exp
+from quam_libs.lib.fit import (
+    fit_decay_exp,
+    decay_exp,
+    fit_oscillation_decay_exp,
+    oscillation_decay_exp,
+)
 
 
 # %% {Node_parameters}
 class Parameters(NodeParameters):
     qubits: Optional[List[str]] = ["q3"]
-    """qubits to perform the T2 echo measurement on. If None or empty, all active qubits will be used."""
-    num_averages: int = 100
+    """Qubits to perform the T2 echo measurement on. If None or empty, all active qubits will be used."""
+    num_averages: int = 50
     """The number of averages to perform."""
     min_wait_time_in_ns: int = 16
     """Minimum wait time in ns."""
-    max_wait_time_in_ns: int = 25000
+    max_wait_time_in_ns: int = 10000
     """Maximum wait time in ns."""
     wait_time_step_in_ns: int = 100
     """Wait time step in ns."""
-    qubit_flux_min: float = -0.1 # relative to the coupler set point if reset_coupler_bias is False
-    """Minimum coupler flux amplitude (relative to the coupler set point)."""
-    qubit_flux_max: float = 0.1 # relative to the coupler set point if reset_coupler_bias is False
-    """Maximum coupler flux amplitude (relative to the coupler set point)."""
-    qubit_flux_num_points: float = 5 
-    """Number of coupler flux points."""
+    qubit_flux_min: float = -0.2
+    """Minimum qubit flux pulse amplitude relative to the decoupler offset (V)."""
+    qubit_flux_max: float = 0.2
+    """Maximum qubit flux pulse amplitude relative to the decoupler offset (V)."""
+    qubit_flux_num_points: int = 20
+    """Number of qubit flux pulse points."""
     flux_point_joint_or_independent_or_arbitrary: Literal["joint", "independent", "arbitrary"] = "independent"
     """Whether to use joint, independent or arbitrary flux points for the qubits."""
     simulate: bool = False
@@ -46,10 +50,8 @@ class Parameters(NodeParameters):
     """Timeout for the QM session in seconds."""
     use_state_discrimination: bool = True
     """Whether to use state discrimination for readout."""
-    reset_type: Literal["active", "thermal"] = "thermal"
+    reset_type: Literal["active", "thermal"] = "active"
     """Type of reset to use before each measurement."""
-    use_qubit_flux_pulse: bool = True
-    """Whether to use a coupler flux pulse on the coupler during the idle time."""
 
 
 node = QualibrationNode(name="06d_T2_echo_vs_qubit_flux", parameters=Parameters())
@@ -84,27 +86,26 @@ idle_times = np.arange(
 )
 
 fluxes_qubit = np.linspace(
-    node.parameters.qubit_flux_min, 
-    node.parameters.qubit_flux_max, 
-    node.parameters.qubit_flux_num_points
+    node.parameters.qubit_flux_min,
+    node.parameters.qubit_flux_max,
+    node.parameters.qubit_flux_num_points,
 )
-
 
 flux_point = node.parameters.flux_point_joint_or_independent_or_arbitrary  # 'independent' or 'joint'
 
 
-with program() as t2_echo_vs_coupler_flux:
+with program() as t2_echo_vs_qubit_flux:
     flux_qubit = declare(float)
     I, I_st, Q, Q_st, n, n_st = qua_declaration(num_qubits=num_qubits)
     t = declare(int)  # QUA variable for the idle time
     if node.parameters.use_state_discrimination:
         state = [declare(int) for _ in range(num_qubits)]
         state_st = [declare_stream() for _ in range(num_qubits)]
-    
+
     for i, qubit in enumerate(qubits):
-        XY_delay = qubit.xy.opx_output.delay + 4
         machine.set_all_fluxes(flux_point=flux_point, target=qubit)
-        if "c" in qubit.id: qubit.z.set_dc_offset(qubit.z.joint_offset) # for coupler-test case      
+        if "c" in qubit.id:
+            qubit.z.set_dc_offset(qubit.z.joint_offset)  # for coupler-test case
         wait(1000)
         qubit.align()
 
@@ -119,39 +120,31 @@ with program() as t2_echo_vs_coupler_flux:
                         else:
                             qubit.resonator.wait(qubit.thermalization_time * u.ns)
                             qubit.align()
-                    
-                    if not node.parameters.use_qubit_flux_pulse:
-                        qubit.z.set_dc_offset(flux_qubit)
-                        wait(1000)
-                        qubit.align()
-
 
                     qubit.xy.play("x90")
+                    qubit.z.wait(qubit.xy.operations["x90"].length // 4)
 
-                    qubit.z.wait(qubit.xy.operations["x90"].length // 4 + XY_delay // 4)
-                    if node.parameters.use_qubit_flux_pulse:
-                        qubit.z.play(
-                            "const",
-                            amplitude_scale=flux_qubit / qubit.z.operations["const"].amplitude,
-                            duration=t,
-                        )
+                    qubit.z.play(
+                        "const",
+                        amplitude_scale=flux_qubit / qubit.z.operations["const"].amplitude,
+                        duration=t,
+                    )
+                    qubit.xy.wait(t)
 
-                    qubit.xy.wait(t + 1)
                     qubit.xy.play("x180")
-                    qubit.xy.wait(t + 1)
+                    qubit.z.wait(qubit.xy.operations["x180"].length // 4)
 
-                    qubit.z.wait(duration=qubit.xy.operations["x180"].length // 4)
-                    if node.parameters.use_qubit_flux_pulse:
-                        qubit.z.play(
-                            "const",
-                            amplitude_scale=flux_qubit / qubit.z.operations["const"].amplitude,
-                            duration=t,
-                        )
-                        
+                    
+                    qubit.z.play(
+                        "const",
+                        amplitude_scale=flux_qubit / qubit.z.operations["const"].amplitude,
+                        duration=t,
+                    )
+                    qubit.xy.wait(t)
 
                     qubit.xy.play("-x90")
-                    
-                    align()
+                    qubit.z.wait(qubit.xy.operations["-x90"].length // 4)
+                    qubit.align()
 
                     # Measure the state of the resonators
                     if node.parameters.use_state_discrimination:
@@ -159,7 +152,6 @@ with program() as t2_echo_vs_coupler_flux:
                         save(state[i], state_st[i])
                     else:
                         qubit.resonator.measure("readout", qua_vars=(I[i], Q[i]))
-                        # save data
                         save(I[i], I_st[i])
                         save(Q[i], Q_st[i])
 
@@ -179,7 +171,7 @@ with program() as t2_echo_vs_coupler_flux:
 if node.parameters.simulate:
     # Simulates the QUA program for the specified duration
     simulation_config = SimulationConfig(duration=10_000 // 4)  # In clock cycles = 4ns
-    job = qmm.simulate(config, t2_echo_vs_coupler_flux, simulation_config)
+    job = qmm.simulate(config, t2_echo_vs_qubit_flux, simulation_config)
     samples = job.get_simulated_samples()
     samples.con1.plot()
     node.results = {"figure": plt.gcf()}
@@ -189,20 +181,15 @@ if node.parameters.simulate:
 
 else:
     with qm_session(qmm, config, timeout=node.parameters.timeout) as qm:
-        job = qm.execute(t2_echo_vs_coupler_flux)
+        job = qm.execute(t2_echo_vs_qubit_flux)
         # Get results from QUA program
         for i in range(num_qubits):
             print(f"Fetching results for qubit {qubits[i].name}")
             data_list = ["n"]
             results = fetching_tool(job, data_list, mode="live")
-            # Live plotting
-            # fig, axes = plt.subplots(2, num_qubits, figsize=(4 * num_qubits, 8))
-            # interrupt_on_close(fig, job)  # Interrupts the job when closing the figure
             while results.is_processing():
-                # Fetch results
                 fetched_data = results.fetch_all()
                 n = fetched_data[0]
-
                 progress_counter(n, n_avg, start_time=results.start_time)
 
 
@@ -212,48 +199,68 @@ if not node.parameters.simulate:
     # Fetch the data from the OPX and convert it into a xarray with corresponding axes (from most inner to outer loop)
     ds = fetch_results_as_xarray(job.result_handles, qubits, {"idle_time": idle_times, "flux_qubit": fluxes_qubit})
 
-    ds = ds.assign_coords(idle_time=8 * ds.idle_time / 1e3)  # convert to usec
+    ds = ds.assign_coords(idle_time=8 * ds.idle_time / 1e3)  # convert to usec (2τ)
     ds.idle_time.attrs = {"long_name": "idle time", "units": "µs"}
+    ds.flux_qubit.attrs = {"long_name": "qubit flux pulse relative to decoupler offset", "units": "V"}
     node.results = {"ds": ds}
 
-# %% {Data_analysis} 
+# %% {Data_analysis}
 if not node.parameters.simulate:
     ds = ds.assign_coords(flux_mV=ds.flux_qubit * 1e3)
+    ds.flux_mV.attrs = {"long_name": "qubit flux pulse relative to decoupler offset", "units": "mV"}
     fit_results = {}
+    fitted = None
     try:
+        data = ds.state if node.parameters.use_state_discrimination else ds.I
+
+        # Ramsey (oscillation + decay). Frequency is in 1/µs = MHz because idle_time is in µs.
+        fit_osc = fit_oscillation_decay_exp(data, "idle_time")
+        fitted_osc = oscillation_decay_exp(
+            ds.idle_time,
+            fit_osc.sel(fit_vals="a"),
+            fit_osc.sel(fit_vals="f"),
+            fit_osc.sel(fit_vals="phi"),
+            fit_osc.sel(fit_vals="offset"),
+            fit_osc.sel(fit_vals="decay"),
+        )
+        tau_osc = 1 / fit_osc.sel(fit_vals="decay")
+        tau_osc_err = tau_osc * (
+            np.sqrt(np.abs(fit_osc.sel(fit_vals="decay_decay"))) / np.abs(fit_osc.sel(fit_vals="decay"))
+        )
+        freq = np.abs(fit_osc.sel(fit_vals="f"))
+
+        # Pure exponential for traces with no visible oscillation (echo actually refocused).
+        fit_dec = fit_decay_exp(data, "idle_time")
+        fitted_dec = decay_exp(
+            ds.idle_time,
+            fit_dec.sel(fit_vals="a"),
+            fit_dec.sel(fit_vals="offset"),
+            fit_dec.sel(fit_vals="decay"),
+        )
+        tau_dec = -1 / fit_dec.sel(fit_vals="decay")
+        tau_dec_err = -tau_dec * (
+            np.sqrt(np.abs(fit_dec.sel(fit_vals="decay_decay"))) / fit_dec.sel(fit_vals="decay")
+        )
+
+        t_span = float(ds.idle_time.max() - ds.idle_time.min())
+        n_osc = freq * t_span
+        use_ramsey = (n_osc > 0.75) & np.isfinite(tau_osc) & (tau_osc > 0)
+
+        fitted = xr.where(use_ramsey, fitted_osc, fitted_dec)
+        tau = xr.where(use_ramsey, tau_osc, tau_dec)
+        tau_error = xr.where(use_ramsey, tau_osc_err, tau_dec_err)
+        freq = xr.where(use_ramsey, freq, 0.0)
+
+        tau.attrs = {"long_name": "T2", "units": "µs"}
+        tau_error.attrs = {"long_name": "T2 error", "units": "µs"}
+        freq.attrs = {"long_name": "Ramsey frequency", "units": "MHz"}
+
         for q in qubits:
-            # Fit choice
-            if node.parameters.use_state_discrimination:
-                fit_data = fit_decay_exp(ds.state, "idle_time")
-            else:
-                fit_data = fit_decay_exp(ds.I, "idle_time")
-
-            fit_data.attrs = {"long_name": "fits", "units": " "}
-
-            # Build fitted decay
-            fitted = decay_exp(
-                ds.idle_time,
-                fit_data.sel(fit_vals="a"),
-                fit_data.sel(fit_vals="offset"),
-                fit_data.sel(fit_vals="decay"),
-            )
-
-            decay = fit_data.sel(fit_vals="decay")
-            decay.attrs = {"long_name": "decay", "units": "MHz"}
-
-            decay_res = fit_data.sel(fit_vals="decay_decay")
-            decay_res.attrs = {"long_name": "decay error", "units": "MHz"}
-
-            # Compute T2 (you call it T1 but your comment says T2)
-            tau = -1 / decay
-            tau.attrs = {"long_name": "T2", "units": "µs"}
-
-            tau_error = -tau * (np.sqrt(decay_res) / decay)
-            tau_error.attrs = {"long_name": "T2 error", "units": "µs"}
-
             fit_results[q.name] = {
                 "T2_vs_qubit_flux": tau.sel(qubit=q.name).values.tolist(),
                 "T2err_vs_qubit_flux": tau_error.sel(qubit=q.name).values.tolist(),
+                "freq_vs_qubit_flux_MHz": freq.sel(qubit=q.name).values.tolist(),
+                "used_ramsey_fit": use_ramsey.sel(qubit=q.name).values.tolist(),
             }
 
         node.results["fit_results"] = fit_results
@@ -261,14 +268,11 @@ if not node.parameters.simulate:
         print("⚠️ Fit failed:", e)
         print("Proceeding with raw data only.")
 
-    def t2_is_valid(t2_array):
-        """Returns True if T2 contains at least one positive finite value."""
-        t2 = np.array(t2_array, dtype=float)
-        return np.any(np.isfinite(t2) & (t2 > 0))
-    
 # %% {Plotting}
 if not node.parameters.simulate:
-   # ---- RAW PLOT ----
+    flux_xlabel = "Qubit flux pulse relative to decoupler offset (mV)"
+
+    # ---- RAW PLOT ----
     grid = QubitGrid(ds, [q.grid_location for q in qubits])
     grid.fig.set_size_inches(12, 3 * len(qubits))
 
@@ -279,15 +283,13 @@ if not node.parameters.simulate:
             im = ds.sel(qubit=qname).state.plot(
                 ax=ax, x="flux_mV", y="idle_time", add_colorbar=False, cmap="viridis"
             )
-            ax.set_ylabel("Idle time (µs)")
         else:
             im = ds.sel(qubit=qname).I.plot(
                 ax=ax, x="flux_mV", y="idle_time", add_colorbar=False, cmap="viridis"
             )
-            ax.set_ylabel("Idle time (µs)")
 
-        xlabel = f"{qname} flux {'shift' if node.parameters.use_qubit_flux_pulse else 'full'} (mV)"
-        ax.set_xlabel(xlabel)
+        ax.set_xlabel(flux_xlabel)
+        ax.set_ylabel("Idle time (µs)")
         ax.set_title(qname)
 
         cb = grid.fig.colorbar(im, ax=ax)
@@ -306,16 +308,13 @@ if not node.parameters.simulate:
     for ax, qubit in grid_iter(grid):
         qname = qubit["qubit"]
 
-        # Only plot qubit where fit exists
-        if qname in fit_results:
-
+        if qname in fit_results and fitted is not None:
             im = fitted.sel(qubit=qname).plot(
                 ax=ax, x="flux_mV", y="idle_time",
                 add_colorbar=False, cmap="viridis"
             )
 
-            xlabel = f"{qname} flux {'shift' if node.parameters.use_qubit_flux_pulse else 'full'} (mV)"
-            ax.set_xlabel(xlabel)
+            ax.set_xlabel(flux_xlabel)
             ax.set_ylabel("Idle time (µs)")
             ax.set_title(qname)
 
@@ -323,12 +322,11 @@ if not node.parameters.simulate:
             cb.set_label("Fitted " + ("state" if node.parameters.use_state_discrimination else "I"))
 
         else:
-            # Fit missing
             ax.set_title(f"{qname} – no fit")
             ax.text(0.5, 0.5, "No fit data", ha="center", va="center")
             ax.set_axis_off()
 
-    grid.fig.suptitle("Fit")
+    grid.fig.suptitle("Fit (Ramsey if oscillating, else exponential)")
     plt.tight_layout()
     plt.show()
 
@@ -351,12 +349,11 @@ if not node.parameters.simulate:
         flux = ds.flux_mV.values
 
         mask = (
-        np.isfinite(T2) &
-        (T2 > 0) &
-        (T2err < 0.5 * T2)   # <-- STD check (relative error))
+            np.isfinite(T2) &
+            (T2 > 0) &
+            (T2err < 0.5 * T2)
         )
 
-        # If no good points, skip this qubit
         if not np.any(mask):
             ax.set_title(f"{qname} – no valid T2 points")
             ax.set_axis_off()
@@ -370,17 +367,47 @@ if not node.parameters.simulate:
             capsize=3,
         )
 
-        xlabel = f"{qname} flux {'shift' if node.parameters.use_qubit_flux_pulse else 'full'} (mV)"
         ax.set_title(qname)
-        ax.set_xlabel(xlabel)
+        ax.set_xlabel(flux_xlabel)
         ax.set_ylabel("T2 (µs)")
 
-    grid.fig.suptitle("T2 vs qubit flux (filtered)")
+    grid.fig.suptitle("T2 vs qubit flux pulse (filtered)")
     plt.tight_layout()
     plt.show()
 
     node.results["figure_T2_qubit"] = grid.fig
 
+    # ---- FREQUENCY PLOT (Ramsey detuning; 0 if exponential fallback) ----
+    grid = QubitGrid(ds, [q.grid_location for q in qubits])
+    grid.fig.set_size_inches(12, 3 * len(qubits))
+
+    for ax, qubit in grid_iter(grid):
+        qname = qubit["qubit"]
+
+        if qname not in fit_results:
+            ax.set_title(f"{qname} – no frequency data")
+            ax.set_axis_off()
+            continue
+
+        freq_mhz = np.array(fit_results[qname]["freq_vs_qubit_flux_MHz"], float)
+        flux = ds.flux_mV.values
+        mask = np.isfinite(freq_mhz)
+
+        if not np.any(mask):
+            ax.set_title(f"{qname} – no valid frequency points")
+            ax.set_axis_off()
+            continue
+
+        ax.plot(flux[mask], freq_mhz[mask], "o-")
+        ax.set_title(qname)
+        ax.set_xlabel(flux_xlabel)
+        ax.set_ylabel("Ramsey frequency (MHz)")
+
+    grid.fig.suptitle("Ramsey frequency vs qubit flux pulse (0 = exponential fallback)")
+    plt.tight_layout()
+    plt.show()
+
+    node.results["figure_freq_qubit"] = grid.fig
 
 
 # %% {Save}
