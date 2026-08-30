@@ -197,6 +197,8 @@ def plot_bayesian_results(
             psd_valid = psd_data[valid_mask]
             
             # 3. 進行 Fitting 與定量分析
+            sigma_TLS = "NaN"
+            tau_ms = np.nan
             try:
                 # 2. 對數重採樣：在 Log 頻率軸上均勻取 50 個點 (平衡高低頻點密度)
                 f_log = np.logspace(np.log10(f_valid[0]), np.log10(f_valid[-1]), 50)
@@ -238,7 +240,9 @@ def plot_bayesian_results(
                 ax.plot(f_dense, psd_fit, 'r--', lw=1.8, label=fit_label)
                 ax.legend(fontsize='small', loc='upper right')
             except Exception:
-                sigma_TLS = "NaN"
+                pass
+
+            tau_display = round(tau_ms, 1) if np.isfinite(tau_ms) else "NaN"
 
             # 5. 座標軸設定
             ax.set_xscale("log")
@@ -249,7 +253,7 @@ def plot_bayesian_results(
             ax.set_title(
                 f"{qname}\n"
                 f"$\\sigma_{{TLS}} = {sigma_TLS}\\ \\mu s$\n"
-                f"$\\tau_{{TLS}} = {round(tau_ms, 1)}\\text{{ ms}}$"
+                f"$\\tau_{{TLS}} = {tau_display}\\text{{ ms}}$"
             )
             
         grid_welch.fig.suptitle("T1 fluctuation Welch PSD & Lorentzian Fit")
