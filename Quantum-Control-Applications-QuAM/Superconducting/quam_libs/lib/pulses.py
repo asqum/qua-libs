@@ -462,6 +462,54 @@ class SlepianPulse(Pulse):
 
         return p.tolist()
 
+
+@quam_dataclass
+class DoubleSlepianPulse(Pulse):
+    """
+    Bipolar flux pulse composed of two equal-length Slepian pulses (+A then -A).
+
+    Args:
+        length (int): Total pulse duration in samples.
+        amplitude (float): Peak amplitude of each Slepian lobe.
+        time_bandwidth (float): DPSS half-bandwidth product NW (concentration).
+            Automatically reduced for short pulses (scipy requires NW < M/2).
+        slepian_order (int): DPSS sequence index. 0 = first-order Slepian.
+        axis_angle (float, optional): IQ axis angle in radians.
+    """
+
+    amplitude: float
+    time_bandwidth: float = 4.0
+    slepian_order: int = 0
+    axis_angle: float = None
+
+    def waveform_function(self):
+        from scipy.signal.windows import dpss
+
+        total_length = int(self.length)
+        first_length = total_length // 2
+        second_length = total_length - first_length
+
+        def _slepian_lobe(length: int, sign: float) -> np.ndarray:
+            if length <= 0:
+                return np.array([])
+            nw = _effective_dpss_bandwidth(length, self.time_bandwidth)
+            w = dpss(length, nw, Kmax=self.slepian_order + 1)[self.slepian_order]
+            w = w / np.max(np.abs(w))
+            return sign * float(self.amplitude) * w
+
+        p = np.concatenate(
+            [
+                _slepian_lobe(first_length, +1.0),
+                _slepian_lobe(second_length, -1.0),
+            ]
+        )
+
+        if self.axis_angle is not None:
+            p = p * np.exp(1j * self.axis_angle)
+
+        return p.tolist()
+
+
 @quam_dataclass
 class FreeCosineBipolarPulse(Pulse):
     """
