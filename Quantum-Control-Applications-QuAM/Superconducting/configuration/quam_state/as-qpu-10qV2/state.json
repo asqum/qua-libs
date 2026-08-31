@@ -251,9 +251,9 @@
                     }
                 },
                 "opx_output": "#/wiring/qubits/q1/z/opx_output",
-                "independent_offset": 0.017152876713942205,
+                "independent_offset": "#./joint_offset",
                 "joint_offset": 0.026894219107329632,
-                "min_offset": "#./independent_offset",
+                "min_offset": "#./joint_offset",
                 "__class__": "quam_libs.components.flux_line.FluxLine"
             },
             "resonator": {
@@ -617,9 +617,9 @@
                     }
                 },
                 "opx_output": "#/wiring/qubits/q2/z/opx_output",
-                "independent_offset": 0.044365201300336415,
+                "independent_offset": "#./joint_offset",
                 "joint_offset": 0.04726068081999564,
-                "min_offset": "#./independent_offset",
+                "min_offset": "#./joint_offset",
                 "__class__": "quam_libs.components.flux_line.FluxLine"
             },
             "resonator": {
@@ -973,9 +973,9 @@
                     }
                 },
                 "opx_output": "#/wiring/qubits/q3/z/opx_output",
-                "independent_offset": 0.017152876713942205,
+                "independent_offset": "#./joint_offset",
                 "joint_offset": 0.017452038160713775,
-                "min_offset": "#./independent_offset",
+                "min_offset": "#./joint_offset",
                 "__class__": "quam_libs.components.flux_line.FluxLine"
             },
             "resonator": {
@@ -1339,9 +1339,9 @@
                     }
                 },
                 "opx_output": "#/wiring/qubits/q4/z/opx_output",
-                "independent_offset": 0.044365201300336415,
+                "independent_offset": "#./joint_offset",
                 "joint_offset": 0.03474655848640048,
-                "min_offset": "#./independent_offset",
+                "min_offset": "#./joint_offset",
                 "__class__": "quam_libs.components.flux_line.FluxLine"
             },
             "resonator": {
@@ -1680,9 +1680,9 @@
                     }
                 },
                 "opx_output": "#/wiring/qubits/q5/z/opx_output",
-                "independent_offset": 0.0844978123576474,
+                "independent_offset": "#./joint_offset",
                 "joint_offset": 0.07554859109008735,
-                "min_offset": "#./independent_offset",
+                "min_offset": "#./joint_offset",
                 "__class__": "quam_libs.components.flux_line.FluxLine"
             },
             "resonator": {
@@ -2002,9 +2002,9 @@
                     }
                 },
                 "opx_output": "#/wiring/qubits/q6/z/opx_output",
-                "independent_offset": 0.22404716842706382,
+                "independent_offset": "#./joint_offset",
                 "joint_offset": 0.2192867083484435,
-                "min_offset": "#./independent_offset",
+                "min_offset": "#./joint_offset",
                 "__class__": "quam_libs.components.flux_line.FluxLine"
             },
             "resonator": {
@@ -2316,9 +2316,9 @@
                     }
                 },
                 "opx_output": "#/wiring/qubits/q7/z/opx_output",
-                "independent_offset": 0.16001725240154782,
+                "independent_offset": "#./joint_offset",
                 "joint_offset": 0.16025410405867183,
-                "min_offset": "#./independent_offset",
+                "min_offset": "#./joint_offset",
                 "__class__": "quam_libs.components.flux_line.FluxLine"
             },
             "resonator": {
@@ -2647,9 +2647,9 @@
                     }
                 },
                 "opx_output": "#/wiring/qubits/q8/z/opx_output",
-                "independent_offset": 0.12507265631757225,
+                "independent_offset": "#./joint_offset",
                 "joint_offset": 0.1572805625037997,
-                "min_offset": "#./independent_offset",
+                "min_offset": "#./joint_offset",
                 "__class__": "quam_libs.components.flux_line.FluxLine"
             },
             "resonator": {
@@ -2969,9 +2969,9 @@
                     }
                 },
                 "opx_output": "#/wiring/qubits/q9/z/opx_output",
-                "independent_offset": 0.19077274350077447,
+                "independent_offset": "#./joint_offset",
                 "joint_offset": -0.214,
-                "min_offset": "#./independent_offset",
+                "min_offset": "#./joint_offset",
                 "__class__": "quam_libs.components.flux_line.FluxLine"
             },
             "resonator": {
@@ -3287,9 +3287,9 @@
                     }
                 },
                 "opx_output": "#/wiring/qubits/q10/z/opx_output",
-                "independent_offset": 0.08195473226252392,
+                "independent_offset": "#./joint_offset",
                 "joint_offset": -0.28,
-                "min_offset": "#./independent_offset",
+                "min_offset": "#./joint_offset",
                 "__class__": "quam_libs.components.flux_line.FluxLine"
             },
             "resonator": {
