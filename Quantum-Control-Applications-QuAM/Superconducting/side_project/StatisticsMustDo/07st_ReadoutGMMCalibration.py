@@ -50,7 +50,7 @@ from quam_libs.lib.qubit_thermometer import repetition_data, StateDiscrimination
 
 # %% {Node_parameters}
 class Parameters(NodeParameters):
-    qubits: Optional[List[str]] = ['q1'] #The qubit to be measured. If None, all active qubits will be measured
+    qubits: Optional[List[str]] = ['q6'] #The qubit to be measured. If None, all active qubits will be measured
     num_runs: int = 2048*2
     flux_point_joint_or_independent_or_arbitrary: Literal['joint', 'independent'] = 'independent'   
     simulate: bool = False
