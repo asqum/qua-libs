@@ -1111,7 +1111,7 @@ class StateDiscrimination():
             all_i = [m[0] for m in means]
             ax.set_xlim(min(all_i) - 10*std, max(all_i) + 10*std)
 
-    def show_error_analysis(self, qubit_name, ax:Axes):
+    def show_error_analysis(self, qubit_name, ax:Axes, sq_gate_error:float=None):
         # 1. 取得資料與分析結果
         i_data = self.data['I'].values.flatten()
         q_data = self.data['Q'].values.flatten()
@@ -1126,21 +1126,17 @@ class StateDiscrimination():
         # error cata
         overlap_error = 0.5 * math.erfc(snr / (2 * math.sqrt(2)))
         ro_error = 0.5*(p01+p10)
+
+        if sq_gate_error is None:
+            sq_gate_error = 0
         
-        transition_error_up = p01 
-        transition_error_dn = p10 
-
-        if transition_error_up < 0 or transition_error_dn < 0:
-            warnings = "Overlap error too high !"
-        else:
-            warnings = None
-
+        T1_error = p10 - p01 - sq_gate_error # assume single qubit control gate error can be ignored
 
         error_dict = {
         r"$\epsilon_{RO}$": ro_error * 100,
         r"$\epsilon_{overlap}$": overlap_error * 100,
-        r"$\epsilon_{0 \to 1}$": transition_error_up * 100,
-        r"$\epsilon_{1 \to 0}$": transition_error_dn * 100,
+        r"$\epsilon_{thermal}$": p01 * 100,
+        r"$\epsilon_{relax}$": T1_error * 100,
         }
 
         labels = list(error_dict.keys())
@@ -1193,15 +1189,15 @@ class StateDiscrimination():
         ax.get_figure().suptitle("Readout Error Breakdown")
 
         ax.get_figure().tight_layout(rect=[0, 0.12, 1, 1])
-        if warnings is not None:
-            ax.text(
-                0.5,
-                -0.25,
-                warnings,
-                transform=ax.transAxes,
-                ha="center",
-                va="top",
-                fontsize=8,
-                color="gray",
-            )
+        # if warnings is not None:
+        #     ax.text(
+        #         0.5,
+        #         -0.25,
+        #         warnings,
+        #         transform=ax.transAxes,
+        #         ha="center",
+        #         va="top",
+        #         fontsize=8,
+        #         color="gray",
+        #     )
       
