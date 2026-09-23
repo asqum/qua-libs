@@ -45,10 +45,12 @@ class Parameters(NodeParameters):
     qubits: Optional[List[str]] = None
     num_runs: int = 3000
     reset_type_thermal_or_active: Literal["thermal", "active"] = "thermal"
+    max_attempts: int = 10
     flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
     multiplexed: bool = False
     simulate: bool = False
     timeout: int = 100
+    connect_timeout: int = 200
 
 
 node = QualibrationNode(name="11e_IQ_Blobs_G_E_F", parameters=Parameters())
@@ -64,7 +66,7 @@ node.machine = machine
 config = machine.generate_config()
 octave_config = machine.get_octave_config()
 # Open Communication with the QOP
-qmm = machine.connect()
+qmm = machine.connect(timeout=node.parameters.connect_timeout)
 
 # Get the relevant QuAM components
 if node.parameters.qubits is None or node.parameters.qubits == "":
@@ -104,6 +106,23 @@ def find_biggest_gaussian(da):
     
     return biggest_gaussian['mu']
 
+
+def draw_gef_boundaries(ax, centers, xlim, ylim, n=250):
+    """Manhattan nearest-center boundaries, matching readout_state_gef."""
+    centers = np.asarray(centers, dtype=float)
+    xs = np.linspace(xlim[0], xlim[1], n)
+    ys = np.linspace(ylim[0], ylim[1], n)
+    xx, yy = np.meshgrid(xs, ys)
+    dist = np.stack([np.abs(xx - c[0]) + np.abs(yy - c[1]) for c in centers], axis=0)
+    for i, j, k in ((0, 1, 2), (1, 2, 0), (2, 0, 1)):
+        field = np.ma.masked_where(dist[k] < np.minimum(dist[i], dist[j]), dist[i] - dist[j])
+        vals = field.compressed()
+        if vals.size == 0 or vals.min() > 0 or vals.max() < 0:
+            continue
+        ax.contour(
+            xx, yy, field, levels=[0], colors=[(0.35, 0.35, 0.35, 0.45)], linewidths=1.0, zorder=4
+        )
+
 # %% {QUA_program}
 n_runs = node.parameters.num_runs  # Number of runs
 flux_point = node.parameters.flux_point_joint_or_independent  # 'independent' or 'joint'
@@ -126,26 +145,23 @@ with program() as iq_blobs:
 
         with for_(n, 0, n < n_runs, n + 1):
             # ground iq blobs for all qubits
+            align()
             save(n, n_st)
-            wait(4)
             update_frequency(qubit.xy.name, qubit.xy.intermediate_frequency)
-            wait(4)
             if not node.parameters.simulate:
                 if reset_type == "active":
-                    active_reset_gef(qubit)
+                    active_reset_gef(qubit, max_attempts=node.parameters.max_attempts)
                     qubit.resonator.update_frequency(
-                        qubit.resonator.intermediate_frequency + qubit.resonator.GEF_frequency_shift
+                        qubit.resonator.intermediate_frequency + qubit.resonator.GEF_frequency_shift, 
+                        keep_phase=True
                     )
-                    wait(4)
                 elif reset_type == "thermal":
                     wait(4 * qubit.thermalization_time * u.ns)
                 else:
                     raise ValueError(f"Unrecognized reset type {reset_type}.")
 
             qubit.align()
-            wait(4)
             qubit.resonator.measure("readout", qua_vars=(I_g[i], Q_g[i]))
-            wait(4)
             qubit.align()
             # save data
             save(I_g[i], I_g_st[i])
@@ -153,50 +169,40 @@ with program() as iq_blobs:
 
             if not node.parameters.simulate:
                 if reset_type == "active":
-                    active_reset_gef(qubit)
+                    active_reset_gef(qubit, max_attempts=node.parameters.max_attempts)
                     qubit.resonator.update_frequency(
-                        qubit.resonator.intermediate_frequency + qubit.resonator.GEF_frequency_shift
+                        qubit.resonator.intermediate_frequency + qubit.resonator.GEF_frequency_shift, 
+                        keep_phase=True
                     )
-                    wait(4)
                 elif reset_type == "thermal":
                     wait(4*qubit.thermalization_time * u.ns)
                 else:
                     raise ValueError(f"Unrecognized reset type {reset_type}.")
-            wait(4)
             qubit.align()
-            wait(4)
             qubit.xy.play("x180")
-            wait(4)
+
             qubit.align()
-            wait(4)
             qubit.resonator.measure("readout", qua_vars=(I_e[i], Q_e[i]))
-            wait(4)
             qubit.align()
             save(I_e[i], I_e_st[i])
             save(Q_e[i], Q_e_st[i])
 
             if not node.parameters.simulate:
                 if reset_type == "active":
-                    active_reset_gef(qubit)
+                    active_reset_gef(qubit, max_attempts=node.parameters.max_attempts)
                     qubit.resonator.update_frequency(
-                        qubit.resonator.intermediate_frequency + qubit.resonator.GEF_frequency_shift
+                        qubit.resonator.intermediate_frequency + qubit.resonator.GEF_frequency_shift, keep_phase=True
                     )
-                    wait(4)
                 elif reset_type == "thermal":
                     wait(4*qubit.thermalization_time * u.ns)
                 else:
                     raise ValueError(f"Unrecognized reset type {reset_type}.")
-            wait(4)
             qubit.align()
-            wait(4)
             qubit.xy.play("x180")
-            wait(4)
             update_frequency(
-                qubit.xy.name, qubit.xy.intermediate_frequency - qubit.anharmonicity
+                qubit.xy.name, qubit.xy.intermediate_frequency - qubit.anharmonicity, keep_phase=True
             )
-            wait(4)
             qubit.xy.play(GEF_operation)
-            wait(4)
             qubit.align()
             qubit.resonator.measure("readout", qua_vars=(I_f[i], Q_f[i]))
             qubit.align()
@@ -278,19 +284,16 @@ if  not node.parameters.simulate:
         # Derive the confusion matrix
         confusion = np.zeros((3, 3))
         for p, prep_state in enumerate(["g", "e", "f"]):
-            dist_g = np.sqrt(
-                (I_g_cent - ds[f"I_{prep_state}"].sel(qubit=q.name)) ** 2
-                + (Q_g_cent - ds[f"Q_{prep_state}"].sel(qubit=q.name)) ** 2
+            I_prep = ds[f"I_{prep_state}"].sel(qubit=q.name)
+            Q_prep = ds[f"Q_{prep_state}"].sel(qubit=q.name)
+            dist = np.stack(
+                [
+                    np.abs(I_g_cent - I_prep) + np.abs(Q_g_cent - Q_prep),
+                    np.abs(I_e_cent - I_prep) + np.abs(Q_e_cent - Q_prep),
+                    np.abs(I_f_cent - I_prep) + np.abs(Q_f_cent - Q_prep),
+                ],
+                axis=0,
             )
-            dist_e = np.sqrt(
-                (I_e_cent - ds[f"I_{prep_state}"].sel(qubit=q.name)) ** 2
-                + (Q_e_cent - ds[f"Q_{prep_state}"].sel(qubit=q.name)) ** 2
-            )
-            dist_f = np.sqrt(
-                (I_f_cent - ds[f"I_{prep_state}"].sel(qubit=q.name)) ** 2
-                + (Q_f_cent - ds[f"Q_{prep_state}"].sel(qubit=q.name)) ** 2
-            )
-            dist = np.stack([dist_g, dist_e, dist_f], axis=0)
             counts = np.argmin(dist, axis=0)
             confusion[p][0] = np.sum(counts == 0) / len(counts)
             confusion[p][1] = np.sum(counts == 1) / len(counts)
@@ -352,6 +355,9 @@ if not node.parameters.simulate:
             label="F",
         )
         ax.axis("equal")
+        ax.set_autoscale_on(False)
+        xlim, ylim = ax.get_xlim(), ax.get_ylim()
+        draw_gef_boundaries(ax, 1e3 * node.results["results"][qn]["center_matrix"], xlim, ylim)
         ax.set_xlabel("I [mV]")
         ax.set_ylabel("Q [mV]")
         ax.set_title(qubit["qubit"])
