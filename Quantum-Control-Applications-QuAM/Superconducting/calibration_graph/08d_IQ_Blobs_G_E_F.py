@@ -53,7 +53,7 @@ class Parameters(NodeParameters):
     connect_timeout: int = 200
 
 
-node = QualibrationNode(name="11e_IQ_Blobs_G_E_F", parameters=Parameters())
+node = QualibrationNode(name="08d_IQ_Blobs_G_E_F", parameters=Parameters())
 
 
 # %% {Initialize_QuAM_and_QOP}
