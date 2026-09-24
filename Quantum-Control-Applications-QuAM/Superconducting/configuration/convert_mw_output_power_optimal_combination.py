@@ -16,7 +16,7 @@ You set the maximum normalized amplitude each channel may use:
     1 / num_qubits_sharing_readout   for readout (multiplex cap)
 
 The script then finds the lowest full_scale_power_dbm whose required amplitude still fits
-within that cap. When several operations share one port (x180/x90/saturation on XY), the
+within that cap. When several operations share one port (x180/x90/EF_x180/saturation on XY), the
 most power-hungry operation sets full_scale_power_dbm for the whole port.
 
 Readout multiplex: num_qubits_sharing_readout qubits share one MW readout port.
@@ -45,7 +45,7 @@ qubit_names: Optional[list[str]] = None
 # Re-optimize the XY drive channels.
 optimize_xy: bool = True
 # XY operations sharing each drive port. The most power-hungry one sets full_scale_power_dbm.
-xy_operations: tuple[str, ...] = ("x180", "x90")  # ("x180", "x90", "saturation")
+xy_operations: tuple[str, ...] = ("x180", "x90", "EF_x180")  # ("x180", "x90", "EF_x180", "saturation")
 # Max normalized base amplitude the XY waveforms may reach. The script lowers
 # full_scale_power_dbm until the most power-hungry operation hits this cap.
 # Must be <= the hardware limit (MW-FEM max_wf_amplitude = 1.0).

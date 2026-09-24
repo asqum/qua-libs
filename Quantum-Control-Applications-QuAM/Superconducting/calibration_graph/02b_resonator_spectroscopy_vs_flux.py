@@ -54,7 +54,7 @@ class Parameters(NodeParameters):
     num_flux_points: int = 75
     frequency_span_in_mhz: float = 7.5 #15
     frequency_step_in_mhz: float = 0.1 #0.1
-    flux_point_joint_or_independent: Literal["joint", "independent", ""] = "independent"
+    flux_point_joint_or_independent: Literal["joint", "independent", ""] = "joint"
     input_line_impedance_in_ohm: float = 50
     line_attenuation_in_db: float = 0
     update_flux_min: bool = False
@@ -260,6 +260,20 @@ if not node.parameters.simulate:
     # %% {Plotting}
     grid = QubitGrid(ds, [q.grid_location for q in qubits])
     for ax, qubit in grid_iter(grid):
+        q_name = qubit["qubit"]
+        q_obj = next(q for q in qubits if q.name == q_name)
+        current_offset = (
+            float(q_obj.z.independent_offset)
+            if flux_point == "independent"
+            else float(q_obj.z.joint_offset)
+        )
+        current_rel_freq = peak_freq.sel(qubit=q_name).sel(flux=current_offset, method="nearest")
+        current_abs_freq = (
+            ds.sel(qubit=q_name)
+            .sel(flux=current_offset, method="nearest")
+            .sel(freq=current_rel_freq)
+            .freq_full
+        )
         ax2 = ax.twiny()
         # Plot using the attenuated current x-axis
         ds.assign_coords(freq_GHz=ds.freq_full / 1e9).loc[qubit].IQ_abs.plot(
@@ -293,16 +307,37 @@ if not node.parameters.simulate:
             color="orange",
             label="min offset",
         )
-        # Location of the current resonator frequency
+        # Location of the fitted idle resonator frequency
         ax.plot(
             idle_offset.loc[qubit].values,
-            abs_freqs.sel(qubit=qubit["qubit"]).values
-            * 1e-9,
+            abs_freqs.sel(qubit=q_name).values * 1e-9,
             "r*",
             markersize=10,
+            zorder=5,
+            label="idle (fit)",
         )
-        ax.set_title(qubit["qubit"])
+        # Location of the current (state) offset
+        ax.plot(
+            current_offset,
+            np.asarray(current_abs_freq) * 1e-9,
+            "b*",
+            markersize=10,
+            zorder=5,
+            label="current",
+        )
+        ax.set_title(q_name)
         ax.set_xlabel("Flux (V)")
+        ax.legend(
+            loc="upper left",
+            fontsize=5,
+            markerscale=0.5,
+            framealpha=0.5,
+            borderpad=0.2,
+            labelspacing=0.15,
+            handlelength=1.0,
+            handletextpad=0.3,
+            ncol=2,
+        )
 
     grid.fig.suptitle("Resonator spectroscopy vs flux ")
     plt.tight_layout()
