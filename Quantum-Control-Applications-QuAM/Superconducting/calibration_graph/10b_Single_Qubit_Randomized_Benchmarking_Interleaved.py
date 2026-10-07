@@ -26,7 +26,6 @@ Prerequisites:
 from qualibrate import QualibrationNode, NodeParameters
 from quam_libs.components import QuAM, Transmon
 from quam_libs.macros import active_reset
-from qualang_tools.plot import interrupt_on_close
 from qualang_tools.results import progress_counter, fetching_tool
 from qualang_tools.multi_user import qm_session
 from qualang_tools.bakery.randomized_benchmark_c1 import c1_table
@@ -37,18 +36,19 @@ from typing import Literal, Optional, List
 from scipy.optimize import curve_fit
 import matplotlib.pyplot as plt
 import numpy as np
+import time
 
 
 # %% {Node_parameters}
 class Parameters(NodeParameters):
-    qubits: Optional[List[str]] = None
+    qubits: Optional[List[str]] = ["q4","q5"]
     use_state_discrimination: bool = True
     use_strict_timing: bool = True
     interleaved_gate_index: int = 2
     num_random_sequences: int = 50  # Number of random sequences
     num_averages: int = 20
-    max_circuit_depth: int = 1000  # Maximum circuit depth
-    delta_clifford: int = 10
+    max_circuit_depth: int = 1200  # Maximum circuit depth
+    delta_clifford: int = 40
     seed: int = 345324
     flux_point_joint_or_independent: Literal["joint", "independent"] = "independent"
     reset_type_thermal_or_active: Literal["thermal", "active"] = "thermal"
@@ -71,10 +71,7 @@ config = machine.generate_config()
 # Open Communication with the QOP
 qmm = machine.connect()
 
-if node.parameters.qubits is None or node.parameters.qubits == "":
-    qubits = machine.active_qubits
-else:
-    qubits = [machine.qubits[q] for q in node.parameters.qubits.replace(" ", "").split(",")]
+qubits = [machine.qubits[q] for q in node.parameters.qubits]
 num_qubits = len(qubits)
 
 
@@ -126,6 +123,29 @@ def get_interleaved_gate(gate_index):
 
 def power_law(power, a, b, p):
     return a * (p**power) + b
+
+
+def guess_power_law(x, y):
+    """Initial guess for A * p**x + B from the measured curve.
+
+    The tail estimates the asymptote B. A = y[0] - B is negative when the
+    curve rises (excited-state population) and positive when it decays.
+    """
+    x = np.asarray(x, dtype=float)
+    y = np.asarray(y, dtype=float)
+    n_tail = max(3, len(y) // 5)
+    b = float(np.median(y[-n_tail:]))
+    a = float(y[0] - b)
+    if abs(a) < 1e-4:
+        return [0.0, float(np.median(y)), 0.99]
+    ratio = (y - b) / a
+    mask = (x > 0) & (ratio > 0.02) & (ratio < 0.98)
+    if not np.any(mask):
+        p = 0.99
+    else:
+        p = float(np.exp(np.median(np.log(ratio[mask]) / x[mask])))
+    p = float(np.clip(p, 1e-6, 1 - 1e-6))
+    return [a, b, p]
 
 
 def generate_sequence(interleaved_gate_index):
@@ -356,30 +376,13 @@ else:
                 results = fetching_tool(job, data_list=["state_avg", "iteration"], mode="live")
             else:
                 results = fetching_tool(job, data_list=["I_avg", "Q_avg", "iteration"], mode="live")
-            # Live plotting
-            fig = plt.figure()
-            interrupt_on_close(fig, job)  # Interrupts the job when closing the figure
-            # data analysis
             x = np.arange(0, max_circuit_depth + 0.1, delta_clifford)
             x[0] = 1  # to set the first value of 'x' to be depth = 1 as in the experiment
             while results.is_processing():
-                # data analysis
-                if state_discrimination:
-                    state_avg, iteration = results.fetch_all()
-                    value_avg = state_avg
-                else:
-                    I, Q, iteration = results.fetch_all()
-                    value_avg = I
-
-                # Progress bar
+                fetched = results.fetch_all()
+                iteration = fetched[-1]
                 progress_counter(iteration, num_of_sequences, start_time=results.get_start_time())
-                # Plot averaged values
-                plt.cla()
-                plt.plot(x, value_avg, marker=".")
-                plt.xlabel("Number of Clifford gates")
-                plt.ylabel("Sequence Fidelity")
-                plt.title(f"Single qubit interleaved RB {get_interleaved_gate(interleaved_gate_index)}")
-                plt.pause(0.1)
+                time.sleep(1)
 
             # At the end of the program, fetch the non-averaged results to get the error-bars
             if state_discrimination:
@@ -393,13 +396,15 @@ else:
                 value_avg = np.mean(I, axis=0)
                 error_avg = np.std(I, axis=0)
             # data analysis
+            p0 = guess_power_law(x, value_avg)
+            print(f"Initial guess: A = {p0[0]:.3}, B = {p0[1]:.3}, p = {p0[2]:.6}")
             pars, cov = curve_fit(
                 f=power_law,
                 xdata=x,
                 ydata=value_avg,
-                p0=[0.5, 0.5, 0.9],
-                bounds=(-np.inf, np.inf),
-                maxfev=2000,
+                p0=p0,
+                bounds=([-np.inf, -np.inf, 0.0], [np.inf, np.inf, 1.0]),
+                maxfev=10000,
             )
             stdevs = np.sqrt(np.diag(cov))
 
@@ -445,10 +450,12 @@ else:
                 f"{qubit.name}_clifford_set_infidelity": r_c,
                 f"{qubit.name}_gate_infidelity": r_g,
             }
-            node.results[f"{qubit.name}_figure"] = fig
+            node.results[f"{qubit.name}_figure"] = fig_analysis
             node.results[f"{qubit.name}_figure_analysis"] = fig_analysis
 
-            plt.show()
+ 
 
 node.results["initial_parameters"] = node.parameters.model_dump()
 node.save()
+
+# %%
