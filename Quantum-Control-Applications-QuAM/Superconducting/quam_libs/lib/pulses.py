@@ -400,6 +400,189 @@ class CosineFlatTopPulse(Pulse):
         return p.tolist()
 
 
+@quam_dataclass
+class FlatTopGaussianPulse(Pulse):
+    """Gaussian rise/fall, flat-top pulse.
+
+    Rise and fall are the two halves of a Gaussian window whose sigma is
+    ``rise_fall_length / 5``. Total length is ``flat_length + 2 * rise_fall_length``.
+
+    Args:
+        length (int): Total pulse duration in samples.
+        amplitude (float): Peak amplitude of the pulse.
+        axis_angle (float, optional): IQ axis angle in radians.
+            If None (default), pulse is real and drives a single channel.
+            If set, pulse becomes complex-valued for IQ outputs.
+        flat_length (int): Number of samples at full amplitude (the flat-top region).
+    """
+
+    amplitude: float
+    axis_angle: float = None
+    flat_length: int = 0
+
+    def waveform_function(self):
+        from qualang_tools.config.waveform_tools import flattop_gaussian_waveform
+
+        L = int(self.length)
+        F = int(self.flat_length)
+        rise_fall_length = (L - F) // 2
+        if F + 2 * rise_fall_length != L:
+            raise ValueError(
+                "FlatTopGaussianPulse requires (length - flat_length) to be even "
+                f"(length={L}, flat_length={F})."
+            )
+
+        waveform = np.array(
+            flattop_gaussian_waveform(
+                amplitude=self.amplitude,
+                flat_length=F,
+                rise_fall_length=rise_fall_length,
+                return_part="all",
+            )
+        )
+
+        if self.axis_angle is not None:
+            waveform = waveform * np.exp(1j * self.axis_angle)
+
+        return waveform.tolist()
+
+
+def _gaussian_filtered_envelope(core: np.ndarray, total_length: int, amplitude: float,
+                                gaussian_filter_frequency_mhz: float, sample_rate: float) -> np.ndarray:
+    """Center ``core`` in a zero window of ``total_length``, Gaussian-filter it, and
+    rescale so ``max(abs(envelope)) == abs(amplitude)``."""
+    from scipy.ndimage import gaussian_filter1d
+
+    zero_pad_len = total_length - len(core)
+    left_pad = zero_pad_len // 2
+    right_pad = zero_pad_len - left_pad
+    env = np.concatenate((np.zeros(left_pad), core, np.zeros(right_pad)))
+
+    sigma = sample_rate / (2.0 * np.pi * gaussian_filter_frequency_mhz * 1e6)
+    env = gaussian_filter1d(env, sigma=sigma)
+
+    peak = float(np.max(np.abs(env)))
+    if peak > 0:
+        env = env * (abs(amplitude) / peak)
+    else:
+        env = np.zeros(total_length)
+    return env
+
+
+@quam_dataclass
+class GaussianFilteredSquarePulse(Pulse):
+    """Square core with symmetric zero padding, Gaussian-filtered and peak-renormalized.
+
+    Pre-filter layout over ``length`` is ``[zeros | amplitude plateau | zeros]``.
+    The filter sigma (samples) is ``sample_rate / (2 * pi * f)`` with
+    ``f = gaussian_filter_frequency_mhz * 1e6``. Each zero flank should be roughly
+    >= 5 sigma, otherwise the waveform will not decay to zero at the edges.
+
+    Args:
+        pulse_length (int): Samples in the constant-amplitude core.
+        padding_length (int): Extra zero samples (split left/right) in the total length.
+        amplitude (float): Peak amplitude after filtering.
+        gaussian_filter_frequency_mhz (float): Filter cutoff in MHz.
+        sample_rate (float): Sample rate in Hz used for the sigma mapping.
+        axis_angle (float, optional): IQ axis angle in radians.
+        length (int): Inferred as ``ceil((pulse_length + padding_length) / 4) * 4``.
+    """
+
+    pulse_length: int
+    padding_length: int = 0
+    amplitude: float
+    gaussian_filter_frequency_mhz: float
+    sample_rate: float = 1e9
+    axis_angle: float = None
+    length: int = "#./inferred_length"
+
+    @property
+    def inferred_length(self) -> int:
+        return int(np.ceil((self.pulse_length + self.padding_length) / 4) * 4)
+
+    def waveform_function(self):
+        if self.pulse_length <= 0:
+            raise ValueError("GaussianFilteredSquarePulse.pulse_length must be positive")
+        if self.padding_length < 0:
+            raise ValueError("GaussianFilteredSquarePulse.padding_length must be non-negative")
+        if self.gaussian_filter_frequency_mhz <= 0:
+            raise ValueError("GaussianFilteredSquarePulse.gaussian_filter_frequency_mhz must be positive")
+
+        L = int(self.length)
+        if self.amplitude == 0:
+            return np.zeros(L).tolist()
+
+        core = self.amplitude * np.ones(int(self.pulse_length))
+        env = _gaussian_filtered_envelope(
+            core, L, self.amplitude, self.gaussian_filter_frequency_mhz, self.sample_rate
+        )
+
+        if self.axis_angle is not None:
+            env = env * np.exp(1j * self.axis_angle)
+        return env.tolist()
+
+
+@quam_dataclass
+class GaussianFilteredSymmetricBipolarPulse(Pulse):
+    """Symmetric bipolar square core, Gaussian-filtered and peak-renormalized.
+
+    Pre-filter layout over ``length`` is ``[zeros | +amplitude | -amplitude | zeros]``
+    with two equal-length lobes. Filtering and renormalization are the same as
+    ``GaussianFilteredSquarePulse``.
+
+    Args:
+        pulse_length (int): Total samples of both lobes. Must be even.
+        padding_length (int): Extra zero samples (split left/right) in the total length.
+        amplitude (float): Peak magnitude after filtering. The positive lobe always
+            comes first regardless of the sign (same as the quam_builder pulse).
+        gaussian_filter_frequency_mhz (float): Filter cutoff in MHz.
+        sample_rate (float): Sample rate in Hz used for the sigma mapping.
+        axis_angle (float, optional): IQ axis angle in radians.
+        length (int): Inferred as ``ceil((pulse_length + padding_length) / 4) * 4``.
+    """
+
+    pulse_length: int
+    padding_length: int = 0
+    amplitude: float
+    gaussian_filter_frequency_mhz: float
+    sample_rate: float = 1e9
+    axis_angle: float = None
+    length: int = "#./inferred_length"
+
+    @property
+    def inferred_length(self) -> int:
+        return int(np.ceil((self.pulse_length + self.padding_length) / 4) * 4)
+
+    def waveform_function(self):
+        if self.pulse_length <= 0:
+            raise ValueError("GaussianFilteredSymmetricBipolarPulse.pulse_length must be positive")
+        if self.pulse_length % 2 != 0:
+            raise ValueError("GaussianFilteredSymmetricBipolarPulse.pulse_length must be even")
+        if self.padding_length < 0:
+            raise ValueError("GaussianFilteredSymmetricBipolarPulse.padding_length must be non-negative")
+        if self.gaussian_filter_frequency_mhz <= 0:
+            raise ValueError(
+                "GaussianFilteredSymmetricBipolarPulse.gaussian_filter_frequency_mhz must be positive"
+            )
+
+        L = int(self.length)
+        if self.amplitude == 0:
+            return np.zeros(L).tolist()
+
+        half_len = int(self.pulse_length) // 2
+        core = np.concatenate(
+            (self.amplitude * np.ones(half_len), -self.amplitude * np.ones(half_len))
+        )
+        env = _gaussian_filtered_envelope(
+            core, L, self.amplitude, self.gaussian_filter_frequency_mhz, self.sample_rate
+        )
+        env = env * np.sign(self.amplitude)
+
+        if self.axis_angle is not None:
+            env = env * np.exp(1j * self.axis_angle)
+        return env.tolist()
+
+
 def _effective_dpss_bandwidth(length: int, time_bandwidth: float) -> float:
     """Clip NW so scipy dpss(M, NW) satisfies NW < M/2."""
     return min(time_bandwidth, length / 2.0 - 1e-9)

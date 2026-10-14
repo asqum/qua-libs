@@ -1,6 +1,6 @@
 """
         TWO-QUBIT GATE SET TOMOGRAPHY (Advance Input Stream)
-2Q variant of 100a_Gate_Set_Tomography_AIS using the pyGSTi smq2Q_XYICPHASE model pack
+2Q variant of 94a_Gate_Set_Tomography_AIS using the pyGSTi smq2Q_XYICPHASE model pack
 (falling back to smq2Q_XYCPHASE), as in CQT_2Q_GST.ipynb.
 
 Native gates: I, x90, y90 on both qubits, plus the calibrated CZ gate of the pair.
@@ -72,7 +72,7 @@ class Parameters(NodeParameters):
 
 
 node = QualibrationNode[Parameters, QuAM](
-    name="100b_two_qubit_gate_set_tomography_ais", parameters=Parameters()
+    name="94b_two_qubit_gate_set_tomography_ais", parameters=Parameters()
 )
 
 # %% {Initialize_QuAM_and_QOP}

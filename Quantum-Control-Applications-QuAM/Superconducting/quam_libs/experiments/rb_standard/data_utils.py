@@ -447,3 +447,586 @@ def plot_combined_rb(qp_name, rb_result_SRB, rb_result_IRB, target_gate:str|None
     )
     
     return fig
+
+
+def _retention_decay(depths, amplitude, tau):
+    """Computational population, linear in depth. amplitude absorbs depth-independent SPAM."""
+    return amplitude * (1.0 - tau * depths)
+
+
+def _postselected_decay(depths, amplitude, lam, offset):
+    """Post-selected |00> survival. lam is the computational error per Clifford."""
+    return amplitude * (1.0 - lam) ** depths + offset
+
+
+def _subspace_population(depths, intercept, asymptote_frac, lam1):
+    """Wood & Gambetta subspace population, p(m) = A + B λ1^m.
+
+    intercept is p(0) = A + B. asymptote_frac in [0, 1] sets A = asymptote_frac * intercept,
+    so the curve is monotonic from the intercept toward an asymptote at or below it.
+    """
+    asymptote = asymptote_frac * intercept
+    return asymptote + (intercept - asymptote) * np.power(lam1, depths)
+
+
+def _lrb_survival(depths, A0, B0, C0, lam2, lam1):
+    """Unconditional |00> survival, p0(m) = A0 + B0 λ1^m + C0 λ2^m."""
+    return A0 + B0 * np.power(lam1, depths) + C0 * np.power(lam2, depths)
+
+
+def _lrb_survival_single(depths, A0, C0, lam2):
+    """Weak-leakage |00> survival, p0(m) = A0 + C0 λ2^m."""
+    return A0 + C0 * np.power(lam2, depths)
+
+
+def _r_squared(y, y_fit):
+    ss_res = np.sum((y - y_fit) ** 2)
+    ss_tot = np.sum((y - np.mean(y)) ** 2)
+    if ss_tot == 0:
+        return 1.0
+    return 1.0 - ss_res / ss_tot
+
+
+@dataclasses.dataclass
+class LeakageRBResult:
+    """
+    Two-qubit RB with leakage, using leakage post-selection in the computational-dominant regime.
+
+    State codes 0, 1, 2, 3 are the computational basis. Any state >= 4 is leakage.
+    Retention P(state < 4) = A (1 - τ ℓ) gives the leakage rate τ.
+    Post-selected P(state == 0 | state < 4) = A (1 - λ)^ℓ + B gives the computational error λ.
+    Average fidelity is F = 1 - ((d_C - 1) / d_C) λ - τ, with d_C = 4.
+
+    This is the LPS analysis of Chen & Baldwin, arXiv:2502.00154, Sec. IV.2.3.
+    The single-exponential fit of P(|00>) is kept as naive_fidelity for comparison.
+
+    fit() also runs the Wood & Gambetta leakage RB model (arXiv:1704.03081):
+    P(no leakage) = A + B λ1^m, with L1 = (1 - A)(1 - λ1) and L2 = A(1 - λ1).
+    P(|00>) = A0 + B0 λ1^m + C0 λ2^m, and
+    F = [(d_C - 1) λ2 + 1 - L1] / d_C.
+    plot_lrb() draws that fit. L1 and L2 are separately determined only once the
+    subspace population has approached its asymptote.
+    """
+
+    circuit_depths: list[int]
+    num_repeats: int
+    num_averages: int
+    state: np.ndarray
+    d_c: int = 4
+
+    def __post_init__(self):
+        self.state = np.asarray(self.state)
+        expected = (self.num_repeats, len(self.circuit_depths), self.num_averages)
+        if self.state.shape != expected:
+            raise ValueError(
+                f"state shape {self.state.shape} does not match "
+                f"(num_repeats, num_depths, num_averages) = {expected}"
+            )
+        self.depths = np.asarray(self.circuit_depths, dtype=float)
+
+    def _sequence_probabilities(self):
+        computational = (self.state == 0).mean(axis=-1)
+        retention = (self.state < 4).mean(axis=-1)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            postselected = np.where(retention > 0, computational / retention, np.nan)
+        return computational, retention, postselected
+
+    @staticmethod
+    def _mean_and_sem(values):
+        mean = np.nanmean(values, axis=0)
+        count = np.sum(np.isfinite(values), axis=0)
+        std = np.nanstd(values, axis=0, ddof=1)
+        sem = np.full(mean.shape, np.nan, dtype=float)
+        enough = count >= 2
+        sem[enough] = std[enough] / np.sqrt(count[enough])
+        finite_mean = np.isfinite(mean)
+        zero_sem = finite_mean & (~np.isfinite(sem) | (sem == 0))
+        sem[zero_sem] = 1e-8
+        return mean, sem
+
+    def _fit_curve(self, model, y, sigma, p0, bounds, return_cov=False):
+        mask = np.isfinite(y) & np.isfinite(sigma) & (sigma > 0)
+        if np.count_nonzero(mask) < len(p0):
+            raise RuntimeError(
+                f"Not enough finite points ({np.count_nonzero(mask)}) to fit {len(p0)} parameters."
+            )
+        popt, pcov = curve_fit(
+            model,
+            self.depths[mask],
+            y[mask],
+            p0=p0,
+            bounds=bounds,
+            sigma=sigma[mask],
+            absolute_sigma=True,
+            maxfev=20000,
+        )
+        errors = np.sqrt(np.maximum(np.diag(pcov), 0.0))
+        r_squared = _r_squared(y[mask], model(self.depths[mask], *popt))
+        if return_cov:
+            return popt, errors, r_squared, pcov
+        return popt, errors, r_squared
+
+    def fit(self):
+        computational, retention, postselected = self._sequence_probabilities()
+        self.p_comp, self.p_comp_err = self._mean_and_sem(computational)
+        self.p_retention, self.p_retention_err = self._mean_and_sem(retention)
+        self.p_post, self.p_post_err = self._mean_and_sem(postselected)
+
+        max_depth = float(np.max(self.depths)) if len(self.depths) else 1.0
+        tau_upper = 0.95 / max(max_depth, 1.0)
+        amplitude0 = float(np.clip(self.p_retention[0], 0.05, 1.0))
+        (self.A_ret, self.tau), (self.A_ret_err, self.tau_err), self.retention_r_squared = self._fit_curve(
+            _retention_decay,
+            self.p_retention,
+            self.p_retention_err,
+            p0=[amplitude0, 1e-3],
+            bounds=([0.0, 0.0], [1.0, tau_upper]),
+        )
+
+        (self.A_post, self.lam, self.B_post), (
+            self.A_post_err,
+            self.lam_err,
+            self.B_post_err,
+        ), self.post_r_squared = self._fit_curve(
+            _postselected_decay,
+            self.p_post,
+            self.p_post_err,
+            p0=[(self.d_c - 1) / self.d_c, 0.01, 1.0 / self.d_c],
+            bounds=([0.0, 0.0, 0.0], [1.0, 0.999, 1.0]),
+        )
+
+        weight = (self.d_c - 1) / self.d_c
+        self.fidelity = 1.0 - weight * self.lam - self.tau
+        self.fidelity_err = float(np.sqrt((weight * self.lam_err) ** 2 + self.tau_err ** 2))
+        self.comp_dominant_ok = bool(self.tau * max_depth < 0.2)
+
+        (naive_A, naive_alpha, naive_B), (
+            self.naive_A_err,
+            self.naive_alpha_err,
+            self.naive_B_err,
+        ), self.naive_r_squared = self._fit_curve(
+            rb_decay_curve,
+            self.p_comp,
+            self.p_comp_err,
+            p0=[0.75, 0.9, 0.25],
+            bounds=([-1.0, 0.0, -1.0], [2.0, 1.0, 2.0]),
+        )
+        self.naive_A = naive_A
+        self.naive_alpha = naive_alpha
+        self.naive_B = naive_B
+        self.naive_fidelity = 1.0 - weight * (1.0 - naive_alpha)
+        self.naive_fidelity_err = float(weight * self.naive_alpha_err)
+        self._fit_wood_gambetta()
+        return self
+
+    def _fit_wood_gambetta(self):
+        """Leakage and seepage rates from Wood & Gambetta, arXiv:1704.03081."""
+        self.lrb_ok = False
+        self.L1 = np.nan
+        self.L1_err = np.nan
+        self.L2 = np.nan
+        self.L2_err = np.nan
+        self.lrb_A = np.nan
+        self.lrb_B = np.nan
+        self.lrb_lam1 = np.nan
+        self.lrb_lam1_err = np.nan
+        self.lrb_lam2 = np.nan
+        self.lrb_lam2_err = np.nan
+        self.lrb_A0 = np.nan
+        self.lrb_B0 = np.nan
+        self.lrb_C0 = np.nan
+        self.lrb_fidelity = np.nan
+        self.lrb_fidelity_err = np.nan
+        self.lrb_subspace_r_squared = np.nan
+        self.lrb_survival_r_squared = np.nan
+        self.lrb_survival_model = "none"
+        self.lrb_plateau_resolved = False
+        try:
+            intercept0 = float(np.clip(self.p_retention[0], 0.05, 1.0))
+            lam1_guess = float(np.clip(1.0 - max(5.0 * self.tau, 1e-3), 0.5, 0.999))
+            (intercept, asymptote_frac, lam1), errors, self.lrb_subspace_r_squared, pcov = self._fit_curve(
+                _subspace_population,
+                self.p_retention,
+                self.p_retention_err,
+                p0=[intercept0, 0.8, lam1_guess],
+                bounds=([0.0, 0.0, 0.0], [1.0, 1.0, 1.0]),
+                return_cov=True,
+            )
+            self.lrb_A = float(asymptote_frac * intercept)
+            self.lrb_B = float(intercept - self.lrb_A)
+            self.lrb_lam1 = float(lam1)
+            self.lrb_lam1_err = float(errors[2])
+            one_minus = 1.0 - self.lrb_lam1
+            self.L1 = (1.0 - self.lrb_A) * one_minus
+            self.L2 = self.lrb_A * one_minus
+            if np.all(np.isfinite(pcov)):
+                jacobian = np.array(
+                    [
+                        [-asymptote_frac * one_minus, -intercept * one_minus, -(1.0 - self.lrb_A)],
+                        [asymptote_frac * one_minus, intercept * one_minus, -self.lrb_A],
+                    ]
+                )
+                rate_cov = jacobian @ pcov @ jacobian.T
+                self.L1_err = float(np.sqrt(max(rate_cov[0, 0], 0.0)))
+                self.L2_err = float(np.sqrt(max(rate_cov[1, 1], 0.0)))
+            max_depth = float(np.max(self.depths)) if len(self.depths) else 0.0
+            self.lrb_plateau_resolved = bool(np.power(self.lrb_lam1, max_depth) < 0.2)
+            self.lrb_ok = True
+            try:
+                self._fit_lrb_survival()
+            except (RuntimeError, ValueError, FloatingPointError):
+                self.lrb_survival_model = "none"
+        except (RuntimeError, ValueError, FloatingPointError):
+            return
+
+    def _fit_lrb_survival(self):
+        """Fit P(|00>) with λ1 held fixed. Fall back to one exponential when leakage is weak."""
+        lam1 = self.lrb_lam1
+
+        def two_exp(depths, A0, B0, C0, lam2):
+            return _lrb_survival(depths, A0, B0, C0, lam2, lam1)
+
+        A0_guess = 1.0 / self.d_c
+        C0_guess = float(np.clip(self.p_comp[0] - A0_guess, 0.0, 1.0))
+        lam2_guess = float(np.clip(self.naive_alpha, 0.5, 0.999))
+        double_ok = False
+        try:
+            (A0, B0, C0, lam2), errors, r_squared = self._fit_curve(
+                two_exp,
+                self.p_comp,
+                self.p_comp_err,
+                p0=[A0_guess, 0.0, C0_guess, lam2_guess],
+                bounds=([0.0, -1.0, 0.0, 0.0], [1.0, 1.0, 1.0, 1.0]),
+            )
+            if np.isfinite(errors[3]) and errors[3] < 0.2:
+                double_ok = True
+        except (RuntimeError, ValueError, FloatingPointError):
+            A0 = B0 = C0 = lam2 = np.nan
+            errors = np.full(4, np.nan)
+
+        if not double_ok:
+            (A0, C0, lam2), errors_single, r_squared = self._fit_curve(
+                _lrb_survival_single,
+                self.p_comp,
+                self.p_comp_err,
+                p0=[A0_guess, C0_guess, lam2_guess],
+                bounds=([0.0, 0.0, 0.0], [1.0, 1.0, 1.0]),
+            )
+            B0 = 0.0
+            errors = np.array([errors_single[0], 0.0, errors_single[1], errors_single[2]])
+            self.lrb_survival_model = "single"
+        else:
+            self.lrb_survival_model = "double"
+
+        self.lrb_A0 = float(A0)
+        self.lrb_B0 = float(B0)
+        self.lrb_C0 = float(C0)
+        self.lrb_lam2 = float(lam2)
+        self.lrb_lam2_err = float(errors[3])
+        self.lrb_survival_r_squared = float(r_squared)
+        self.lrb_fidelity = ((self.d_c - 1) * self.lrb_lam2 + 1.0 - self.L1) / self.d_c
+        lam2_weight = (self.d_c - 1) / self.d_c
+        l1_term = 0.0 if not np.isfinite(self.L1_err) else (self.L1_err / self.d_c) ** 2
+        self.lrb_fidelity_err = float(np.sqrt((lam2_weight * self.lrb_lam2_err) ** 2 + l1_term))
+
+    def plot(self, title=None):
+        fig, ax = plt.subplots(figsize=(8, 6))
+        depths = self.depths
+        smooth = np.linspace(depths.min(), depths.max(), 200)
+
+        ax.errorbar(
+            depths, self.p_comp, yerr=self.p_comp_err, fmt="o", color="tab:blue",
+            capsize=3, label=r"$P(|00\rangle)$",
+        )
+        ax.errorbar(
+            depths, self.p_retention, yerr=self.p_retention_err, fmt="s", color="black",
+            capsize=3, label="retention $P($no leakage$)$",
+        )
+        ax.errorbar(
+            depths, self.p_post, yerr=self.p_post_err, fmt="^", color="tab:green",
+            capsize=3, label=r"post-selected $P(|00\rangle)$",
+        )
+        ax.plot(smooth, _retention_decay(smooth, self.A_ret, self.tau), color="black", linestyle="--")
+        ax.plot(
+            smooth, _postselected_decay(smooth, self.A_post, self.lam, self.B_post),
+            color="tab:green", linestyle="--",
+        )
+        ax.plot(
+            smooth,
+            _retention_decay(smooth, self.A_ret, self.tau)
+            * _postselected_decay(smooth, self.A_post, self.lam, self.B_post),
+            color="tab:blue", linestyle="--", label="model",
+        )
+
+        regime = "τℓ ≪ 1 holds" if self.comp_dominant_ok else "τℓ is not ≪ 1 at the longest depth"
+        ax.set_title(
+            f"F = {self.fidelity * 100:.3f}% ± {self.fidelity_err * 100:.3f}%\n"
+            f"λ = {self.lam:.3e} ± {self.lam_err:.3e},  τ = {self.tau:.3e} ± {self.tau_err:.3e}\n"
+            f"single-exponential $P(|00\\rangle)$ F = {self.naive_fidelity * 100:.3f}%"
+        )
+        ax.text(
+            0.04, 0.04,
+            f"circuits per depth: {self.num_repeats}\n"
+            f"retention $R^2$ = {self.retention_r_squared:.3f},  "
+            f"post-selected $R^2$ = {self.post_r_squared:.3f}\n"
+            f"{regime}",
+            transform=ax.transAxes,
+            fontsize=10,
+            verticalalignment="bottom",
+            bbox=dict(boxstyle="round,pad=0.4", facecolor="white", alpha=0.85, edgecolor="gray"),
+        )
+        ax.set_xlabel("Circuit depth (Cliffords)")
+        ax.set_ylabel("Probability")
+        ax.set_ylim(0, 1.05)
+        ax.grid(True, linestyle=":", alpha=0.7)
+        ax.legend(framealpha=0, loc="upper right")
+        if title:
+            fig.suptitle(title)
+            fig.tight_layout(rect=(0, 0, 1, 0.94))
+        else:
+            fig.tight_layout()
+        return fig
+
+    def plot_lrb(self, title=None):
+        """Wood & Gambetta leakage and seepage fit, arXiv:1704.03081."""
+        fig, axes = plt.subplots(1, 2, figsize=(12, 5.5), sharex=True, sharey=True)
+        depths = self.depths
+        smooth = np.linspace(depths.min(), depths.max(), 200)
+        ax_pop, ax_surv = axes
+
+        ax_pop.errorbar(
+            depths, self.p_retention, yerr=self.p_retention_err, fmt="s", color="black",
+            capsize=3, label="retention $P($no leakage$)$",
+        )
+        ax_surv.errorbar(
+            depths, self.p_comp, yerr=self.p_comp_err, fmt="o", color="tab:blue",
+            capsize=3, label=r"$P(|00\rangle)$",
+        )
+
+        if self.lrb_ok:
+            ax_pop.plot(
+                smooth,
+                self.lrb_A + self.lrb_B * np.power(self.lrb_lam1, smooth),
+                color="black", linestyle="--", label=r"$A + B\lambda_1^{m}$",
+            )
+            ax_pop.axhline(self.lrb_A, color="tab:orange", linestyle=":", label=f"asymptote $A$ = {self.lrb_A:.3f}")
+            ax_pop.plot(
+                smooth, _retention_decay(smooth, self.A_ret, self.tau),
+                color="0.6", linestyle="--", label="linear retention",
+            )
+            regime = (
+                r"asymptote resolved: $\lambda_1^{m_{\max}} < 0.2$"
+                if self.lrb_plateau_resolved
+                else r"asymptote not resolved; $L_1$ and $L_2$ are not separate"
+            )
+            ax_pop.set_title(
+                f"$L_1$ = {self.L1:.3e} ± {self.L1_err:.3e}\n"
+                f"$L_2$ = {self.L2:.3e} ± {self.L2_err:.3e}\n"
+                f"$\\lambda_1$ = {self.lrb_lam1:.5f}"
+            )
+            ax_pop.text(
+                0.04, 0.04,
+                f"subspace $R^2$ = {self.lrb_subspace_r_squared:.3f}\n{regime}",
+                transform=ax_pop.transAxes,
+                fontsize=9,
+                verticalalignment="bottom",
+                bbox=dict(boxstyle="round,pad=0.4", facecolor="white", alpha=0.85, edgecolor="gray"),
+            )
+        else:
+            ax_pop.set_title("subspace fit failed")
+
+        if self.lrb_survival_model == "double":
+            ax_surv.plot(
+                smooth,
+                _lrb_survival(smooth, self.lrb_A0, self.lrb_B0, self.lrb_C0, self.lrb_lam2, self.lrb_lam1),
+                color="tab:blue", linestyle="--", label="two-exponential",
+            )
+        elif self.lrb_survival_model == "single":
+            ax_surv.plot(
+                smooth,
+                _lrb_survival_single(smooth, self.lrb_A0, self.lrb_C0, self.lrb_lam2),
+                color="tab:blue", linestyle="--", label="single-exponential",
+            )
+
+        if self.lrb_survival_model in ("double", "single"):
+            ax_surv.set_title(
+                f"$F$ = {self.lrb_fidelity * 100:.3f}% ± {self.lrb_fidelity_err * 100:.3f}%\n"
+                f"$\\lambda_2$ = {self.lrb_lam2:.5f} ± {self.lrb_lam2_err:.3e}\n"
+                f"survival model: {self.lrb_survival_model}"
+            )
+            ax_surv.text(
+                0.04, 0.04,
+                f"survival $R^2$ = {self.lrb_survival_r_squared:.3f}",
+                transform=ax_surv.transAxes,
+                fontsize=9,
+                verticalalignment="bottom",
+                bbox=dict(boxstyle="round,pad=0.4", facecolor="white", alpha=0.85, edgecolor="gray"),
+            )
+        else:
+            ax_surv.set_title(r"$P(|00\rangle)$ fit failed")
+
+        for ax in axes:
+            ax.set_xlabel("Circuit depth (Cliffords)")
+            ax.set_ylim(0, 1.05)
+            ax.grid(True, linestyle=":", alpha=0.7)
+            ax.legend(framealpha=0, loc="upper right")
+        ax_pop.set_ylabel("Probability")
+        if title:
+            fig.suptitle(title)
+            fig.tight_layout(rect=(0, 0, 1, 0.94))
+        else:
+            fig.tight_layout()
+        return fig
+
+
+def _avg_mb_decay(depths, amplitude, r, offset):
+    """Averaged-basis survival. r = 1 - λ - τ is the depolarizing parameter."""
+    return amplitude * r ** depths + offset
+
+
+@dataclasses.dataclass
+class AvgMBLeakageRBResult:
+    """
+    Two-qubit RB, average over measurement basis, computational-dominant leakage regime.
+
+    Each random circuit is measured four times. A final II, X(target), X(control), or XX
+    maps the ideal |00> to |00>, |01>, |10>, or |11>. p_avg is the average probability of
+    the matching outcome. Retention P(state < 4) = A (1 - τ ℓ) gives the leakage rate.
+
+    p_avg(ℓ) = A r^ℓ + B, with r = 1 - λ - τ.
+    F = 1 - ((d_C - 1) / d_C) λ - τ.
+
+    Chen & Baldwin, arXiv:2502.00154, Sec. IV.2.2. State layout is
+    (num_random * 4, depth, shot), bases ordered 0, 1, 2, 3 within each random circuit.
+    """
+
+    circuit_depths: list[int]
+    num_repeats: int
+    num_averages: int
+    state: np.ndarray
+    n_bases: int = 4
+    d_c: int = 4
+
+    def __post_init__(self):
+        self.state = np.asarray(self.state)
+        expected = (self.num_repeats, len(self.circuit_depths), self.num_averages)
+        if self.state.shape != expected:
+            raise ValueError(
+                f"state shape {self.state.shape} does not match "
+                f"(num_repeats, num_depths, num_averages) = {expected}"
+            )
+        if self.num_repeats % self.n_bases != 0:
+            raise ValueError(
+                f"num_repeats ({self.num_repeats}) is not divisible by n_bases ({self.n_bases})"
+            )
+        self.depths = np.asarray(self.circuit_depths, dtype=float)
+        self.num_random_circuits = self.num_repeats // self.n_bases
+
+    def _basis_probabilities(self):
+        state = self.state.reshape(
+            self.num_random_circuits, self.n_bases, len(self.circuit_depths), self.num_averages
+        )
+        expected = np.arange(self.n_bases)
+        success = state == expected[None, :, None, None]
+        p_avg = success.mean(axis=(1, 3))
+        p_retention = (state < 4).mean(axis=(1, 3))
+        return p_avg, p_retention
+
+    def _fit_curve(self, model, y, sigma, p0, bounds):
+        mask = np.isfinite(y) & np.isfinite(sigma) & (sigma > 0)
+        if np.count_nonzero(mask) < len(p0):
+            raise RuntimeError(
+                f"Not enough finite points ({np.count_nonzero(mask)}) to fit {len(p0)} parameters."
+            )
+        popt, pcov = curve_fit(
+            model,
+            self.depths[mask],
+            y[mask],
+            p0=p0,
+            bounds=bounds,
+            sigma=sigma[mask],
+            absolute_sigma=True,
+            maxfev=20000,
+        )
+        errors = np.sqrt(np.maximum(np.diag(pcov), 0.0))
+        return popt, errors, _r_squared(y[mask], model(self.depths[mask], *popt))
+
+    def fit(self):
+        p_avg_rep, p_ret_rep = self._basis_probabilities()
+        self.p_avg, self.p_avg_err = LeakageRBResult._mean_and_sem(p_avg_rep)
+        self.p_retention, self.p_retention_err = LeakageRBResult._mean_and_sem(p_ret_rep)
+
+        max_depth = float(np.max(self.depths)) if len(self.depths) else 1.0
+        tau_upper = 0.95 / max(max_depth, 1.0)
+        amplitude0 = float(np.clip(self.p_retention[0], 0.05, 1.0))
+        (self.A_ret, self.tau), (self.A_ret_err, self.tau_err), self.retention_r_squared = self._fit_curve(
+            _retention_decay,
+            self.p_retention,
+            self.p_retention_err,
+            p0=[amplitude0, 1e-3],
+            bounds=([0.0, 0.0], [1.0, tau_upper]),
+        )
+        (self.A_avg, self.r, self.B_avg), (
+            self.A_avg_err,
+            self.r_err,
+            self.B_avg_err,
+        ), self.avg_r_squared = self._fit_curve(
+            _avg_mb_decay,
+            self.p_avg,
+            self.p_avg_err,
+            p0=[(self.d_c - 1) / self.d_c, 0.99, 1.0 / self.d_c],
+            bounds=([0.0, 0.0, 0.0], [1.5, 1.0, 1.0]),
+        )
+
+        self.lam = 1.0 - self.r - self.tau
+        self.lam_err = float(np.sqrt(self.r_err ** 2 + self.tau_err ** 2))
+        weight = (self.d_c - 1) / self.d_c
+        self.fidelity = 1.0 - weight * self.lam - self.tau
+        self.fidelity_err = float(np.sqrt((weight * self.r_err) ** 2 + ((1.0 - weight) * self.tau_err) ** 2))
+        self.bound_infidelity = weight * (1.0 - self.r)
+        self.comp_dominant_ok = bool(self.tau * max_depth < 0.2)
+        return self
+
+    def plot(self, title=None):
+        fig, ax = plt.subplots(figsize=(8, 6))
+        depths = self.depths
+        smooth = np.linspace(depths.min(), depths.max(), 200)
+
+        ax.errorbar(
+            depths, self.p_avg, yerr=self.p_avg_err, fmt="o", color="tab:blue",
+            capsize=3, label=r"$p_{\mathrm{avg}}$",
+        )
+        ax.errorbar(
+            depths, self.p_retention, yerr=self.p_retention_err, fmt="s", color="black",
+            capsize=3, label="retention $P($no leakage$)$",
+        )
+        ax.plot(smooth, _avg_mb_decay(smooth, self.A_avg, self.r, self.B_avg), color="tab:blue", linestyle="--")
+        ax.plot(smooth, _retention_decay(smooth, self.A_ret, self.tau), color="black", linestyle="--")
+
+        regime = "τℓ ≪ 1 holds" if self.comp_dominant_ok else "τℓ is not ≪ 1 at the longest depth"
+        ax.set_title(
+            f"F = {self.fidelity * 100:.3f}% ± {self.fidelity_err * 100:.3f}%\n"
+            f"r = {self.r:.5f},  λ = {self.lam:.3e},  τ = {self.tau:.3e}\n"
+            f"bound infidelity $(3/4)(1-r)$ = {self.bound_infidelity:.3e}"
+        )
+        ax.text(
+            0.04, 0.04,
+            f"random circuits per depth: {self.num_random_circuits},  4 final bases\n"
+            f"avg $R^2$ = {self.avg_r_squared:.3f},  retention $R^2$ = {self.retention_r_squared:.3f}\n"
+            f"{regime}",
+            transform=ax.transAxes,
+            fontsize=10,
+            verticalalignment="bottom",
+            bbox=dict(boxstyle="round,pad=0.4", facecolor="white", alpha=0.85, edgecolor="gray"),
+        )
+        ax.set_xlabel("Circuit depth (Cliffords)")
+        ax.set_ylabel("Probability")
+        ax.set_ylim(0, 1.05)
+        ax.grid(True, linestyle=":", alpha=0.7)
+        ax.legend(framealpha=0, loc="upper right")
+        if title:
+            fig.suptitle(title)
+            fig.tight_layout(rect=(0, 0, 1, 0.94))
+        else:
+            fig.tight_layout()
+        return fig
