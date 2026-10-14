@@ -42,7 +42,7 @@ import xarray as xr
 
 
 # %% {Node_parameters}
-qubit_pair_indexes = [1]
+qubit_pair_indexes = [4]
 
 
 class Parameters(NodeParameters):
@@ -54,11 +54,11 @@ class Parameters(NodeParameters):
     simulate: bool = False
     simulation_duration_ns: int = 10_000
     timeout: int = 100
-    num_frames: int = 80
-    frame_span: float = 0.4
-    number_of_operations: int = 30
+    num_frames: int = 100
+    frame_span: float = 0.2
+    number_of_operations: int = 15
     load_data_id: Optional[int] = None
-    operation: Literal["Cz", "Cz_flattop", "Cz_unipolar", "Cz_bipolar", "Cz_flattop_erf"] = "Cz_flattop"
+    operation: Literal["Cz", "Cz_flattop", "Cz_unipolar", "Cz_bipolar", "Cz_flattop_erf"] = "Cz"
 
 
 node = QualibrationNode(name="33b_Cz_1Qphase_calibration_frame_error_amp", parameters=Parameters())
