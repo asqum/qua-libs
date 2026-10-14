@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from typing import Union, Dict
+from typing import Dict, Optional, Sequence, Tuple, Union
 
 from quam.components import Octave
 
@@ -15,8 +15,8 @@ from quam_libs.components import OPXPlusQuAM, FEMQuAM, QuAM, Transmon
 from quam_libs.quam_builder.wiring.create_wiring import create_wiring
 
 
-def build_quam(machine: QuAM, quam_state_path: Union[Path, str], octaves_settings: Dict = {}) -> QuAM:
-    add_octaves(machine, octaves_settings, quam_state_path)
+def build_quam(machine: QuAM, quam_state_path: Union[Path, str], octave_names: Sequence[str] = ()) -> QuAM:
+    add_octaves(machine, octave_names)
     add_ports(machine)
     add_transmons(machine)
     add_pulses(machine)
@@ -27,7 +27,12 @@ def build_quam(machine: QuAM, quam_state_path: Union[Path, str], octaves_setting
 
 
 def build_quam_wiring(
-    connectivity: Connectivity, host_ip: str, cluster_name: str, quam_state_path: Union[Path, str], port: int = None
+    connectivity: Connectivity,
+    host_ip: str,
+    cluster_name: str,
+    quam_state_path: Union[Path, str],
+    port: int = None,
+    octaves: Optional[Dict[str, Tuple[str, int]]] = None,
 ) -> QuAM:
     if os.path.exists(quam_state_path) and "state.json" in os.listdir(quam_state_path):
         # if there is a non-empty QuAM state already
@@ -35,7 +40,7 @@ def build_quam_wiring(
     else:
         machine = create_base_machine(connectivity)
 
-    add_name_and_ip(machine, host_ip, cluster_name, port)
+    add_name_and_ip(machine, host_ip, cluster_name, port, octaves)
     machine.wiring = create_wiring(connectivity)
     save_machine(machine, quam_state_path)
 
@@ -60,9 +65,17 @@ def create_base_machine(connectivity: Connectivity):
     )
 
 
-def add_name_and_ip(machine: QuAM, host_ip: str, cluster_name: str, port: Union[int, None]):
+def add_name_and_ip(
+    machine: QuAM,
+    host_ip: str,
+    cluster_name: str,
+    port: Union[int, None],
+    octaves: Optional[Dict[str, Tuple[str, int]]] = None,
+):
     """Stores the minimal information to connect to a QuantumMachinesManager."""
     machine.network = {"host": host_ip, "port": port, "cluster_name": cluster_name}
+    if octaves:
+        machine.network["octaves"] = {name: list(address) for name, address in octaves.items()}
 
 
 def add_ports(machine: QuAM):
@@ -118,25 +131,10 @@ def add_pulses(machine: QuAM):
             add_default_transmon_pair_pulses(qubit_pair)
 
 
-def add_octaves(machine: QuAM, octaves_settings: Dict, quam_state_path: Union[Path, str]):
-    octave_ips, octave_ports = [], []
-    for octave_settings in octaves_settings.values():
-        octave_ips.append(octave_settings.get("ip", machine.network.host))
-        octave_ports.append(octave_settings.get("port", 80))
-    machine.network["octave_ips"] = octave_ips
-    machine.network["octave_ports"] = octave_ports
-
-    if isinstance(quam_state_path, str):
-        quam_state_path = Path(quam_state_path)
-    quam_state_path = str(quam_state_path.parent.resolve())
-    for i, octave_name in enumerate(octaves_settings):
-        octave = Octave(
-            name=octave_name,
-            ip=machine.network["octave_ips"][i],
-            port=machine.network["octave_ports"][i],
-            calibration_db_path=quam_state_path,
-        )
-        machine.octaves[octave_name] = octave
+def add_octaves(machine: QuAM, octave_names: Sequence[str]):
+    for name in octave_names:
+        octave = Octave(name=name)
+        machine.octaves[name] = octave
         octave.initialize_frequency_converters()
 
     return machine
