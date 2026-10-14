@@ -35,9 +35,13 @@ operator explicitly overrides them; a new workflow uses `state.json`
 `jy_enter_autonomy_mode`, shows its session `browser_url`, waits for the one
 bounded-lease activation with `jy_wait_for_autonomy_status`, and then uses only
 `jy_autonomy_*` execution tools. On that approval page the operator also ticks
-the optional nodes (`02`, `05st`, `06st_t2star`, `06st_t2e`) and chooses
-one-qubit-at-a-time or multiplexed measurement from 03a on; tell them so with
-the link, and follow `jy_get_next_action`, which already skips unticked nodes. On hosts with durable goals, automatic-mode
+the optional nodes (`02`, `06a`, `05st`, `06st_t2star`, `06st_t2e`), chooses
+one-qubit-at-a-time or multiplexed measurement from 03a on (a shared XY output
+allows only one at a time), and chooses whether to calibrate flux (02b/03b,
+plus the ticked 06a; a shared Z output disables it). Tell them so with the
+link, and follow `jy_get_next_action`, which already skips unticked nodes. The
+Dashboard's Guide tab explains the operation and shows a successful example
+per node. On hosts with durable goals, automatic-mode
 entry creates one session goal and keeps waiting/advancing until completion,
 operator stop, lease expiry, or hard stop. On other hosts, keep the current turn
 alive while possible but do not promise indefinite model lifetime; `已核准` is
@@ -79,7 +83,8 @@ to their corresponding server controls.
 
 The Dashboard may be local or a token-protected public HTTPS URL. Its stable `/`
 entry resolves the active session and links to three views: Home (status,
-measurement controls, device pairing, and full shutdown), Approval, and
+measurement controls, full shutdown, and how to sign in another device with the
+shared lab password), Approval, and
 Experiment results. Every run remains
 in the Results experiment-number dropdown until full service shutdown. Wait
 for the human to review scope, limits, prior result plots, Decision, Reason, next
@@ -99,21 +104,34 @@ shutdown first, then `結束量測` to verify. See `Command.md`. Never use
 the lease outside its targets/nodes or after pause, expiry, revocation, or halt.
 Low confidence, `needs_review`, and `manual_review` do not themselves pause the
 lease, but only a completed `pass` run with an identical recorded decision patch
-may use unattended scientific state commit. Wait on bounded status/events between actions.
+may use unattended scientific state commit, except that a completed
+`needs_review` run commits its `passing_targets` and nothing else
+(`autonomy.partial_pass_state_commit`). Wait on bounded status/events between actions.
 In automatic mode, each `(node, qubit)` has an independent 20-attempt budget. When one qubit reaches
 that limit without usable evidence, treat it as incomplete for that node, do not
 schedule it again under the lease, and continue resolved qubits into later nodes.
-Quota exhaustion is not a lease-wide halt; snapshot, worker, state-hash, hardware
-lock, and parameter-policy failures remain immediate lease-wide halts.
+Quota exhaustion is not a lease-wide halt. Only `snapshot_missing`,
+`state_hash_conflict`, and `hardware_lock_anomaly` (`autonomy.halt_conditions`)
+end the lease. An out-of-policy parameter, out-of-scope target set, or premature
+analyze is refused and recorded, and the lease continues; fix the request. A
+worker crash matching `autonomy.recoverable_worker_exceptions` keeps the lease
+and returns its remedy; any other worker crash, and a recognized
+instrument-connectivity failure, pauses the lease until the operator resumes it
+with `恢復量測`. Exception enforced by the server today: a `jy_autonomy_start_run`
+refused with a plain service error, such as a node that is not yet
+`current_node` ("record a decision first") or a later-node target set that does
+not exactly match the resolved carried targets, still halts the lease. Check
+`jy_get_next_action` first and never send the next node's run in parallel with
+the decision that advances to it.
 While the lease remains active, keep executing safe in-scope retries and later
 nodes until the workflow completes. Stop scheduling a target only when evidence
 shows it is scientifically unusable, its node/qubit quota is exhausted, lease
 time expires, or a configured hard stop/operator control occurs. For 04 and 05,
-use `jy_recommend_0405_snr_retry`: completion requires robust SNR >= 14 and >= 25
-respectively, and low-SNR subgroups should increase `num_averages` within policy.
+use `jy_recommend_0405_snr_retry`: completion requires robust SNR >= 7 and >= 15
+respectively (`analysis."04"/"05".min_robust_snr`), and low-SNR subgroups should increase `num_averages` within policy.
 When every safe authorized adjustment for an unresolved qubit is exhausted,
 leave it incomplete, continue other resolvable qubits, and report the attempted
-parameters plus observed evidence to the user. The Results page exposes four
+parameters plus observed evidence to the user. The Home page exposes four
 operator states: pause after the current run, resume the same unexpired lease,
 end/revoke automation while keeping the site, and emergency-stop the worker while
 keeping the site. Home alone exposes full shutdown, protected by an exact second
@@ -152,8 +170,9 @@ fails before producing a snapshot, explicitly state that no result plot exists
 and explain the failure instead of omitting the plot silently.
 
 Use thermal reset by default for every reset-capable experiment. Only an accepted
-active-reset 07b result with two compact clouds and normalized readout fidelity
-at least 0.85 qualifies that qubit for explicit active reset downstream. Before
+active-reset 07b result with normalized readout fidelity at least 0.80
+(`reset_policy.active_min_readout_fidelity`; compact clouds are also required
+only while `analysis."07b".active_reset_requires_morphology` is true) qualifies that qubit for explicit active reset downstream. Before
 any active-reset 05st/06st run, use the conditional prerequisite-verification
 path to repeat and accept 05, 06, and 06b with active reset. After same-reset
 baselines and their lifetime windows pass, run each statistics node once with

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import getpass
+import hmac
 import ipaddress
 import json
 import math
@@ -9,6 +10,7 @@ import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from html import escape
+from pathlib import Path
 from typing import Any, Collection
 from urllib.parse import parse_qs, urlencode
 
@@ -21,12 +23,14 @@ from starlette.responses import (
     StreamingResponse,
 )
 
+from .guide_web import guide_asset_path, guide_section
 from .service import AgentService, ServiceError
 
 
 MAX_FORM_BYTES = 4096
-# Confirmation, token and ids plus the lease-page checkboxes and mode choice.
-MAX_APPROVAL_FORM_FIELDS = 16
+# Confirmation, token and ids plus the lease-page checkboxes, the mode and
+# flux choices and the 02 inputs.
+MAX_APPROVAL_FORM_FIELDS = 20
 SUMMARY_THUMBNAIL_LIMIT = 6
 TAIPEI_TIMEZONE = timezone(timedelta(hours=8), name="Asia/Taipei")
 CACHEABLE_ASSET_CACHE_CONTROL = "private, max-age=604800, immutable"
@@ -102,6 +106,8 @@ SESSION_DASHBOARD_SCRIPT = """(() => {
 
 DASHBOARD_EVENT_TYPES = {
     "home": None,
+    # Operator request 2026-10-08: static operating guide, never refreshed.
+    "guide": frozenset(),
     # Operator request 2026-10-03: model / token / estimated-cost page.
     "usage": {"run_started", "run_analyzed", "decision_recorded"},
     "approval": {
@@ -349,6 +355,16 @@ async def handle_browser_approval(
             strict_parsing=True,
             max_num_fields=MAX_APPROVAL_FORM_FIELDS,
         )
+        if _lease_option_offer(proposal) is not None:
+            # Operator request 2026-10-10: automatic measurement is approved
+            # only on the Dashboard approval page, after its node preview.
+            raise ServiceError(
+                _ui(
+                    language,
+                    "自動量測請在量測 Dashboard 的「核准」頁預覽並核准。",
+                    "Approve automatic measurement on the Dashboard approval page, after its preview.",
+                )
+            )
         approved = service.approve_from_browser(
             proposal_id,
             _single_field(fields, "confirmation"),
@@ -621,6 +637,7 @@ async def handle_session_dashboard(
     """Render one page of the shared measurement Dashboard."""
     language = _requested_language(request)
     resolved_view = view or str(request.path_params.get("view") or "")
+    lease_options: dict[str, Any] | None = None
     if resolved_view not in DASHBOARD_EVENT_TYPES:
         resolved_view = "home"
     try:
@@ -649,7 +666,12 @@ async def handle_session_dashboard(
         )
     if request.method == "GET":
         return _session_dashboard_page(
-            service, review, principal, view=resolved_view, language=language
+            service,
+            review,
+            principal,
+            view=resolved_view,
+            language=language,
+            query=dict(request.query_params),
         )
 
     allowed_origins = {*service.approval_allowed_origins, _request_origin(request)}
@@ -696,17 +718,63 @@ async def handle_session_dashboard(
         operation = _single_field(fields, "operation")
         if view is not None and operation not in {
             "home": {"shutdown", "control"},
-            "approval": {"approve"},
+            "approval": {"approve", "preview"},
             "results": set(),
             "usage": set(),
+            "guide": set(),
         }[resolved_view]:
             raise ServiceError("This control does not belong to the current Dashboard page.")
+        if operation == "preview":
+            resolved_view = "approval"
+            proposal_id = _single_field(fields, "proposal_id")
+            pending = review.get("pending_proposal") or {}
+            if proposal_id != str(pending.get("id", "")):
+                raise ServiceError("This proposal is no longer the pending session action.")
+            if not hmac.compare_digest(
+                _single_field(fields, "csrf_token"),
+                service.approval_csrf_token(proposal_id),
+            ):
+                raise ServiceError("The browser approval token was invalid.")
+            lease_options = _lease_options_from_fields(fields, pending)
+            if lease_options is None:
+                raise ServiceError("This approval has no choices to preview.")
+            return _session_dashboard_page(
+                service,
+                review,
+                principal,
+                view=resolved_view,
+                language=language,
+                lease_preview=_lease_preview(service, proposal_id, lease_options),
+            )
         if operation == "approve":
             resolved_view = "approval"
             proposal_id = _single_field(fields, "proposal_id")
             pending = review.get("pending_proposal") or {}
             if proposal_id != str(pending.get("id", "")):
                 raise ServiceError("This proposal is no longer the pending session action.")
+            lease_options = _lease_options_from_fields(fields, pending)
+            if lease_options is not None:
+                # Operator request 2026-10-10: approval needs the preview of
+                # exactly these choices and the ticked agree box.
+                digest = fields.get("preview_digest", [""])
+                if len(digest) != 1 or not hmac.compare_digest(
+                    digest[0], service.lease_preview_digest(proposal_id, lease_options)
+                ):
+                    raise ServiceError(
+                        _ui(
+                            language,
+                            "選項在預覽後已變更或尚未預覽；請按「預覽此次量測的實驗」後再核准。",
+                            "The choices changed after the preview, or there was no preview; preview again before approving.",
+                        )
+                    )
+                if fields.get("agree") != ["yes"]:
+                    raise ServiceError(
+                        _ui(
+                            language,
+                            "請先勾選「我已確認以上會執行的實驗、起點與選項」。",
+                            "Tick the box confirming the experiments, start point and choices first.",
+                        )
+                    )
             service.approve_from_browser(
                 proposal_id,
                 _single_field(fields, "confirmation"),
@@ -714,7 +782,7 @@ async def handle_session_dashboard(
                 request.client.host if request.client is not None else "",
                 actor=principal.actor,
                 approval_method=principal.method,
-                lease_options=_lease_options_from_fields(fields, pending),
+                lease_options=lease_options,
             )
             if str(review.get("session", {}).get("mode")) == "autonomous":
                 success = _ui(
@@ -768,6 +836,15 @@ async def handle_session_dashboard(
         else:
             raise ServiceError("Unknown dashboard operation.")
     except (UnicodeDecodeError, ValueError, ServiceError) as exc:
+        retained = None
+        if lease_options is not None:
+            # Keep the operator's choices (and their preview, if it still
+            # applies) instead of resetting the form.
+            pending_id = str((review.get("pending_proposal") or {}).get("id", ""))
+            try:
+                retained = _lease_preview(service, pending_id, lease_options)
+            except (ServiceError, ValueError):
+                retained = {"options": lease_options}
         return _session_dashboard_page(
             service,
             service.dashboard_review(session_id),
@@ -776,6 +853,7 @@ async def handle_session_dashboard(
             error=str(exc),
             status_code=400,
             language=language,
+            lease_preview=retained,
         )
     return _session_dashboard_page(
         service,
@@ -823,6 +901,55 @@ async def handle_session_dashboard_asset(
         content_disposition_type="inline",
         headers=headers,
     )
+
+
+async def handle_chip_history_asset(
+    request: Request,
+    service: AgentService,
+) -> Response:
+    """A plot of a successful run on this session's chip (operator 2026-10-13)."""
+    language = _requested_language(request)
+    try:
+        _approval_principal(request, service)
+        session_id = str(request.path_params.get("session_id", ""))
+        run_id = str(request.path_params.get("run_id", ""))
+        position = int(str(request.path_params.get("position", "")))
+        path = service.chip_history_asset(session_id, run_id, position)
+        version = request.query_params.get("v")
+        current = _asset_version(path)
+        if request.query_params.get("thumb") == "1":
+            path = service.dashboard_asset_thumbnail(path)
+    except (ValueError, ServiceError, OSError):
+        return _message_page(
+            _ui(language, "找不到結果圖", "Result image not found"),
+            _ui(language, "無法取得這張晶片歷史結果圖。", "This chip history image is unavailable."),
+            status_code=404,
+            language=language,
+        )
+    headers = (
+        CACHEABLE_ASSET_HEADERS if version and version == current else SECURITY_HEADERS
+    )
+    return FileResponse(
+        path,
+        filename=path.name,
+        content_disposition_type="inline",
+        headers=headers,
+    )
+
+
+def _chip_history_html(service: AgentService, session_id: str, language: str) -> str:
+    from .chip_history import render_chip_history
+
+    try:
+        history = service.chip_history_for_session(session_id)
+    except (ServiceError, ValueError) as exc:
+        return f'<section class="card"><p class="muted">{escape(str(exc))}</p></section>'
+
+    def image_url(run_id: str, position: int, thumb: bool) -> str:
+        url = f"/session/{session_id}/chip-assets/{run_id}/{position}"
+        return url + ("?thumb=1" if thumb else "")
+
+    return render_chip_history(history, image_url, language)
 
 
 def _asset_version(path: Any) -> str:
@@ -923,9 +1050,81 @@ main {{ max-width:760px; margin:48px auto; padding:0 16px; }}
 <h2>{_ui(language, '目前沒有開啟中的量測工作階段', 'No measurement session is open')}</h2>
 <p>{_ui(language, '服務已可連線；在 AI 對話中進入量測模式後，此入口會顯示新的工作階段。', 'The service is reachable. Enter measurement mode in the AI conversation to make the new session appear here.')}</p>
 <p>{_ui(language, '若進入模式因上次殘留的程式、workflow 或設定失敗，請在 repository 的 AI 對話輸入「恢復」；英文輸入 “Recover”。', 'If entry fails because a program, workflow, or lifecycle setting was left over, send “Recover” in the repository AI conversation.')}</p>
+<p><a href="/guide?lang={escape(language)}" style="color:#cfe0ff">{_ui(language, '使用說明：操作方式與各節點的成功範例', 'Guide: how to operate JY and what each node looks like')}</a></p>
 <p class="muted">{_ui(language, '審閱者', 'Reviewer')}：{escape(_principal_label(principal, language))}</p>
 </section></main></body></html>"""
     return HTMLResponse(html, headers=SECURITY_HEADERS)
+
+
+async def handle_guide_page(request: Request, service: AgentService) -> Response:
+    """The guide on its own, reachable without a measurement session."""
+
+    language = _requested_language(request)
+    try:
+        _approval_principal(request, service)
+    except ServiceError as exc:
+        return _message_page(
+            _ui(language, "無法開啟說明", "Guide unavailable"),
+            str(exc),
+            status_code=403,
+            language=language,
+        )
+    session_id = service.current_dashboard_session_id()
+    back = (
+        f'<p><a href="/session/{escape(session_id)}/home?lang={escape(language)}">'
+        f'{_ui(language, "回到量測 Dashboard", "Back to the measurement Dashboard")}</a></p>'
+        if session_id
+        else ""
+    )
+    html = f"""<!doctype html>
+<html lang="{escape(language)}"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script defer src="/assets/language.js"></script>
+<title>{_ui(language, 'JY 使用說明', 'JY guide')}</title>
+<style>
+:root {{ color-scheme:dark; font-family:system-ui,-apple-system,sans-serif; }}
+* {{ box-sizing:border-box; }}
+body {{ margin:0; background:#08101d; color:#edf4ff; line-height:1.55; }}
+main {{ max-width:1040px; margin:24px auto; padding:0 16px 52px; }}
+a {{ color:#cfe0ff; }}
+.card {{ background:#121d31; border:1px solid #2b3b5d; border-radius:14px; padding:18px; margin:16px 0; }}
+.muted {{ color:#9fb2d7; }} .summary-ok {{ color:#8ce0b0; }}
+figure {{ margin:0; padding:10px; background:#070d18; border-radius:10px; }}
+img {{ display:block; width:100%; height:auto; border-radius:7px; }}
+.language-switch {{ position:fixed; top:10px; right:12px; z-index:10; padding:8px 10px; background:#121d31; border:1px solid #2b3b5d; border-radius:10px; }}
+.language-switch label {{ display:block; color:#9fb2d7; font-size:.75rem; }}
+.language-switch select {{ padding:6px; color:white; background:#07101f; border:1px solid #6680b5; border-radius:7px; }}
+</style></head><body>{_language_switch(language)}<main>
+<h1>{_ui(language, 'JY 使用說明', 'JY guide')}</h1>
+{back}
+{guide_section(language)}
+</main></body></html>"""
+    return HTMLResponse(html, headers=SECURITY_HEADERS)
+
+
+async def handle_guide_asset(request: Request, service: AgentService) -> Response:
+    language = _requested_language(request)
+    try:
+        _approval_principal(request, service)
+    except ServiceError:
+        path = None
+    else:
+        path = guide_asset_path(
+            service.settings.agent_root, str(request.path_params.get("name", ""))
+        )
+    if path is None:
+        return _message_page(
+            _ui(language, "找不到說明圖", "Guide image not found"),
+            _ui(language, "沒有這張說明圖。", "There is no such guide image."),
+            status_code=404,
+            language=language,
+        )
+    return FileResponse(
+        path,
+        filename=path.name,
+        content_disposition_type="inline",
+        headers=CACHEABLE_ASSET_HEADERS,
+    )
 
 
 def _session_dashboard_page(
@@ -938,6 +1137,8 @@ def _session_dashboard_page(
     success: str | None = None,
     status_code: int = 200,
     language: str = "zh-Hant",
+    lease_preview: dict[str, Any] | None = None,
+    query: dict[str, str] | None = None,
 ) -> HTMLResponse:
     session = review["session"]
     session_id = str(session["id"])
@@ -953,7 +1154,11 @@ def _session_dashboard_page(
     operational_notice = _instrument_pause_notice(review, language)
 
     approval_html = ""
-    if pending is not None:
+    if pending is not None and _lease_option_offer(pending) is not None:
+        approval_html = _lease_approval_card(
+            service, session_id, pending, language, lease_preview
+        )
+    elif pending is not None:
         proposal_id = str(pending["id"])
         csrf = service.approval_csrf_token(proposal_id)
         confirmation = f"APPROVE {proposal_id}"
@@ -1074,7 +1279,11 @@ def _session_dashboard_page(
         session_id, review.get("history", []), language
     )
     revision = int(review.get("event_revision", 0))
-    events_url = f"/session/{session_id}/{view}/events?after={revision}"
+    events_url = (
+        ""
+        if view == "guide"
+        else f"/session/{session_id}/{view}/events?after={revision}"
+    )
     authorization_status = (
         str(authorization.get("status"))
         if authorization is not None
@@ -1086,12 +1295,14 @@ def _session_dashboard_page(
     approval_path = f"/session/{session_id}/approval?lang={language}"
     results_path = f"/session/{session_id}/results?lang={language}"
     usage_path = f"/session/{session_id}/usage?lang={language}"
+    guide_path = f"/session/{session_id}/guide?lang={language}"
     nav = f"""
     <nav class="dashboard-nav" aria-label="{_ui(language, 'Dashboard 分頁', 'Dashboard pages')}">
       <a class="{'active' if view == 'home' else ''}" href="{escape(home_path)}">{_ui(language, '首頁', 'Home')}</a>
       <a class="{'active' if view == 'approval' else ''}" href="{escape(approval_path)}">{_ui(language, '核准', 'Approval')} <span class="badge">{pending_count}</span></a>
       <a class="{'active' if view == 'results' else ''}" href="{escape(results_path)}">{_ui(language, '實驗結果', 'Experiment results')} <span class="badge">{result_count}</span></a>
       <a class="{'active' if view == 'usage' else ''}" href="{escape(usage_path)}">{_ui(language, 'Token 用量', 'Token usage')}</a>
+      <a class="{'active' if view == 'guide' else ''}" href="{escape(guide_path)}">{_ui(language, '使用說明', 'Guide')}</a>
     </nav>"""
     status_html = f"""
     <section class="card"><dl>
@@ -1106,8 +1317,7 @@ def _session_dashboard_page(
     </dl></section>"""
     device_html = f"""
     <section class="card"><h2>{_ui(language, '連接其他裝置', 'Connect another device')}</h2>
-    <p>{_ui(language, '若要讓手機或另一台瀏覽器存取，請在實驗室電腦開啟本機操作頁，為每台裝置建立各自的短效配對連結。不要把長效 token 放入網址。', 'To connect a phone or another browser, open the local operator console on the lab PC and create a separate short-lived pairing link for each device. Never place the long-lived token in a URL.')}</p>
-    <code class="confirmation">{escape(str(session.get('operator_console_url')))}</code>
+    <p>{_ui(language, '在手機或另一台瀏覽器開啟同一個 Dashboard 網址，輸入實驗室固定密碼（存於實驗室電腦的 runtime/dashboard-password.txt）。每個瀏覽器各自登入，有效 12 小時。不要把密碼放入網址或聊天訊息。', 'Open this same Dashboard URL on the phone or other browser and enter the shared lab password (kept on the lab PC in runtime/dashboard-password.txt). Each browser signs in separately for 12 hours. Never put the password in a URL or a chat message.')}</p>
     </section>"""
     continuity_html = f"""
     <section class="card"><h2>{_ui(language, 'AI／網路中斷時怎麼辦', 'If the AI app or network disconnects')}</h2>
@@ -1117,18 +1327,29 @@ def _session_dashboard_page(
       <li>{_ui(language, '若下一次進入量測模式因殘留程式或工作階段失敗，輸入「恢復」；英文可輸入 “Recover”。此命令會安全收尾並關閉可驗證的 JY 程式，不會強制刪除 hardware lock。', 'If the next entry fails because a program or session was left open, send “Recover”. It safely closes verified JY state and programs without force-deleting a hardware lock.')}</li>
     </ol>
     </section>"""
-    if view == "approval":
+    if view == "guide":
+        page_title = _ui(language, "JY 使用說明", "JY guide")
+        page_intro = _ui(language, "JY agent 的操作方式、量測順序，以及每個節點成功時應該看到的圖。", "How to operate the JY agent, the measurement order, and what each node looks like when it succeeds.")
+        page_content = guide_section(language)
+    elif view == "approval":
         page_title = _ui(language, "JY 核准", "JY approval")
         page_intro = _ui(language, "此頁只處理待核准動作；新提案出現時才會自動更新。", "This page is only for pending approvals and refreshes when a proposal changes.")
         page_content = approval_html
     elif view == "usage":
         page_title = _ui(language, "JY Token 用量", "JY token usage")
-        page_intro = _ui(language, "每個實驗使用的模型、token 數與估計費用，從本機 Claude Code 對話紀錄統計（只讀取數字）。", "Model, tokens and estimated cost per experiment, counted from the local Claude Code transcripts (numbers only).")
-        page_content = _usage_section(service, str(workflow["id"]), language)
+        page_intro = _ui(language, "此晶片所有實驗使用的模型、token 數與估計費用，可選時段計算；從本機 Claude Code 對話紀錄統計（只讀取數字）。", "Model, tokens and estimated cost of every experiment on this chip, for any time range, counted from the local Claude Code transcripts (numbers only).")
+        page_content = _usage_section(service, session_id, language, query or {})
     elif view == "results":
         page_title = _ui(language, "JY 實驗結果", "JY experiment results")
         page_intro = _ui(language, "所有實驗結果會保留到服務關閉；此頁只在結果或判斷改變時更新。暫停、停止與關機控制已移到首頁。", "All results remain until the service closes. This page refreshes only for results or decisions. Pause, stop, and shutdown controls are on the Home page.")
-        page_content = summary_html + history_html
+        # Operator request 2026-10-13: the chip's successful results across
+        # all workflows lead the page, above this session's results.
+        page_content = (
+            _operator_notice_section(session_id, review.get("history", []), language)
+            + _chip_history_html(service, session_id, language)
+            + summary_html
+            + history_html
+        )
     else:
         page_title = _ui(language, "JY 量測首頁", "JY measurement home")
         page_intro = _ui(language, "手機與電腦共用此工作階段入口；量測控制在本頁，核准與結果使用下方分頁。AI 對話仍在原本的 App。", "Phones and computers share this session entry. Measurement controls are on this page; approval and results use the pages below. AI conversation remains in the original app.")
@@ -1161,6 +1382,13 @@ pre {{ overflow:auto; white-space:pre-wrap; word-break:break-word; background:#0
 figure {{ margin:0; padding:10px; background:#070d18; border-radius:10px; }}
 img {{ display:block; width:100%; height:auto; border-radius:7px; }}
 .summary-list {{ margin:0; padding:0; list-style:none; }}
+.chip-node {{ border-top:1px solid #21304d; padding:10px 0; }}
+.chip-node > summary {{ cursor:pointer; font-size:1.05rem; }}
+.chip-qubit {{ margin:10px 0 14px 14px; }}
+.chip-qubit h4 {{ margin:6px 0; }}
+.chip-values {{ list-style:none; padding:0; margin:4px 0 8px; display:flex; flex-wrap:wrap; gap:4px 18px; }}
+.chip-qubit details {{ margin-left:8px; }}
+figcaption {{ font-size:.75rem; overflow-wrap:anywhere; }}
 .summary-row {{ display:grid; grid-template-columns:minmax(150px,230px) 1fr; gap:6px 16px; align-items:start; padding:12px 0; border-top:1px solid #21304d; }}
 .summary-row:first-child {{ border-top:0; padding-top:4px; }}
 .summary-name a {{ color:#cfe0ff; font-weight:700; text-decoration:none; overflow-wrap:anywhere; }}
@@ -1181,7 +1409,7 @@ button {{ margin-top:12px; border:0; color:white; background:#3568e8; font-weigh
 .confirmation {{ display:block; padding:12px; background:#070d18; border-radius:8px; user-select:all; overflow-wrap:anywhere; }}
 .lease-options {{ border:1px solid #2b3b5d; border-radius:10px; padding:10px 14px; margin:14px 0; }} .lease-options legend {{ padding:0 6px; font-weight:700; }} .lease-options .choice {{ display:flex; gap:10px; align-items:flex-start; margin:8px 0; }} .lease-options .choice input {{ width:auto; margin-top:5px; flex:none; }} .warning {{ color:#ffd479; }}
 .notice {{ padding:12px; border-radius:8px; }} .error {{ background:#5a1e2a; }} .success {{ background:#14532d; }}
-.dashboard-nav {{ display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin:18px 0; }}
+.dashboard-nav {{ display:grid; grid-template-columns:repeat(5,1fr); gap:10px; margin:18px 0; }}
 .usage-table {{ width:100%; border-collapse:collapse; font-size:.9rem; font-variant-numeric:tabular-nums; }}
 .usage-table th,.usage-table td {{ padding:6px 8px; border-top:1px solid #21304d; text-align:right; white-space:nowrap; }}
 .usage-table th:first-child,.usage-table td:first-child,.usage-table td.text,.usage-table th.text {{ text-align:left; }}
@@ -1190,6 +1418,16 @@ button {{ margin-top:12px; border:0; color:white; background:#3568e8; font-weigh
 .usage-totals {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; }}
 .usage-totals div {{ background:#070d18; border-radius:10px; padding:10px 12px; }}
 .usage-totals strong {{ display:block; font-size:1.25rem; }}
+.usage-totals small {{ display:block; color:#9fb2d7; }}
+.usage-table tr.usage-day td {{ background:#16223a; font-weight:700; border-top:2px solid #2b3b5d; }}
+.usage-table details summary {{ cursor:pointer; list-style:none; }}
+.usage-table details span {{ display:block; color:#9fb2d7; font-size:.8rem; }}
+.usage-presets {{ display:flex; flex-wrap:wrap; gap:8px; margin:0 0 12px; }}
+.usage-presets a {{ color:#cfe0ff; background:#121d31; border:1px solid #2b3b5d; border-radius:999px; padding:6px 14px; text-decoration:none; }}
+.usage-presets a.active {{ background:#234b9d; border-color:#7ba2ff; color:white; }}
+.usage-range {{ display:grid; grid-template-columns:1fr 1fr auto; gap:10px; align-items:end; }}
+.usage-range button {{ margin-top:0; width:auto; }}
+@media(max-width:600px) {{ .usage-range {{ grid-template-columns:1fr; }} }}
 .dashboard-nav a {{ color:#cfe0ff; background:#121d31; border:1px solid #2b3b5d; border-radius:10px; padding:12px; text-align:center; text-decoration:none; }}
 .dashboard-nav a.active {{ background:#234b9d; border-color:#7ba2ff; color:white; }}
 .badge {{ display:inline-block; min-width:1.5em; margin-left:4px; padding:0 .4em; border-radius:999px; background:#07101f; }}
@@ -1215,14 +1453,75 @@ MODEL_LABELS = {
 }
 
 
-def _usage_section(service: AgentService, workflow_id: str, language: str) -> str:
-    """Per-run model, token and estimated-cost table (2026-10-03)."""
+USAGE_PRESETS = ("chip", "session", "today", "7d", "month")
+
+
+def _usage_range(
+    query: dict[str, str], now: datetime
+) -> tuple[str, datetime | None, datetime | None, str | None]:
+    """(preset, start, end, error) from the page query, in Taipei civil time.
+
+    Operator choice 2026-10-14: presets for the whole chip, this session,
+    today, the last 7 days and this month, or a custom from/to pair. The
+    "to" minute is included.
+    """
+    raw_from = (query.get("from") or "").strip()
+    raw_to = (query.get("to") or "").strip()
+    preset = (query.get("range") or "").strip()
+    if preset not in USAGE_PRESETS:
+        preset = "custom" if raw_from or raw_to else "chip"
+    midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    if preset == "today":
+        return preset, midnight, None, None
+    if preset == "7d":
+        return preset, now - timedelta(days=7), None, None
+    if preset == "month":
+        return preset, midnight.replace(day=1), None, None
+    if preset != "custom":
+        return preset, None, None, None
+
+    def parse(value: str) -> datetime | None:
+        if not value:
+            return None
+        parsed = datetime.fromisoformat(value)
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=TAIPEI_TIMEZONE)
+
     try:
-        usage = service.workflow_usage(workflow_id)
+        start = parse(raw_from)
+        end = parse(raw_to)
+    except ValueError:
+        return "chip", None, None, "time"
+    if end is not None:
+        end += timedelta(minutes=1)
+    if start is not None and end is not None and end <= start:
+        return "chip", None, None, "order"
+    return preset, start, end, None
+
+
+def _usage_section(
+    service: AgentService,
+    session_id: str,
+    language: str,
+    query: dict[str, str] | None = None,
+) -> str:
+    """Chip-wide model, token and estimated-cost page (2026-10-03, 2026-10-14)."""
+    from .usage import total_tokens
+
+    now = datetime.now(TAIPEI_TIMEZONE)
+    preset, start, end, range_error = _usage_range(query or {}, now)
+    try:
+        usage = service.chip_usage(
+            session_id,
+            start,
+            end,
+            session_only=preset == "session",
+            day_zone=TAIPEI_TIMEZONE,
+        )
     except Exception as exc:  # the page must never break the Dashboard
         return f'<section class="card"><p class="notice error">{escape(str(exc))}</p></section>'
     if usage.get("error"):
         return f'<section class="card"><p class="notice error">{escape(str(usage["error"]))}</p></section>'
+    overall, ranged = usage["overall"], usage["range"]
 
     def number(value: Any) -> str:
         return f"{int(value):,}"
@@ -1238,69 +1537,162 @@ def _usage_section(service: AgentService, workflow_id: str, language: str) -> st
             MODEL_LABELS.get(name, name) for name in sorted(bucket.get("models", {}))
         ) or "-"
 
-    def cells(bucket: dict[str, Any]) -> str:
+    def tokens(bucket: dict[str, Any]) -> str:
         writes = bucket.get("cache_write_5m", 0) + bucket.get("cache_write_1h", 0)
+        detail = (
+            f"Input {number(bucket.get('input', 0))} · "
+            f"{_ui(language, 'Cache 寫入', 'Cache write')} {number(writes)} · "
+            f"{_ui(language, 'Cache 讀取', 'Cache read')} {number(bucket.get('cache_read', 0))} · "
+            f"Output {number(bucket.get('output', 0))} · "
+            f"{_ui(language, '呼叫', 'Calls')} {number(bucket.get('calls', 0))}"
+        )
+        return (
+            f"<details><summary>{number(total_tokens(bucket))}</summary>"
+            f"<span>{escape(detail)}</span></details>"
+        )
+
+    def cells(bucket: dict[str, Any]) -> str:
         return (
             f'<td class="text">{escape(models(bucket))}</td>'
-            f"<td>{number(bucket.get('calls', 0))}</td>"
+            f"<td>{tokens(bucket)}</td>"
             f"<td>{number(bucket.get('output', 0))}</td>"
-            f"<td>{number(bucket.get('input', 0))}</td>"
-            f"<td>{number(writes)}</td>"
-            f"<td>{number(bucket.get('cache_read', 0))}</td>"
             f"<td>{dollars(bucket)}</td>"
         )
 
+    def tile(label: str, value: str, note: str = "") -> str:
+        small = f"<small>{escape(note)}</small>" if note else ""
+        return f'<div><span class="muted">{escape(label)}</span><strong>{value}</strong>{small}</div>'
+
+    def experiments_cost(result: dict[str, Any]) -> float:
+        return sum(float(row["cost_usd"]) for row in result["runs"])
+
+    def local(value: Any) -> datetime | None:
+        try:
+            parsed = datetime.fromisoformat(str(value))
+        except ValueError:
+            return None
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(TAIPEI_TIMEZONE)
+
     head = (
         f'<th class="text">{_ui(language, "模型", "Model")}</th>'
-        f"<th>{_ui(language, '呼叫', 'Calls')}</th>"
-        f"<th>Output</th><th>Input</th>"
-        f"<th>{_ui(language, 'Cache 寫入', 'Cache write')}</th>"
-        f"<th>{_ui(language, 'Cache 讀取', 'Cache read')}</th>"
+        f"<th>{_ui(language, '總 token', 'Total tokens')}</th>"
+        f"<th>Output</th>"
         f"<th>{_ui(language, '估計費用', 'Est. cost')}</th>"
     )
-    total = usage["total"]
-    measurement_cost = sum(float(row["cost_usd"]) for row in usage["runs"])
-    totals = f"""
-    <section class="card"><h2>{_ui(language, '總計', 'Totals')}</h2>
+
+    chip_started = local(overall.get("chip_started_at"))
+    chip = f"""
+    <section class="card"><h2>{_ui(language, '晶片', 'Chip')} {escape(str(usage.get('chip_name')))}</h2>
     <div class="usage-totals">
-      <div><span class="muted">{_ui(language, '估計總費用', 'Estimated total')}</span><strong>{dollars(total)}</strong></div>
-      <div><span class="muted">{_ui(language, '實驗部分', 'Experiments')}</span><strong>${measurement_cost:.2f}</strong></div>
-      <div><span class="muted">{_ui(language, '程式開發', 'Development')}</span><strong>{dollars(usage['development'])}</strong></div>
-      <div><span class="muted">{_ui(language, '對話／其他', 'Conversation')}</span><strong>{dollars(usage['conversation'])}</strong></div>
-      <div><span class="muted">{_ui(language, '模型', 'Models')}</span><strong>{escape(models(total))}</strong></div>
-      <div><span class="muted">Output tokens</span><strong>{number(total['output'])}</strong></div>
+      {tile(_ui(language, '開始時間', 'Started'), escape(chip_started.strftime('%Y-%m-%d %H:%M') if chip_started else '-'), 'Asia/Taipei')}
+      {tile(_ui(language, '估計總費用', 'Estimated total'), dollars(overall['total']))}
+      {tile(_ui(language, '總 token', 'Total tokens'), number(total_tokens(overall['total'])), f"Output {number(overall['total']['output'])}")}
+      {tile(_ui(language, '實驗', 'Experiments'), f"${experiments_cost(overall):.2f}", _ui(language, f"{len(overall['runs'])} 次", f"{len(overall['runs'])} runs"))}
+      {tile(_ui(language, '量測前準備', 'Before runs'), dollars(overall['setup']))}
+      {tile(_ui(language, '程式開發', 'Development'), dollars(overall['development']))}
+      {tile(_ui(language, '對話／其他', 'Conversation'), dollars(overall['conversation']))}
+      {tile(_ui(language, '模型', 'Models'), escape(models(overall['total'])), _ui(language, f"{overall['workflows']} 個 workflow", f"{overall['workflows']} workflows"))}
     </div></section>"""
+
+    preset_labels = {
+        "chip": _ui(language, "整個晶片", "Whole chip"),
+        "session": _ui(language, "本 session", "This session"),
+        "today": _ui(language, "今天", "Today"),
+        "7d": _ui(language, "近 7 天", "Last 7 days"),
+        "month": _ui(language, "本月", "This month"),
+    }
+    presets = "".join(
+        f'<a class="{"active" if key == preset else ""}" '
+        f'href="?lang={escape(language)}&amp;range={key}">{label}</a>'
+        for key, label in preset_labels.items()
+    )
+    field_from = start.astimezone(TAIPEI_TIMEZONE).strftime("%Y-%m-%dT%H:%M") if start else ""
+    field_to = (
+        (end - timedelta(minutes=1)).astimezone(TAIPEI_TIMEZONE).strftime("%Y-%m-%dT%H:%M")
+        if end
+        else ""
+    )
+    error_text = {
+        "time": _ui(language, "時間格式無法辨識，改顯示整個晶片。", "The time could not be read; showing the whole chip."),
+        "order": _ui(language, "結束時間必須晚於開始時間，改顯示整個晶片。", "The end must be after the start; showing the whole chip."),
+    }.get(range_error or "")
+    error_html = f'<p class="notice error">{escape(error_text)}</p>' if error_text else ""
+    if preset == "chip":
+        range_text = _ui(language, "整個晶片（從第一個 workflow 開始）", "The whole chip (since its first workflow)")
+    elif preset == "session":
+        range_text = _ui(language, "本 session 的 workflow", "This session's workflow")
+    else:
+        range_text = (
+            f"{field_from.replace('T', ' ') or _ui(language, '最早', 'earliest')} → "
+            f"{(end.astimezone(TAIPEI_TIMEZONE).strftime('%Y-%m-%d %H:%M') if end else _ui(language, '現在', 'now'))}"
+            " (Asia/Taipei)"
+        )
+    everything = ranged["all_usage"]
+    range_card = f"""
+    <section class="card"><h2>{_ui(language, '時段', 'Time range')}</h2>
+    <nav class="usage-presets">{presets}</nav>
+    <form method="get" class="usage-range">
+      <input type="hidden" name="lang" value="{escape(language)}">
+      <label>{_ui(language, '起', 'From')}<input type="datetime-local" name="from" value="{escape(field_from)}"></label>
+      <label>{_ui(language, '迄（含該分鐘，空白＝現在）', 'To (inclusive, blank = now)')}<input type="datetime-local" name="to" value="{escape(field_to)}"></label>
+      <button type="submit">{_ui(language, '計算', 'Calculate')}</button>
+    </form>
+    {error_html}
+    <p class="muted">{escape(range_text)}</p>
+    <div class="usage-totals">
+      {tile(_ui(language, '此時段（此晶片）', 'In range (this chip)'), dollars(ranged['total']), _ui(language, f"{number(total_tokens(ranged['total']))} tokens", f"{number(total_tokens(ranged['total']))} tokens"))}
+      {tile(_ui(language, '其中實驗', 'Of which experiments'), f"${experiments_cost(ranged):.2f}", _ui(language, f"{len(ranged['runs'])} 次", f"{len(ranged['runs'])} runs"))}
+      {tile(_ui(language, '此時段全部用量', 'All usage in range'), dollars(everything['total']), _ui(language, '含其他晶片、程式開發與對話', 'including other chips, development and conversation'))}
+      {tile(_ui(language, '全部用量中的程式開發', 'Development (all)'), dollars(everything['development']))}
+    </div></section>"""
+
+    by_day: dict[str, list[dict[str, Any]]] = {}
+    for row in ranged["runs"]:
+        begun = local(row.get("started_at"))
+        by_day.setdefault(begun.date().isoformat() if begun else "-", []).append(row)
+    day_keys = sorted(set(by_day) | set(ranged["days"]), reverse=True)
+    empty = {"calls": 0, "cost_usd": 0.0, "models": {}}
+    day_rows = []
+    for day in day_keys:
+        rows = sorted(by_day.get(day, []), key=lambda item: str(item["started_at"]), reverse=True)
+        label = _ui(language, f"{day} · {len(rows)} 個實驗", f"{day} · {len(rows)} runs")
+        day_rows.append(
+            f'<tr class="usage-day"><td class="text" colspan="3">{escape(label)}</td>'
+            f"{cells(ranged['days'].get(day, empty))}</tr>"
+        )
+        for row in rows:
+            begun = local(row.get("started_at"))
+            day_rows.append(
+                f'<tr><td class="text">{escape(begun.strftime("%H:%M:%S") if begun else "-")}</td>'
+                f'<td class="text">{escape(row["node_id"])}</td>'
+                f'<td class="text">{escape(",".join(row["qubits"]))}</td>{cells(row)}</tr>'
+            )
+    other_rows = "".join(
+        f'<tr class="usage-day"><td class="text" colspan="3">{label}</td>{cells(ranged[key])}</tr>'
+        for key, label in (
+            ("setup", _ui(language, "量測前準備（進入、等待核准）", "Before runs (entry, approval)")),
+            ("development", _ui(language, "程式開發（修改檔案的呼叫）", "Development (calls that edit files)")),
+            ("conversation", _ui(language, "對話／其他", "Conversation / other")),
+        )
+    )
+    runs = f"""
+    <section class="card"><h2>{_ui(language, '依日期／實驗', 'By date and experiment')}</h2>
+    <div class="table-scroll"><table class="usage-table">
+    <tr><th class="text">{_ui(language, '開始時間', 'Started')}</th><th class="text">{_ui(language, '節點', 'Node')}</th><th class="text">Qubits</th>{head}</tr>
+    {''.join(day_rows)}{other_rows}
+    </table></div></section>"""
 
     node_rows = "".join(
         f'<tr><td class="text">{escape(node)}</td><td>{number(bucket["runs"])}</td>{cells(bucket)}</tr>'
-        for node, bucket in usage["nodes"].items()
+        for node, bucket in ranged["nodes"].items()
     )
     nodes = f"""
     <section class="card"><h2>{_ui(language, '依節點', 'By node')}</h2>
     <div class="table-scroll"><table class="usage-table">
     <tr><th class="text">{_ui(language, '節點', 'Node')}</th><th>Runs</th>{head}</tr>
     {node_rows}
-    </table></div></section>"""
-
-    run_rows = "".join(
-        f'<tr><td class="text">{escape(_format_taipei_time(row["started_at"]))}</td>'
-        f'<td class="text">{escape(row["node_id"])}</td>'
-        f'<td class="text">{escape(",".join(row["qubits"]))}</td>{cells(row)}</tr>'
-        for row in usage["runs"]
-    )
-    other_rows = "".join(
-        f'<tr><td class="text" colspan="3">{label}</td>{cells(usage[key])}</tr>'
-        for key, label in (
-            ("setup", _ui(language, "量測開始前（進入、等待核准）", "Before the first run (entry, approval)")),
-            ("development", _ui(language, "程式開發（修改檔案的呼叫）", "Development (calls that edit files)")),
-            ("conversation", _ui(language, "對話／其他", "Conversation / other")),
-        )
-    )
-    runs = f"""
-    <section class="card"><h2>{_ui(language, '依實驗', 'By experiment')}</h2>
-    <div class="table-scroll"><table class="usage-table">
-    <tr><th class="text">{_ui(language, '開始時間', 'Started')}</th><th class="text">{_ui(language, '節點', 'Node')}</th><th class="text">Qubits</th>{head}</tr>
-    {run_rows}{other_rows}
     </table></div></section>"""
 
     pricing = usage.get("pricing", {}).get("models", {})
@@ -1311,12 +1703,14 @@ def _usage_section(service: AgentService, workflow_id: str, language: str) -> st
     notes = f"""
     <section class="card"><h2>{_ui(language, '計算方式', 'How this is counted')}</h2>
     <ul class="muted">
-      <li>{_ui(language, '一次呼叫歸給它發生時正在進行的實驗（從該實驗開始到下一個實驗開始），包含啟動、等待、分析、決策與 commit；修改檔案的呼叫算程式開發。', 'A call belongs to the experiment in progress when it happened (from that run start to the next), covering start, waiting, analysis, decision and commit; calls that edit files count as development.')}</li>
+      <li>{_ui(language, '晶片用量是這顆晶片所有 workflow 期間內的呼叫：從 workflow 建立到它結束或下一個 workflow 建立為止。workflow 之間的空檔與沒有記錄晶片的舊 workflow 只算在「此時段全部用量」。', "Chip usage is every call inside this chip's workflows, from a workflow's creation to its close or the next workflow's creation. Gaps between workflows and old workflows without a recorded chip count only in All usage in range.")}</li>
+      <li>{_ui(language, '一次呼叫歸給它發生時正在進行的實驗（從該實驗開始到下一個實驗開始），包含啟動、等待、分析、決策與 commit；修改檔案的呼叫算程式開發。從前一個 workflow 繼承的 run 沒有重新量測，不列出。', 'A call belongs to the experiment in progress when it happened (from that run start to the next), covering start, waiting, analysis, decision and commit; calls that edit files count as development. Runs inherited from an earlier workflow were not measured again and are not listed.')}</li>
+      <li>{_ui(language, '日期列是該日此晶片的全部用量（含量測前準備、程式開發、對話），實驗列只算該實驗。總 token = input + cache 寫入 + cache 讀取 + output，點數字可看拆分。', "A date row is all of this chip's usage that day (including before-run, development and conversation); an experiment row is that experiment only. Total tokens = input + cache write + cache read + output; click a number for the split.")}</li>
       <li>{_ui(language, '估計費用採 Anthropic API 公開價格（每百萬 token，USD）：', 'Estimated cost uses Anthropic API list prices (USD per million tokens): ')}{escape(price_text)}{_ui(language, '；cache 寫入為 input 價格的 1.25 倍（5 分鐘）或 2 倍（1 小時）。訂閱方案的實際計費方式不同，這裡是 API 等值費用。', '; cache writes cost 1.25x (5 min) or 2x (1 h) the input price. Subscription plans are billed differently; this is the API-equivalent cost.')}</li>
-      <li>{_ui(language, 'Cache 讀取通常最大：每次呼叫都會重新送出整段對話。標 * 的列含沒有價格的模型。', 'Cache reads are usually the largest column because every call resends the whole conversation. Rows marked * include a model without a price.')}</li>
+      <li>{_ui(language, 'Cache 讀取通常最大：每次呼叫都會重新送出整段對話。標 * 的列含沒有價格的模型。', 'Cache reads are usually the largest part because every call resends the whole conversation. Rows marked * include a model without a price.')}</li>
       <li>{_ui(language, '資料來源', 'Source')}: {escape(str(usage.get('transcript_dir')))}</li>
     </ul></section>"""
-    return totals + nodes + runs + notes
+    return chip + range_card + runs + nodes + notes
 
 
 def _instrument_pause_notice(
@@ -1380,39 +1774,55 @@ def _successful_qubits(item: dict[str, Any]) -> list[str]:
     otherwise a node like 05, where nine of ten qubits passed and committed,
     would read as a failure on the summary.
 
-    A single-pass node is different again: it runs once on the node defaults
-    and the workflow accepts the result by design, so every target it measured
-    counts.
+    Operator instruction 2026-10-10: a failed qubit is never shown as
+    successful. That rules out listing every target of a single-pass node,
+    the node's own `outcomes` (Qualibrate marks every qubit "successful"),
+    03a coarse/refinement candidates, and a passing qubit whose values the
+    recorded decision left out of the state patch.
     """
 
     run = item.get("run") or {}
     analysis = item.get("analysis") or {}
-    status = str(run.get("status") or "")
-
-    if run.get("single_pass") and status == "completed":
-        targets = (run.get("parameters") or {}).get("qubits")
-        if isinstance(targets, list):
-            return sorted(
-                (str(name) for name in targets), key=_natural_name_key
-            )
-
     passing = analysis.get("passing_targets")
-    if isinstance(passing, list):
-        return sorted((str(name) for name in passing), key=_natural_name_key)
+    if not isinstance(passing, list):
+        return []
+    if str(run.get("node_id")) == "03a" and analysis.get("03a_stage") != "fine":
+        return []
+    names = {str(name) for name in passing}
+    decision = item.get("decision")
+    if isinstance(decision, dict):
+        patch = decision.get("state_patch")
+        patch = patch if isinstance(patch, list) else []
+        in_patch = _patch_qubits(patch)
+        proposed = _patch_qubits(analysis.get("candidate_state_patch") or [])
+        names -= proposed - in_patch
+    return sorted(names, key=_natural_name_key)
 
-    if str(analysis.get("analysis_status") or "") != "pass":
-        return []
-    outcomes = analysis.get("outcomes_advisory")
-    if not isinstance(outcomes, dict):
-        return []
-    return sorted(
-        (
-            str(name)
-            for name, value in outcomes.items()
-            if str(value) == "successful"
-        ),
-        key=_natural_name_key,
-    )
+
+def _summary_successes(history: list[dict[str, Any]]) -> list[list[str]]:
+    """Per-run successful qubits, each qubit listed once per node.
+
+    Operator instruction 2026-10-10: a qubit succeeds at a node once. When a
+    later run of the same node passes it again (an active-reset repeat or
+    verification), only the latest run lists it.
+    """
+    successes = [_successful_qubits(item) for item in history]
+    seen: dict[str, set[str]] = {}
+    for index in range(len(history) - 1, -1, -1):
+        node = str((history[index].get("run") or {}).get("node_id"))
+        shown = seen.setdefault(node, set())
+        successes[index] = [name for name in successes[index] if name not in shown]
+        shown.update(successes[index])
+    return successes
+
+
+def _patch_qubits(patch: Any) -> set[str]:
+    names: set[str] = set()
+    for item in patch if isinstance(patch, list) else []:
+        match = re.match(r"^/qubits/(q[0-9]+)/", str((item or {}).get("path", "")))
+        if match:
+            names.add(match.group(1))
+    return names
 
 
 def _session_summary_section(
@@ -1429,11 +1839,12 @@ def _session_summary_section(
         )
     separator = ", " if language == "en" else "、"
     rows: list[str] = []
+    successes = _summary_successes(history)
     for ordinal, item in enumerate(history, start=1):
         run = item.get("run") or {}
         label = f'{_ui(language, "實驗", "Experiment")} {ordinal}: {run.get("node_id")}'
         target = f'?lang={escape(language)}&amp;experiment={ordinal}'
-        qubits = _successful_qubits(item)
+        qubits = successes[ordinal - 1]
         if qubits:
             asset_indices = list(item.get("asset_indices", []))
             shown = asset_indices[:SUMMARY_THUMBNAIL_LIMIT]
@@ -1474,9 +1885,48 @@ def _session_summary_section(
         )
     return (
         f'<section class="card"><h2>{heading}</h2>'
-        f'<p class="muted">{_ui(language, "只有 JY 判定通過、且節點回報成功的 qubit 才會列出結果圖；點任一列可跳到該次實驗的完整結果。", "Plots appear only for qubits that JY passed and the node reported as successful. Select a row to open that experiment in full.")}</p>'
+        f'<p class="muted">{_ui(language, "只列出 JY 判定通過且已寫入 state 的 qubit，每個 node 每顆 qubit 只列一次；點任一列可跳到該次實驗的完整結果。", "Only qubits that JY passed and that were committed to the state are listed, once per node. Select a row to open that experiment in full.")}</p>'
         f'<ol class="summary-list">{"".join(rows)}</ol></section>'
     )
+
+
+def _operator_notice_section(
+    session_id: str,
+    history: list[dict[str, Any]],
+    language: str = "zh-Hant",
+) -> str:
+    """Findings that need a person, such as a 02b avoided crossing.
+
+    Operator request 2026-10-08: show the picture and say what to do.
+    """
+
+    cards: list[str] = []
+    for ordinal, item in enumerate(history, start=1):
+        analysis = item.get("analysis") or {}
+        notices = analysis.get("operator_notices") or []
+        plots = [str(path) for path in item.get("plots") or []]
+        for notice in notices:
+            if not isinstance(notice, dict):
+                continue
+            qubit = str(notice.get("qubit") or "")
+            messages = notice.get("message") or {}
+            message = messages.get(language) or messages.get("en") or ""
+            figures = "".join(
+                f'<figure><img src="{_asset_url(session_id, item, position)}" '
+                f'alt="{escape(qubit)} avoided crossing" loading="lazy"></figure>'
+                for position, path in enumerate(plots)
+                if "avoided-crossing" in Path(path).name
+                and f"-{qubit}-" in Path(path).name
+                and position < len(item.get("asset_indices", []))
+            )
+            cards.append(
+                f"""<section class="card instrument-alert">
+                  <h2>{_ui(language, '需要人工處理', 'Needs a person')} · {_ui(language, '實驗', 'Experiment')} {ordinal} · {escape(qubit)}</h2>
+                  <p>{escape(str(message))}</p>
+                  <div class="result-grid">{figures}</div>
+                </section>"""
+            )
+    return "".join(cards)
 
 
 def _session_history_section(
@@ -1739,7 +2189,12 @@ def _proposal_page(
     )
     confirmation = f"APPROVE {proposal_id}"
     form = ""
-    if status == "pending":
+    if status == "pending" and _lease_option_offer(proposal) is not None:
+        form = (
+            f'<section class="card approval"><h2>{_ui(language, "核准", "Approval")}</h2>'
+            f'<p>{_ui(language, "自動量測請在量測 Dashboard 的「核准」頁選擇起點與選項、預覽會執行的實驗後再核准。", "Approve automatic measurement on the Dashboard approval page: choose the start point and options, preview the experiments, then approve.")}</p></section>'
+        )
+    elif status == "pending":
         csrf_token = service.approval_csrf_token(proposal_id)
         form = f"""
         <section class="card approval">
@@ -2092,6 +2547,7 @@ def _has_trusted_submission_source(
 # Operator request 2026-10-04: labels for the optional nodes on the lease page.
 OPTIONAL_NODE_LABELS = {
     "02": ("02 寬頻共振腔掃描（Broadband spectroscopy，02x 之前）", "02 Broadband spectroscopy (before 02x)"),
+    "06a": ("06a Ramsey vs flux（06 之後，微調 flux offset；需選擇進行 flux 校正）", "06a Ramsey vs flux (after 06, fine-tunes the flux offset; needs flux calibration)"),
     "05st": ("05st T1 統計", "05st T1 statistics"),
     "06st_t2star": ("06st T2* 統計", "06st T2* statistics"),
     "06st_t2e": ("06st T2 echo 統計", "06st T2 echo statistics"),
@@ -2105,35 +2561,99 @@ def _lease_option_offer(proposal: dict[str, Any]) -> dict[str, Any] | None:
     return offer if isinstance(offer, dict) else None
 
 
-def _lease_options_fields(proposal: dict[str, Any], language: str) -> str:
+def _lease_options_fields(
+    proposal: dict[str, Any],
+    language: str,
+    selected: dict[str, Any] | None = None,
+) -> str:
     """Checkboxes and the measurement-mode choice for an autonomy lease.
 
     Operator request 2026-10-04: automatic measurement starts only after the
     operator has chosen which optional experiments run and whether the qubits
-    are measured one at a time or multiplexed.
+    are measured one at a time or multiplexed. `selected` re-fills the form
+    with the choices a preview was made from (operator request 2026-10-10).
     """
 
     offer = _lease_option_offer(proposal)
     if offer is None:
         return ""
     parts: list[str] = []
+    history = offer.get("start_node")
+    if isinstance(history, dict):
+        parts.append(_start_node_fieldset(history, language, selected))
+    flux = offer.get("flux_calibration")
+    flux_optional = (
+        set(flux.get("optional") or []) if isinstance(flux, dict) else set()
+    )
+    flux_boxes: list[str] = []
     optional = [
-        item for item in offer.get("optional_nodes", []) if isinstance(item, dict)
+        item
+        for item in offer.get("optional_nodes", [])
+        if isinstance(item, dict)
     ]
+    for item in [item for item in optional if str(item.get("node")) in flux_optional]:
+        node = str(item.get("node"))
+        zh, en = OPTIONAL_NODE_LABELS.get(node, (node, node))
+        blocked = bool(flux.get("blocked")) or flux.get("locked") is False
+        ticked = (
+            node in (selected.get("optional_nodes") or [])
+            if selected is not None
+            else item.get("default", True)
+        )
+        checked = " checked" if ticked and not blocked else ""
+        disabled = " disabled" if blocked else ""
+        flux_boxes.append(
+            f'<label class="choice flux-dependent"><input type="checkbox" name="optional_node" '
+            f'value="{escape(node)}"{checked}{disabled}> {escape(_ui(language, zh, en))}</label>'
+        )
+    optional = [item for item in optional if str(item.get("node")) not in flux_optional]
     if optional:
         boxes = []
         for item in optional:
             node = str(item.get("node"))
             zh, en = OPTIONAL_NODE_LABELS.get(node, (node, node))
-            checked = " checked" if item.get("default", True) else ""
+            ticked = (
+                node in (selected.get("optional_nodes") or [])
+                if selected is not None
+                else item.get("default", True)
+            )
+            checked = " checked" if ticked else ""
             box = (
                 f'<label class="choice"><input type="checkbox" name="optional_node" '
                 f'value="{escape(node)}"{checked}> {escape(_ui(language, zh, en))}</label>'
             )
-            if node == "02":
+            if item.get("required"):
+                # A disabled box is not submitted, so a hidden field carries it.
+                names = ", ".join(str(name) for name in item.get("required_because") or [])
+                note = _ui(
+                    language,
+                    f"必須執行：{names} 的讀取 IF 為 0 或重複，請填共振腔數量與設計頻率。",
+                    f"Required: readout IFs of {names} are zero or duplicated; "
+                    "enter the resonator count and design frequencies.",
+                )
                 box = (
-                    f'<div class="optional-node">{box}'
-                    f"{_broadband_parameter_fields(item.get('parameters'), language)}</div>"
+                    f'<input type="hidden" name="optional_node" value="{escape(node)}">'
+                    f'<label class="choice"><input type="checkbox" checked disabled> '
+                    f"{escape(_ui(language, zh, en))}</label>"
+                    f'<p class="warning">{escape(note)}</p>'
+                )
+            if node == "02":
+                # Operator choice 2026-10-11: a later start point skips 02, so
+                # the 02 box and its fields disappear (the server ignores them).
+                skipped_note = _ui(
+                    language,
+                    "已選擇從後面的實驗開始：02 不會執行，不需勾選或填寫。",
+                    "A later start point is selected: 02 does not run and needs no tick or parameters.",
+                )
+                box = (
+                    "<style>"
+                    "form:has(input[name=start_node]:checked:not([value=beginning])) .node-02-block { display:none; }"
+                    ".node-02-skipped { display:none; }"
+                    "form:has(input[name=start_node]:checked:not([value=beginning])) .node-02-skipped { display:block; }"
+                    "</style>"
+                    f'<div class="optional-node node-02-block">{box}'
+                    f"{_broadband_parameter_fields(((selected or {}).get('node_parameters') or {}).get('02') or item.get('parameters'), language)}</div>"
+                    f'<p class="muted node-02-skipped">{escape(skipped_note)}</p>'
                 )
             boxes.append(box)
         parts.append(
@@ -2174,13 +2694,30 @@ def _lease_options_fields(proposal: dict[str, Any], language: str) -> str:
                 _ui(language, f"Multiplex：{first} 之後每個實驗同時量所有 qubit", f"Multiplexed: every node from {first} on measures all qubits together"),
             ),
         )
+        blocked = set(drive.get("blocked") or [])
         radios = []
         for value, label in choices:
             mark = (
                 _ui(language, "（建議）", " (recommended)") if value == recommended else ""
             )
-            checked = " checked" if locked == value else ""
-            disabled = " disabled" if locked is not None and locked != value else ""
+            if value in blocked:
+                mark = _ui(language, "（共用 XY 輸出，已停用）", " (disabled: shared XY output)")
+            forced = blocked and value not in blocked
+            disabled = (
+                " disabled"
+                if value in blocked or (locked is not None and locked != value)
+                else ""
+            )
+            chosen = (
+                selected is not None
+                and selected.get("drive_mode") == value
+                and not disabled
+            )
+            checked = (
+                " checked"
+                if locked == value or (forced and locked is None) or chosen
+                else ""
+            )
             radios.append(
                 f'<label class="choice"><input type="radio" name="drive_mode" '
                 f'value="{value}" required{checked}{disabled}> {escape(label)}{mark}</label>'
@@ -2191,7 +2728,7 @@ def _lease_options_fields(proposal: dict[str, Any], language: str) -> str:
             else ""
         )
         warning = (
-            f'<p class="warning">{_ui(language, "共用 XY 輸出時選 multiplex：同一條線上的 qubit 共用 LO，JY 不會為個別 qubit 移動該 LO。", "Multiplexed on a shared XY output: qubits on that line share one LO, and JY will not move it for an individual qubit.")}</p>'
+            f'<p class="warning">{_ui(language, "共用 XY 輸出無法 multiplex：同一條線上的 qubit 共用 LO 與驅動，因此只能一次量一顆 qubit。", "A shared XY output cannot be multiplexed: the qubits on that line share one LO and drive, so they are measured one at a time.")}</p>'
             if groups
             else ""
         )
@@ -2204,7 +2741,325 @@ def _lease_options_fields(proposal: dict[str, Any], language: str) -> str:
               {warning}
             </fieldset>"""
         )
+    if isinstance(flux, dict):
+        parts.append(
+            _flux_calibration_fieldset(
+                flux,
+                flux_boxes,
+                language,
+                (selected or {}).get("flux_calibration"),
+            )
+        )
     return "\n".join(parts)
+
+
+def _lease_preview(
+    service: AgentService, proposal_id: str, lease_options: dict[str, Any]
+) -> dict[str, Any]:
+    return {
+        "options": lease_options,
+        "preview": service.preview_lease_options(proposal_id, lease_options),
+        "digest": service.lease_preview_digest(proposal_id, lease_options),
+    }
+
+
+def _lease_approval_card(
+    service: AgentService,
+    session_id: str,
+    pending: dict[str, Any],
+    language: str,
+    lease_preview: dict[str, Any] | None,
+) -> str:
+    """Two-step automatic-measurement approval.
+
+    Operator request 2026-10-10: the operator makes the choices and previews
+    which experiments will run; only then do the agree box and the approval
+    code appear, and Approve needs both. Changing a choice after the preview
+    needs a new preview.
+    """
+
+    proposal_id = str(pending["id"])
+    csrf = service.approval_csrf_token(proposal_id)
+    selected = (lease_preview or {}).get("options")
+    preview = (lease_preview or {}).get("preview")
+    digest = (lease_preview or {}).get("digest")
+    confirm_html = ""
+    if isinstance(preview, dict) and digest:
+        confirmation = f"APPROVE {proposal_id}"
+        confirm_html = f"""
+            {_lease_preview_section(preview, language)}
+            <input type="hidden" name="preview_digest" value="{escape(str(digest))}">
+            <label class="choice agree"><input type="checkbox" name="agree" value="yes" required>
+              {_ui(language, '我已確認以上會執行的實驗、起點與選項。', 'I have checked the experiments, start point and choices above.')}</label>
+            <p>{_ui(language, '勾選後輸入以下完整文字：', 'Then enter the complete text below:')}</p>
+            <code class="confirmation">{escape(confirmation)}</code>
+            <label for="confirmation">{_ui(language, '核准文字', 'Confirmation')}</label>
+            <input id="confirmation" name="confirmation" type="text"
+                   autocomplete="off" autocapitalize="off" spellcheck="false" required>
+            <button type="submit" name="operation" value="approve">{_ui(language, '核准', 'Approve')}</button>"""
+    step = (
+        _ui(language, "若要更改選項，改完後請重新預覽。", "To change a choice, change it and preview again.")
+        if confirm_html
+        else _ui(language, "選完後按「預覽」，確認此次會量哪些實驗後才會出現核准碼。", "Make the choices, then press Preview; the approval code appears after you have seen which experiments will run.")
+    )
+    return f"""
+        <section class="card approval">
+          <h2>{_ui(language, '待核准動作', 'Action awaiting approval')}</h2>
+          {_proposed_action_section(pending, language)}
+          <form method="post" action="/session/{escape(session_id)}/approval?lang={escape(language)}">
+            <input type="hidden" name="proposal_id" value="{escape(proposal_id)}">
+            <input type="hidden" name="csrf_token" value="{escape(csrf)}">
+            {_lease_options_fields(pending, language, selected)}
+            <p class="muted">{step}</p>
+            <button type="submit" name="operation" value="preview" formnovalidate>{_ui(language, '預覽此次量測的實驗', 'Preview the experiments')}</button>
+            {confirm_html}
+          </form>
+        </section>"""
+
+
+def _start_node_fieldset(
+    history: dict[str, Any], language: str, selected: dict[str, Any] | None
+) -> str:
+    """Where this workflow starts, with the chip's latest workflow beside it.
+
+    Operator request 2026-10-10: start from the beginning or at any node the
+    chip's latest workflow reached; the evidence before it is kept. Starting
+    after 02b keeps that workflow's flux choice.
+    """
+
+    chosen = str((selected or {}).get("start_node") or "beginning")
+    flux = bool(history.get("flux_calibration"))
+    rows = []
+    for item in history.get("nodes") or []:
+        if not isinstance(item, dict):
+            continue
+        status = (
+            _ui(language, "完成", "Finished")
+            if item.get("finished")
+            else _ui(language, "已量但未完成", "Measured, not finished")
+            if item.get("ran")
+            else _ui(language, "未量", "Not measured")
+        )
+        passed = ", ".join(str(name) for name in item.get("passed") or []) or "—"
+        rows.append(
+            f"<tr><td>{escape(str(item.get('node')))}</td><td>{escape(status)}</td>"
+            f"<td>{escape(passed)}</td></tr>"
+        )
+    radios = [
+        f'<label class="choice"><input type="radio" name="start_node" value="beginning"'
+        f'{" checked" if chosen == "beginning" else ""}> '
+        f'{_ui(language, "從頭開始（不沿用上次結果）", "From the beginning (no earlier results kept)")}</label>'
+    ]
+    for node in history.get("start_nodes") or []:
+        node = str(node)
+        radios.append(
+            f'<label class="choice"><input type="radio" name="start_node" value="{escape(node)}"'
+            f'{" checked" if chosen == node else ""}> '
+            f'{escape(_ui(language, f"從 {node} 開始（沿用 {node} 之前的結果）", f"Start at {node} (keep the results before {node})"))}</label>'
+        )
+    warning = (
+        ""
+        if history.get("state_matches", True)
+        else f'<p class="warning">{_ui(language, "注意：目前的 state.json 與上次 workflow 結束時不同（之後有其他量測或修改）。沿用的結果可能已不符合目前狀態。", "Note: the current state.json differs from the one the last workflow left. The kept results may no longer match the current state.")}</p>'
+    )
+    blocked = [str(name) for name in history.get("start_blocked_by") or []]
+    absent = [str(name) for name in history.get("absent_at_02") or []]
+    if blocked:
+        names = ", ".join(blocked)
+        warning += (
+            f'<p class="warning">{escape(_ui(language, f"{names} 的讀取 IF 尚未設定，且上次 02 沒有判定為找不到，所以這次只能從頭開始（02 必須執行並填寫）。", f"{names} have no readout IF and were not found absent at 02 last time, so this measurement must start from the beginning (02 runs and needs its parameters)."))}</p>'
+        )
+    elif absent:
+        names = ", ".join(absent)
+        warning += (
+            f'<p class="muted">{escape(_ui(language, f"上次 02 找不到 {names} 的共振腔；從後面的實驗開始時會沿用這個判定，不需要再做 02。", f"Last time 02 found no resonator for {names}; a later start keeps that and skips 02."))}</p>'
+        )
+    created = _format_taipei_time(history.get("created_at"))
+    return f"""<fieldset class="lease-options">
+      <legend>{_ui(language, '起點（必選）', 'Start point (required)')}</legend>
+      <p>{escape(_ui(language, f"這顆 chip（{history.get('device_key')}）最近一次的 workflow：{history.get('source_workflow_id')}（{created} 開始），量到 {history.get('reached_node')}；當時 flux 校正：{'是' if flux else '否'}。", f"This chip's ({history.get('device_key')}) latest workflow: {history.get('source_workflow_id')} (started {created}), reached {history.get('reached_node')}; flux calibration then: {'yes' if flux else 'no'}."))}</p>
+      <table class="history"><thead><tr><th>Node</th><th>{_ui(language, '狀態', 'Status')}</th><th>{_ui(language, '通過的 qubit', 'Passed qubits')}</th></tr></thead>
+      <tbody>{''.join(rows)}</tbody></table>
+      {''.join(radios)}
+      {_qubit_start_fields(history, language, selected)}
+      <p class="muted">{_ui(language, '從 02b 之後的 node 開始時，flux 校正固定沿用上次的選擇；上次未選 flux 時不會出現 03b。', 'Starting after 02b keeps the last flux choice; without flux last time, 03b does not appear.')}</p>
+      {warning}
+    </fieldset>"""
+
+
+def _qubit_start_fields(
+    history: dict[str, Any], language: str, selected: dict[str, Any] | None
+) -> str:
+    """One start node per qubit, shown when the start is the per-qubit pass.
+
+    Operator request 2026-10-12: on a chip measured one qubit at a time each
+    qubit may restart its pass at any node it reached last time.
+    """
+
+    offer = history.get("qubit_start_nodes") or {}
+    serial = history.get("serialize_from_node")
+    if not offer or not serial:
+        return ""
+    chosen = (selected or {}).get("qubit_start_nodes") or {}
+    rows = []
+    for qubit, nodes in offer.items():
+        options = "".join(
+            f'<option value="{escape(str(node))}"'
+            f'{" selected" if str(chosen.get(qubit, serial)) == str(node) else ""}>'
+            f"{escape(str(node))}</option>"
+            for node in nodes
+        )
+        rows.append(
+            f'<label class="qubit-start">{escape(str(qubit))} '
+            f'<select name="qubit_start__{escape(str(qubit))}">{options}</select></label>'
+        )
+    note = _ui(
+        language,
+        f"從 {serial} 開始時，每顆 qubit 可各自選擇從上次量到的哪個實驗繼續（之前的結果沿用）。",
+        f"Starting at {serial}, each qubit may continue from any experiment it reached last time (earlier results are kept).",
+    )
+    return (
+        "<style>"
+        ".qubit-starts { display:none; }"
+        f"form:has(input[name=start_node][value=\"{escape(str(serial))}\"]:checked) .qubit-starts {{ display:block; }}"
+        ".qubit-start { display:inline-block; margin-right:1em; }"
+        "</style>"
+        f'<div class="qubit-starts"><p class="muted">{escape(note)}</p>{"".join(rows)}</div>'
+    )
+
+
+def _lease_preview_section(preview: dict[str, Any], language: str) -> str:
+    """The nodes this approval would run, shown before the agree box."""
+
+    labels = {
+        "run": _ui(language, "會量測", "Runs"),
+        "inherited": _ui(language, "沿用上次結果", "Kept from last time"),
+        "not_run": _ui(language, "不量測", "Not run"),
+        "skipped": _ui(language, "略過（未勾選）", "Skipped (unticked)"),
+        "skipped_flux": _ui(language, "略過（未選 flux 校正）", "Skipped (no flux calibration)"),
+    }
+    items = []
+    for item in preview.get("nodes") or []:
+        status = str(item.get("status"))
+        css = "run" if status == "run" else "muted"
+        items.append(
+            f'<li class="{css}"><strong>{escape(str(item.get("node")))}</strong> — '
+            f"{escape(labels.get(status, status))}</li>"
+        )
+    count = sum(1 for item in preview.get("nodes") or [] if item.get("status") == "run")
+    starts = []
+    for item in preview.get("qubit_starts") or []:
+        if not isinstance(item, dict):
+            continue
+        node = str(item.get("start_node"))
+        label = _ui(language, f"從 {node} 開始", f"starts at {node}")
+        starts.append(
+            f"<li><strong>{escape(str(item.get('qubit')))}</strong> — {escape(label)}</li>"
+        )
+    starts_html = (
+        f"<h3>{_ui(language, '每顆 qubit 的起點（一次量一顆）', 'Where each qubit starts (one qubit at a time)')}</h3>"
+        f'<ul class="preview-qubits">{"".join(starts)}</ul>'
+        if starts
+        else ""
+    )
+    return f"""<section class="lease-preview">
+      <h3>{_ui(language, f'此次量測會執行的實驗（{count} 個）', f'Experiments this measurement runs ({count})')}</h3>
+      <ol class="preview-nodes">{''.join(items)}</ol>
+      {starts_html}
+    </section>"""
+
+
+def _flux_calibration_fieldset(
+    flux: dict[str, Any],
+    extra_boxes: list[str],
+    language: str,
+    chosen: bool | None = None,
+) -> str:
+    """Yes/no flux calibration, blocked when the wiring shares a Z output.
+
+    Operator request 2026-10-08.
+    """
+
+    nodes = ", ".join(str(node) for node in flux.get("nodes") or [])
+    extras = ", ".join(str(node) for node in flux.get("optional") or [])
+    groups = flux.get("shared_z_groups") or {}
+    blocked = bool(flux.get("blocked"))
+    locked = flux.get("locked")
+    explanation = _ui(
+        language,
+        f"選「是」會執行 {nodes}（02b 在 02a 之後：共振腔 vs flux；03b 在 03a 之後："
+        "qubit spectroscopy vs flux），把 qubit 移到 sweet spot。"
+        + (f"可再勾選 {extras}（06 之後）。" if extras else ""),
+        f"Yes runs {nodes} (02b after 02a: resonator vs flux; 03b after 03a: "
+        "qubit spectroscopy vs flux) and moves each qubit to its sweet spot."
+        + (f" {extras} (after 06) can be ticked as well." if extras else ""),
+    )
+    if groups:
+        shared = "; ".join(
+            f"{escape(str(output).split('/ports/')[-1])} → {escape(', '.join(names))}"
+            for output, names in sorted(groups.items())
+        )
+        detected = _ui(
+            language,
+            f"偵測到 wiring 中多個 qubit 共用同一個 Z 輸出：{shared}。共用 flux 線無法單獨調整一顆 qubit，因此不能進行 flux 校正。",
+            f"The wiring routes several qubits to one Z output: {shared}. A shared flux line cannot tune one qubit alone, so flux calibration is disabled.",
+        )
+    else:
+        detected = _ui(
+            language,
+            "每個 qubit 都有自己的 Z 輸出，可以進行 flux 校正。",
+            "Every qubit has its own Z output, so flux calibration is available.",
+        )
+    choices = (
+        ("yes", _ui(language, "是，進行 flux 校正", "Yes, calibrate flux"), True),
+        ("no", _ui(language, "否，維持目前的 flux 設定", "No, keep the current flux settings"), False),
+    )
+    radios = []
+    for value, label, meaning in choices:
+        disabled = (
+            " disabled"
+            if (blocked and meaning) or (locked is not None and locked is not meaning)
+            else ""
+        )
+        checked = (
+            " checked"
+            if locked is meaning
+            or (blocked and meaning is False and locked is None)
+            or (chosen is meaning and not disabled)
+            else ""
+        )
+        mark = (
+            _ui(language, "（共用 Z 輸出，已停用）", " (disabled: shared Z output)")
+            if blocked and meaning
+            else ""
+        )
+        radios.append(
+            f'<label class="choice"><input type="radio" name="flux_calibration" '
+            f'value="{value}" required{checked}{disabled}> {escape(label)}{mark}</label>'
+        )
+    extras_html = ""
+    if extra_boxes:
+        extras_html = (
+            f'<div class="flux-extras"><p class="muted">'
+            f'{_ui(language, "額外 flux 實驗（需選「是」）：", "Extra flux experiment (needs Yes):")}</p>'
+            f'{"".join(extra_boxes)}</div>'
+        )
+    locked_note = (
+        f'<p class="muted">{_ui(language, "此工作流程已選定是否進行 flux 校正，不能在中途更改。", "This workflow already chose whether to calibrate flux; it cannot change mid-workflow.")}</p>'
+        if locked is not None
+        else ""
+    )
+    return f"""<style>
+      .lease-options:has(input[name=flux_calibration][value=no]:checked) .flux-extras {{ opacity:.45; }}
+    </style>
+    <fieldset class="lease-options">
+      <legend>{_ui(language, '是否進行 flux 校正（必選）', 'Calibrate flux? (required)')}</legend>
+      <p>{explanation}</p>
+      <p>{detected}</p>
+      {''.join(radios)}
+      {extras_html}
+      {locked_note}
+    </fieldset>"""
 
 
 def _broadband_parameter_fields(stored: Any, language: str) -> str:
@@ -2224,7 +3079,7 @@ def _broadband_parameter_fields(stored: Any, language: str) -> str:
         for value in design
     )
     return f"""<style>
-      .optional-node:not(:has(input[name="optional_node"]:checked)) .node-parameters {{ display: none; }}
+      .optional-node:not(:has(input[type=checkbox]:checked)) .node-parameters {{ display: none; }}
       .node-parameters {{ margin: .25rem 0 .75rem 1.75rem; display: grid; gap: .4rem; }}
       .node-parameters input[type=text], .node-parameters input[type=number] {{ width: 100%; max-width: 36rem; padding: .35rem; }}
     </style>
@@ -2291,8 +3146,15 @@ def _workflow_options_rows(workflow: Any, language: str) -> str:
     skipped = ", ".join(str(node) for node in options.get("excluded_nodes", [])) or _ui(
         language, "無", "None"
     )
+    flux = options.get("flux_calibration")
+    flux_text = (
+        _ui(language, "是", "Yes")
+        if flux is True
+        else _ui(language, "否", "No")
+    )
     rows = (
         f"<dt>{_ui(language, '量測方式', 'Measurement mode')}</dt><dd>{escape(mode_text)}</dd>"
+        f"<dt>{_ui(language, 'Flux 校正', 'Flux calibration')}</dt><dd>{escape(flux_text)}</dd>"
         f"<dt>{_ui(language, '未勾選的實驗', 'Unticked experiments')}</dt><dd>{escape(skipped)}</dd>"
     )
     broadband = (options.get("node_parameters") or {}).get("02")
@@ -2316,14 +3178,41 @@ def _lease_options_from_fields(
     modes = fields.get("drive_mode", [])
     if len(modes) > 1:
         raise ServiceError("Choose exactly one measurement mode.")
+    flux_values = fields.get("flux_calibration", [])
+    if len(flux_values) > 1 or any(value not in {"yes", "no"} for value in flux_values):
+        raise ServiceError("Choose yes or no for flux calibration.")
     selected = list(fields.get("optional_node", []))
+    start_values = fields.get("start_node", [])
+    if len(start_values) > 1:
+        raise ServiceError("Choose exactly one start point.")
+    offer = _lease_option_offer(proposal) or {}
+    if isinstance(offer.get("start_node"), dict) and not start_values:
+        raise ServiceError("Choose where this measurement starts.")
+    start_node = start_values[0] if start_values else None
+    if start_node not in (None, "", "beginning"):
+        # Operator choice 2026-10-11: 02 runs only from the beginning; a later
+        # start ignores its tick and its (hidden) parameter fields.
+        selected = [node for node in selected if node != "02"]
     node_parameters = (
         {"02": _broadband_parameters_from_fields(fields)} if "02" in selected else {}
     )
+    history = offer.get("start_node") if isinstance(offer.get("start_node"), dict) else {}
+    qubit_start_nodes: dict[str, str] = {}
+    if start_node and start_node == history.get("serialize_from_node"):
+        # Operator request 2026-10-12: one start node per qubit.
+        for qubit in history.get("qubit_start_nodes") or {}:
+            values = fields.get(f"qubit_start__{qubit}", [])
+            if len(values) > 1:
+                raise ServiceError(f"Choose exactly one start point for {qubit}.")
+            if values:
+                qubit_start_nodes[str(qubit)] = values[0]
     return {
         "optional_nodes": selected,
         "drive_mode": modes[0] if modes else None,
+        "flux_calibration": (flux_values[0] == "yes") if flux_values else None,
         "node_parameters": node_parameters,
+        "start_node": None if start_node in (None, "", "beginning") else start_node,
+        "qubit_start_nodes": qubit_start_nodes,
     }
 
 

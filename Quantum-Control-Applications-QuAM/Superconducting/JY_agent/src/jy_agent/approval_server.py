@@ -18,7 +18,10 @@ from .approval_web import (
     handle_autonomy_events_script,
     handle_browser_approval,
     handle_browser_approval_asset,
+    handle_guide_asset,
+    handle_guide_page,
     handle_language_script,
+    handle_chip_history_asset,
     handle_session_dashboard,
     handle_session_dashboard_asset,
     handle_session_dashboard_events,
@@ -85,11 +88,23 @@ def create_approval_app(settings: Settings | None = None) -> Starlette:
     async def session_usage(request: Request) -> Response:
         return await handle_session_dashboard(request, service, view="usage")
 
+    async def session_guide(request: Request) -> Response:
+        return await handle_session_dashboard(request, service, view="guide")
+
+    async def guide(request: Request) -> Response:
+        return await handle_guide_page(request, service)
+
+    async def guide_asset(request: Request) -> Response:
+        return await handle_guide_asset(request, service)
+
     async def session_usage_events(request: Request) -> Response:
         return await handle_session_dashboard_events(request, service, view="usage")
 
     async def session_asset(request: Request) -> Response:
         return await handle_session_dashboard_asset(request, service)
+
+    async def chip_asset(request: Request) -> Response:
+        return await handle_chip_history_asset(request, service)
 
     async def session_events(request: Request) -> Response:
         return await handle_session_dashboard_events(request, service)
@@ -205,6 +220,19 @@ def create_approval_app(settings: Settings | None = None) -> Starlette:
                 name="session_usage",
             ),
             Route(
+                "/session/{session_id}/guide",
+                session_guide,
+                methods=["GET"],
+                name="session_guide",
+            ),
+            Route("/guide", guide, methods=["GET"], name="guide"),
+            Route(
+                "/guide/assets/{name}",
+                guide_asset,
+                methods=["GET"],
+                name="guide_asset",
+            ),
+            Route(
                 "/session/{session_id}/usage/events",
                 session_usage_events,
                 methods=["GET"],
@@ -215,6 +243,12 @@ def create_approval_app(settings: Settings | None = None) -> Starlette:
                 session_asset,
                 methods=["GET"],
                 name="session_dashboard_asset",
+            ),
+            Route(
+                "/session/{session_id}/chip-assets/{run_id}/{position:int}",
+                chip_asset,
+                methods=["GET"],
+                name="session_chip_history_asset",
             ),
             Route(
                 "/session/{session_id}/events",

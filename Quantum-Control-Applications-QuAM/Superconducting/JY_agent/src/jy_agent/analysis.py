@@ -7,6 +7,14 @@ from pathlib import Path
 from typing import Any
 
 from .analysis_07d import cloud_outlier_fractions, two_blob_metrics
+from .analysis_flux import (
+    FLUX_NODES,
+    TUNABLE,
+    avoided_crossing_notices,
+    flux_dataset_metrics,
+    flux_fit_quality,
+    render_02b_plots,
+)
 from .analysis_02c import (
     analyze_02c_transitions,
     node_selected_readout_powers_dbm,
@@ -128,6 +136,26 @@ class SnapshotAnalyzer:
             failures.append("No result plot was saved.")
 
         dataset_metrics = self._dataset_metrics(snapshot, node_id, data)
+        if node_id == "06":
+            dataset_metrics["ramsey_fringes_hz"] = _ramsey_fringe_frequencies(
+                snapshot, data
+            )
+        operator_notices: list[dict[str, Any]] = []
+        if node_id in FLUX_NODES:
+            if node_id == "02b":
+                plots.extend(
+                    path
+                    for path in render_02b_plots(
+                        self.settings.runtime / "report_assets",
+                        snapshot.name,
+                        dataset_metrics,
+                    )
+                    if path not in plots
+                )
+                operator_notices = avoided_crossing_notices(dataset_metrics)
+                for notice in operator_notices:
+                    warnings.append(notice["message"]["en"])
+            dataset_metrics.pop("_traces", None)
         if node_id in {"05", "06b"}:
             plots.extend(
                 path
@@ -153,6 +181,52 @@ class SnapshotAnalyzer:
                     stage_03a,
                 )
             )
+            rejected_warnings, rejected_failures = self._avoid_rejected_03a_lines(
+                fit_quality, dataset_metrics, run, stage_03a
+            )
+            warnings.extend(rejected_warnings)
+            failures.extend(rejected_failures)
+        elif node_id == "07b":
+            # Operator decision 2026-10-14: 07b always commits its rotation
+            # angle and threshold; a qubit below the fidelity target or without
+            # two Gaussian blobs only loses state discrimination and active reset.
+            for name, result in (fit_quality.get("results") or {}).items():
+                if isinstance(result, dict) and result.get(
+                    "state_discrimination_qualified"
+                ) is False:
+                    warnings.append(
+                        f"{name} readout is not usable for state discrimination or "
+                        "active reset ("
+                        + "; ".join(result.get("state_discrimination_reasons") or [])
+                        + "); 07b still passes so the rotation angle and threshold "
+                        "commit and later nodes measure the raw I quadrature."
+                    )
+        elif node_id in {"05st", "06st_t2star", "06st_t2e"}:
+            plots.extend(
+                path
+                for path in _filtered_statistics_plots(
+                    self.settings.runtime / "report_assets",
+                    snapshot.name,
+                    node_id,
+                    dataset_metrics.get("robust_summaries") or {},
+                )
+                if path not in plots
+            )
+            for name, result in (fit_quality.get("results") or {}).items():
+                if not isinstance(result, dict) or result.get("summary_robust") is not False:
+                    continue
+                entry = result.get("robust_summary") or {}
+                detail = (
+                    f"; robust refit: median {entry['median_us']:.4g} us, IQR "
+                    f"{entry['q25_us']:.4g}-{entry['q75_us']:.4g} us "
+                    f"({entry['fits']}/{entry['iterations']} fits)"
+                    if all(_finite(entry.get(k)) for k in ("median_us", "q25_us", "q75_us"))
+                    else ""
+                )
+                warnings.append(
+                    f"{name} {node_id} summary is not robust (sigma > mu, failed "
+                    f"single fits dominate the mean){detail}. Status kept; annotated."
+                )
         elif node_id == "04":
             warnings.extend(
                 self._normalize_04_fitted_edge_metrics(
@@ -170,6 +244,7 @@ class SnapshotAnalyzer:
                 "04",
                 "05",
                 "06b",
+                *FLUX_NODES,
             }:
                 failures.append(dataset_metrics["error"])
             else:
@@ -199,6 +274,29 @@ class SnapshotAnalyzer:
                 failures.append(
                     f"{name} feature lies within {edge_limit:.0%} of a sweep edge."
                 )
+            if node_id == "03a" and stage_03a == "fine":
+                # Operator choice 2026-10-12: a fine line at the RF that two
+                # LOs confirmed (`cross_lo_03a_lines`) uses the cross-LO floor.
+                rules_03a = self.policy.raw["analysis"]["03a"]
+                confirmed = ((run or {}).get("cross_lo_03a_lines") or {}).get(name)
+                fit = fit_quality.get("results", {}).get(name, {})
+                line = fit.get("drive_freq") if isinstance(fit, dict) else None
+                tolerance = 1e6 * float(rules_03a.get("cross_lo_rf_tolerance_mhz", 5.0))
+                if (
+                    _finite(confirmed)
+                    and _finite(line)
+                    and abs(float(line) - float(confirmed)) <= tolerance
+                    and rules_03a.get("cross_lo_fine_min_robust_snr") is not None
+                ):
+                    min_snr = min(
+                        min_snr, float(rules_03a["cross_lo_fine_min_robust_snr"])
+                    )
+                    # Read back by the server's 03a target resolution.
+                    fit["cross_lo_confirmed"] = True
+                    warnings.append(
+                        f"{name} fine line {float(line) / 1e9:.6g} GHz was confirmed "
+                        f"under two LOs; SNR floor {min_snr:g} applies."
+                    )
             if node_id in {"02x", "02a", "03a", "04", "05"}:
                 if not _finite(snr):
                     failures.append(f"{name} robust sweep SNR is unavailable.")
@@ -381,6 +479,26 @@ class SnapshotAnalyzer:
                         )
                     )
                     warnings.extend(normalization_warnings)
+                elif node_id == "02b":
+                    # Operator rule 2026-10-08: only a tunable qubit's flux
+                    # result commits; flat and avoided-crossing qubits keep
+                    # their offsets and resonator IF.
+                    results_02b = fit_quality.get("results") or {}
+                    tunable = {
+                        str(name)
+                        for name, result in results_02b.items()
+                        if isinstance(result, dict)
+                        and result.get("classification") == TUNABLE
+                    }
+                    candidate_patch, withheld = split_patch_by_target(
+                        candidate_patch, tunable
+                    )
+                    withheld_targets = sorted(patch_qubit_targets(withheld))
+                    if withheld_targets:
+                        warnings.append(
+                            f"02b updates are withheld for {withheld_targets}: "
+                            "they are flat, show an avoided crossing, or failed."
+                        )
                 candidate_patch, missing_value_failures = _drop_missing_values(
                     candidate_patch, current
                 )
@@ -400,6 +518,11 @@ class SnapshotAnalyzer:
                 "Snapshot has no saved QuAM state; no state patch can be derived."
             )
 
+        if node_id in {"05st", "06st_t2star", "06st_t2e"} and candidate_patch:
+            candidate_patch, filtered_warnings = _filtered_statistics_patch(
+                node_id, candidate_patch, dataset_metrics.get("robust_summaries") or {}
+            )
+            warnings.extend(filtered_warnings)
         status = "pass" if not failures else "needs_review"
         failures_by_target, run_level_failures = _attribute_failures(
             failures, targets
@@ -412,6 +535,30 @@ class SnapshotAnalyzer:
             )
         )
         suppressed_targets: list[str] = []
+        frequency_correction_patch: list[dict[str, Any]] = []
+        if node_id == "06" and candidate_patch and not run_level_failures:
+            # Operator instruction 2026-10-10: a Ramsey fit whose fringes
+            # missed the detuning stays unresolved, but its drive-frequency
+            # correction may commit (IF and idle_freq only, never T2ramsey) so
+            # the next 06 can confirm the corrected frequency.
+            ready = {
+                str(name)
+                for name, result in (fit_quality.get("results") or {}).items()
+                if isinstance(result, dict)
+                and result.get("frequency_correction_ready") is True
+                and str(name) not in passing_targets
+            }
+            frequency_correction_patch = [
+                item
+                for item in candidate_patch
+                if (
+                    match := re.match(
+                        r"^/qubits/(q[0-9]+)/(xy/intermediate_frequency|extras/idle_freq)$",
+                        str(item.get("path", "")),
+                    )
+                )
+                and match.group(1) in ready
+            ]
         if status != "pass" and candidate_patch:
             # Operator instruction 2026-09-20: a run that is `needs_review`
             # overall must still commit the qubits that individually passed
@@ -476,8 +623,10 @@ class SnapshotAnalyzer:
             "run_level_failure_reasons": run_level_failures,
             "passing_targets": passing_targets,
             "suppressed_patch_targets": suppressed_targets,
+            "operator_notices": operator_notices,
             "warnings": warnings,
             "candidate_state_patch": candidate_patch,
+            "frequency_correction_patch": frequency_correction_patch,
             "rejected_state_change_count": len(rejected_patch),
             "active_state_hash": active_hash,
         }
@@ -642,6 +791,81 @@ class SnapshotAnalyzer:
                 "above it; selected the higher-frequency peak as the |0>-|1> candidate."
             )
         return warnings
+
+    def _avoid_rejected_03a_lines(
+        self,
+        fit_quality: dict[str, Any],
+        dataset_metrics: dict[str, Any],
+        run: dict[str, Any] | None,
+        stage_03a: str | None,
+    ) -> tuple[list[str], list[str]]:
+        """Never select a line 04 already rejected for this qubit.
+
+        Operator rule 2026-10-12: a qubit that returned from 04 to 03a (no Rabi
+        at its line) searches for another one. When a coarse or refinement fit
+        lands inside a rejected window, the strongest other peak candidate is
+        used instead; a fine scan there, or no other candidate, fails.
+        """
+
+        rejected = (run or {}).get("rejected_03a_lines") or {}
+        if not isinstance(rejected, dict) or not rejected:
+            return [], []
+        results = fit_quality.get("results", {})
+        metrics_by_qubit = dataset_metrics.get("qubits", {})
+        if not isinstance(results, dict) or not isinstance(metrics_by_qubit, dict):
+            return [], []
+        warnings: list[str] = []
+        failures: list[str] = []
+        for name, windows in rejected.items():
+            fit = results.get(name)
+            metrics = metrics_by_qubit.get(name)
+            if not isinstance(fit, dict) or not _finite(fit.get("drive_freq")):
+                continue
+
+            def blocked(frequency: float) -> bool:
+                return any(
+                    float(low) <= frequency <= float(high) for low, high in windows
+                )
+
+            line = float(fit["drive_freq"])
+            if not blocked(line):
+                continue
+            coordinate = metrics.get("feature_coordinate") if isinstance(metrics, dict) else None
+            center = line - float(coordinate) if _finite(coordinate) else None
+            alternatives = [
+                candidate
+                for candidate in (
+                    metrics.get("peak_candidates") if isinstance(metrics, dict) else None
+                )
+                or []
+                if isinstance(candidate, dict)
+                and center is not None
+                and _finite(candidate.get("coordinate_hz"))
+                and not blocked(center + float(candidate["coordinate_hz"]))
+            ]
+            if alternatives and stage_03a != "fine":
+                best = max(alternatives, key=lambda item: float(item.get("robust_snr") or 0.0))
+                metrics["rejected_feature_coordinate"] = coordinate
+                metrics["feature_coordinate"] = best["coordinate_hz"]
+                metrics["feature_fwhm_hz"] = best.get("fwhm_hz")
+                metrics["robust_snr"] = best.get("robust_snr")
+                metrics["edge_fraction"] = best.get("edge_fraction")
+                metrics["dynamic_range"] = best.get("prominence")
+                metrics["feature_selection"] = "outside_rejected_line"
+                fit["protected_node_drive_freq"] = line
+                fit["drive_freq"] = center + float(best["coordinate_hz"])
+                warnings.append(
+                    f"{name} fit {line / 1e9:.6g} GHz lies on a line 04 rejected; "
+                    f"selected the next candidate at {fit['drive_freq'] / 1e9:.6g} GHz."
+                )
+            else:
+                fit["fit_successful"] = False
+                fit["rejected_line"] = True
+                failures.append(
+                    f"{name} fit {line / 1e9:.6g} GHz lies on a line 04 rejected "
+                    "(no Rabi there); search for another line."
+                )
+        return warnings, failures
 
     def _03a_stage(self, run: dict[str, Any] | None) -> str:
         parameters: dict[str, Any] = {}
@@ -821,18 +1045,26 @@ class SnapshotAnalyzer:
         current: dict[str, Any],
     ) -> list[dict[str, Any]]:
         """Resolve RF values that depend on an IF update recorded in the same block."""
+        resonator = ("resonator/intermediate_frequency", "dressed_resonator_freq")
+        drive = ("xy/intermediate_frequency", "idle_freq")
         path_kinds = {
-            "02a": ("resonator/intermediate_frequency", "dressed_resonator_freq"),
-            "02c": ("resonator/intermediate_frequency", "dressed_resonator_freq"),
-            "03a": ("xy/intermediate_frequency", "idle_freq"),
-            "06": ("xy/intermediate_frequency", "idle_freq"),
+            "02a": [resonator],
+            "02b": [resonator],
+            "02c": [resonator],
+            "03a": [drive],
+            # 03b computes sweetspot_freq from its own fit, so only idle_freq
+            # reads the pre-update IF; 06a reads it for both.
+            "03b": [drive],
+            "06": [drive],
+            "06a": [drive, ("xy/intermediate_frequency", "sweetspot_freq")],
         }
         kinds = path_kinds.get(node_id)
         if kinds is None:
             return patch
-        if_suffix, extras_name = kinds
         by_path = {item["path"]: item for item in patch}
-        for name in current.get("qubits", {}):
+        for (if_suffix, extras_name), name in (
+            (kind, name) for kind in kinds for name in current.get("qubits", {})
+        ):
             if_path = f"/qubits/{name}/{if_suffix}"
             rf_path = f"/qubits/{name}/extras/{extras_name}"
             if_item = by_path.get(if_path)
@@ -925,6 +1157,26 @@ class SnapshotAnalyzer:
             ],
             "06b": [
                 r"^/qubits/q[0-9]+/T2echo$",
+            ],
+            # Flux calibration (operator 2026-10-08). The 02b aSWAP amplitude
+            # and FluxPeriodV bookkeeping stay out; 06a's quadratic term is
+            # left to 03b, which measures it directly.
+            "02b": [
+                r"^/qubits/q[0-9]+/z/(joint_offset|min_offset)$",
+                r"^/qubits/q[0-9]+/(phi0_voltage|phi0_current)$",
+                r"^/qubits/q[0-9]+/resonator/intermediate_frequency$",
+                r"^/qubits/q[0-9]+/extras/dressed_resonator_freq$",
+            ],
+            "03b": [
+                r"^/qubits/q[0-9]+/z/joint_offset$",
+                r"^/qubits/q[0-9]+/xy/intermediate_frequency$",
+                r"^/qubits/q[0-9]+/freq_vs_flux_01_quad_term$",
+                r"^/qubits/q[0-9]+/extras/(idle_freq|sweetspot_freq)$",
+            ],
+            "06a": [
+                r"^/qubits/q[0-9]+/z/joint_offset$",
+                r"^/qubits/q[0-9]+/xy/intermediate_frequency$",
+                r"^/qubits/q[0-9]+/extras/(idle_freq|sweetspot_freq)$",
             ],
             "05st": [
                 r"^/qubits/q[0-9]+/T1$",
@@ -1175,10 +1427,35 @@ class SnapshotAnalyzer:
                         isinstance(morphology, dict)
                         and morphology.get("morphology_pass") is True
                     )
-                    usable_fidelity = (
-                        fidelity is not None and min_fidelity <= fidelity <= 1.0
+                    # Operator decision 2026-10-13: below the fidelity target
+                    # 07b still passes (warning only), so its rotation angle and
+                    # threshold commit and later nodes see the signal on I.
+                    # 2026-10-14: the cloud shape no longer blocks the pass
+                    # either (`morphology_blocks_pass`); both only decide
+                    # whether state discrimination and active reset may be used.
+                    blocks = bool(rules_07b.get("min_readout_fidelity_blocks_pass", True))
+                    shape_blocks = bool(rules_07b.get("morphology_blocks_pass", True))
+                    floor = min_fidelity if blocks else 0.0
+                    usable_fidelity = fidelity is not None and (
+                        floor <= fidelity <= 1.0 if blocks else 0.0 < fidelity <= 1.0
                     )
-                    usable = usable_fidelity and morphology_pass
+                    angle = (
+                        _scalar_number(result.get("angle"))
+                        if isinstance(result, dict)
+                        else None
+                    )
+                    usable = usable_fidelity and (morphology_pass or not shape_blocks)
+                    discrimination_reasons: list[str] = []
+                    if fidelity is None:
+                        discrimination_reasons.append("fidelity is missing")
+                    elif not min_fidelity <= fidelity <= 1.0:
+                        discrimination_reasons.append(
+                            f"fidelity {fidelity:.3f} is below {min_fidelity:g}"
+                        )
+                    if not morphology_pass:
+                        discrimination_reasons.append(
+                            "IQ clouds are not two separated Gaussian blobs"
+                        )
                     active_reset_qualified = (
                         reset_type == "active"
                         and (morphology_pass or not active_needs_morphology)
@@ -1212,16 +1489,19 @@ class SnapshotAnalyzer:
                     normalized_results[name] = {
                         "fit_successful": usable,
                         "readout_fidelity": fidelity,
+                        "below_fidelity_target": bool(
+                            fidelity is not None and fidelity < min_fidelity
+                        ),
                         "reset_type": reset_type,
                         "active_reset_qualified": active_reset_qualified,
                         "active_reset_fidelity_floor": active_min_fidelity,
                         "active_reset_qualification_reason": active_reset_reason,
                         "protected_node_fidelity": raw_fidelity,
                         "morphology_pass": morphology_pass,
+                        "state_discrimination_qualified": not discrimination_reasons,
+                        "state_discrimination_reasons": discrimination_reasons,
                         "cloud_shape": _json_safe(morphology),
-                        "angle": _scalar_number(result.get("angle"))
-                        if isinstance(result, dict)
-                        else None,
+                        "angle": angle,
                         "threshold": _scalar_number(result.get("threshold"))
                         if isinstance(result, dict)
                         else None,
@@ -1236,7 +1516,7 @@ class SnapshotAnalyzer:
                             f"{name} readout fidelity is missing or below "
                             f"{min_fidelity:g}."
                         )
-                    if not morphology_pass:
+                    if not morphology_pass and shape_blocks:
                         reasons = (
                             morphology.get("morphology_failures", [])
                             if isinstance(morphology, dict)
@@ -1252,6 +1532,14 @@ class SnapshotAnalyzer:
             parameters = data.get("initial_parameters", {})
             maximum_ns = parameters.get("max_wait_time_in_ns")
             points = parameters.get("num_time_points")
+            detuning_mhz = _scalar_number(parameters.get("frequency_detuning_in_mhz"))
+            detuning_hz = detuning_mhz * 1e6 if detuning_mhz is not None else None
+            fringe_tolerance = float(
+                self.policy.raw.get("analysis", {})
+                .get("06", {})
+                .get("max_fringe_detuning_error_fraction", 0.2)
+            )
+            fringes_by_qubit = (dataset_metrics or {}).get("ramsey_fringes_hz") or {}
             if not isinstance(fit_results, dict) or not fit_results:
                 failures.append("06 has no Ramsey fit_results.")
             else:
@@ -1277,7 +1565,7 @@ class SnapshotAnalyzer:
                         if _finite(points) and _finite(coverage) and float(coverage) > 0
                         else None
                     )
-                    usable = (
+                    fit_usable = (
                         decay is not None
                         and decay > 0
                         and relative is not None
@@ -1288,9 +1576,41 @@ class SnapshotAnalyzer:
                         and samples >= 2
                         and offset is not None
                     )
+                    # Operator instruction 2026-10-10: both fringe
+                    # frequencies must match the set detuning, so the
+                    # committed frequency is the one the next 06 confirms.
+                    fringes = fringes_by_qubit.get(name)
+                    fringes = (
+                        [float(value) for value in fringes]
+                        if isinstance(fringes, list)
+                        and len(fringes) == 2
+                        and all(_finite(value) for value in fringes)
+                        else None
+                    )
+                    fringe_matches = (
+                        fringes is not None
+                        and detuning_hz is not None
+                        and detuning_hz > 0
+                        and all(
+                            abs(value - detuning_hz) <= fringe_tolerance * detuning_hz
+                            for value in fringes
+                        )
+                    )
+                    usable = fit_usable and fringe_matches
                     ramsey_results[name] = {
                         "fit_successful": usable,
                         "statistics_ready": usable,
+                        "fringe_frequencies_hz": fringes,
+                        "detuning_hz": detuning_hz,
+                        "fringe_matches_detuning": fringe_matches,
+                        # A missed detuning still corrects the drive frequency
+                        # so the next 06 can confirm it; nothing else commits.
+                        "frequency_correction_ready": (
+                            not fringe_matches
+                            and offset is not None
+                            and fringes is not None
+                            and all(value > 0 for value in fringes)
+                        ),
                         "coherence_seconds": decay,
                         "coherence_error_seconds": error,
                         "relative_uncertainty": relative,
@@ -1303,14 +1623,32 @@ class SnapshotAnalyzer:
                             else None
                         ),
                     }
-                    if not usable:
+                    if not fit_usable:
                         failures.append(
                             f"{name} Ramsey fit is missing, uncertain, or under-covered."
+                        )
+                    if not fringe_matches:
+                        shown = (
+                            "/".join(f"{value / 1e6:.3g}" for value in fringes)
+                            if fringes is not None
+                            else "unavailable"
+                        )
+                        target = (
+                            f"{detuning_hz / 1e6:.3g}" if detuning_hz else "unknown"
+                        )
+                        failures.append(
+                            f"{name} Ramsey fringe frequencies {shown} MHz are not "
+                            f"within {fringe_tolerance:.0%} of the {target} MHz detuning."
                         )
             normalized = ramsey_results
         elif node_id == "06b":
             metrics_by_qubit = (dataset_metrics or {}).get("qubits", {})
             echo_results: dict[str, Any] = {}
+            # Operator instruction 2026-10-12: a clear echo decay passes at a
+            # lower R-squared when the readout is poor (q1: 0.88 at ~2 uV).
+            echo_min_r_squared = float(
+                self.policy.raw.get("analysis", {}).get("06b", {}).get("min_r_squared", 0.9)
+            )
             for name in targets or []:
                 metrics = metrics_by_qubit.get(name)
                 if not isinstance(metrics, dict) or metrics.get("error"):
@@ -1335,7 +1673,7 @@ class SnapshotAnalyzer:
                     and _finite(result["relative_uncertainty"])
                     and float(result["relative_uncertainty"]) < 0.25
                     and _finite(result["r_squared"])
-                    and float(result["r_squared"]) >= 0.9
+                    and float(result["r_squared"]) >= echo_min_r_squared
                     and _finite(result["coverage_lifetimes"])
                     and float(result["coverage_lifetimes"]) >= 3.5
                     and _finite(result["samples_per_lifetime"])
@@ -1381,18 +1719,51 @@ class SnapshotAnalyzer:
                     if not usable:
                         failures.append(f"{name} randomized-benchmarking fit failed.")
             normalized = rb_results
+        elif node_id in FLUX_NODES:
+            normalized, flux_failures = flux_fit_quality(
+                node_id, dataset_metrics or {}, list(targets or [])
+            )
+            failures.extend(flux_failures)
         elif node_id in {"05st", "06st_t2star", "06st_t2e"}:
             histo_num = data.get("initial_parameters", {}).get("histo_num")
             stats_results: dict[str, Any] = {}
             if histo_num != 100:
                 failures.append(f"{node_id} must contain exactly 100 repetitions.")
+            # 2026-10-13 (q1 06st_t2e #493): a lost instrument link ended the
+            # node after 3 of 100 repetitions and it still saved a "result".
+            completed = (dataset_metrics or {}).get("completed_iterations")
+            minimum = int(
+                self.policy.raw["analysis"].get("statistics", {}).get(
+                    "min_completed_iterations", 90
+                )
+            )
+            enough = isinstance(completed, int) and completed >= minimum
+            if not enough:
+                failures.append(
+                    f"{node_id} completed only {completed} of {histo_num} repetitions "
+                    f"(at least {minimum} required)."
+                )
+            summaries = (dataset_metrics or {}).get("protected_node_summaries") or {}
+            robust = (dataset_metrics or {}).get("robust_summaries") or {}
             for name in targets or []:
                 stats_results[name] = {
-                    "fit_successful": histo_num == 100,
+                    "fit_successful": histo_num == 100 and enough,
                     "histo_num": histo_num,
+                    "completed_iterations": completed,
                     "completion_rule": "validated_baselines_then_single_statistics_run",
                     "raw_iteration_refit_required": False,
                 }
+                # Operator choice 2026-10-13: a mean the failed single fits
+                # dominate (sigma > mu; q1 06st_t2e #494: 26481 +- 119514 us)
+                # keeps its status but is annotated with a robust refit.
+                summary = summaries.get(name) if isinstance(summaries, dict) else None
+                mu = summary.get("mu_us") if isinstance(summary, dict) else None
+                sigma = summary.get("sigma_us") if isinstance(summary, dict) else None
+                if _finite(mu) and _finite(sigma) and float(sigma) > abs(float(mu)):
+                    stats_results[name]["summary_robust"] = False
+                    entry = robust.get(name) if isinstance(robust, dict) else None
+                    if isinstance(entry, dict):
+                        stats_results[name]["robust_summary"] = entry
             normalized = stats_results
         return {"results": normalized, "failures": failures}
 
@@ -1579,7 +1950,10 @@ class SnapshotAnalyzer:
         data: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         if node_id in {"05st", "06st_t2star", "06st_t2e"}:
-            return self._statistics_metadata(node_id, data)
+            metadata = self._statistics_metadata(node_id, data)
+            metadata["completed_iterations"] = _completed_iterations(snapshot)
+            metadata["robust_summaries"] = _robust_statistics(snapshot, node_id)
+            return metadata
         if node_id == "02":
             return _broadband_metadata(data)
         dataset_path = snapshot / "ds.h5"
@@ -1593,6 +1967,13 @@ class SnapshotAnalyzer:
 
         if node_id == "07b":
             return self._iq_blob_morphology(dataset)
+        if node_id in FLUX_NODES:
+            return flux_dataset_metrics(
+                node_id,
+                dataset,
+                data,
+                self.policy.raw.get("analysis", {}).get(node_id, {}),
+            )
 
         transition_analysis: dict[str, Any] | None = None
         if node_id == "02c":
@@ -1802,7 +2183,24 @@ class SnapshotAnalyzer:
                         node_id,
                     )
                     decay_candidates.append(alternate_metrics)
-                metrics[name] = max(decay_candidates, key=_decay_metric_rank)
+                # Operator decision 2026-10-14: 07b always commits the rotation
+                # angle, so the decay sits on I. Keep I (or state) whenever it
+                # is acceptable; another quadrature is only a fallback.
+                min_r_squared = (
+                    float(self.policy.raw["analysis"]["06b"]["min_r_squared"])
+                    if node_id == "06b"
+                    else 0.9
+                )
+
+                def rank(candidate: dict[str, Any]) -> tuple[int, int, float, float]:
+                    return _decay_metric_rank(candidate, min_r_squared)
+
+                primary = decay_candidates[0]
+                metrics[name] = (
+                    primary
+                    if primary.get("signal") in {"I", "state"} and rank(primary)[0] == 1
+                    else max(decay_candidates, key=rank)
+                )
         result: dict[str, Any] = {"qubits": metrics}
         if transition_analysis is not None:
             for name, transition in transition_analysis.get("qubits", {}).items():
@@ -1966,7 +2364,9 @@ def _decay_trace_metrics(
     return result
 
 
-def _decay_metric_rank(metrics: dict[str, Any]) -> tuple[int, int, float, float]:
+def _decay_metric_rank(
+    metrics: dict[str, Any], min_r_squared: float = 0.9
+) -> tuple[int, int, float, float]:
     """Prefer an accepted physical decay, then fit quality and robust SNR."""
     if not isinstance(metrics, dict) or metrics.get("error"):
         return (-1, -1, float("-inf"), float("-inf"))
@@ -1982,7 +2382,7 @@ def _decay_metric_rank(metrics: dict[str, Any]) -> tuple[int, int, float, float]
         and _finite(relative)
         and 0 <= float(relative) < 0.25
         and _finite(r_squared)
-        and float(r_squared) >= 0.9
+        and float(r_squared) >= min_r_squared
         and _finite(coverage)
         and float(coverage) >= 3.5
         and _finite(samples)
@@ -2358,6 +2758,12 @@ _DIGEST_FIT_KEYS = (
     "EPC",
     "EPG",
     "recommended_statistics_max_wait_time_in_ns",
+    # Flux calibration (2026-10-08).
+    "classification",
+    "flux_tunable",
+    "idle_offset_v",
+    "flux_shift_v",
+    "flux_offset_v",
 )
 
 
@@ -2415,6 +2821,7 @@ def evidence_digest(analysis: dict[str, Any] | None) -> dict[str, Any]:
         "failure_reasons_by_target",
         "run_level_failure_reasons",
         "03a_stage",
+        "operator_notices",
     ):
         if key in analysis:
             result[key] = analysis[key]
@@ -2737,6 +3144,46 @@ def _scalar_number(value: Any) -> float | None:
     return None
 
 
+def _ramsey_fringe_frequencies(
+    snapshot: Path, data: dict[str, Any] | None
+) -> dict[str, list[float]]:
+    """Both fitted 06 fringe frequencies (detuning sign -1, +1) per qubit, in Hz.
+
+    `06_Ramsey.py` saves the oscillation fit per qubit as
+    ``./fit_results.<q>.raw_fit_results.h5`` with ``f`` in 1/ns.
+    """
+
+    import numpy as np
+
+    fits = (data or {}).get("fit_results")
+    if not isinstance(fits, dict):
+        return {}
+    root = snapshot.resolve()
+    fringes: dict[str, list[float]] = {}
+    for name, raw in fits.items():
+        reference = raw.get("raw_fit_results") if isinstance(raw, dict) else None
+        if not isinstance(reference, str) or not reference.startswith("./"):
+            continue
+        path = (snapshot / reference[2:]).resolve()
+        try:
+            path.relative_to(root)
+        except ValueError:
+            continue
+        if not path.is_file():
+            continue
+        try:
+            frequency = _load_xarray_dataset(path)["fit"].sel(fit_vals="f")
+            if "qubit" in frequency.dims:
+                frequency = frequency.sel(qubit=str(name))
+            if "sign" in frequency.dims:
+                frequency = frequency.sortby("sign")
+            values = np.asarray(frequency.values, dtype=float).ravel() * 1e9
+        except Exception:
+            continue
+        fringes[str(name)] = [float(value) for value in values]
+    return fringes
+
+
 def _resolve_snapshot_npz_references(snapshot: Path, value: Any) -> Any:
     """Resolve Qualibrate's local ``arrays.npz`` references without escaping a snapshot.
 
@@ -2784,3 +3231,259 @@ def _resolve_snapshot_npz_references(snapshot: Path, value: Any) -> Any:
         return archives[archive_path][key]
 
     return load(value)
+
+
+def _completed_iterations(snapshot: Path) -> int | None:
+    """Repetitions a statistics node actually finished (its `iteration` size)."""
+    try:
+        import xarray as xr
+
+        with xr.open_dataset(snapshot / "ds.h5") as dataset:
+            size = dataset.sizes.get("iteration")
+        return int(size) if size is not None else None
+    except Exception:
+        return None
+
+
+def _robust_statistics(
+    snapshot: Path, node_id: str | None = None
+) -> dict[str, dict[str, Any]]:
+    """Median and IQR of per-repetition exponential fits (operator 2026-10-13).
+
+    Each repetition is fitted on I, Q (and state, when present); the signal
+    with the larger decay amplitude counts, in either direction. Lifetimes in
+    the dataset's idle_time unit (us for the statistics nodes). 06st_t2star
+    fits a damped cosine instead: its Ramsey fringes are not a plain decay
+    (operator 2026-10-15).
+    """
+    try:
+        import numpy as np
+        import xarray as xr
+        from scipy.optimize import curve_fit
+    except Exception:  # pragma: no cover - optional analysis stack
+        return {}
+
+    def decay(x, amplitude, lifetime, offset):
+        return amplitude * np.exp(-x / lifetime) + offset
+
+    def ramsey(x, amplitude, lifetime, offset, frequency, phase):
+        return (
+            amplitude * np.exp(-x / lifetime) * np.cos(2 * np.pi * frequency * x + phase)
+            + offset
+        )
+
+    oscillating = node_id == "06st_t2star"
+    model = ramsey if oscillating else decay
+
+    def starts(times: Any, trace: Any) -> list[list[float]]:
+        if not oscillating:
+            return [[trace[0] - trace[-1], times.max() / 4, trace[-1]]]
+        # The strongest non-DC FFT line seeds the fringe frequency.
+        spectrum = np.abs(np.fft.rfft(trace - trace.mean()))
+        frequencies = np.fft.rfftfreq(times.size, float(np.median(np.diff(times))))
+        frequency = float(frequencies[1 + int(np.argmax(spectrum[1:]))]) if spectrum.size > 1 else 0.0
+        amplitude = float(trace.max() - trace.min()) / 2
+        return [
+            [amplitude, times.max() / 4, float(trace.mean()), frequency, phase]
+            for phase in (0.0, np.pi)
+        ]
+
+    # Operator choice 2026-10-13: drop poor single fits, then summarise.
+    min_r_squared, min_snr = _statistics_refit_floors()
+
+    out: dict[str, dict[str, Any]] = {}
+    try:
+        with xr.open_dataset(snapshot / "ds.h5") as dataset:
+            if "iteration" not in dataset.dims or "idle_time" not in dataset.coords:
+                return {}
+            times = np.asarray(dataset["idle_time"].values, dtype=float)
+            names = [str(q) for q in dataset["qubit"].values] if "qubit" in dataset.coords else []
+            variables = [v for v in ("state", "I", "Q") if v in dataset]
+            for index, name in enumerate(names):
+                lifetimes = []
+                kept: list[float] = []
+                total = int(dataset.sizes["iteration"])
+                for iteration in range(total):
+                    best = None
+                    best_quality = (0.0, 0.0)
+                    for variable in variables:
+                        trace = np.asarray(
+                            dataset[variable].isel(iteration=iteration, qubit=index).values,
+                            dtype=float,
+                        )
+                        params = None
+                        for p0 in starts(times, trace):
+                            try:
+                                with np.errstate(all="ignore"):
+                                    candidate, _ = curve_fit(
+                                        model, times, trace, p0=p0, maxfev=5000
+                                    )
+                            except Exception:
+                                continue
+                            if params is None or np.var(
+                                trace - model(times, *candidate)
+                            ) < np.var(trace - model(times, *params)):
+                                params = candidate
+                        if params is None:
+                            continue
+                        if not np.all(np.isfinite(params)) or params[1] <= 0:
+                            continue
+                        if best is None or abs(params[0]) > abs(best[0]):
+                            best = params
+                            residual = trace - model(times, *params)
+                            spread = float(np.var(trace))
+                            r_squared = (
+                                1.0 - float(np.var(residual)) / spread if spread > 0 else 0.0
+                            )
+                            noise = float(np.std(residual))
+                            snr = abs(float(params[0])) / noise if noise > 0 else 0.0
+                            best_quality = (r_squared, snr)
+                    if best is not None:
+                        lifetimes.append(float(best[1]))
+                        r_squared, snr = best_quality
+                        if (
+                            r_squared >= min_r_squared
+                            and snr >= min_snr
+                            # A lifetime beyond the sweep window is not measured
+                            # (q2 05st #504: one flat repetition fitted 753 us).
+                            and float(best[1]) <= float(times.max())
+                        ):
+                            kept.append(float(best[1]))
+                if lifetimes:
+                    q25, median, q75 = np.percentile(lifetimes, [25, 50, 75])
+                    out[name] = {
+                        "fits": len(lifetimes),
+                        "iterations": total,
+                        "median_us": float(median),
+                        "q25_us": float(q25),
+                        "q75_us": float(q75),
+                        "kept": len(kept),
+                        "kept_lifetimes_us": [round(value, 4) for value in kept],
+                        "filtered_mean_us": float(np.mean(kept)) if kept else None,
+                        "filtered_std_us": float(np.std(kept)) if kept else None,
+                        "min_r_squared": min_r_squared,
+                        "min_snr": min_snr,
+                        "model": "damped_cosine" if oscillating else "exponential",
+                    }
+    except Exception:
+        return {}
+    return out
+
+
+def _statistics_refit_floors() -> tuple[float, float]:
+    """R^2 and SNR floors for a single statistics repetition (policy, else defaults)."""
+    try:
+        from .config import Settings
+        from .policy import PolicyEngine
+
+        rules = PolicyEngine(Settings.load()).raw.get("analysis", {}).get("statistics", {})
+        return (
+            float(rules.get("refit_min_r_squared", 0.5)),
+            float(rules.get("refit_min_snr", 3.0)),
+        )
+    except Exception:  # pragma: no cover - tests and offline use
+        return 0.5, 3.0
+
+
+_STATISTICS_LABELS = {"05st": "T1", "06st_t2star": "T2*", "06st_t2e": "T2E"}
+_STATISTICS_RECORD_KEYS = {
+    "05st": ("T1", "T1_dev"),
+    "06st_t2star": ("T2ramsey", "T2ramsey_dev"),
+    "06st_t2e": ("T2", "T2_dev"),
+}
+_WORKING_LIFETIME_KEYS = {"T1", "T2echo", "T2ramsey"}
+
+
+def _filtered_statistics_plots(
+    folder: Path, snapshot_name: str, node_id: str, summaries: dict[str, Any]
+) -> list[str]:
+    """Redraw the node's histogram from the kept repetitions (operator 2026-10-13)."""
+    paths: list[str] = []
+    if not summaries:
+        return paths
+    try:
+        import matplotlib
+
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        import numpy as np
+    except Exception:  # pragma: no cover
+        return paths
+    folder.mkdir(parents=True, exist_ok=True)
+    label = _STATISTICS_LABELS.get(node_id, "lifetime")
+    for name, entry in summaries.items():
+        kept = entry.get("kept_lifetimes_us") if isinstance(entry, dict) else None
+        if not kept:
+            continue
+        values = np.asarray(kept, dtype=float)
+        mean, std = float(values.mean()), float(values.std())
+        figure, axis = plt.subplots(figsize=(4.2, 3.4))
+        counts, edges, _ = axis.hist(values, bins=20, color="skyblue", alpha=0.7)
+        if std > 0:
+            width = float(edges[1] - edges[0]) or 1.0
+            grid = np.linspace(values.min(), values.max(), 200)
+            axis.plot(
+                grid,
+                len(values) * width * np.exp(-0.5 * ((grid - mean) / std) ** 2)
+                / (std * np.sqrt(2 * np.pi)),
+                "r-",
+            )
+        axis.set_title(f"{name}  ({len(values)}/{entry.get('iterations')} kept)")
+        axis.set_xlabel(f"{label} (us)")
+        axis.set_ylabel("Counts")
+        axis.text(
+            0.04, 0.95, f"mu = {mean:.2f} +- {std:.2f} us", transform=axis.transAxes,
+            va="top", bbox={"boxstyle": "round", "facecolor": "white", "alpha": 0.8},
+        )
+        figure.suptitle(
+            f"{label} statistics, filtered (R2>={entry.get('min_r_squared')}, "
+            f"SNR>={entry.get('min_snr')})",
+            fontsize=9,
+        )
+        figure.tight_layout()
+        path = folder / f"{snapshot_name}-{node_id}-{name}-filtered.png"
+        figure.savefig(path, dpi=110)
+        plt.close(figure)
+        paths.append(str(path.resolve()))
+    return paths
+
+
+def _filtered_statistics_patch(
+    node_id: str, patch: list[dict[str, Any]], summaries: dict[str, Any]
+) -> tuple[list[dict[str, Any]], list[str]]:
+    """The statistics record takes the filtered mean/std; working lifetimes stay.
+
+    Operator decision 2026-10-13: a statistics run reports the histogram of its
+    good repetitions. Its record keys (extras.T1/T1_dev, ...) take that mean and
+    spread; the working T1/T2echo/T2ramsey stay with the single 05 / 06 / 06b
+    fits that also set the thermal wait.
+    """
+    record, spread = _STATISTICS_RECORD_KEYS.get(node_id, (None, None))
+    kept: list[dict[str, Any]] = []
+    warnings: list[str] = []
+    for item in patch:
+        parts = str(item.get("path", "")).strip("/").split("/")
+        if len(parts) == 3 and parts[0] == "qubits" and parts[2] in _WORKING_LIFETIME_KEYS:
+            continue
+        if (
+            len(parts) == 4
+            and parts[0] == "qubits"
+            and parts[2] == "extras"
+            and parts[3] in {record, spread}
+        ):
+            entry = summaries.get(parts[1]) if isinstance(summaries, dict) else None
+            mean = entry.get("filtered_mean_us") if isinstance(entry, dict) else None
+            std = entry.get("filtered_std_us") if isinstance(entry, dict) else None
+            value = mean if parts[3] == record else std
+            if value is None or (parts[3] == spread and float(value) <= 0):
+                continue
+            item = {**item, "value": float(value) * 1e-6}
+        kept.append(item)
+    for name, entry in (summaries or {}).items():
+        if isinstance(entry, dict) and entry.get("filtered_mean_us") is not None:
+            warnings.append(
+                f"{name} {node_id} filtered summary: {entry['filtered_mean_us']:.4g} +- "
+                f"{entry['filtered_std_us']:.3g} us from {entry['kept']}/{entry['iterations']} "
+                "repetitions (poor R2/SNR fits dropped); the statistics record uses it."
+            )
+    return kept, warnings

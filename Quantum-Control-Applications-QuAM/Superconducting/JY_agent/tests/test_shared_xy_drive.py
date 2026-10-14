@@ -39,6 +39,10 @@ def chip_state(targets: list[str] = TARGETS) -> dict:
     for index, name in enumerate(targets):
         qubit = deepcopy(template)
         qubit["xy"]["intermediate_frequency"] = 20_000_000.0 * index
+        # Distinct readout IFs: equal ones would force 02 (rule 2026-10-07).
+        qubit["resonator"]["intermediate_frequency"] = (
+            float(qubit["resonator"]["intermediate_frequency"]) + 5_000_000.0 * index
+        )
         state["qubits"][name] = qubit
     state["active_qubit_names"] = list(targets)
     state["ports"] = {
@@ -123,10 +127,16 @@ def record_node(
 ) -> str:
     """One completed, analyzed run of `node_id` for a single qubit."""
 
+    parameters: dict = {"qubits": [qubit]}
+    if node_id == "03a":
+        # 2026-10-14: the first coarse run uses 1.0 on a shared XY line.
+        parameters["operation_amplitude_factor"] = (
+            1.0 if service.policy.shared_xy_drive_groups() else 0.01
+        )
     proposal = service.request_run(
         workflow["id"],
         node_id,
-        {"qubits": [qubit]},
+        parameters,
         f"{node_id} for {qubit}.",
         "unittest-agent",
         autonomy_lease_id=lease["id"],

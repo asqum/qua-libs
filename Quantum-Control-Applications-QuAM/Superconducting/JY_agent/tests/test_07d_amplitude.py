@@ -78,7 +78,7 @@ class Normalize07dAmplitudeTests(unittest.TestCase):
 
 
 class SinglePassDefaultKeysTests(unittest.TestCase):
-    """A 07d run on the old 1.99 sweep no longer counts toward single pass."""
+    """A 07d run on an old sweep (3.16 before 2026-10-13) no longer counts."""
 
     def test_run_on_old_default_is_eligible_again(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
@@ -98,7 +98,7 @@ class SinglePassDefaultKeysTests(unittest.TestCase):
             proposal = service.request_run(
                 workflow["id"], "07d", {"qubits": first}, "Group 1.", "unittest"
             )
-            for run_id, factor in (("old-sweep", 1.99),):
+            for run_id, factor in (("old-sweep", 3.16),):
                 service.db.execute(
                     """
                     INSERT INTO runs(
@@ -117,7 +117,7 @@ class SinglePassDefaultKeysTests(unittest.TestCase):
                 service._single_pass_measured_targets(workflow, "07d"), set()
             )
             service.request_run(
-                workflow["id"], "07d", {"qubits": first}, "Redo on 3.16.", "unittest"
+                workflow["id"], "07d", {"qubits": first}, "Redo on 1.41.", "unittest"
             )
             service.db.execute(
                 """
@@ -129,7 +129,7 @@ class SinglePassDefaultKeysTests(unittest.TestCase):
                 (
                     workflow["id"],
                     proposal["id"],
-                    json.dumps({"qubits": first, "max_amplitude_factor": 3.16}),
+                    json.dumps({"qubits": first, "max_amplitude_factor": 1.41}),
                 ),
             )
             with self.assertRaisesRegex(Exception, "runs once per target"):

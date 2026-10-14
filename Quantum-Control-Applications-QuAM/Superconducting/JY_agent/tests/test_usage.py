@@ -5,8 +5,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from jy_agent.approval_web import _usage_section
-from jy_agent.usage import attribute_usage, call_cost, load_calls, parse_time
+from datetime import datetime, timedelta
+
+from jy_agent.approval_web import TAIPEI_TIMEZONE, _usage_range, _usage_section
+from jy_agent.usage import attribute_usage, call_cost, chip_usage, load_calls, parse_time
 
 PRICING = {
     "cache_write_5m_multiplier": 1.25,
@@ -64,6 +66,17 @@ class UsageTests(unittest.TestCase):
         (root / "s.jsonl").write_text("\n".join(json.dumps(x) for x in lines), encoding="utf-8")
         return root
 
+    def test_streaming_line_keeps_final_output(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            lines = [
+                assistant("p1", "2026-10-02T11:00:00Z", output=7),
+                assistant("p1", "2026-10-02T11:00:03Z", ["Bash"], output=240),
+            ]
+            (Path(folder) / "agent.jsonl").write_text("\n".join(json.dumps(x) for x in lines), encoding="utf-8")
+            (call,) = load_calls(Path(folder))
+            self.assertEqual(call.tokens["output"], 240)
+            self.assertEqual(call.tools, {"Bash"})
+
     def runs(self):
         return [
             {"id": "A", "node_id": "02x", "qubits": ["q1"], "started_at": "2026-10-02T11:10:00+00:00"},
@@ -94,22 +107,83 @@ class UsageTests(unittest.TestCase):
             expected = (10 * 4 + 1000 * 4 * 2.0 + 1000 * 0.2 + 100 * 20) / 1e6
             self.assertAlmostEqual(call_cost(call, PRICING), expected)
 
+    def workflows(self):
+        return [
+            # The chip's first workflow; closed at 10:30 before any call.
+            {"id": "w0", "created_at": "2026-10-02T10:00:00Z", "updated_at": "2026-10-02T10:30:00Z", "status": "stopped", "device_key": "chipA"},
+            # Still open, so it runs until the next workflow is created.
+            {"id": "w1", "created_at": "2026-10-02T10:59:00Z", "updated_at": "2026-10-02T11:00:00Z", "status": "recovery_required", "device_key": "chipA"},
+            # Another chip from 11:25 on: m8 is not chip A's.
+            {"id": "w2", "created_at": "2026-10-02T11:25:00Z", "updated_at": "2026-10-02T11:26:00Z", "status": "active", "device_key": "chipB"},
+        ]
+
+    def test_chip_usage_follows_workflow_windows(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            calls = load_calls(self.transcript(folder))
+            result = chip_usage(calls, self.workflows(), {"w1": self.runs()}, PRICING, "chipA")
+            self.assertEqual(result["chip_started_at"], "2026-10-02T10:00:00+00:00")
+            self.assertEqual(result["workflows"], 2)
+            self.assertEqual([row["run_id"] for row in result["runs"]], ["A", "B"])
+            self.assertEqual(result["total"]["calls"], 7)  # m1-m7; m8 is chip B, m0 before
+            self.assertEqual(result["conversation"]["calls"], 0)
+            self.assertEqual(result["days"]["2026-10-02"]["calls"], 7)
+            self.assertEqual(result["all_usage"]["total"]["calls"], 9)
+            self.assertEqual(result["all_usage"]["conversation"]["calls"], 2)  # m0, m8
+
+    def test_chip_usage_range_and_session(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            calls = load_calls(self.transcript(folder))
+            ranged = chip_usage(
+                calls, self.workflows(), {"w1": self.runs()}, PRICING, "chipA",
+                parse_time("2026-10-02T11:15:00Z"), parse_time("2026-10-02T12:00:00Z"),
+            )
+            # Run A started before the range and had no call inside it.
+            self.assertEqual([row["run_id"] for row in ranged["runs"]], ["B"])
+            self.assertEqual(ranged["total"]["calls"], 1)
+            self.assertEqual(ranged["all_usage"]["total"]["calls"], 2)
+            session = chip_usage(
+                calls, self.workflows(), {"w1": self.runs()}, PRICING, "chipA",
+                only_workflow="w0",
+            )
+            self.assertEqual(session["total"]["calls"], 0)
+            self.assertEqual(session["runs"], [])
+
+    def test_range_presets(self) -> None:
+        now = datetime(2026, 10, 14, 15, 30, tzinfo=TAIPEI_TIMEZONE)
+        self.assertEqual(_usage_range({}, now)[:3], ("chip", None, None))
+        preset, start, end, _ = _usage_range({"range": "month"}, now)
+        self.assertEqual(start, datetime(2026, 10, 1, tzinfo=TAIPEI_TIMEZONE))
+        preset, start, end, error = _usage_range({"from": "2026-10-13T08:00", "to": "2026-10-13T09:00"}, now)
+        self.assertEqual(preset, "custom")
+        self.assertEqual(end - start, timedelta(minutes=61))
+        self.assertEqual(_usage_range({"from": "2026-10-13T09:00", "to": "2026-10-13T08:00"}, now)[3], "order")
+        self.assertEqual(_usage_range({"from": "yesterday"}, now)[3], "time")
+
     def test_page_renders(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
             root = self.transcript(folder)
+            test = self
 
             class Service:
-                def workflow_usage(self, workflow_id):
+                def chip_usage(self, session_id, start=None, end=None, session_only=False, day_zone=None):
                     calls = load_calls(root)
-                    result = attribute_usage(
-                        calls, UsageTests().runs(), PRICING, parse_time("2026-10-02T10:59:00Z")
-                    )
-                    return {**result, "pricing": PRICING, "transcript_dir": str(root)}
+                    args = (calls, test.workflows(), {"w1": test.runs()}, PRICING, "chipA")
+                    return {
+                        "chip_name": "chipA",
+                        "overall": chip_usage(*args, day_zone=day_zone),
+                        "range": chip_usage(*args, start, end, day_zone=day_zone),
+                        "pricing": PRICING,
+                        "transcript_dir": str(root),
+                    }
 
-            html = _usage_section(Service(), "wf", "zh-Hant")
+            html = _usage_section(Service(), "s", "zh-Hant", {"range": "chip"})
             self.assertIn("Opus 5.5", html)
             self.assertIn("02c", html)
             self.assertIn("估計總費用", html)
+            self.assertIn("晶片 chipA", html)
+            self.assertIn("2026-10-02 · 2 個實驗", html)
+            self.assertIn("此時段全部用量", html)
+            self.assertIn("19:10:00", html)  # run A in Taipei time
 
 
 if __name__ == "__main__":

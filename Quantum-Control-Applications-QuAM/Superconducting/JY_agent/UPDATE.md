@@ -1,5 +1,115 @@
 # Update log / 更新紀錄
 
+## 2026-10-14
+
+- 04 拉長 gate 的上限：共用 XY 線 1000 → 400 ns；私有線維持 100 ns。
+- 03a 的 `operation_amplitude_factor` 上限依 XY 接線決定：共用線最大 1.0，第一次
+  800 MHz coarse 用 1.0；私有線（可 multiplex）最大 0.05，第一次 coarse 用 0.01。
+  03a 預設 saturation 長度 50000 → 20000 ns。
+- 從頭量測：目前晶片沒有任何 JY 量測紀錄的 qubit（例如從別的晶片複製的 state），
+  第一次量測前須先套用 `jy_request_fresh_qubit_defaults`：清空 extras；T1、
+  T2ramsey、T2echo = 100 µs；anharmonicity = 200 MHz；saturation 0.5／20000 ns；
+  readout 長度與 depletion 2000 ns；readout 判別值歸零、confusion matrix 設為單位
+  矩陣；z offset 與 quad term 歸零；x180 = 0.05、x90 = 0.025、DRAG 歸零；gate 長度
+  共用線 400 ns、私有線 40 ns。有紀錄的 qubit 不受影響。
+
+- 04 gate-lengthening cap: shared XY line 1000 -> 400 ns; private stays 100 ns.
+- The 03a `operation_amplitude_factor` cap follows the XY wiring: a shared line
+  may go to 1.0 and its first 800 MHz coarse run uses 1.0; a private
+  (multiplexable) line stays at or below 0.05 and its first coarse run uses
+  0.01. The 03a default saturation length is 20000 ns (was 50000).
+- Measuring from scratch: a qubit with no JY run on the current chip (for
+  example a state copied from another chip) needs
+  `jy_request_fresh_qubit_defaults` before its first run. The commit empties
+  extras and sets T1/T2ramsey/T2echo to 100 us, anharmonicity to 200 MHz,
+  saturation to 0.5 / 20000 ns, readout length and depletion to 2000 ns, the
+  readout discrimination to zero with an identity confusion matrix, the z
+  offsets and quad term to 0, x180 to 0.05 and x90 to 0.025 with DRAG terms 0,
+  and the gate to 400 ns (shared line) or 40 ns (private line). Qubits with a
+  record keep their state.
+
+- Token 用量頁改為統計整顆晶片：最上方是晶片開始時間（第一個 workflow 建立時）
+  與所有 workflow 的總用量，分成實驗、量測前準備、程式開發、對話。可選整個晶片、
+  本 session、今天、近 7 天、本月或自訂起迄（台北時間）；另列此時段全部用量
+  （含其他晶片與 workflow 之間的工作）。實驗依日期分組，每列為開始時間、節點、
+  qubits、模型、總 token（點開看拆分）、output 與估計費用；繼承的 run 不列出。
+
+- Token usage now covers the whole chip: its start time (first workflow) and the
+  total across all its workflows at the top, split into experiments, before-run,
+  development, and conversation. Pick the whole chip, this session, today, the
+  last 7 days, this month, or a custom from/to (Taipei time); All usage in range
+  also counts other chips and work between workflows. Experiments are grouped by
+  date with start time, node, qubits, model, total tokens (click for the split),
+  output, and estimated cost; inherited runs are not listed.
+
+## 2026-10-13
+
+- 校正順序改為 `02 → 02x → 02c → 02a → 02b → 03a → 03b → 04 → 07d → 07b → 05 →
+  06 → 06a → 06b → 10a → 05st → 06st_t2star → 06st_t2e`。新增選用的 `02`
+  寬頻共振腔掃描（02x 之前）；`07d` readout 頻率／長度／功率優化緊接在 `07b`
+  之前；`05` 移到 `07b` 之後，以優化後的 readout 量 T1。
+- 新增 flux 校正 `02b`（02a 後）、`03b`（03a 後）與選用的 `06a`（06 後），只在
+  核准頁選「是」時執行；有 qubit 共用 Z output 時無法選。
+- 共用 XY drive output 的晶片從 `03a` 起一次只量一顆 qubit，跑完整個後段再換下
+  一顆，且不能選 multiplex；只有 03a 找不到線或 04 沒有 pi pulse 才提早結束該
+  qubit。每個節點前以 `jy_request_xy_lo_plan` 規劃 drive LO（可行時共用一個
+  100 MHz 格點 LO）。
+- `04` 若在最長 gate 與滿幅仍看不到 Rabi，可把 qubit 送回 `03a` 找另一條線，
+  每顆最多 3 次。`04` 每次最多 5 顆、`07d` 最多 4 顆。
+- 自動量測核准頁新增選項：起點（依此晶片最近 workflow 的晶片歷史）、選用節點
+  （02、06a、05st、06st_t2star、06st_t2e）、從 03a 起 per-qubit 或 multiplex、
+  是否做 flux 校正；先按預覽，再勾選同意並輸入核准碼。
+- Dashboard 新增 Token 用量與使用說明分頁（共五個分頁）。Token 用量只讀本機
+  Claude Code 對話紀錄；使用說明附各節點範例圖。實驗結果頁最上方新增晶片歷史，
+  列出此晶片跨 workflow 的成功結果，並在 `runtime/chip_history/` 保留關機後仍可
+  開啟的靜態副本。
+- Lease 只在 `snapshot_missing`、`state_hash_conflict`、`hardware_lock_anomaly`
+  時結束。接觸硬體前被拒絕的請求只拒絕並記錄；已登錄的 worker crash 保留 lease
+  並提示修正，其他 crash 暫停 lease，以 `恢復量測` 續跑。`needs_review` 的 run
+  仍 commit 其 `passing_targets`。第一次 run 因程式過大 submission timeout 時，
+  群組依序減半到單顆。
+- 新增 setup 工具：`jy_request_02x_probe_setup`（02x 探測功率餘裕、每顆 qubit
+  獨立的圖格與 QUA thread），以及 readout 長度正規化與 readout 振幅預算。
+- Active reset 資格門檻為 07b fidelity 0.80；07b 之後 active／thermal 兩組分開
+  量測。
+
+- The sequence is now `02 → 02x → 02c → 02a → 02b → 03a → 03b → 04 → 07d → 07b →
+  05 → 06 → 06a → 06b → 10a → 05st → 06st_t2star → 06st_t2e`. An optional `02`
+  broadband resonator survey runs before 02x; `07d` readout
+  frequency/duration/power optimization runs right before `07b`; `05` moved after
+  `07b` so T1 is measured on the optimized readout.
+- Flux calibration: `02b` (after 02a), `03b` (after 03a), and the optional `06a`
+  (after 06) run only when the lease page says yes; a Z output shared by two
+  qubits disables it.
+- On a chip with a shared XY drive output, every node from `03a` on measures one
+  qubit at a time through the whole tail before the next qubit, and multiplex is
+  not offered. A pass ends early only when 03a finds no line or 04 finds no pi
+  pulse. Before each node `jy_request_xy_lo_plan` places the drive LO (one shared
+  100 MHz-grid LO when possible).
+- `04` may send a qubit with no Rabi at full amplitude and the longest gate back
+  to `03a` to look for another line, at most 3 times per qubit. `04` runs at most
+  5 targets per run and `07d` at most 4.
+- The lease approval page now asks for the start node (from this chip's history),
+  optional nodes (02, 06a, 05st, 06st_t2star, 06st_t2e), per-qubit or multiplex
+  from 03a, and flux calibration; approval needs Preview, then the agree box and
+  the approval code.
+- The Dashboard gains Token usage and Guide tabs (five tabs in all). Token usage
+  reads only local Claude Code transcripts; Guide shows an example plot per node.
+  Experiment results now opens with the chip history -- successful results for
+  this chip across workflows -- with a static copy under `runtime/chip_history/`
+  that survives shutdown.
+- Only `snapshot_missing`, `state_hash_conflict`, and `hardware_lock_anomaly` end
+  the lease. Requests refused before the hardware are refused and recorded; a
+  registered worker crash keeps the lease with its remedy, and any other crash
+  pauses it until `Resume measurement`. A `needs_review` run still commits its
+  `passing_targets`. A first run that times out on submission because the
+  program is too large halves its group down to one target.
+- New setup tools: `jy_request_02x_probe_setup` (02x probe headroom, a plot cell
+  and QUA thread per qubit), plus readout-length normalization and the readout
+  amplitude budget.
+- Active-reset qualification uses 07b fidelity 0.80; after 07b the active and
+  thermal groups are measured separately.
+
 ## 2026-09-20
 
 - Dashboard 版面調整：暫停排程、繼續排程、結束自動授權與緊急停止 worker 從

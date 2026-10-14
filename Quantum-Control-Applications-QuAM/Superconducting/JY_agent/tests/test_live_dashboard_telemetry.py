@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import sys
 import tempfile
 import threading
@@ -152,7 +153,9 @@ class LiveDashboardTelemetryTests(unittest.TestCase):
                     view="approval",
                 )
             ).body.decode("utf-8")
-            self.assertIn(f"APPROVE {proposal_id}", approval)
+            # Operator request 2026-10-10: the code appears only after a preview.
+            self.assertIn('name="operation" value="preview"', approval)
+            self.assertNotIn(f"APPROVE {proposal_id}", approval)
             self.assertNotIn('name="operation" value="shutdown"', approval)
             self.assertNotIn("data-experiment-selector", approval)
 
@@ -242,12 +245,87 @@ class LiveDashboardTelemetryTests(unittest.TestCase):
             )
             body = response.body.decode("utf-8")
             self.assertIn("待核准動作", body)
-            self.assertIn(f"APPROVE {proposal_id}", body)
-            self.assertIn(
-                '<input id="confirmation" name="confirmation" type="text"',
-                body,
-            )
+            # Operator request 2026-10-10: choose, preview, then agree + code.
+            self.assertNotIn(f"APPROVE {proposal_id}", body)
+            self.assertNotIn('name="confirmation"', body)
             self.assertIn('name="drive_mode" value="per_qubit" required', body)
+
+            preview_body = urlencode(
+                {
+                    "operation": "preview",
+                    "proposal_id": proposal_id,
+                    "csrf_token": service.approval_csrf_token(proposal_id),
+                    "drive_mode": "multiplex",
+                }
+            ).encode("utf-8")
+            previewed = asyncio.run(
+                handle_session_dashboard(
+                    _request(
+                        f"/session/{session_id}/approval",
+                        {"session_id": session_id},
+                        method="POST",
+                        body=preview_body,
+                    ),
+                    service,
+                    view="approval",
+                )
+            ).body.decode("utf-8")
+            self.assertIn("此次量測會執行的實驗", previewed)
+            self.assertIn(f"APPROVE {proposal_id}", previewed)
+            self.assertIn('name="agree" value="yes" required', previewed)
+            self.assertIn('value="multiplex" required checked', previewed)
+            self.assertEqual(service.proposal(proposal_id)["status"], "pending")
+            digest = re.search(r'name="preview_digest" value="([0-9a-f]+)"', previewed).group(1)
+
+            without_agree = urlencode(
+                {
+                    "operation": "approve",
+                    "proposal_id": proposal_id,
+                    "csrf_token": service.approval_csrf_token(proposal_id),
+                    "confirmation": f"APPROVE {proposal_id}",
+                    "drive_mode": "multiplex",
+                    "preview_digest": digest,
+                }
+            ).encode("utf-8")
+            refused = asyncio.run(
+                handle_session_dashboard(
+                    _request(
+                        f"/session/{session_id}/approval",
+                        {"session_id": session_id},
+                        method="POST",
+                        body=without_agree,
+                    ),
+                    service,
+                    view="approval",
+                )
+            )
+            self.assertEqual(refused.status_code, 400)
+            self.assertEqual(service.proposal(proposal_id)["status"], "pending")
+            changed = urlencode(
+                {
+                    "operation": "approve",
+                    "proposal_id": proposal_id,
+                    "csrf_token": service.approval_csrf_token(proposal_id),
+                    "confirmation": f"APPROVE {proposal_id}",
+                    "drive_mode": "per_qubit",
+                    "preview_digest": digest,
+                    "agree": "yes",
+                }
+            ).encode("utf-8")
+            refused = asyncio.run(
+                handle_session_dashboard(
+                    _request(
+                        f"/session/{session_id}/approval",
+                        {"session_id": session_id},
+                        method="POST",
+                        body=changed,
+                    ),
+                    service,
+                    view="approval",
+                )
+            )
+            self.assertEqual(refused.status_code, 400)
+            self.assertIn("重新預覽", refused.body.decode("utf-8"))
 
             approval_body = urlencode(
                 {
@@ -258,6 +336,8 @@ class LiveDashboardTelemetryTests(unittest.TestCase):
                     # Operator request 2026-10-04: a lease needs the
                     # measurement-mode choice from the approval page.
                     "drive_mode": "multiplex",
+                    "preview_digest": digest,
+                    "agree": "yes",
                 }
             ).encode("utf-8")
             approved = asyncio.run(
@@ -434,11 +514,10 @@ class LiveDashboardTelemetryTests(unittest.TestCase):
                     service,
                 )
             )
-            self.assertEqual(legacy_approval.status_code, 303)
-            self.assertEqual(
-                legacy_approval.headers["location"],
-                f"/session/{first_session_id}/approval?lang=zh-Hant",
-            )
+            # Operator request 2026-10-10: a lease is approved only on the
+            # Dashboard approval page, after its preview.
+            self.assertEqual(legacy_approval.status_code, 400)
+            self.assertEqual(service.proposal(first["id"])["status"], "pending")
             service.stop_autonomy(
                 first_lease_id,
                 "unittest-agent",
@@ -531,7 +610,7 @@ class LiveDashboardTelemetryTests(unittest.TestCase):
                             "warnings": [],
                             "fit_quality": {"results": {}},
                             "dataset_metrics": {
-                                "qubits": {"q1": {"robust_snr": 20.0}}
+                                "qubits": {"q1": {"robust_snr": 12.0}}
                             },
                         }
                     ),
@@ -565,7 +644,7 @@ class LiveDashboardTelemetryTests(unittest.TestCase):
                             "warnings": [],
                             "fit_quality": {"results": {}},
                             "dataset_metrics": {
-                                "qubits": {"q1": {"robust_snr": 20.0}}
+                                "qubits": {"q1": {"robust_snr": 12.0}}
                             },
                         }
                     ),
@@ -763,6 +842,9 @@ class LiveDashboardTelemetryTests(unittest.TestCase):
                 )
 
             service = AgentService(settings)
+            # Statistics prerequisites only; the 2026-10-12 07b readout gate is
+            # covered in test_per_qubit_pass_rules.
+            service.policy.shared_xy_drive["statistics_readout_node"] = None
             workflow = start_test_workflow(service)
             service.db.execute(
                 "UPDATE workflows SET current_node = '05st' WHERE id = ?",

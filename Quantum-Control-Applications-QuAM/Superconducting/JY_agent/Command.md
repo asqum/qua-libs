@@ -48,6 +48,7 @@ one paragraph.
 | 使用者輸入 `已核准` / `Approved` | 下一則回覆第一行必須是 `已核准`，然後繼續作業。 / The next reply’s first line is exactly `已核准`, then continue. |
 | 等待 Dashboard 核准（run、state、lease）而對話暫停 / Waiting for Dashboard approval | 三行 list：`需要使用者做什麼`、`完成後回傳: 已核准`、結束量測提示 / Three-line list ending with `已核准` |
 | 儀器連線失敗、排程已暫停 / Instrument connectivity pause | 三行 list：`完成後回傳: 恢復量測` |
+| 未登錄的 worker crash 暫停 lease / Unrecognized worker crash paused the lease | 三行 list：`完成後回傳: 恢復量測`（同一 lease 續跑，不需重新核准） / Three-line list ending with `恢復量測`; the same lease resumes without a new approval |
 | 殘留流程／服務，無法進入 / Stale lifecycle blocks entry | 三行 list：`完成後回傳: 恢復` |
 | Ensure 回 `recovery_only`（硬體鎖隔離） / recovery_only lock quarantine | 三行 list：`完成後回傳: 恢復` |
 | 自動量測已被暫停 / Autonomy paused | 三行 list：`完成後回傳: 繼續 JY 自動量測` |
@@ -85,9 +86,9 @@ the Dashboard first.
 |---|---|---|
 | 對話仍在線，要全部關掉 / Agent turn is live | 直接輸入 `結束量測`；agent 會停 run、關 workflow 與服務。 / Send `結束量測`; the agent stops the run and services. | 不必先上網頁。 / Web-first is not required. |
 | 對話已暫停、AI 斷線、或只用手機 / Paused turn, disconnected AI, or phone-only | 先到 Dashboard 首頁輸入 `SHUTDOWN <session-id>` 結束量測；對話恢復後再輸入 `結束量測` 確認。 / Home page full shutdown first; then send `結束量測` to verify. | 只在暫停的對話打 `結束量測` 不會立刻關機。 / Typing it into a paused chat does not shut services down by itself. |
-| 只想停自動排程、保留網站 / Pause automation, keep site | `暫停 JY 自動量測` 或 Results 頁 Pause | 不是 `結束量測` |
-| 只想撤銷自動授權、保留網站 / End lease, keep site | `結束 JY 自動授權` 或 Results 頁 End automation | 不是 `結束量測` |
-| 只要立刻停 worker、保留網站 / Emergency-stop worker, keep site | `緊急停止 JY worker` 或 Results 頁 Emergency stop | 不是 `結束量測` |
+| 只想停自動排程、保留網站 / Pause automation, keep site | `暫停 JY 自動量測` 或首頁 Pause / Home Pause | 不是 `結束量測` |
+| 只想撤銷自動授權、保留網站 / End lease, keep site | `結束 JY 自動授權` 或首頁 End automation / Home End automation | 不是 `結束量測` |
+| 只要立刻停 worker、保留網站 / Emergency-stop worker, keep site | `緊急停止 JY worker` 或首頁 Emergency stop / Home Emergency stop | 不是 `結束量測` |
 | 進不去、殘留服務或 workflow / Stale state blocks entry | 輸入 `恢復` | 這是收尾殘留狀態，不是正常量測結束。 / Recovery, not a normal end. |
 | 關機後留下硬體鎖隔離 / Retained lock after shutdown | 量測電腦本機 operator console 現場確認；必要時再 `恢復` | 不能從手機 Dashboard 解鎖。 / Phone Dashboard cannot recover the lock. |
 
@@ -100,16 +101,32 @@ the Dashboard first.
 - Home：`結束量測並關閉所有 JY 服務`，需輸入頁面顯示的
   `SHUTDOWN <session-id>`，以及 Pause、Resume、End automation（保留網站）、
   Emergency stop worker（保留網站）。
-- Approval：核准待處理的 run、state change 或初始 bounded lease。
-- 實驗結果：結果摘要（每次實驗的成功 qubit 與結果圖縮圖），以及該次服務的
-  完整實驗下拉歷史。
+- Approval：核准待處理的 run、state change 或初始 bounded lease（lease 需先選擇
+  起點與選項並預覽）。
+- 實驗結果：最上方是此晶片跨 workflow 的成功結果（晶片歷史，關機後仍保留靜態
+  副本），其下是結果摘要（每次實驗的成功 qubit 與結果圖縮圖）與該次服務的完整
+  實驗下拉歷史。
+- Token 用量：最上方是此晶片的開始時間與所有 workflow 的總用量；可選整個晶片、
+  本 session、今天、近 7 天、本月或自訂起迄時段計算費用；實驗依日期分組，每列
+  有開始時間、token、模型與估計費用。只讀取本機 Claude Code 對話紀錄；
+  Codex／Cursor 用量不計入。
+- 使用說明：操作方式、量測順序與各節點的成功範例圖。
 
 - Home: full shutdown, protected by the displayed `SHUTDOWN <session-id>` text,
   plus Pause, Resume, End automation (keep site), and Emergency stop worker
   (keep site).
-- Approval: approves a pending run, state change, or initial bounded lease.
-- Experiment results: the result summary (successful qubits and plot thumbnails
-  per experiment) and the service-lifetime experiment history.
+- Approval: approves a pending run, state change, or initial bounded lease (a
+  lease needs its start node and options chosen and previewed first).
+- Experiment results: the chip history (successful results for this chip across
+  workflows; a static copy survives shutdown), then the result summary
+  (successful qubits and plot thumbnails per experiment) and the
+  service-lifetime experiment history.
+- Token usage: the chip's start time and its total across all workflows at the
+  top; a time range (whole chip, this session, today, last 7 days, this month, or
+  a custom from/to) for the cost of any period; experiments grouped by date, each
+  with start time, tokens, model, and estimated cost. Read only from local
+  Claude Code transcripts; Codex and Cursor usage is not counted.
+- Guide: how to operate JY, the measurement order, and an example plot per node.
 
 ## 一次性維護指令 / One-line maintenance commands
 

@@ -8,7 +8,7 @@ import shutil
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Iterable
+from typing import Any, Callable, Collection, Iterable
 
 from .util import atomic_write_json, exclusive_file_lock, sha256_file
 
@@ -240,6 +240,58 @@ def shared_xy_drive_groups(wiring: dict[str, Any]) -> dict[str, list[str]]:
     }
 
 
+def z_line_groups(wiring: dict[str, Any]) -> dict[str, list[str]]:
+    """Qubit names grouped by the Z (flux) output each one is wired to."""
+
+    qubits = wiring.get("wiring", wiring).get("qubits", {})
+    if not isinstance(qubits, dict):
+        return {}
+    groups: dict[str, list[str]] = {}
+    for name, item in qubits.items():
+        if not isinstance(item, dict):
+            continue
+        z = item.get("z")
+        output = z.get("opx_output") if isinstance(z, dict) else None
+        if not isinstance(output, str):
+            continue
+        groups.setdefault(output, []).append(str(name))
+    return {output: sorted(names) for output, names in groups.items()}
+
+
+def shared_z_line_groups(wiring: dict[str, Any]) -> dict[str, list[str]]:
+    """Only the Z outputs that more than one qubit is wired to.
+
+    Operator request 2026-10-08: a shared flux line cannot move one qubit
+    without moving the others, so any such output on the chip disables flux
+    calibration on the lease page.
+    """
+
+    return {
+        output: names
+        for output, names in z_line_groups(wiring).items()
+        if len(names) > 1
+    }
+
+
+def z_offset(qubit: dict[str, Any], key: str) -> float | None:
+    """A qubit's z offset, following QuAM's `#./other_key` references."""
+
+    z = qubit.get("z") if isinstance(qubit, dict) else None
+    if not isinstance(z, dict):
+        return None
+    value: Any = z.get(key)
+    seen = {key}
+    while isinstance(value, str) and value.startswith("#./"):
+        target = value[3:]
+        if target in seen:
+            return None
+        seen.add(target)
+        value = z.get(target)
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return float(value) if math.isfinite(float(value)) else None
+
+
 def channel_kind(qubit: dict[str, Any]) -> str:
     class_name = str(qubit.get("xy", {}).get("__class__", ""))
     if class_name.endswith("MWChannel"):
@@ -288,6 +340,104 @@ def bootstrap_patch(
     return patch, details
 
 
+def fresh_qubit_defaults_patch(
+    state: dict[str, Any],
+    qubits: list[str],
+    defaults: dict[str, Any],
+    shared_xy: Collection[str],
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Starting values for qubits measured from scratch (operator 2026-10-14).
+
+    Empties `extras`, writes the configured T1/T2/anharmonicity, saturation and
+    readout pulses, resets the readout discrimination and the flux offsets,
+    and sets the x180/x90 gate: amplitude, x90 at half of it, DRAG terms 0,
+    and a length that follows the XY wiring. Values held as `#` references are
+    left alone; they follow their target.
+    """
+
+    patch: list[dict[str, Any]] = []
+    details: dict[str, Any] = {}
+
+    def put(path: str, value: Any) -> None:
+        patch.append({"op": "add", "path": path, "value": value})
+
+    def numeric(value: Any) -> bool:
+        return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+    for name in qubits:
+        qubit = state["qubits"][name]
+        base = f"/qubits/{name}"
+        shared = name in shared_xy
+        gate_ns = int(defaults["x180_length_ns"]["shared_xy" if shared else "private_xy"])
+        x180_amplitude = float(defaults["x180_amplitude"])
+        put(f"{base}/extras", {})
+        put(f"{base}/T1", float(defaults["T1_s"]))
+        put(f"{base}/T2ramsey", float(defaults["T2ramsey_s"]))
+        put(f"{base}/T2echo", float(defaults["T2echo_s"]))
+        put(f"{base}/anharmonicity", float(defaults["anharmonicity_hz"]))
+        if "freq_vs_flux_01_quad_term" in qubit:
+            put(f"{base}/freq_vs_flux_01_quad_term", 0.0)
+        z = qubit.get("z")
+        if isinstance(z, dict):
+            for key in ("joint_offset", "independent_offset"):
+                if key in z and not isinstance(z[key], str):
+                    put(f"{base}/z/{key}", 0.0)
+        operations = qubit["xy"]["operations"]
+        x180 = operation_backing_name(qubit, "x180")
+        x90 = operation_backing_name(qubit, "x90")
+        old_length = operations[x180].get("length")
+        for op_name, operation in operations.items():
+            if not isinstance(operation, dict):
+                continue
+            lowered = str(op_name).lower()
+            length = operation.get("length")
+            if op_name == x180 or (
+                numeric(length)
+                and numeric(old_length)
+                and float(length) == float(old_length)
+                and not lowered.startswith(("ef_", "saturation"))
+            ):
+                put(f"{base}/xy/operations/{op_name}/length", gate_ns)
+        for op_name, amplitude in ((x180, x180_amplitude), (x90, x180_amplitude / 2)):
+            operation = operations[op_name]
+            if not isinstance(operation.get("amplitude"), str):
+                put(f"{base}/xy/operations/{op_name}/amplitude", amplitude)
+            for key in ("alpha", "detuning"):
+                if numeric(operation.get(key)):
+                    put(f"{base}/xy/operations/{op_name}/{key}", 0.0)
+        saturation = operations.get("saturation")
+        if isinstance(saturation, dict):
+            put(
+                f"{base}/xy/operations/saturation/amplitude",
+                float(defaults["saturation_amplitude"]),
+            )
+            put(
+                f"{base}/xy/operations/saturation/length",
+                int(defaults["saturation_length_ns"]),
+            )
+        resonator = qubit.get("resonator")
+        readout = (
+            (resonator.get("operations") or {}).get("readout")
+            if isinstance(resonator, dict)
+            else None
+        )
+        if isinstance(readout, dict):
+            rr = f"{base}/resonator"
+            put(f"{rr}/operations/readout/length", int(defaults["readout_length_ns"]))
+            put(f"{rr}/depletion_time", int(defaults["depletion_time_ns"]))
+            put(f"{rr}/operations/readout/integration_weights_angle", 0.0)
+            put(f"{rr}/operations/readout/threshold", 0.0)
+            put(f"{rr}/operations/readout/rus_exit_threshold", 0.0)
+            put(f"{rr}/confusion_matrix", [[1.0, 0.0], [0.0, 1.0]])
+        details[name] = {
+            "xy_line": "shared" if shared else "private",
+            "x180_length_ns": gate_ns,
+            "x180_amplitude": x180_amplitude,
+            "cleared_extras": sorted((qubit.get("extras") or {}).keys()),
+        }
+    return patch, details
+
+
 def drive_lo_recenter_patch(
     state: dict[str, Any],
     wiring: dict[str, Any],
@@ -300,6 +450,8 @@ def drive_lo_recenter_patch(
     allow_shared_output: bool = False,
     band_window: Callable[[Any], tuple[float, float] | None] | None = None,
     max_if_abs_hz: float | None = None,
+    park_out_of_range: bool = False,
+    focus_rf_hz: dict[str, float] | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Build XY LO/IF patches for 03a coarse-search placement.
 
@@ -309,7 +461,14 @@ def drive_lo_recenter_patch(
     port LO is one knob for all of them. `band_window` maps a port's band to
     the LO range that band allows; an LO outside it is refused, except for an
     explicit coarse-window shift, which is clamped to the edge so the 03a
-    search keeps moving instead of stalling."""
+    search keeps moving instead of stalling.
+
+    With `park_out_of_range` (operator instruction 2026-10-12) a companion the
+    new LO cannot reach within `max_if_abs_hz` is parked at that limit instead
+    of refusing the move: a per-qubit pass never plays it, and the XY LO plan
+    puts it back from `extras.idle_freq` when its own turn comes.
+    `focus_rf_hz` gives a selected qubit's real RF when its own IF is parked,
+    so its coarse window is centred where it belongs."""
     if not qubits or len(set(qubits)) != len(qubits):
         raise StateError("LO recenter qubits must be a non-empty unique list")
     if (
@@ -387,6 +546,8 @@ def drive_lo_recenter_patch(
             raise StateError(f"{name} LO and IF must be numeric")
 
         old_rf = float(old_lo) + float(old_if)
+        if focus_rf_hz is not None and name in focus_rf_hz:
+            old_rf = float(focus_rf_hz[name])
         grid = float(lo_grid_hz)
         if target_rf_hz is not None:
             requested_rf = target_rf_hz[name]
@@ -445,6 +606,7 @@ def drive_lo_recenter_patch(
             clamped = True
 
         compensated: dict[str, float] = {}
+        parked: dict[str, float] = {}
         for companion in companions:
             companion_if_path = f"/qubits/{companion}/xy/intermediate_frequency"
             try:
@@ -459,7 +621,14 @@ def drive_lo_recenter_patch(
             ):
                 raise StateError(f"{companion} XY IF must be numeric")
             preserved = float(old_lo) + float(companion_if) - new_lo
-            if max_if_abs_hz is not None and abs(preserved) > float(max_if_abs_hz):
+            if (
+                max_if_abs_hz is not None
+                and abs(preserved) > float(max_if_abs_hz)
+                and park_out_of_range
+            ):
+                parked[companion] = float(old_lo) + float(companion_if)
+                preserved = math.copysign(float(max_if_abs_hz), preserved)
+            elif max_if_abs_hz is not None and abs(preserved) > float(max_if_abs_hz):
                 raise StateError(
                     f"Moving the shared LO to {new_lo / 1e9:g} GHz for {name} "
                     f"would put {companion} at an IF of {preserved / 1e6:g} MHz, "
@@ -484,6 +653,7 @@ def drive_lo_recenter_patch(
             "mode": mode,
             "shared_with": companions,
             "compensated_if_hz": compensated,
+            "parked_rf_hz": parked,
             "band_window_hz": list(window) if window is not None else None,
             "clamped_to_band": clamped,
             "xy_output": output_ref,

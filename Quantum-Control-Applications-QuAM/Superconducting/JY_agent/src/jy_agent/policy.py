@@ -14,12 +14,27 @@ from .state import (
     operation_backing_name,
     pointer_get,
     shared_xy_drive_groups,
+    shared_z_line_groups,
+    z_offset,
 )
 from .util import is_finite_number
 
 
 class PolicyError(ValueError):
     pass
+
+
+class _FactorCaps:
+    def __init__(self, shared: set[str], shared_cap: float, private_cap: float):
+        self._shared = shared
+        self._shared_cap = shared_cap
+        self._private_cap = private_cap
+
+    def shared(self, name: str) -> bool:
+        return name in self._shared
+
+    def __getitem__(self, name: str) -> float:
+        return self._shared_cap if name in self._shared else self._private_cap
 
 
 class PolicyEngine:
@@ -102,9 +117,21 @@ class PolicyEngine:
         if len(set(qubits)) != len(qubits):
             raise PolicyError("qubits must not contain duplicates")
 
+        if self.is_flux_calibration_node(node_id):
+            shared_z = self.shared_z_line_groups()
+            if shared_z:
+                described = "; ".join(
+                    f"{output} drives {', '.join(names)}"
+                    for output, names in sorted(shared_z.items())
+                )
+                raise PolicyError(
+                    f"{node_id} is flux calibration, which is disabled because "
+                    f"this chip shares Z lines ({described})."
+                )
         self._validate_common_sweep(merged)
         self._validate_detuning_wait_product(definition, merged)
         self._validate_node_specific(node_id, merged, state)
+        self._validate_runtime_estimate(node_id, merged, state)
         warnings: list[str] = []
         if definition["flux_behavior"] == "hardcoded_min":
             warnings.append(
@@ -115,7 +142,13 @@ class PolicyEngine:
             warnings.append(f"{node_id} is constrained to joint flux mode.")
         self._validate_shared_xy_drive_targets(node_id, qubits, drive_mode)
         if merged.get("multiplexed") is True and len(qubits) > 1:
-            warnings.extend(self.validate_multiplex_targets(qubits, state))
+            # 02 is the broadband search that assigns the readout IFs, so it
+            # may run while they are still unset (operator rule 2026-10-07).
+            warnings.extend(
+                self.validate_multiplex_targets(
+                    qubits, state, allow_unset_readout=node_id == "02"
+                )
+            )
         return merged, warnings
 
     def _validate_shared_xy_drive_targets(
@@ -164,6 +197,24 @@ class PolicyEngine:
         low, high = float(low) + float(margin), float(high) - float(margin)
         return (low, high) if low <= high else None
 
+    def spectroscopy_amplitude_factor_caps(self) -> "_FactorCaps":
+        """03a operation_amplitude_factor cap per qubit, from the XY wiring.
+
+        Operator instruction 2026-10-14: a qubit on a shared XY line gets
+        `max_operation_amplitude_factor_shared_xy`, every other one
+        `max_operation_amplitude_factor_private_xy`.
+        """
+
+        rules = self.raw["analysis"]["03a"]
+        shared = {
+            name for names in self.shared_xy_drive_groups().values() for name in names
+        }
+        return _FactorCaps(
+            shared,
+            float(rules["max_operation_amplitude_factor_shared_xy"]),
+            float(rules["max_operation_amplitude_factor_private_xy"]),
+        )
+
     def shared_xy_drive_groups(self) -> dict[str, list[str]]:
         """XY drive outputs that more than one qubit of this chip shares."""
 
@@ -200,6 +251,9 @@ class PolicyEngine:
         Operator request 2026-10-04: `drive_mode`, chosen on the lease
         approval page, overrides the wiring -- `per_qubit` applies the cap on
         any chip and `multiplex` lifts it. `None` keeps the wiring default.
+
+        Operator instruction 2026-10-08: `multiplex` cannot lift the cap on a
+        chip that shares an XY output; such a chip is always one at a time.
         """
 
         cap = self.shared_xy_drive.get("max_multiplex_targets")
@@ -207,18 +261,124 @@ class PolicyEngine:
             return None
         if not self.serializes_on_shared_xy_drive(node_id):
             return None
-        if drive_mode == "multiplex":
-            return None
-        if drive_mode == "per_qubit":
+        if drive_mode == "per_qubit" or self.shared_xy_drive_groups():
             return cap
-        return cap if self.shared_xy_drive_groups() else None
+        return None
+
+    def shared_z_line_groups(self) -> dict[str, list[str]]:
+        """Z (flux) outputs that more than one qubit of this chip shares."""
+
+        try:
+            wiring = load_state(self.settings.wiring_path)
+        except Exception:  # pragma: no cover - a missing wiring file is reported elsewhere
+            return {}
+        return shared_z_line_groups(wiring)
+
+    def flux_calibration_nodes(self) -> tuple[list[str], list[str]]:
+        """The flux nodes a lease-page yes enables, and the optional extras."""
+
+        config = self.raw.get("workflow_options", {}).get("flux_calibration") or {}
+        return (
+            [str(node) for node in config.get("nodes", [])],
+            [str(node) for node in config.get("optional", [])],
+        )
+
+    def is_flux_calibration_node(self, node_id: str) -> bool:
+        nodes, optional = self.flux_calibration_nodes()
+        return node_id in nodes or node_id in optional
+
+    def readout_frequencies_unset(
+        self,
+        qubits: list[str],
+        state: dict[str, Any] | None = None,
+    ) -> list[str]:
+        """Targets whose readout IF is zero or shared with a line-mate.
+
+        Operator rule 2026-10-07: such a chip has not had its resonators
+        assigned yet, so the workflow must start with the broadband 02 search.
+        """
+        active_state = state or load_state(self.settings.active_state)
+        wiring = load_state(self.settings.wiring_path)
+        wiring_qubits = wiring.get("wiring", wiring).get("qubits", {})
+        by_line: dict[tuple[str, float], list[str]] = {}
+        unset: set[str] = set()
+        for name in qubits:
+            qubit = active_state.get("qubits", {}).get(name, {})
+            frequency = (qubit.get("resonator") or {}).get("intermediate_frequency")
+            if not is_finite_number(frequency) or abs(float(frequency)) < 1.0:
+                unset.add(name)
+                continue
+            output = str(wiring_qubits.get(name, {}).get("rr", {}).get("opx_output"))
+            by_line.setdefault((output, float(frequency)), []).append(name)
+        for names in by_line.values():
+            if len(names) > 1:
+                unset.update(names)
+        return sorted(unset)
+
+    def readout_amplitude_budget_patch(
+        self,
+        qubits: list[str],
+        state: dict[str, Any] | None = None,
+    ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+        """Scale each over-budget readout line down to its target sum.
+
+        Operator choice 2026-10-07: a new chip's template amplitudes can sum
+        above `max_aggregate_readout_amplitude`. Instead of refusing entry, JY
+        scales every amplitude on such a line by one factor so the line sums to
+        `readout_amplitude_budget_target`; 02c later sets each amplitude from
+        its dressed limit. Lines already within the limit are left alone.
+        """
+        active_state = state or load_state(self.settings.active_state)
+        wiring = load_state(self.settings.wiring_path)
+        wiring_qubits = wiring.get("wiring", wiring).get("qubits", {})
+        limits = self.limits["multiplex"]
+        maximum = float(limits["max_aggregate_readout_amplitude"])
+        target = float(limits.get("readout_amplitude_budget_target", 0.9 * maximum))
+        lines: dict[str, list[tuple[str, str, float]]] = {}
+        for name in qubits:
+            qubit = active_state.get("qubits", {}).get(name, {})
+            operations = (qubit.get("resonator") or {}).get("operations", {})
+            key = "readout"
+            readout = operations.get(key)
+            if isinstance(readout, str) and readout.startswith("#./"):
+                key = readout[3:]
+                readout = operations.get(key)
+            amplitude = readout.get("amplitude") if isinstance(readout, dict) else None
+            if not is_finite_number(amplitude):
+                continue
+            output = str(wiring_qubits.get(name, {}).get("rr", {}).get("opx_output"))
+            path = f"/qubits/{name}/resonator/operations/{key}/amplitude"
+            lines.setdefault(output, []).append((name, path, float(amplitude)))
+        patch: list[dict[str, Any]] = []
+        details: dict[str, Any] = {}
+        for output, members in sorted(lines.items()):
+            total = sum(abs(amplitude) for _, _, amplitude in members)
+            if total <= maximum:
+                continue
+            factor = target / total
+            details[output] = {
+                "old_sum": total,
+                "new_sum": target,
+                "factor": factor,
+                "qubits": {name: amplitude * factor for name, _, amplitude in members},
+            }
+            for _name, path, amplitude in members:
+                patch.append({"op": "replace", "path": path, "value": amplitude * factor})
+        return patch, details
 
     def validate_multiplex_targets(
         self,
         qubits: list[str],
         state: dict[str, Any] | None = None,
+        *,
+        allow_unset_readout: bool = False,
+        allow_over_budget: bool = False,
     ) -> list[str]:
-        """Validate shared-readout topology before a multi-qubit run."""
+        """Validate shared-readout topology before a multi-qubit run.
+
+        ``allow_unset_readout`` skips the resonator-spacing check, for the
+        broadband 02 search that assigns those frequencies.
+        """
         limits = self.limits["multiplex"]
         if len(qubits) > int(limits["max_qubits_per_run"]):
             raise PolicyError(
@@ -278,7 +438,8 @@ class PolicyEngine:
                     f"maximum is {limits['max_qubits_per_readout_line']}"
                 )
             ordered = sorted(members, key=lambda item: item["frequency"])
-            for left, right in zip(ordered, ordered[1:]):
+            pairs = [] if allow_unset_readout else list(zip(ordered, ordered[1:]))
+            for left, right in pairs:
                 spacing = right["frequency"] - left["frequency"]
                 if spacing < float(limits["min_resonator_spacing_hz"]):
                     raise PolicyError(
@@ -286,7 +447,9 @@ class PolicyEngine:
                         f"{spacing / 1e6:g} MHz apart on {output}"
                     )
             aggregate = sum(item["amplitude"] for item in members)
-            if aggregate > float(limits["max_aggregate_readout_amplitude"]):
+            if not allow_over_budget and aggregate > float(
+                limits["max_aggregate_readout_amplitude"]
+            ):
                 raise PolicyError(
                     f"Aggregate readout amplitude {aggregate:g} on {output} "
                     f"exceeds {limits['max_aggregate_readout_amplitude']:g}"
@@ -390,6 +553,100 @@ class PolicyEngine:
                 "it is derived)"
             )
 
+    def estimate_run_seconds(
+        self, node_id: str, parameters: dict[str, Any], state: dict[str, Any]
+    ) -> float | None:
+        """Lower-bound hardware time of one run, or None without an estimator.
+
+        Counts shots times the pulses, readout and waits each shot plays; the
+        program, data transfer and analysis come on top. Qubits are measured
+        one after another unless the node runs them multiplexed.
+        """
+
+        if node_id not in {"02b", "03b", "06a"}:
+            return None
+        qubits = [state["qubits"][name] for name in parameters.get("qubits", [])]
+        if not qubits:
+            return None
+
+        def readout_ns(qubit: dict[str, Any]) -> float:
+            operations = (qubit.get("resonator") or {}).get("operations") or {}
+            readout = operations.get("readout")
+            if isinstance(readout, str) and readout.startswith("#./"):
+                readout = operations.get(readout[3:])
+            length = readout.get("length") if isinstance(readout, dict) else None
+            return float(length) if is_finite_number(length) else 2000.0
+
+        def depletion_ns(qubit: dict[str, Any]) -> float:
+            value = (qubit.get("resonator") or {}).get("depletion_time")
+            return float(value) if is_finite_number(value) else 2000.0
+
+        averages = int(parameters["num_averages"])
+        per_qubit: list[float] = []
+        for qubit in qubits:
+            shot = readout_ns(qubit) + depletion_ns(qubit)
+            if node_id == "02b":
+                span = float(parameters["frequency_span_in_mhz"])
+                step = float(parameters["frequency_step_in_mhz"])
+                frequencies = max(1, math.ceil(span / step))
+                settle = (qubit.get("z") or {}).get("settle_time")
+                settle_ns = float(settle) if is_finite_number(settle) else 0.0
+                per_flux = settle_ns + frequencies * shot
+                total_ns = averages * int(parameters["num_flux_points"]) * per_flux
+            elif node_id == "03b":
+                span = float(parameters["frequency_span_in_mhz"])
+                step = float(parameters["frequency_step_in_mhz"])
+                frequencies = max(1, math.ceil(span / step))
+                length = parameters.get("operation_len_in_ns")
+                if not is_finite_number(length):
+                    saturation = ((qubit.get("xy") or {}).get("operations") or {}).get(
+                        "saturation"
+                    )
+                    length = (
+                        saturation.get("length") if isinstance(saturation, dict) else None
+                    )
+                drive_ns = float(length) if is_finite_number(length) else 0.0
+                total_ns = (
+                    averages
+                    * frequencies
+                    * int(parameters["num_flux_points"])
+                    * (drive_ns + shot)
+                )
+            else:
+                span = float(parameters["flux_span"])
+                fluxes = math.floor(span / float(parameters["flux_step"]) + 1e-9) + 1
+                waits = range(
+                    int(parameters["min_wait_time_in_ns"]) // 4,
+                    int(parameters["max_wait_time_in_ns"]) // 4,
+                    max(1, int(parameters["wait_time_step_in_ns"]) // 4),
+                )
+                idle_ns = sum(4 * value for value in waits)
+                # Two state readouts per shot, plus the two x90 and gaps.
+                total_ns = averages * fluxes * (
+                    len(waits) * (2 * shot + 400.0) + idle_ns
+                )
+            per_qubit.append(total_ns * 1e-9)
+        if parameters.get("multiplexed") is True:
+            return max(per_qubit)
+        return sum(per_qubit)
+
+    def _validate_runtime_estimate(
+        self, node_id: str, parameters: dict[str, Any], state: dict[str, Any]
+    ) -> None:
+        """Operator instruction 2026-10-08: only statistics nodes run long."""
+
+        limit_minutes = self.limits.get("max_run_minutes")
+        if not is_finite_number(limit_minutes):
+            return
+        estimate = self.estimate_run_seconds(node_id, parameters, state)
+        if estimate is not None and estimate > float(limit_minutes) * 60:
+            raise PolicyError(
+                f"{node_id} would take at least {estimate / 60:.1f} min on the "
+                f"hardware; non-statistics runs must finish within "
+                f"{float(limit_minutes):g} min. Reduce averages, points or "
+                "targets per run."
+            )
+
     def _validate_common_sweep(self, parameters: dict[str, Any]) -> None:
         averages = parameters.get("num_averages")
         if averages is not None and averages > int(self.limits["max_num_averages"]):
@@ -436,7 +693,7 @@ class PolicyEngine:
                 raise PolicyError(
                     f"res_design_freq has {len(design)} entries but res_num is {expected}"
                 )
-        if node_id in {"02x", "02a", "02c"}:
+        if node_id in {"02x", "02a", "02c", "02b"}:
             span_mhz = float(parameters["frequency_span_in_mhz"])
             resonator_rules = self.raw.get("analysis", {}).get("resonator", {})
             max_span_mhz = float(resonator_rules.get("max_frequency_span_mhz", 60.0))
@@ -509,7 +766,15 @@ class PolicyEngine:
             span_hz = float(parameters["frequency_span_in_mhz"]) * 1e6
             limit = float(self.limits["qubit_if_abs_hz"])
             arbitrary_frequency = parameters.get("arbitrary_qubit_frequency_in_ghz")
+            factor_cap = self.spectroscopy_amplitude_factor_caps()
+            factor = float(parameters["operation_amplitude_factor"])
             for name in qubits:
+                if factor > factor_cap[name] + 1e-12:
+                    raise PolicyError(
+                        f"{name} 03a operation_amplitude_factor {factor:g} exceeds "
+                        f"{factor_cap[name]:g}, the cap for its "
+                        f"{'shared' if factor_cap.shared(name) else 'private'} XY line"
+                    )
                 qubit = state["qubits"][name]
                 if arbitrary_frequency is not None:
                     # 03a_Qubit_Spectroscopy.py computes
@@ -544,6 +809,112 @@ class PolicyEngine:
                 if driven > maximum:
                     raise PolicyError(
                         f"{name} spectroscopy waveform amplitude {driven:g} exceeds {maximum:g}"
+                    )
+
+        sweep = self.node_definition(node_id).get("flux_sweep")
+        if isinstance(sweep, dict):
+            # Operator limits 2026-10-08: 02b +-0.9 V, 03b +-0.4 V, each at
+            # most 100 flux points.
+            low = float(parameters[sweep["min_key"]])
+            high = float(parameters[sweep["max_key"]])
+            points = int(parameters[sweep["points_key"]])
+            limit = float(sweep["max_abs_v"])
+            if low >= high:
+                raise PolicyError(
+                    f"{sweep['min_key']} must be lower than {sweep['max_key']}"
+                )
+            if max(abs(low), abs(high)) > limit + 1e-12:
+                raise PolicyError(
+                    f"{node_id} flux sweep {low:g}..{high:g} V exceeds the "
+                    f"+-{limit:g} V policy limit"
+                )
+            if points < 5 or points > int(sweep["max_points"]):
+                raise PolicyError(
+                    f"{node_id} needs between 5 and {sweep['max_points']} flux "
+                    f"points; requested {points}"
+                )
+        if node_id in {"03b", "06a"}:
+            # These play the z `const` pulse scaled by sweep / amplitude; QUA
+            # accepts amplitude_scale only inside [-2, 2).
+            reach = (
+                max(
+                    abs(float(parameters["min_flux_offset_in_v"])),
+                    abs(float(parameters["max_flux_offset_in_v"])),
+                )
+                if node_id == "03b"
+                else float(parameters["flux_span"]) / 2
+            )
+            max_scale = float(
+                (self.limits.get("flux") or {}).get("max_amplitude_scale", 1.99)
+            )
+            for name in qubits:
+                const = (
+                    (state["qubits"][name].get("z") or {}).get("operations") or {}
+                ).get("const")
+                amplitude = const.get("amplitude") if isinstance(const, dict) else None
+                if not is_finite_number(amplitude) or float(amplitude) == 0:
+                    raise PolicyError(
+                        f"{name} has no z const pulse amplitude for the flux sweep"
+                    )
+                if reach / abs(float(amplitude)) > max_scale:
+                    raise PolicyError(
+                        f"{name} flux sweep of {reach:g} V needs amplitude_scale "
+                        f"{reach / abs(float(amplitude)):g} of the {float(amplitude):g} V "
+                        f"z const pulse; QUA allows at most {max_scale:g}"
+                    )
+        if node_id in {"02b", "03b", "06a"}:
+            for name in qubits:
+                if z_offset(state["qubits"][name], "joint_offset") is None:
+                    raise PolicyError(
+                        f"{name} has no numeric z joint_offset for flux calibration"
+                    )
+        if node_id == "03b":
+            span_hz = float(parameters["frequency_span_in_mhz"]) * 1e6
+            shift_hz = abs(float(parameters["frequency_shift_in_mhz"])) * 1e6
+            limit = float(self.limits["qubit_if_abs_hz"])
+            for name in qubits:
+                qubit = state["qubits"][name]
+                current_if = qubit["xy"]["intermediate_frequency"]
+                if not is_finite_number(current_if):
+                    raise PolicyError(f"{name} qubit IF is not numeric")
+                if abs(float(current_if)) + shift_hz + span_hz / 2 > limit:
+                    raise PolicyError(
+                        f"{name} qubit sweep exceeds ±{limit / 1e6:g} MHz IF"
+                    )
+                saturation = operation_amplitude(qubit, "saturation")
+                maximum = float(self.limits[channel_kind(qubit)]["max_wf_amplitude"])
+                driven = abs(saturation * float(parameters["operation_amplitude_factor"]))
+                if driven > maximum:
+                    raise PolicyError(
+                        f"{name} spectroscopy waveform amplitude {driven:g} exceeds {maximum:g}"
+                    )
+        if node_id == "06a":
+            span = float(parameters["flux_span"])
+            step = float(parameters["flux_step"])
+            if span > 0.2 + 1e-12:
+                raise PolicyError(
+                    f"06a flux_span {span:g} V exceeds the +-0.1 V policy limit"
+                )
+            if step > span:
+                raise PolicyError("06a flux_step must not exceed flux_span")
+            if math.floor(span / step + 1e-9) + 1 > 101:
+                raise PolicyError(
+                    f"06a flux sweep has {math.floor(span / step + 1e-9) + 1} "
+                    "points; the policy allows about 100"
+                )
+            minimum = parameters["min_wait_time_in_ns"]
+            maximum = parameters["max_wait_time_in_ns"]
+            wait_step = parameters["wait_time_step_in_ns"]
+            if minimum < 16 or minimum >= maximum:
+                raise PolicyError("06a wait-time range is invalid")
+            if any(value % 4 for value in (minimum, maximum, wait_step)):
+                raise PolicyError("06a wait times and step must be multiples of 4 ns")
+            if (maximum - minimum) // wait_step < 8:
+                raise PolicyError("06a wait sweep must contain at least 8 points")
+            for name in qubits:
+                if operation_amplitude(state["qubits"][name], "x180") == 0:
+                    raise PolicyError(
+                        f"{name} x180 amplitude is zero; calibrate it before 06a"
                     )
 
         if node_id == "04":
@@ -698,6 +1069,25 @@ class PolicyEngine:
                     )
                 continue
             if re.fullmatch(
+                r"/ports/mw_inputs/[^/]+/[0-9]+/[0-9]+/downconverter_frequency",
+                path,
+            ):
+                # Readout-LO recentre (2026-10-07): the input LO must equal
+                # an output LO written in the same patch on the same FEM.
+                controller, fem = path.split("/")[3:5]
+                paired = re.compile(
+                    rf"/ports/mw_outputs/{re.escape(controller)}/{fem}/[0-9]+/upconverter_frequency"
+                )
+                if not is_finite_number(value) or not any(
+                    paired.fullmatch(str(other.get("path"))) and other.get("value") == value
+                    for other in patch
+                ):
+                    raise PolicyError(
+                        f"{path} must equal the readout output LO written in "
+                        "the same patch"
+                    )
+                continue
+            if re.fullmatch(
                 r"/ports/mw_outputs/[^/]+/[0-9]+/[0-9]+/full_scale_power_dbm",
                 path,
             ):
@@ -766,4 +1156,30 @@ class PolicyEngine:
             elif path.endswith("/extras/readout_fidelity"):
                 if not is_finite_number(value) or not 0 <= float(value) <= 1:
                     raise PolicyError(f"Readout fidelity must be between 0 and 1 at {path}")
+            elif re.search(r"/z/(joint_offset|independent_offset|min_offset)$", path):
+                limit = float((self.limits.get("flux") or {}).get("max_offset_abs_v", 0.9))
+                if not is_finite_number(value) or abs(float(value)) > limit:
+                    raise PolicyError(
+                        f"Flux offset must be a number within +-{limit:g} V at {path}"
+                    )
+            elif path.endswith(("/phi0_voltage", "/phi0_current")):
+                if not is_finite_number(value) or float(value) <= 0:
+                    raise PolicyError(f"Flux period must be finite and positive at {path}")
+            elif path.endswith("/freq_vs_flux_01_quad_term"):
+                if not is_finite_number(value):
+                    raise PolicyError(f"Quadratic flux term must be numeric at {path}")
+            elif re.search(r"/extras/(sweetspot_freq|FluxPeriodV)$", path):
+                # 0.0 is the placeholder the extras prerequisite writes.
+                if not is_finite_number(value) or float(value) < 0:
+                    raise PolicyError(f"{path} must be finite and non-negative")
+            # Fresh-qubit defaults (operator 2026-10-14).
+            elif re.fullmatch(r"/qubits/q[0-9]+/extras", path):
+                if value != {}:
+                    raise PolicyError(f"{path} may only be emptied")
+            elif path.endswith("/anharmonicity"):
+                if not is_finite_number(value) or float(value) <= 0:
+                    raise PolicyError(f"Anharmonicity must be finite and positive at {path}")
+            elif path.endswith(("/alpha", "/detuning")):
+                if not is_finite_number(value):
+                    raise PolicyError(f"DRAG term must be numeric at {path}")
         return updated

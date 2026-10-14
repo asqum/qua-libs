@@ -50,6 +50,7 @@ def make_settings(root: Path) -> Settings:
         require_explicit_qubits=True,
         measurement_mode_entry_phrase="進入 JY 量測模式",
         measurement_mode_exit_phrase="退出 JY 量測模式",
+        fresh_qubit_defaults=False,
     )
 
 

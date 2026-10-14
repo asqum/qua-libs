@@ -29,7 +29,12 @@ workflow:
   # Operator request 2026-10-04: 02 (broadband survey) runs ahead of 02x. It and
   # the statistics nodes are optional; the operator ticks them on the lease
   # approval page (rules/policies.yaml `workflow_options.optional_nodes`).
-  sequence: ["02", "02x", "02c", "02a", "03a", "04", "05", "07d", "07b", "06", "06b", "10a", "05st", "06st_t2star", "06st_t2e"]
+  # Operator request 2026-10-08: flux calibration 02b (after 02a), 03b (after
+  # 03a) and the optional 06a (after 06) run only when the lease page says yes
+  # (rules/policies.yaml `workflow_options.flux_calibration`).
+  # Operator instruction 2026-10-12: 05 (T1) runs after 07b, on the optimised
+  # readout, for every qubit (replaces the 05 -> 07d/07b -> 05 deferral).
+  sequence: ["02", "02x", "02c", "02a", "02b", "03a", "03b", "04", "07d", "07b", "05", "06", "06a", "06b", "10a", "05st", "06st_t2star", "06st_t2e"]
   default_flux_point: "joint"
   require_explicit_qubits: true
 

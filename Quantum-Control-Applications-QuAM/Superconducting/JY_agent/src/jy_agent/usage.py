@@ -6,14 +6,21 @@ the server, so this reads the transcripts Claude Code keeps under
 ``~/.claude/projects/<project>/``. Only numbers are extracted; no conversation
 text leaves this module.
 
-One API call can appear on several transcript lines (one per content block)
-that repeat the same usage, so calls are de-duplicated by message id.
+One API call can appear on several transcript lines (one per content block),
+so calls are de-duplicated by message id. Sub-agent transcripts also write a
+streaming call before it finishes, with a partial output count (checked
+against ccusage 2026-10-14), so each token count keeps its largest value.
 Attribution, per call: a call that uses a JY MCP tool is measurement work and
 belongs to the JY run whose window [started_at, next run's started_at)
 contains it (before the first run: session setup). A call that edits files
 (Edit, Write, NotebookEdit) is development. Any other call (reading, waiting,
 answering) takes the label of the next labelled call in the same user turn, or
 the previous one; a turn with neither kind is conversation.
+
+Operator request 2026-10-14: the page covers the whole chip, not only the
+current session. A workflow owns the calls from its creation to its close or
+the next workflow's creation, whichever is first; ``chip_usage`` adds up the
+windows of every workflow on one chip, optionally cut to a time range.
 """
 
 from __future__ import annotations
@@ -21,13 +28,16 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone, tzinfo
 from pathlib import Path
 from typing import Any, Iterable
 
 DEVELOPMENT_TOOLS = frozenset({"Edit", "Write", "NotebookEdit", "MultiEdit"})
 JY_TOOL_PREFIX = "mcp__jy_bringup__"
 TOKEN_KEYS = ("input", "cache_write_5m", "cache_write_1h", "cache_read", "output")
+# A workflow in one of these states is still open; any other status closed it
+# at its updated_at.
+OPEN_WORKFLOW_STATUSES = frozenset({"active", "paused", "recovery_required"})
 
 _CACHE: dict[str, tuple[tuple[float, int], list["Call"]]] = {}
 
@@ -79,7 +89,7 @@ def load_calls(root: Path) -> list[Call]:
             if known is None:
                 calls[call.message_id] = call
             else:
-                known.tools |= call.tools
+                _absorb(known, call.tools, call.tokens)
     return sorted(calls.values(), key=lambda item: item.timestamp)
 
 
@@ -127,10 +137,17 @@ def _file_calls(path: Path) -> list[Call]:
                     tools=tools,
                 )
             else:
-                call.tools |= tools
+                _absorb(call, tools, _tokens(message["usage"]))
     calls = list(by_id.values())
     _CACHE[key] = (signature, calls)
     return calls
+
+
+def _absorb(call: Call, tools: set[str], tokens: dict[str, int]) -> None:
+    """Fold another line of the same API call into ``call``."""
+    call.tools |= tools
+    for key in TOKEN_KEYS:
+        call.tokens[key] = max(call.tokens[key], tokens[key])
 
 
 def _is_user_input(content: Any) -> bool:
@@ -180,6 +197,17 @@ def _empty() -> dict[str, Any]:
     return {"calls": 0, "cost_usd": 0.0, "unpriced_calls": 0, "models": {}, **{k: 0 for k in TOKEN_KEYS}}
 
 
+def total_tokens(bucket: dict[str, Any]) -> int:
+    return sum(int(bucket.get(key, 0)) for key in TOKEN_KEYS)
+
+
+def _merge(into: dict[str, Any], bucket: dict[str, Any]) -> None:
+    for key in ("calls", "cost_usd", "unpriced_calls", *TOKEN_KEYS):
+        into[key] += bucket[key]
+    for model, count in bucket["models"].items():
+        into["models"][model] = into["models"].get(model, 0) + count
+
+
 def _add(bucket: dict[str, Any], call: Call, cost: float | None) -> None:
     bucket["calls"] += 1
     for key in TOKEN_KEYS:
@@ -197,8 +225,13 @@ def attribute_usage(
     pricing: dict[str, Any],
     start: datetime,
     end: datetime | None = None,
+    labels: dict[str, str] | None = None,
 ) -> dict[str, Any]:
-    """Aggregate calls into per-run, per-node, setup and development buckets."""
+    """Aggregate calls in [start, end) into per-run, per-node, setup and development buckets.
+
+    ``labels`` lets a caller label every call once, so a turn cut by a window
+    boundary keeps the label it has in the whole transcript.
+    """
     ordered = sorted(
         (run for run in runs if parse_time(run.get("started_at")) is not None),
         key=lambda run: parse_time(run["started_at"]),
@@ -207,9 +240,10 @@ def attribute_usage(
     selected = [
         call
         for call in calls
-        if call.timestamp >= start and (end is None or call.timestamp <= end)
+        if call.timestamp >= start and (end is None or call.timestamp < end)
     ]
-    labels = _labels(selected)
+    if labels is None:
+        labels = _labels(selected)
     per_run = {str(run["id"]): _empty() for run in ordered}
     setup, development, conversation, total = _empty(), _empty(), _empty(), _empty()
     for call in selected:
@@ -243,10 +277,7 @@ def attribute_usage(
         )
         node_bucket = per_node.setdefault(node, {**_empty(), "runs": 0})
         node_bucket["runs"] += 1
-        for key in ("calls", "cost_usd", "unpriced_calls", *TOKEN_KEYS):
-            node_bucket[key] += bucket[key]
-        for model, count in bucket["models"].items():
-            node_bucket["models"][model] = node_bucket["models"].get(model, 0) + count
+        _merge(node_bucket, bucket)
     return {
         "runs": run_rows,
         "nodes": per_node,
@@ -255,6 +286,119 @@ def attribute_usage(
         "conversation": conversation,
         "total": total,
     }
+
+
+def workflow_windows(
+    workflows: Iterable[dict[str, Any]],
+) -> list[tuple[dict[str, Any], datetime, datetime | None]]:
+    """(workflow, start, end) per workflow; end None while it is still open.
+
+    Workflows of every chip are needed here: the next workflow's creation
+    closes the previous one even when it measures another chip.
+    """
+    ordered = sorted(
+        (item for item in workflows if parse_time(item.get("created_at")) is not None),
+        key=lambda item: parse_time(item["created_at"]),
+    )
+    windows = []
+    for position, workflow in enumerate(ordered):
+        start = parse_time(workflow["created_at"])
+        end = (
+            parse_time(ordered[position + 1]["created_at"])
+            if position + 1 < len(ordered)
+            else None
+        )
+        if workflow.get("status") not in OPEN_WORKFLOW_STATUSES:
+            closed = parse_time(workflow.get("updated_at"))
+            if closed is not None and closed >= start and (end is None or closed < end):
+                end = closed
+        windows.append((workflow, start, end))
+    return windows
+
+
+def chip_usage(
+    calls: Iterable[Call],
+    workflows: Iterable[dict[str, Any]],
+    runs_by_workflow: dict[str, list[dict[str, Any]]],
+    pricing: dict[str, Any],
+    device_key: str,
+    start: datetime | None = None,
+    end: datetime | None = None,
+    day_zone: tzinfo = timezone.utc,
+    only_workflow: str | None = None,
+) -> dict[str, Any]:
+    """Usage of one chip's workflows inside [start, end), plus every call in it.
+
+    ``only_workflow`` keeps a single workflow's window (the session view)
+    while the other workflows still decide where that window ends.
+
+    ``all_usage`` counts every call in the range whatever chip or workflow it
+    belongs to (operator choice 2026-10-14: workflows without a chip and work
+    between workflows appear only there). ``days`` holds each civil date in
+    ``day_zone`` with all of the chip's calls on that date.
+    """
+    calls = sorted(calls, key=lambda item: item.timestamp)
+    labels = _labels(calls)
+    in_range = [
+        call
+        for call in calls
+        if (start is None or call.timestamp >= start)
+        and (end is None or call.timestamp < end)
+    ]
+    everything = {key: _empty() for key in ("measurement", "development", "conversation", "total")}
+    for call in in_range:
+        cost = call_cost(call, pricing)
+        _add(everything["total"], call, cost)
+        _add(everything[labels[call.message_id]], call, cost)
+
+    chip_windows = [
+        window for window in workflow_windows(workflows)
+        if window[0].get("device_key") == device_key
+    ]
+    result: dict[str, Any] = {
+        "chip_started_at": chip_windows[0][1].isoformat() if chip_windows else None,
+        "workflows": len(chip_windows),
+        "runs": [],
+        "nodes": {},
+        "days": {},
+        "setup": _empty(),
+        "development": _empty(),
+        "conversation": _empty(),
+        "total": _empty(),
+        "all_usage": everything,
+    }
+    for workflow, opened, closed in chip_windows:
+        if only_workflow is not None and str(workflow["id"]) != only_workflow:
+            continue
+        low =opened if start is None else max(opened, start)
+        high = closed if end is None else (end if closed is None else min(closed, end))
+        if high is not None and high <= low:
+            continue
+        part = attribute_usage(
+            calls,
+            runs_by_workflow.get(str(workflow["id"]), []),
+            pricing,
+            low,
+            high,
+            labels=labels,
+        )
+        for row in part["runs"]:
+            begun = parse_time(row.get("started_at"))
+            started_inside = begun is not None and begun >= low and (high is None or begun < high)
+            if row["calls"] or started_inside:
+                result["runs"].append({**row, "workflow_id": str(workflow["id"])})
+        for node, bucket in part["nodes"].items():
+            node_bucket = result["nodes"].setdefault(node, {**_empty(), "runs": 0})
+            node_bucket["runs"] += bucket["runs"]
+            _merge(node_bucket, bucket)
+        for key in ("setup", "development", "conversation", "total"):
+            _merge(result[key], part[key])
+        for call in calls:
+            if call.timestamp >= low and (high is None or call.timestamp < high):
+                day = call.timestamp.astimezone(day_zone).date().isoformat()
+                _add(result["days"].setdefault(day, _empty()), call, call_cost(call, pricing))
+    result["runs"].sort(key=lambda row: parse_time(row["started_at"]))
+    return result
 
 
 def _labels(calls: list[Call]) -> dict[str, str]:

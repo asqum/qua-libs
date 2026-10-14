@@ -1106,6 +1106,29 @@ def jy_request_drive_lo_recenter(
 
 
 @mcp.tool()
+def jy_request_fresh_qubit_defaults(
+    workflow_id: str,
+    client_id: str,
+    autonomy_lease_id: str | None = None,
+    operation_id: str | None = None,
+) -> dict[str, Any]:
+    """Empty extras and write starting values for qubits this chip never measured."""
+    request = {
+        "workflow_id": workflow_id,
+        "client_id": client_id,
+        "autonomy_lease_id": autonomy_lease_id,
+    }
+    return _mutation(
+        "jy_request_fresh_qubit_defaults",
+        operation_id,
+        request,
+        lambda: service.request_fresh_qubit_defaults(
+            workflow_id, client_id, autonomy_lease_id
+        ),
+    )
+
+
+@mcp.tool()
 def jy_request_initial_03a_zero_if(
     workflow_id: str,
     client_id: str,
@@ -1123,6 +1146,239 @@ def jy_request_initial_03a_zero_if(
         operation_id,
         request,
         lambda: service.request_initial_03a_zero_if(
+            workflow_id, client_id, autonomy_lease_id
+        ),
+    )
+
+
+@mcp.tool()
+def jy_request_readout_full_scale_rescale(
+    workflow_id: str,
+    client_id: str,
+    autonomy_lease_id: str | None = None,
+    operation_id: str | None = None,
+) -> dict[str, Any]:
+    """Lower readout full scales, ignoring line members marked unmeasurable.
+
+    Each measurable member keeps its delivered power; the line's full scale
+    becomes the smallest integer within the pulse and line-sum limits. With
+    autonomy_lease_id it is delegated; apply it with
+    jy_autonomy_apply_setup_state.
+    """
+    request = {
+        "workflow_id": workflow_id,
+        "client_id": client_id,
+        "autonomy_lease_id": autonomy_lease_id,
+    }
+    return _mutation(
+        "jy_request_readout_full_scale_rescale",
+        operation_id,
+        request,
+        lambda: service.request_readout_full_scale_rescale(
+            workflow_id, client_id, autonomy_lease_id
+        ),
+    )
+
+
+@mcp.tool()
+def jy_request_readout_length_normalize(
+    workflow_id: str,
+    client_id: str,
+    autonomy_lease_id: str | None = None,
+    operation_id: str | None = None,
+) -> dict[str, Any]:
+    """Cap readout length and depletion time at the configured values.
+
+    For a new chip whose template readout pulses are long (e.g. 100 us), so
+    every multiplexed point waits for the longest one. With autonomy_lease_id
+    it is delegated; apply it with jy_autonomy_apply_setup_state.
+    """
+    request = {
+        "workflow_id": workflow_id,
+        "client_id": client_id,
+        "autonomy_lease_id": autonomy_lease_id,
+    }
+    return _mutation(
+        "jy_request_readout_length_normalize",
+        operation_id,
+        request,
+        lambda: service.request_readout_length_normalize(
+            workflow_id, client_id, autonomy_lease_id
+        ),
+    )
+
+
+@mcp.tool()
+def jy_request_02x_probe_setup(
+    workflow_id: str,
+    client_id: str,
+    autonomy_lease_id: str | None = None,
+    operation_id: str | None = None,
+) -> dict[str, Any]:
+    """Give each qubit its own QUA thread and grid cell; raise 02x probe headroom.
+
+    Elements sharing one QUA thread run on one core, so multiplexed readout
+    reported one element's response on every channel. 02x plays every line
+    tone at a fixed -10 dBm; on a low full scale the tones sum above 1 and
+    clip. Shared grid_location values make node plots overlap. Each qubit keeps its delivered readout power. With
+    autonomy_lease_id it is delegated; apply it with
+    jy_autonomy_apply_setup_state.
+    """
+    request = {
+        "workflow_id": workflow_id,
+        "client_id": client_id,
+        "autonomy_lease_id": autonomy_lease_id,
+    }
+    return _mutation(
+        "jy_request_02x_probe_setup",
+        operation_id,
+        request,
+        lambda: service.request_02x_probe_setup(
+            workflow_id, client_id, autonomy_lease_id
+        ),
+    )
+
+
+@mcp.tool()
+def jy_request_xy_lo_plan(
+    workflow_id: str,
+    client_id: str,
+    autonomy_lease_id: str | None = None,
+    operation_id: str | None = None,
+) -> dict[str, Any]:
+    """Place the shared XY LO for the qubit whose per-qubit pass is running.
+
+    Required before each node after 03a. One 100 MHz-grid LO is shared by
+    every measured qubit when it keeps them all within the common IF limit;
+    otherwise the qubit uses its own LO and qubits it cannot reach are parked.
+    The LO is recorded in extras.xy_lo_freq. With autonomy_lease_id it is
+    delegated; apply it with jy_autonomy_apply_setup_state.
+    """
+    request = {
+        "workflow_id": workflow_id,
+        "client_id": client_id,
+        "autonomy_lease_id": autonomy_lease_id,
+    }
+    return _mutation(
+        "jy_request_xy_lo_plan",
+        operation_id,
+        request,
+        lambda: service.request_xy_lo_plan(workflow_id, client_id, autonomy_lease_id),
+    )
+
+
+@mcp.tool()
+def jy_request_04_gate_time(
+    workflow_id: str,
+    length_ns: int,
+    client_id: str,
+    autonomy_lease_id: str | None = None,
+    operation_id: str | None = None,
+) -> dict[str, Any]:
+    """Lengthen the 04 qubit's XY gate when its amplitude sweep is maxed out.
+
+    Use when the Rabi signal changes but has not turned over and the last 04
+    swept to the amplitude limit. At most 1000 ns on a shared XY line, 100 ns
+    on a private one, in 4 ns steps. With autonomy_lease_id it is delegated;
+    apply it with jy_autonomy_apply_setup_state, then rerun 04.
+    """
+    request = {
+        "workflow_id": workflow_id,
+        "length_ns": length_ns,
+        "client_id": client_id,
+        "autonomy_lease_id": autonomy_lease_id,
+    }
+    return _mutation(
+        "jy_request_04_gate_time",
+        operation_id,
+        request,
+        lambda: service.request_04_gate_time(
+            workflow_id, length_ns, client_id, autonomy_lease_id
+        ),
+    )
+
+
+@mcp.tool()
+def jy_request_node_extras_prerequisites(
+    workflow_id: str,
+    client_id: str,
+    autonomy_lease_id: str | None = None,
+    operation_id: str | None = None,
+) -> dict[str, Any]:
+    """Add every missing extras key the remaining nodes record (0.0 placeholder).
+
+    Required setup when, e.g., a new chip lacks extras/bare_resonator_freq:
+    Qualibrate's state recorder raises KeyError on a missing key. With
+    autonomy_lease_id it is delegated; apply it with
+    jy_autonomy_apply_setup_state.
+    """
+    request = {
+        "workflow_id": workflow_id,
+        "client_id": client_id,
+        "autonomy_lease_id": autonomy_lease_id,
+    }
+    return _mutation(
+        "jy_request_node_extras_prerequisites",
+        operation_id,
+        request,
+        lambda: service.request_node_extras_prerequisites(
+            workflow_id, client_id, autonomy_lease_id
+        ),
+    )
+
+
+@mcp.tool()
+def jy_request_readout_lo_recenter(
+    workflow_id: str,
+    client_id: str,
+    autonomy_lease_id: str | None = None,
+    operation_id: str | None = None,
+) -> dict[str, Any]:
+    """Move readout LOs so 02 covers every operator design frequency.
+
+    Required setup at 02 when a design frequency lies outside the readout LO
+    +- max IF window. Assigned qubits keep their RF; the earlier 02 pass no
+    longer counts. With autonomy_lease_id it is delegated; apply it with
+    jy_autonomy_apply_setup_state.
+    """
+    request = {
+        "workflow_id": workflow_id,
+        "client_id": client_id,
+        "autonomy_lease_id": autonomy_lease_id,
+    }
+    return _mutation(
+        "jy_request_readout_lo_recenter",
+        operation_id,
+        request,
+        lambda: service.request_readout_lo_recenter(
+            workflow_id, client_id, autonomy_lease_id
+        ),
+    )
+
+
+@mcp.tool()
+def jy_request_readout_amplitude_budget(
+    workflow_id: str,
+    client_id: str,
+    autonomy_lease_id: str | None = None,
+    operation_id: str | None = None,
+) -> dict[str, Any]:
+    """Scale an over-budget readout line's amplitudes down to the target sum.
+
+    Required setup when a line sums above max_aggregate_readout_amplitude
+    (e.g. a new chip's template). With autonomy_lease_id it is delegated;
+    apply it with jy_autonomy_apply_setup_state.
+    """
+    request = {
+        "workflow_id": workflow_id,
+        "client_id": client_id,
+        "autonomy_lease_id": autonomy_lease_id,
+    }
+    return _mutation(
+        "jy_request_readout_amplitude_budget",
+        operation_id,
+        request,
+        lambda: service.request_readout_amplitude_budget(
             workflow_id, client_id, autonomy_lease_id
         ),
     )

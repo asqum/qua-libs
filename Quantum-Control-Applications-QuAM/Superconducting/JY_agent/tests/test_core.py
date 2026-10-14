@@ -151,6 +151,7 @@ def make_settings(temp_root: Path, state: dict | None = None) -> Settings:
         require_explicit_qubits=True,
         measurement_mode_entry_phrase=ENTRY_PHRASE,
         measurement_mode_exit_phrase=EXIT_PHRASE,
+        fresh_qubit_defaults=False,
     )
 
 
@@ -1296,9 +1297,9 @@ class AnalysisTests(unittest.TestCase):
     def test_07b_active_reset_qualifies_at_eighty_percent(self) -> None:
         """Operator instruction 2026-09-21: the floor is 0.80, not 0.85.
 
-        07b is single-pass, so compact-cloud morphology is no longer a gate at
-        this node and must not silently block active-reset qualification
-        either; only the fidelity floor and an active-reset run decide it.
+        Operator decision 2026-10-14: two Gaussian blobs are required too
+        (`active_reset_requires_morphology: true`), the same rule as state
+        discrimination.
         """
 
         with tempfile.TemporaryDirectory() as folder:
@@ -1327,8 +1328,8 @@ class AnalysisTests(unittest.TestCase):
 
             self.assertFalse(qualify(79.9, True)["active_reset_qualified"])
             self.assertTrue(qualify(80.0, True)["active_reset_qualified"])
-            # A tail no longer blocks qualification at this node.
-            self.assertTrue(qualify(84.0, False)["active_reset_qualified"])
+            # Without two Gaussian blobs there is no active reset.
+            self.assertFalse(qualify(84.0, False)["active_reset_qualified"])
 
             thermal = analyzer._fit_quality(
                 "07b",
@@ -1388,6 +1389,8 @@ class AnalysisTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             settings = make_settings(Path(folder), sample_state(0.2, 0.1))
             analyzer = SnapshotAnalyzer(settings, PolicyEngine(settings))
+            # With the floor configured to block (since 2026-10-13 it may not).
+            analyzer.policy.raw["analysis"]["07b"]["min_readout_fidelity_blocks_pass"] = True
             quality = analyzer._fit_quality(
                 "07b",
                 {"results": {"q1": {"fidelity": 60.3}}},
@@ -1398,7 +1401,44 @@ class AnalysisTests(unittest.TestCase):
             )
 
             self.assertFalse(quality["results"]["q1"]["fit_successful"])
-            self.assertTrue(any("below 0.7" in item for item in quality["failures"]))
+            self.assertTrue(any("below 0.8" in item for item in quality["failures"]))
+
+    def test_07b_always_passes_but_gates_discrimination(self) -> None:
+        """Operator decision 2026-10-14: the angle always commits."""
+
+        with tempfile.TemporaryDirectory() as folder:
+            settings = make_settings(Path(folder), sample_state(0.2, 0.1))
+            analyzer = SnapshotAnalyzer(settings, PolicyEngine(settings))
+
+            def judge(fidelity: float, morphology_pass: bool) -> dict:
+                return analyzer._fit_quality(
+                    "07b",
+                    {"results": {"q1": {"fidelity": fidelity, "angle": 0.3}}},
+                    dataset_metrics={
+                        "qubits": {
+                            "q1": {"morphology_pass": morphology_pass, "clouds": {}}
+                        }
+                    },
+                    targets=["q1"],
+                )
+
+            good = judge(85.0, True)
+            self.assertEqual(good["failures"], [])
+            self.assertTrue(good["results"]["q1"]["fit_successful"])
+            self.assertTrue(good["results"]["q1"]["state_discrimination_qualified"])
+            for fidelity, shape, reason in (
+                (55.0, True, "below 0.8"),
+                (90.0, False, "Gaussian blobs"),
+            ):
+                quality = judge(fidelity, shape)
+                result = quality["results"]["q1"]
+                self.assertEqual(quality["failures"], [])
+                self.assertTrue(result["fit_successful"])
+                self.assertEqual(result["angle"], 0.3)
+                self.assertFalse(result["state_discrimination_qualified"])
+                self.assertTrue(
+                    any(reason in item for item in result["state_discrimination_reasons"])
+                )
 
     def test_07b_sparse_tail_fails_p99_rule_without_axis_elongation(self) -> None:
         with tempfile.TemporaryDirectory() as folder:

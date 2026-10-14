@@ -66,6 +66,37 @@ autonomy:
   # the parameter; it must never resend the value that crashed. Every other
   # worker exception pauses the lease for the operator. Add an entry only
   # together with its `rules/experiences/<node>.md` lesson.
+  # 2026-10-07: the extras keys each node assigns inside Qualibrate's
+  # record_state_updates(), which reads the old value first and raises KeyError
+  # when the key is missing (02x on CRSQ_26009_die(-1,3): bare_resonator_freq).
+  # jy_request_node_extras_prerequisites adds every missing key for the nodes
+  # still ahead with a 0.0 placeholder that the measurement then replaces.
+  # Operator choice 2026-10-07: a new chip's template readout pulses (up to
+  # 100 us) made every multiplexed point wait for the longest one. Before the
+  # readout nodes, jy_request_readout_length_normalize caps the readout length
+  # and depletion time at these values; 07d later picks each qubit's length.
+  # Operator request 2026-10-13: 07d may pick readouts up to ~4000 ns, so the
+  # cap no longer trims them (depletion keeps its 2000 ns cap).
+  readout_length_normalize_ns: 4000
+  readout_depletion_normalize_ns: 2000
+  node_extras_prerequisites:
+    "02x": ["bare_resonator_freq"]
+    "02c": ["dressed_resonator_freq"]
+    "02a": ["dressed_resonator_freq"]
+    "02b": ["dressed_resonator_freq", "FluxPeriodV"]
+    "03a": ["idle_freq"]
+    "03b": ["idle_freq", "sweetspot_freq"]
+    "06": ["idle_freq"]
+    "06a": ["idle_freq", "sweetspot_freq"]
+    "07b": ["readout_fidelity"]
+    # 2026-10-12: 10a's record_state_updates reads the old EPG/EPC first
+    # (KeyError 'EPG' on 2026-10-04).
+    "10a": ["EPG", "EPC"]
+    # 2026-10-13: the statistics scripts' record_state_updates read the old
+    # value first (06st_t2e KeyError 'T2' on q1, run 6c686000).
+    "05st": ["T1", "T1_dev"]
+    "06st_t2star": ["T2ramsey", "T2ramsey_dev"]
+    "06st_t2e": ["T2", "T2_dev"]
   recoverable_worker_exceptions:
     - id: "02c_fractional_power_limits"
       nodes: ["02c"]
@@ -103,7 +134,8 @@ autonomy:
         is not a data-volume problem and goes to the operator.
 
 # Thermal reset is the safe default everywhere. Active reset is evidence-gated
-# per qubit by an active-reset 07b run with compact clouds and >= 85% fidelity.
+# per qubit by an active-reset 07b run with >= 80% fidelity (compact clouds only
+# while analysis."07b".active_reset_requires_morphology is true).
 # If active reset is used for statistics, all three lifetime baselines must be
 # repeated and accepted with active reset before any statistics node may start.
 reset_policy:
@@ -132,10 +164,77 @@ reset_policy:
 # out of attempts -- and only then returns to `serialize_from_node` for the next
 # qubit. That is what makes a shared LO safe: the drive LO only moves between
 # passes, never inside one.
+#
+# Operator instruction 2026-10-08: on such a chip `multiplex` is no longer
+# offered. The lease page disables it, the server refuses it, and a workflow
+# stored with `multiplex` from before this rule still measures one qubit at a
+# time, because a shared output always caps the tail at one target.
+#
+# Operator instruction 2026-10-12: the pass ends early only when a qubit has no
+# frequency (03a) or no pi pulse (04) -- `pass_prerequisite_nodes`. Any other
+# node that fails or is marked incomplete still hands the qubit to the next
+# node. 2026-10-12 later: 05 now runs after 07b in the sequence itself, so the
+# 05 -> 07d/07b -> 05 deferral is retired (`deferrable_nodes` is empty).
+#
+# Operator instruction 2026-10-12: every qubit records the drive LO it uses in
+# `extras.xy_lo_freq`. Before each node of a qubit's pass after 03a the LO is
+# placed by `jy_request_xy_lo_plan`: one shared LO for every measured qubit when
+# a 100 MHz-grid LO keeps all of them within `common_lo_max_if_abs_hz` (room
+# for a +-100 MHz scan inside the 400 MHz IF limit), preferring IFs at least
+# `lo_min_if_abs_hz` away from the LO leakage; otherwise the qubit's own LO.
+# A qubit the shared LO cannot reach is parked at the IF limit -- it is not
+# played -- and its real frequency stays in `extras.idle_freq`.
 shared_xy_drive:
   serialize_from_node: "03a"
   per_qubit_pass: true
   max_multiplex_targets: 1
+  pass_prerequisite_nodes: ["03a", "04"]
+  # Operator instruction 2026-10-12: a ticked statistics node runs only for a
+  # qubit whose single measurement passed (q1: 05 and 06b passed, 06 did not ->
+  # 05st and 06st_t2e run, 06st_t2star is skipped). 10a always runs.
+  statistics_sources: {"05st": "05", "06st_t2star": "06", "06st_t2e": "06b"}
+  # Operator choice 2026-10-12 (q1, 07b fidelity 55%): the statistics nodes fit
+  # 100 short runs each, which a failed discriminator cannot support -- 05st
+  # crashed with no usable fit. 2026-10-14: every node with
+  # use_state_discrimination may set it true only for qubits whose 07b in this
+  # workflow reached analysis."07b".min_readout_fidelity with two Gaussian
+  # blobs; the planner proposes false otherwise and the server refuses true.
+  statistics_readout_node: "07b"
+  deferrable_nodes: {}
+  common_lo_max_if_abs_hz: 300000000
+  lo_min_if_abs_hz: 20000000
+
+# Operator instruction 2026-10-14: a qubit is measured from scratch when the
+# chip config.toml names has no JY run of it -- usually a state folder copied
+# from another chip, whose old values would mislead every node. Before its
+# first run, jy_request_fresh_qubit_defaults empties its extras (measured
+# results) and writes these starting values. A qubit with any run on this chip
+# keeps its state. The gate length follows the XY wiring: a shared line (one
+# qubit per run) needs a long, weak-drive gate, a private one a short gate.
+fresh_qubit_defaults:
+  T1_s: 0.0001
+  T2ramsey_s: 0.0001
+  T2echo_s: 0.0001
+  anharmonicity_hz: 200000000
+  saturation_amplitude: 0.5
+  saturation_length_ns: 20000
+  readout_length_ns: 2000
+  depletion_time_ns: 2000
+  x180_amplitude: 0.05
+  x180_length_ns:
+    shared_xy: 400
+    private_xy: 40
+
+# Operator instruction 2026-10-12: the longest XY gate 04 may use when the
+# drive amplitude is already at its limit and the Rabi has not turned over. A
+# shared drive line needs long gates (it spreads its power over several
+# qubits); a private line keeps fast gates. Operator 2026-10-14: shared
+# limit 1000 -> 400 ns.
+xy_gate_length_ns:
+  min: 16
+  step: 4
+  shared_max: 400
+  private_max: 100
 
 # Operator request 2026-10-04. The autonomy-lease approval page lists these
 # nodes as checkboxes (ticked by default); an unticked node is left out of that
@@ -145,8 +244,18 @@ shared_xy_drive:
 # whole tail at a time; recommended when the wiring shares an XY output) or
 # `multiplex`. Automatic measurement starts only after that choice; the mode is
 # fixed for the rest of the workflow.
+#
+# Operator request 2026-10-08: the same page asks whether to calibrate flux.
+# `nodes` run only on a yes (02b after 02a, 03b after 03a); `optional` nodes are
+# extra ticks that need the yes too (06a after 06). A wiring file that routes
+# two qubits' Z lines to one OPX output disables the yes: a shared flux line
+# cannot move one qubit without moving its neighbours. Without a stored yes the
+# flux nodes are left out of every workflow, including conversational ones.
 workflow_options:
-  optional_nodes: ["02", "05st", "06st_t2star", "06st_t2e"]
+  optional_nodes: ["02", "06a", "05st", "06st_t2star", "06st_t2e"]
+  flux_calibration:
+    nodes: ["02b", "03b"]
+    optional: ["06a"]
 
 instrument_limits:
   qubit_if_abs_hz: 400000000
@@ -178,11 +287,25 @@ instrument_limits:
     3: {min: 6500000000, max: 10500000000}
   mw_band_edge_margin_hz: 100000000
   drive_lo_grid_hz: 100000000
+  # Operator instruction 2026-10-08: only the statistics nodes may run long.
+  # Every other node is meant to finish within this many minutes; nodes with a
+  # registered runtime estimate (02b, 03b, 06a) are refused before the hardware
+  # when the estimate is longer.
+  max_run_minutes: 10
+  flux:
+    # Operator limits 2026-10-08 (02b sweeps at most +-0.9 V). A committed
+    # joint/independent/min offset must stay inside the same range.
+    max_offset_abs_v: 0.9
+    # QUA amplitude_scale must stay inside [-2, 2); 03b/06a scale the z
+    # `const` pulse by sweep_value / const_amplitude.
+    max_amplitude_scale: 1.99
   multiplex:
     max_qubits_per_run: 10
-    max_qubits_per_readout_line: 5
+    max_qubits_per_readout_line: 12  # operator 2026-10-07 (was 5)
     min_resonator_spacing_hz: 1000000
     max_aggregate_readout_amplitude: 0.5
+    # Operator choice 2026-10-07: an over-budget line is scaled to this sum.
+    readout_amplitude_budget_target: 0.45
 
 analysis:
   resonator:
@@ -197,6 +320,49 @@ analysis:
   "02x":
     # Visible interior dip is enough; 02x only fine-tunes stored resonator RF.
     min_robust_snr: 3.0
+  # Operator criteria 2026-10-08 for the flux nodes. Each qubit of a 02b run is
+  # classified from the resonator trace (dip frequency per flux point):
+  #   tunable          -> its offsets commit and it continues to 03b/06a;
+  #   flat             -> no flux dependence; resolved, nothing commits, and it
+  #                       skips 03b and 06a;
+  #   avoided_crossing -> a coupler/neighbour crossing distorts the trace;
+  #                       resolved, nothing commits, it skips 03b and 06a, and
+  #                       the results page tells the operator to tune the
+  #                       neighbouring couplers' flux offsets;
+  #   failed           -> no visible dip or an unusable fit; retried as usual.
+  # A failed or skipped flux node never removes a qubit from 03a/04/... .
+  "02b":
+    # Median dip depth over flux points, in robust noise units.
+    min_dip_snr: 4.0
+    # Flat when the fitted cosine swings less than this many frequency steps
+    # (peak to peak) and the trace itself spans less than flat_max_span_steps.
+    flat_max_swing_steps: 3.0
+    flat_max_span_steps: 4.0
+    # A cosine fit explains the trace (inlier R^2) at least this well.
+    min_fit_r_squared: 0.8
+    # Avoided crossing: >= `crossing_min_points` consecutive flux points sit
+    # further than max(outlier_sigma x robust residual, crossing_min_steps
+    # steps, crossing_min_fraction_of_swing x cosine swing) from the fit.
+    crossing_outlier_sigma: 5.0
+    crossing_min_steps: 4.0
+    crossing_min_fraction_of_swing: 0.25
+    crossing_min_points: 2
+    # The fitted idle (sweet-spot) offset keeps clear of the sweep edges.
+    min_edge_fraction: 0.05
+  "03b":
+    # A flux point counts when its strongest spectral feature stands this far
+    # above the noise; the parabola needs enough of them.
+    min_peak_snr: 4.0
+    min_visible_fraction: 0.5
+    min_fit_r_squared: 0.7
+    # Sweet spot (parabola vertex) clear of the flux sweep edges.
+    min_edge_fraction: 0.05
+  "06a":
+    # Fitted flux offset stays inside this fraction of flux_span (0.4 keeps
+    # it clear of the outer 10% at each edge of the +-flux_span/2 window).
+    max_offset_fraction_of_span: 0.4
+    min_fit_r_squared: 0.5
+    min_valid_flux_fraction: 0.5
   "02a":
     # Visible interior dressed dip is enough after 02c has set the point.
     min_robust_snr: 3.0
@@ -208,23 +374,55 @@ analysis:
     min_robust_snr: 7.0
     noise_confirmation_num_averages: [500, 1000, 2000, 4000]
     max_noise_confirmation_num_averages: 4000
+    # Operator instruction 2026-10-12: a qubit that never ran 03b and shows no
+    # Rabi oscillation at all -- robust SNR below this after the 4000-average
+    # step, or a failed run at the longest allowed gate -- returns to 03a to
+    # look for another line, at most `max_returns_to_03a` times. A visible but
+    # noisy oscillation keeps being optimised at 04 instead.
+    no_rabi_max_robust_snr: 4.0
+    max_returns_to_03a: 3
+    # Operator instruction 2026-10-12 (q3: 32 ns gate swept to 4% of full
+    # scale): "no Rabi" sends a qubit back to 03a only from a run whose
+    # amplitude reached this fraction of max_wf_amplitude at the longest
+    # allowed XY gate (xy_gate_length_ns shared_max / private_max).
+    return_min_amplitude_fraction: 0.9
   "05":
     # q3/q4/q5 reference run: 25.06 / 52.19 / 62.50 at 2000 averages.
-    min_robust_snr: 25.0
+    # Operator instruction 2026-10-12: lowered from 25 to 15. Before 07d the
+    # CRSQ_26009_die(5,-1) readout gave clean T1 decays at SNR 8-12 that 8000
+    # averages could not lift to 25.
+    min_robust_snr: 15.0
     noise_confirmation_num_averages: [2000, 4000, 8000]
     max_noise_confirmation_num_averages: 8000
+  "06":
+    # Operator instruction 2026-10-10: a qubit passes 06 only when both
+    # Ramsey fringe frequencies (detuning signs -1 and +1) lie within this
+    # fraction of the set detuning (1 MHz -> +-200 kHz). A good fit that
+    # misses it commits only its frequency correction and is measured again.
+    max_fringe_detuning_error_fraction: 0.2
+  "06b":
+    # Operator instruction 2026-10-12: lowered from 0.9. On CRSQ_26009_die(5,-1)
+    # the poor readout gave clean echo decays at R^2 0.88 (q1, T2E 42-47 us).
+    min_r_squared: 0.8
   "07b":
-    min_readout_fidelity: 0.70
+    # Operator decision 2026-10-14: 07b is measured once and always passes, so
+    # its rotation angle and threshold commit and 05/06b see the decay on I.
+    # Fidelity >= min_readout_fidelity AND two separated Gaussian blobs
+    # (morphology) are what allow state discrimination (every later node) and
+    # active reset; otherwise the report says the readout is not usable for
+    # them. 0.70 -> 0.80 the same day, one floor for both.
+    min_readout_fidelity: 0.80
+    min_readout_fidelity_blocks_pass: false
+    morphology_blocks_pass: false
     # Operator instruction 2026-09-21: a thermal 07b result above this
     # fidelity earns one active-reset repeat, and that repeat qualifies the
     # qubit for active reset downstream. One number governs both, so the
     # trigger and the qualification floor are deliberately the same.
     active_reset_min_readout_fidelity: 0.80
     active_reset_trigger_fidelity: 0.80
-    # 07b is single-pass, so morphology is no longer a gate at this node and
-    # must not silently block active-reset qualification either. Set this back
-    # to true to restore the compact-cloud requirement for qualification.
-    active_reset_requires_morphology: false
+    # Operator decision 2026-10-14: active reset needs two Gaussian blobs too,
+    # both for the thermal trigger and for the active-reset repeat itself.
+    active_reset_requires_morphology: true
     # Operator instruction 2026-10-02: judge the IQ clouds as two blobs.
     # Shots on the other blob are readout errors (thermal population, decay)
     # and are counted by fidelity; a cloud fails only when more than
@@ -254,7 +452,16 @@ analysis:
     fidelity_tolerance_percent: 2.0
   "03a":
     initial_coarse_span_mhz: 800.0
-    initial_coarse_operation_amplitude_factor: 0.10
+    # Operator instruction 2026-10-14: the 03a drive cap follows the XY wiring,
+    # which decides how much drive reaches the qubit. A shared XY line (one
+    # qubit per run, weak drive) may go up to factor 1.0 and its first 800 MHz
+    # coarse run uses exactly initial_coarse_operation_amplitude_factor (1.0,
+    # was a 0.10 minimum); a private line (multiplexable) stays at or below
+    # 0.05 and its first coarse run uses exactly 0.01.
+    initial_coarse_operation_amplitude_factor: 1.0
+    max_operation_amplitude_factor_shared_xy: 1.0
+    max_operation_amplitude_factor_private_xy: 0.05
+    initial_coarse_operation_amplitude_factor_private_xy: 0.01
     coarse_min_span_mhz: 200.0
     # Do not chase 40–50 MHz windows; ~200 MHz is enough for refinement/fine.
     refinement_max_span_mhz: 200.0
@@ -275,10 +482,48 @@ analysis:
     two_photon_peak_min_distance_mhz: 10.0
     noise_confirmation_num_averages: [500, 1000, 2000]
     max_noise_confirmation_num_averages: 2000
+    # Operator instruction 2026-10-12: a fine scan commits only a line that an
+    # earlier 03a run of the same qubit already showed within this distance
+    # (or the fine FWHM, if wider), with at least this robust SNR. A line 04
+    # rejected (no Rabi) is masked for that qubit by at least this half width.
+    reproduce_tolerance_mhz: 5.0
+    reproduce_min_robust_snr: 4.5
+    rejected_line_min_half_width_mhz: 5.0
+    # Operator choice 2026-10-12 (q3 at 2.226 GHz, SNR 5.3-5.9): a coarse line
+    # below min_robust_snr is still a credible candidate when two runs put it
+    # at the same RF (within the tolerance) from IFs at least the separation
+    # apart -- under different LOs, so not a fixed-IF artefact -- each with at
+    # least this SNR. The fine scan and 04 still decide.
+    cross_lo_min_robust_snr: 5.0
+    cross_lo_rf_tolerance_mhz: 5.0
+    cross_lo_min_if_separation_mhz: 50.0
+    # Operator choice 2026-10-12 (q3 fine #478, SNR 5.58 at 100000 averages): a
+    # fine scan of a cross-LO-confirmed line, within the tolerance of its RF,
+    # passes from this SNR. Reproducibility and 04 still apply.
+    cross_lo_fine_min_robust_snr: 5.0
+  "statistics":
+    # 2026-10-13 (q1 06st_t2e #493): a statistics node that lost the
+    # instrument after 3 of 100 repetitions still saved a summary. A result
+    # counts only when at least this many repetitions completed (the dataset's
+    # `iteration` size).
+    min_completed_iterations: 90
+    # Operator choice 2026-10-13: JY refits every repetition, drops fits below
+    # these floors and redraws the histogram from the rest; the statistics
+    # record (extras.T1/T1_dev, ...) takes that filtered mean and spread.
+    refit_min_r_squared: 0.5
+    refit_min_snr: 3.0
   "02c":
-    # Operator instruction 2026-10-02: read out 10 dB below the dressed
-    # boundary, so 07d/07b start well clear of the bare-resonator transition.
-    readout_power_backoff_db: 10.0
+    # Operator rule 2026-10-11: power rows whose resonance dip is lost in the
+    # noise are ignored. The usable range starts at the lowest power from which
+    # two consecutive rows reach this (90th percentile - minimum) / noise
+    # contrast; the dressed plateau is read from there (CRSQ die(5,-1) q5:
+    # rows below about -44 dBm dropped at 100 averages).
+    min_power_row_snr: 6.0
+    # Operator instruction 2026-10-02: read out below the dressed boundary,
+    # so 07d/07b start clear of the bare-resonator transition. 2026-10-13
+    # (CRSQ_26009_die(5,-1), q3-q5 not located at -10 dB): 10 -> 3 dB, for
+    # every 02c path (analysis patch and state patch).
+    readout_power_backoff_db: 3.0
     # Each readout line's full scale is the smallest integer that keeps every
     # pulse at or below this amplitude (07d's max_readout_amplitude) and the
     # line's summed amplitude at or below
@@ -355,17 +600,41 @@ usage:
 state_commit:
   allowed_json_pointer_patterns:
     - "^/ports/mw_outputs/[^/]+/[0-9]+/[0-9]+/upconverter_frequency$"
+    # Only the readout-LO recentre writes this, together with the output LO.
+    - "^/ports/mw_inputs/[^/]+/[0-9]+/[0-9]+/downconverter_frequency$"
     # Only 02c writes this: its JY patch derives the readout-line full scale.
     - "^/ports/mw_outputs/[^/]+/[0-9]+/[0-9]+/full_scale_power_dbm$"
     - "^/qubits/q[0-9]+/xy/intermediate_frequency$"
     - "^/qubits/q[0-9]+/xy/operations/[A-Za-z0-9_-]+/amplitude$"
+    # Only the 04 gate-time setup and the fresh-qubit defaults write this
+    # (operator 2026-10-12, 2026-10-14).
+    - "^/qubits/q[0-9]+/xy/operations/[A-Za-z0-9_-]+/length$"
+    # Fresh-qubit defaults only (operator 2026-10-14): DRAG terms reset to 0,
+    # the whole extras object emptied, and the starting coherence times and
+    # anharmonicity.
+    - "^/qubits/q[0-9]+/xy/operations/[A-Za-z0-9_-]+/(alpha|detuning)$"
+    - "^/qubits/q[0-9]+/extras$"
+    - "^/qubits/q[0-9]+/(T2ramsey|T2echo|anharmonicity)$"
+    # Only the XY LO plan writes this: the drive LO a qubit uses (2026-10-12).
+    - "^/qubits/q[0-9]+/extras/xy_lo_freq$"
     - "^/qubits/q[0-9]+/resonator/intermediate_frequency$"
     # `length` is 07d's readout-duration output; the others predate it.
     - "^/qubits/q[0-9]+/resonator/operations/readout/(amplitude|full_scale_power_dbm|integration_weights_angle|length)$"
+    # Only the readout-length normalize setup writes this (2026-10-07).
+    - "^/qubits/q[0-9]+/resonator/depletion_time$"
+    # Only the 02x setup writes this, when qubits share a plot cell (2026-10-11).
+    - "^/qubits/q[0-9]+/grid_location$"
+    # Only the same setup writes this, when qubits share a QUA thread (2026-10-11).
+    - "^/qubits/q[0-9]+/(resonator|xy)/thread$"
     - "^/qubits/q[0-9]+/resonator/operations/readout/(threshold|rus_exit_threshold)$"
     - "^/qubits/q[0-9]+/resonator/confusion_matrix$"
     - "^/qubits/q[0-9]+/extras/(bare_resonator_freq|idle_freq|dressed_resonator_freq)$"
-    - "^/qubits/q[0-9]+/extras/(readout_fidelity|T1|T1_dev|T2ramsey|T2ramsey_dev|T2|T2_dev)$"
+    # Flux calibration (02b/03b/06a, operator 2026-10-08). The 02b aSWAP
+    # amplitude stays out on purpose.
+    - "^/qubits/q[0-9]+/z/(joint_offset|independent_offset|min_offset)$"
+    - "^/qubits/q[0-9]+/(phi0_voltage|phi0_current|freq_vs_flux_01_quad_term)$"
+    - "^/qubits/q[0-9]+/extras/(sweetspot_freq|FluxPeriodV)$"
+    - "^/qubits/q[0-9]+/extras/(readout_fidelity|T1|T1_dev|T2ramsey|T2ramsey_dev|T2|T2_dev|EPG|EPC)$"
     - "^/qubits/q[0-9]+/T1$"
     - "^/qubits/q[0-9]+/T2(ramsey|echo)$"
   allowed_operations: ["add", "replace"]
@@ -429,6 +698,12 @@ nodes:
     name: "02x_Bare_Resonator_Spectroscopy"
     script: "02x_Bare_Resonator_Spectroscopy.py"
     flux_behavior: "hardcoded_min"
+    # Operator request 2026-10-11 (diagnostic): with all line tones played
+    # together, CRSQ_26009_die(5,-1)'s six 02x channels showed one common
+    # response (#385, #388) while 02 and 02c resolved distinct resonators.
+    # On the chips listed here (QuAM state folder names) 02x measures one
+    # qubit per run until the cause is understood.
+    single_qubit_devices: []  # CRSQ_26009_die(5,-1) removed 2026-10-11 after the thread fix; re-add if multiplexing still fails
     defaults:
       num_averages: 300
       frequency_span_in_mhz: 20.0
@@ -473,10 +748,61 @@ nodes:
       load_data_id: "optional_positive_int"
       multiplexed: "bool"
 
+  # Operator request 2026-10-08: flux calibration, run only when the lease page
+  # says yes (see workflow_options.flux_calibration). 02b sweeps each qubit's
+  # DC flux at the joint flux point, measures the resonator, and fits the
+  # cosine: the idle (sweet-spot) offset becomes z.joint_offset, the flux
+  # period phi0, and the resonator IF moves to the resonance at that offset.
+  # Sweep limits (operator): +-0.9 V, at most 100 flux points.
+  "02b":
+    name: "02b_Resonator_Spectroscopy_vs_Flux"
+    script: "02b_resonator_spectroscopy_vs_flux.py"
+    flux_behavior: "joint"
+    flux_sweep:
+      min_key: "min_flux_offset_in_v"
+      max_key: "max_flux_offset_in_v"
+      points_key: "num_flux_points"
+      max_abs_v: 0.9
+      max_points: 100
+    defaults:
+      num_averages: 300
+      min_flux_offset_in_v: -0.9
+      max_flux_offset_in_v: 0.9
+      num_flux_points: 75
+      frequency_span_in_mhz: 7.5
+      frequency_step_in_mhz: 0.1
+      flux_point_joint_or_independent: "joint"
+      input_line_impedance_in_ohm: 50
+      line_attenuation_in_db: 0
+      update_flux_min: true
+      simulate: false
+      simulation_duration_ns: 2500
+      timeout: 100
+      load_data_id: null
+    allowed_parameters:
+      qubits: "qubit_list"
+      num_averages: "positive_int"
+      min_flux_offset_in_v: "number"
+      max_flux_offset_in_v: "number"
+      num_flux_points: "positive_int"
+      frequency_span_in_mhz: "positive_number"
+      frequency_step_in_mhz: "positive_number"
+      flux_point_joint_or_independent: "joint_literal"
+      input_line_impedance_in_ohm: "positive_number"
+      line_attenuation_in_db: "nonnegative_number"
+      update_flux_min: "bool"
+      simulate: "bool"
+      simulation_duration_ns: "positive_int"
+      timeout: "positive_int"
+      load_data_id: "optional_positive_int"
+
   "02c":
     name: "02c_Resonator_Spectroscopy_vs_Amplitude"
     script: "02c_resonator_spectroscopy_vs_amplitude.py"
     flux_behavior: "joint"
+    # Operator request 2026-10-11: multiplexed 02x on this chip reported q6's
+    # response on every channel; check 02c one qubit (one tone) per run too.
+    single_qubit_devices: []  # CRSQ_26009_die(5,-1) removed 2026-10-11 after the thread fix; re-add if multiplexing still fails
     defaults:
       num_averages: 100
       frequency_span_in_mhz: 16.0  # first pass finds the separation; retries narrow to 2-5x
@@ -524,8 +850,8 @@ nodes:
     defaults:
       num_averages: 100
       operation: "saturation"
-      operation_amplitude_factor: 0.10
-      operation_len_in_ns: 50000
+      operation_amplitude_factor: 0.01
+      operation_len_in_ns: 20000
       frequency_span_in_mhz: 800.0
       frequency_step_in_mhz: 1.0
       flux_point_joint_or_independent: "joint"
@@ -549,6 +875,57 @@ nodes:
       target_peak_width: "positive_number"
       arbitrary_flux_bias: "optional_number"
       arbitrary_qubit_frequency_in_ghz: "optional_number"
+      simulate: "bool"
+      simulation_duration_ns: "positive_int"
+      timeout: "positive_int"
+      load_data_id: "optional_positive_int"
+      multiplexed: "bool"
+
+  # Operator request 2026-10-08: qubit spectroscopy vs a z flux pulse around
+  # the 02b offset; a parabola fit moves z.joint_offset to the sweet spot and
+  # the drive IF to the qubit frequency there, and stores the quadratic term.
+  # Sweep limits (operator): +-0.4 V, at most 100 flux points. Only qubits 02b
+  # found tunable run it.
+  "03b":
+    name: "03b_Qubit_Spectroscopy_vs_Flux"
+    script: "03b_qubit_spectroscopy_vs_flux.py"
+    flux_behavior: "joint"
+    flux_sweep:
+      min_key: "min_flux_offset_in_v"
+      max_key: "max_flux_offset_in_v"
+      points_key: "num_flux_points"
+      max_abs_v: 0.4
+      max_points: 100
+    defaults:
+      num_averages: 100
+      operation: "saturation"
+      operation_amplitude_factor: 0.02
+      operation_len_in_ns: null
+      frequency_span_in_mhz: 100.0
+      frequency_step_in_mhz: 1.0
+      frequency_shift_in_mhz: 0.0
+      min_flux_offset_in_v: -0.05
+      max_flux_offset_in_v: 0.05
+      num_flux_points: 51
+      flux_point_joint_or_independent: "joint"
+      simulate: false
+      simulation_duration_ns: 2500
+      timeout: 100
+      load_data_id: null
+      multiplexed: false
+    allowed_parameters:
+      qubits: "qubit_list"
+      num_averages: "positive_int"
+      operation: "saturation_literal"
+      operation_amplitude_factor: "positive_number"
+      operation_len_in_ns: "optional_positive_int"
+      frequency_span_in_mhz: "positive_number"
+      frequency_step_in_mhz: "positive_number"
+      frequency_shift_in_mhz: "number"
+      min_flux_offset_in_v: "number"
+      max_flux_offset_in_v: "number"
+      num_flux_points: "positive_int"
+      flux_point_joint_or_independent: "joint_literal"
       simulate: "bool"
       simulation_duration_ns: "positive_int"
       timeout: "positive_int"
@@ -660,6 +1037,9 @@ nodes:
     # sweep. 3.16 (+10 dB) reaches back up to the dressed limit; 22 points keep
     # the step near the old 0.13. A run on an older value of these keys no
     # longer counts toward single pass.
+    # Operator choice 2026-10-13: with the 3 dB 02c backoff, 1.41 (+3 dB)
+    # reaches the dressed limit; 22 points give a ~0.06 step. Sweeping past
+    # the limit drove q2 into a third IQ cloud (07b #457).
     # num_runs 40 -> 100 (2026-10-02): the two-blob selection needs shots per
     # point; 9 pooled points x 200 shots resolve a few-% off-blob share.
     single_pass_default_keys: ["max_amplitude_factor", "num_runs"]
@@ -670,9 +1050,11 @@ nodes:
       frequency_span_in_mhz: 6
       frequency_step_in_mhz: 0.2
       min_amplitude_factor: 0.2
-      max_amplitude_factor: 3.16
+      max_amplitude_factor: 1.41
       num_amplitudes: 22
-      max_duration_in_ns: 2080
+      # Operator request 2026-10-13: up to ~4000 ns (8 durations of 500 ns; the
+      # node needs max_duration / num_durations to be a multiple of 4 ns).
+      max_duration_in_ns: 4000
       num_durations: 8
       plotting_dimension: "2D"
       fidelity_smoothing_intensity: 0.5
@@ -770,6 +1152,46 @@ nodes:
       simulate: "bool"
       simulation_duration_ns: "positive_int"
       timeout: "positive_int"
+
+  # Operator request 2026-10-08: optional (lease-page tick, needs the flux yes).
+  # Ramsey under a small z pulse around the joint offset; the fringe frequency
+  # vs flux parabola fine-tunes z.joint_offset and the drive IF. It reads the
+  # state before and after each shot, so it needs no reset and stays short.
+  # Sweep limits (operator): flux pulse within +-0.1 V (flux_span <= 0.2), at
+  # most about 100 flux points.
+  "06a":
+    name: "06a_Ramsey_vs_Flux_Calibration"
+    script: "06a_Ramsey_vs_Flux_Calibration.py"
+    flux_behavior: "joint"
+    defaults:
+      num_averages: 150
+      frequency_detuning_in_mhz: 4.0
+      min_wait_time_in_ns: 16
+      max_wait_time_in_ns: 516
+      wait_time_step_in_ns: 8
+      flux_span: 0.08
+      flux_step: 0.001
+      flux_point_joint_or_independent: "joint"
+      simulate: false
+      simulation_duration_ns: 2500
+      timeout: 100
+      load_data_id: null
+      multiplexed: false
+    allowed_parameters:
+      qubits: "qubit_list"
+      num_averages: "positive_int"
+      frequency_detuning_in_mhz: "positive_number"
+      min_wait_time_in_ns: "positive_int"
+      max_wait_time_in_ns: "positive_int"
+      wait_time_step_in_ns: "positive_int"
+      flux_span: "positive_number"
+      flux_step: "positive_number"
+      flux_point_joint_or_independent: "joint_literal"
+      simulate: "bool"
+      simulation_duration_ns: "positive_int"
+      timeout: "positive_int"
+      load_data_id: "optional_positive_int"
+      multiplexed: "bool"
 
   "06b":
     name: "06b_T2_echo"

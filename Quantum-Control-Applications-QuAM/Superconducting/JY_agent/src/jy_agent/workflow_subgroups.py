@@ -12,11 +12,14 @@ SUBGROUP_NODES = frozenset(
         "02x",
         "02a",
         "02c",
+        "02b",
         "03a",
+        "03b",
         "04",
         "05",
         "07b",
         "06",
+        "06a",
         "06b",
         "10a",
         "05st",
@@ -34,8 +37,12 @@ FIXED_TARGET_NODES: frozenset[str] = frozenset()
 # share the recovery settings. 03a keeps its own first-coarse-all-targets
 # gate. Statistics nodes may split earlier when wait windows are incompatible.
 SHARED_FIRST_BATCH_NODES = frozenset(
-    {"02x", "02a", "02c", "04", "05", "07b", "06", "06b", "10a"}
+    {"02x", "02a", "02c", "02b", "03b", "04", "05", "07b", "06", "06a", "06b", "10a"}
 )
+# Flux calibration (operator 2026-10-08). Their resolution never gates the
+# rest of the sequence: a qubit that is flat, crosses a coupler or fails here
+# still runs 03a, 04, ... with its old flux settings.
+FLUX_NODES = frozenset({"02b", "03b", "06a"})
 DEFAULT_02X_MIN_ROBUST_SNR = 3.0
 DEFAULT_02A_MIN_ROBUST_SNR = 3.0
 DEFAULT_03A_MIN_ROBUST_SNR = 6.0
@@ -43,8 +50,10 @@ DEFAULT_03A_MIN_EDGE_FRACTION = 0.05
 DEFAULT_03A_MAX_NOISE_CONFIRMATION_AVERAGES = 2000
 DEFAULT_03A_FINAL_MIN_FWHM_HZ = 500_000.0
 DEFAULT_03A_FINAL_MAX_FWHM_HZ = 16_000_000.0
-DEFAULT_04_MIN_ROBUST_SNR = 14.0
-DEFAULT_05_MIN_ROBUST_SNR = 25.0
+# Fallbacks only; the service passes analysis."04"/"05".min_robust_snr from
+# rules/policies.yaml. Kept equal to those values.
+DEFAULT_04_MIN_ROBUST_SNR = 7.0
+DEFAULT_05_MIN_ROBUST_SNR = 15.0
 
 
 def resolve_node_targets(
@@ -85,6 +94,29 @@ def resolve_node_targets(
         min_02x_snr=min_02x_snr,
         min_02a_snr=min_02a_snr,
     )
+
+
+def resolve_02b_tunable_targets(run_rows: Iterable[dict[str, Any]]) -> set[str]:
+    """Qubits whose latest decided 02b result says the resonator tunes.
+
+    Only these go on to 03b and 06a (operator rule 2026-10-08); flat and
+    avoided-crossing qubits skip them.
+    """
+
+    latest: dict[str, bool] = {}
+    for row in run_rows:
+        if row.get("status") not in {None, "completed"}:
+            continue
+        if row.get("analysis_status") not in {"pass", "needs_review"}:
+            continue
+        analysis = json_loads(row.get("analysis_json"), {})
+        results = analysis.get("fit_quality", {}).get("results", {})
+        if not isinstance(results, dict):
+            continue
+        for name, fit in results.items():
+            if isinstance(fit, dict) and fit.get("resolved") is True:
+                latest[str(name)] = fit.get("flux_tunable") is True
+    return {name for name, tunable in latest.items() if tunable}
 
 
 def resolve_03a_candidate_targets(
@@ -223,6 +255,9 @@ def _resolve_usable_targets(
                 continue
             evidence = metrics.get(name)
             if node_id in {
+                "02b",
+                "03b",
+                "06a",
                 "07b",
                 "06",
                 "06b",
@@ -328,8 +363,9 @@ def _fit_is_usable(node_id: str, fit: dict[str, Any]) -> bool:
             and (
                 node_id != "06b"
                 or (
+                    # The R-squared floor is policy (analysis.06b.min_r_squared,
+                    # 0.8 since 2026-10-12) and already decided fit_successful.
                     _finite(fit.get("r_squared"))
-                    and float(fit["r_squared"]) >= 0.9
                     and fit.get("fit_at_search_boundary") is not True
                 )
             )
@@ -344,6 +380,11 @@ def _fit_is_usable(node_id: str, fit: dict[str, Any]) -> bool:
             and _finite(epg)
             and 0 <= float(epg) <= 1
         )
+    if node_id == "02b":
+        # Tunable, flat and avoided-crossing qubits are all decided.
+        return fit.get("resolved") is True
+    if node_id in {"03b", "06a"}:
+        return fit.get("fit_successful") is True
     if node_id in {"05st", "06st_t2star", "06st_t2e"}:
         return (
             fit.get("fit_successful") is True

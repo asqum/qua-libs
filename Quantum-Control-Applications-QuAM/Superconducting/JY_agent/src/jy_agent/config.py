@@ -94,6 +94,10 @@ class Settings:
         "::1/128",
     )
     approval_access_token: str | None = None
+    # Operator instruction 2026-10-14: a qubit this chip never measured gets
+    # the fresh-qubit defaults before its first run. Unit tests that are not
+    # about that rule switch it off.
+    fresh_qubit_defaults: bool = True
 
     @classmethod
     def load(cls, agent_root: Path | None = None) -> "Settings":

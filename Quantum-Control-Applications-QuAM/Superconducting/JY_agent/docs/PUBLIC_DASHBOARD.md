@@ -2,12 +2,16 @@
 
 `ensure_server.ps1` 將 Approval/Dashboard 的本機 `127.0.0.1:8766` 透過 Cloudflare
 HTTPS quick tunnel forward 到公開網址。MCP 固定留在 `127.0.0.1:8765`，不會被
-forward。公開端只提供共用首頁、審閱、核准、結果圖、歷史選單與四種控制狀態。
+forward。公開端只提供共用首頁（狀態、四種控制狀態與完整關機）、審閱、核准、
+結果圖、歷史選單、晶片歷史結果圖、Token 用量，以及使用說明（範例圖取自
+`docs/guide_assets/`）。
 
 `ensure_server.ps1` forwards local Approval/Dashboard port `127.0.0.1:8766`
 through a Cloudflare HTTPS quick tunnel. MCP remains on `127.0.0.1:8765` and is
-never forwarded. The public surface exposes only the shared Home, review,
-approval, result plots, history selection, and four operator control states.
+never forwarded. The public surface exposes only the shared Home (status, the
+four operator control states, and full shutdown), review, approval, result
+plots, history selection, chip-history result images, Token usage, and the
+Guide (example images served from `docs/guide_assets/`).
 
 公開網址本身不帶 token 或 bootstrap query。任何手機或瀏覽器都直接開啟當次
 `https://…trycloudflare.com/`，再輸入量測電腦上

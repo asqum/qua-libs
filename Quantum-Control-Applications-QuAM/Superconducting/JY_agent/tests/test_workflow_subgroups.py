@@ -276,7 +276,7 @@ class TestWorkflowSubgroups(unittest.TestCase):
                 {
                     "qubits": targets,
                     "frequency_span_in_mhz": 800.0,
-                    "operation_amplitude_factor": 0.10,
+                    "operation_amplitude_factor": 0.01,
                 },
                 "Initial all-target 03a coarse search.",
                 "unittest",
@@ -297,7 +297,7 @@ class TestWorkflowSubgroups(unittest.TestCase):
                 {
                     "qubits": [targets[0]],
                     "frequency_span_in_mhz": 100.0,
-                    "operation_amplitude_factor": 0.075,
+                    "operation_amplitude_factor": 0.04,
                 },
                 "Refine a coarse candidate at intermediate power.",
                 "unittest",
@@ -846,6 +846,7 @@ class TestWorkflowSubgroups(unittest.TestCase):
             resolve_node_targets(
                 "04",
                 [{"analysis_status": "needs_review", "analysis_json": json.dumps(rabi)}],
+                min_04_snr=14.0,
             ),
             {"q3"},
         )
@@ -853,6 +854,7 @@ class TestWorkflowSubgroups(unittest.TestCase):
             resolve_node_targets(
                 "05",
                 [{"analysis_status": "needs_review", "analysis_json": json.dumps(t1)}],
+                min_05_snr=25.0,
             ),
             {"q3"},
         )
@@ -1107,6 +1109,7 @@ class SinglePassNodeTests(unittest.TestCase):
                                     name: {
                                         "fit_successful": name in passing,
                                         "readout_fidelity": 0.9 if name in passing else 0.7,
+                                        "morphology_pass": True,
                                     }
                                     for name in targets
                                 }
@@ -1247,7 +1250,7 @@ class ActiveResetRepeatTests(unittest.TestCase):
                     {
                         "fit_quality": {
                             "results": {
-                                name: {"readout_fidelity": value}
+                                name: {"readout_fidelity": value, "morphology_pass": True}
                                 for name, value in fidelities.items()
                             }
                         }
@@ -1405,6 +1408,7 @@ class ActiveResetRepeatTests(unittest.TestCase):
                                     name: {
                                         "fit_successful": name in passing,
                                         "readout_fidelity": 0.9 if name in passing else 0.7,
+                                        "morphology_pass": True,
                                     }
                                     for name in targets
                                 }

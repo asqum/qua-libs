@@ -230,6 +230,13 @@ class Database:
             ("runs", "exit_code", "INTEGER"),
             ("runs", "exit_receipt_path", "TEXT"),
             ("runs", "termination_cause", "TEXT"),
+            # Operator request 2026-10-10: per-chip history and starting a
+            # workflow at a node an earlier workflow on the same chip reached.
+            # Evidence before that node is carried over as inherited runs.
+            ("workflows", "device_key", "TEXT"),
+            ("workflows", "source_workflow_id", "TEXT"),
+            ("workflows", "start_node", "TEXT"),
+            ("runs", "inherited_from_run_id", "TEXT"),
         ):
             columns = {
                 str(row[1])

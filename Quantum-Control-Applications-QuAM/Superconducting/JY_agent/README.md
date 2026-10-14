@@ -100,7 +100,8 @@ Dashboard 頁面核准。
 進入 JY 自動量測模式
 ```
 
-自動模式只先核准一次 8 小時的有限授權。其後只要 targets、nodes、參數與
+自動模式只先核准一次有限授權（預設 8 小時；進入時可指定，上限為
+`policies.yaml` 的 `autonomy.max_duration_hours`）。其後只要 targets、nodes、參數與
 20 次／node／qubit 上限均在授權內，就會繼續安全量測；硬停損仍立即停止。
 Codex 支援 durable `/goal` 時，進入自動模式會建立一個只屬於該 session 的持續
 目標，並以 `jy_wait_for_autonomy_status` 等待核准或新結果，不會只因暫時沒有工具
@@ -113,7 +114,8 @@ Enter either exact phrase in a project-loaded conversation. Do not append
 `target:` or `multiplex:`; a new workflow uses `state.json` `active_qubit_names`
 and defaults `multiplexed=true`. Conversational mode
 requires approval for every run or state change. Automatic mode requests one
-bounded authorization -- eight hours by default, specifiable at entry -- and then continues only inside its targets,
+bounded authorization -- eight hours by default, specifiable at entry up to
+`autonomy.max_duration_hours` -- and then continues only inside its targets,
 nodes, safe parameters, and 20-attempt-per-node/qubit limit.
 The exact English entry commands are `Enter JY measurement mode` and
 `Enter JY automatic measurement mode`; see [Command.md](Command.md) for all
@@ -124,16 +126,33 @@ Sol follow the same goal/turn lifecycle. Completion, operator stop, lease expiry
 and hard stops are terminal. Repository instructions cannot guarantee an
 indefinite Claude/Cursor turn, so `已核准` remains the host-resume fallback.
 
-預設校正順序為 `02x → 02c → 02a`，並包含 `06 → 06b`。所有 reset 預設為 thermal；只有 active-reset
-07b 得到緊實雙雲團且 fidelity 至少 85% 的 qubit，後續才可選 active。若統計節點
-採 active，會先以 active 複驗 05、06、06b；之後 05st 與 06st 各執行一次，不會
-再逐條 fitting 100 個 iteration。
+預設校正順序是 `config/agent.yaml` 的 `workflow.sequence`：
+`02 → 02x → 02c → 02a → 02b → 03a → 03b → 04 → 07d → 07b → 05 → 06 → 06a → 06b → 10a → 05st → 06st_t2star → 06st_t2e`。
+`02`、`06a` 與三個統計節點是選用節點，在自動量測核准頁勾選；`02b`、`03b`
+（與 `06a`）只在選擇 flux 校正時執行，qubit 共用 Z output 時無法選。`07d` 在
+`07b` 前優化 readout，`05` 在 `07b` 之後以優化後的 readout 量測。所有 reset
+預設為 thermal；thermal 07b fidelity 高於 0.80 的 qubit 會再跑一次 active-reset
+07b，該次 fidelity 至少 0.80（`reset_policy.active_min_readout_fidelity`）才取得
+active 資格。07b 之後有 reset 參數的節點把合格與其他 qubit 分成 active／thermal
+兩組，各有自己的第一批 run，不混在同一 run。若統計節點採 active，會先以 active
+複驗 05、06、06b。統計節點各執行一次（100 次重複），至少完成 90 次才算數；JY
+逐次重新 fitting、剔除不良 fit 後記錄平均與分散，沒有 100/100 否決門檻。
 
-The default calibration sequence is `02x → 02c → 02a`, and includes `06 → 06b`. Reset defaults to thermal.
-Downstream active reset is allowed per qubit only after an active-reset 07b result
-has compact dual clouds and at least 85% fidelity. Active-reset statistics first
-revalidate 05, 06, and 06b under active reset; each statistics node then runs once
-without a second all-iteration refit gate.
+The default calibration sequence is `config/agent.yaml` `workflow.sequence`:
+`02 → 02x → 02c → 02a → 02b → 03a → 03b → 04 → 07d → 07b → 05 → 06 → 06a → 06b → 10a → 05st → 06st_t2star → 06st_t2e`.
+`02`, `06a`, and the three statistics nodes are optional and ticked on the lease
+approval page; `02b`, `03b` (and `06a`) run only when flux calibration is chosen,
+which is disabled when qubits share a Z output. `07d` optimizes the readout
+before `07b`, and `05` runs after `07b` on that optimized readout. Reset defaults
+to thermal. A qubit whose thermal 07b fidelity is above 0.80 earns one
+active-reset 07b repeat, and qualifies for active reset when that repeat reaches
+at least 0.80 (`reset_policy.active_min_readout_fidelity`). After 07b,
+reset-capable nodes split qualified and other qubits into active and thermal
+groups, each with its own first batch and never sharing a run. Active-reset
+statistics first revalidate 05, 06, and 06b under active reset. Each statistics
+node runs once (100 repetitions) and counts only when at least 90 completed; JY
+refits every repetition, drops poor fits, and records the filtered mean and
+spread, with no 100/100 rejection gate.
 
 `start_mcp_stdio.ps1` 必須先讓 client 擁有 MCP 工具，這是「雞生蛋」邊界：完全
 沒有 MCP 的 agent 無法只靠一句自然語言建立 MCP。專案載入負責這個一次性的
@@ -149,6 +168,45 @@ network. The entry phrase then runs Ensure and creates or resumes the measuremen
 workflow. Merely opening the folder never operates hardware, and a tunnel failure
 cannot break the MCP initialize response.
 
+### 自動量測核准頁 / Lease approval page
+
+自動量測只在 Dashboard 的核准頁核准，由 operator 選擇，agent 不代選：
+
+- 起點：頁面顯示此晶片（`config.toml` 指定的 QuAM state）最近一次 workflow 到過
+  的節點、是否完成與通過的 qubit。可從頭開始，或從它停下的節點以前任一節點
+  開始；之前的 run 作為繼承證據帶入。`state.json` 之後若有變動，頁面會警告。
+- 選用節點：`02`、`06a`、`05st`、`06st_t2star`、`06st_t2e` 預設勾選；取消勾選即
+  從此 workflow 與 lease 移除。從頭開始且有 target 的 readout IF 為 0 或重複時，
+  `02` 為必選。
+- 量測方式：從 `03a` 起選 per-qubit（一顆 qubit 跑完整個後段再換下一顆）或
+  multiplex。wiring 中有 qubit 共用 XY output 時只能 per-qubit；選定後此
+  workflow 固定不變。
+- Flux 校正：選「是」才執行 `02b`（`02a` 後）與 `03b`（`03a` 後），`06a` 另需
+  勾選；有 qubit 共用 Z output 時無法選「是」。
+- 選完按「預覽」查看會執行的實驗，再勾選同意並輸入核准碼；預覽後更改選項需
+  重新預覽。
+
+Automatic measurement is approved only on the Dashboard Approval page; the
+operator chooses, never the agent:
+
+- Start node: the page shows the chip's (the QuAM state named in `config.toml`)
+  latest workflow -- nodes reached, whether each finished, and passing qubits.
+  Start from the beginning or at any node up to where it stopped; earlier runs
+  are carried in as inherited evidence. The page warns if `state.json` changed
+  since then.
+- Optional nodes: `02`, `06a`, `05st`, `06st_t2star`, and `06st_t2e` are ticked
+  by default; an unticked node is removed from that workflow and lease. `02` is
+  required when starting from the beginning and a target's readout IF is 0 or
+  duplicated.
+- Measurement mode from `03a` on: per-qubit (one qubit through the whole tail,
+  then the next) or multiplex. A shared XY output in the wiring allows only
+  per-qubit. The workflow keeps its mode.
+- Flux calibration: yes runs `02b` (after `02a`) and `03b` (after `03a`); `06a`
+  also needs its tick. A Z output shared by two qubits disables yes.
+- Press Preview to see which experiments will run, then tick the agree box and
+  enter the approval code. Changing a choice after the preview needs a new
+  preview.
+
 ## Dashboard
 
 進入語句觸發的 Ensure 只把 MCP HTTP service 綁在 `127.0.0.1:8765`，並把
@@ -159,16 +217,21 @@ review-only Dashboard 透過 Cloudflare HTTPS quick tunnel 公開。Cloudflare �
 或任意執行程式。
 
 每次進入模式只對使用者顯示 entry result 最外層的 `browser_url`；這是手機與電腦
-共用的 `/` 首頁入口。首頁會解析目前 session，並提供三個分頁：首頁（狀態與
-量測控制與完整關機）、核准、實驗結果。舊 `/approve/...`、`/autonomy/...` 與
-`/session/...` 連結只會導向對應的新分頁，不會建立另一個網站。直接建立或替換
-lease 也會重新綁定同一個 workflow session。
+共用的 `/` 首頁入口。首頁會解析目前 session，並提供五個分頁：首頁（狀態、
+量測控制與完整關機）、核准、實驗結果、Token 用量、使用說明。舊
+`/approve/...`、`/autonomy/...` 與 `/session/...` 連結只會導向對應的新分頁，不會
+建立另一個網站。直接建立或替換 lease 也會重新綁定同一個 workflow session。
 
-結果頁的下拉選單保留本次 server 生命週期內所有實驗，且只在新結果、判斷或控制
-狀態出現時更新；核准頁只在提案改變時更新。右上角可選繁體中文或 English；時間
-預測、參數、分析與下一步預設為摺疊面板。結果頁提供暫停、繼續、結束自動授權
-（保留網站）與緊急停止 worker（保留網站）；只有首頁提供完整關機，且需輸入
-`SHUTDOWN <session-id>` 防止誤觸。
+實驗結果頁最上方是晶片歷史：此晶片在所有 workflow 中成功（JY `passing_targets`）
+的結果，依節點與 qubit 排列，最新一次在前；每次分析後也會寫一份靜態副本到
+`runtime/chip_history/<chip>/index.html`，關機後仍可開啟。其下是本次結果摘要與
+下拉選單，保留本次 server 生命週期內所有實驗，且只在新結果、判斷或控制狀態
+出現時更新；核准頁只在提案改變時更新。Token 用量頁最上方是此晶片的開始時間與總用量，
+可選時段計算費用，並依日期列出每個實驗的模型、token 數與估計費用，只讀取本機 Claude Code 對話紀錄中的數字；Codex／Cursor 的用量不
+計入。使用說明頁介紹操作方式與量測順序，並以 `docs/guide_assets/` 的範例圖說明
+各節點成功時的樣子。右上角可選繁體中文或 English；時間預測、參數、分析與下一步
+預設為摺疊面板。首頁提供暫停、繼續、結束自動授權（保留網站）、緊急停止 worker
+（保留網站）與完整關機；完整關機需輸入 `SHUTDOWN <session-id>` 防止誤觸。
 
 手機或第二個瀏覽器直接使用同一裸 URL 與固定密碼，不再需要配對連結；每個瀏覽器
 仍取得各自 12 小時 cookie。本機 `http://127.0.0.1:8765/operator` 只提供
@@ -182,14 +245,22 @@ URL contains no secret; every browser enters the fixed ignored runtime password
 and receives an independent 12-hour secure cookie. The public surface cannot
 invoke MCP or arbitrary code. Agents show only the entry result's
 top-level `browser_url`, a common `/` entry for phones and computers. It resolves
-the active session and links to Home, Approval, and Experiment results. Legacy
-approval, autonomy, and session URLs redirect to the appropriate view. The
-Results selector retains every run for that server session; updates are
-event-driven. Language is selectable at the top right, and Prediction,
-Parameters, Analysis, and Next action are collapsed by default. Results provides
-Pause, Resume, End automation (keep site), and Emergency-stop worker (keep site).
-Only Home provides full shutdown, guarded by the exact
-`SHUTDOWN <session-id>` confirmation. Direct or replacement lease requests also
+the active session and links to five tabs: Home, Approval, Experiment results,
+Token usage, and Guide. Legacy approval, autonomy, and session URLs redirect to
+the appropriate view. Experiment results opens with the chip history -- every
+successful result (JY `passing_targets`) for this chip across its workflows, by
+node and qubit, newest first -- and a static copy at
+`runtime/chip_history/<chip>/index.html` is rewritten after each analysis and
+survives shutdown. Below it, the summary and selector retain every run for that
+server session; updates are event-driven. Token usage opens with the chip's start
+time and total, computes the cost of any time range, and lists model, tokens,
+and estimated cost per experiment grouped by date, read only as numbers from the local Claude Code
+transcripts; Codex and Cursor usage is not counted. Guide explains operation and
+the sequence, with an example plot per node from `docs/guide_assets/`. Language
+is selectable at the top right, and Prediction, Parameters, Analysis, and Next
+action are collapsed by default. Home provides Pause, Resume, End automation
+(keep site), Emergency-stop worker (keep site), and full shutdown, which is
+guarded by the exact `SHUTDOWN <session-id>` confirmation. Direct or replacement lease requests also
 rebind the workflow's stable session to the current lease.
 Phones and secondary browsers use the same URL and password; no pairing link is
 required. The loopback-only `/operator` page provides formal retained-lock
@@ -197,7 +268,8 @@ inspection/recovery with physical attestation and is never tunneled.
 
 離開或停止語句（例如 `結束量測`、`停止量測`、`退出 JY 量測模式`）會先安全
 終止／等待 active run，再關閉 workflow、Dashboard、MCP HTTP service 與 tunnel。
-完整停止也會刪除該次 Dashboard token；下一次進入會產生全新連結。
+完整停止也會刪除內部 Dashboard access token；下一次進入會建立新的 quick tunnel，
+hostname 可能改變，但登入密碼不變。
 Dashboard 的「完整結束量測」按鈕在 lease halted 後仍可使用；它會等待 active run，
 若 worker 無法證明 cleanup 而留下 lock，coordinator 會確認所有 JY worker 都已死亡，
 保留 lock 與 recovery marker，但仍關閉 Dashboard、MCP 與 tunnel。下一次 Ensure
@@ -208,7 +280,8 @@ protected-backup state 完全相符時使用相容復原。不得手動刪除 lo
 
 Exit or stop phrases safely stop or poll an active run, close the workflow, and
 then shut down the Dashboard, HTTP MCP service, and public tunnel. Full shutdown
-also deletes that Dashboard token, so the next entry receives a fresh URL.
+also deletes the internal Dashboard access token; the next entry opens a new
+quick tunnel whose hostname may differ, while the login password stays the same.
 The full-shutdown button remains available after a halted lease and waits for an
 active run. If cleanup leaves a lock, JY verifies that every worker has exited,
 keeps the lock/receipt for recovery, and still closes Dashboard, MCP, and tunnel.
@@ -262,6 +335,7 @@ repository root/
    │  ├─ policies.yaml                   server-enforced hard limits
    │  └─ experiences/                    accepted settings and lessons
    ├─ docs/                              detailed operating documentation
+   │  └─ guide_assets/                   example plots for the Dashboard Guide
    ├─ src/jy_agent/                      MCP, policy, worker, Dashboard
    ├─ tests/                             offline regression tests
    └─ runtime/                           ignored local audit/runtime data

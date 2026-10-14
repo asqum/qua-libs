@@ -113,7 +113,7 @@ def analyze_02c_transitions(
         selected = trace.sel(qubit=name) if "qubit" in trace.dims else trace
         values = np.asarray(selected.values, dtype=float).reshape(-1)
         base_frequency = _base_frequency(dataset, name)
-        transition = _analyze_trace(
+        full = _analyze_trace(
             power_axis,
             values,
             frequency_axis,
@@ -121,19 +121,105 @@ def analyze_02c_transitions(
             rules,
             trace_source,
         )
+        # Operator rule 2026-10-11: low-power rows whose dip is lost in the
+        # noise are ignored; the dressed plateau is read from the lowest power
+        # that still shows the resonance clearly.
+        row_snr = _power_row_snr(dataset, name)
+        kept = _usable_power_mask(power_axis, row_snr, rules)
+        transition = full
+        if kept is not None and not bool(np.all(kept)):
+            transition = _analyze_trace(
+                power_axis[kept],
+                values[kept],
+                frequency_axis,
+                base_frequency,
+                rules,
+                trace_source,
+            )
+            transition["ignored_low_power_rows"] = int(np.count_nonzero(~kept))
+            transition["usable_min_power_dbm"] = float(np.min(power_axis[kept]))
+        if row_snr is not None:
+            transition["power_row_snr"] = [round(float(value), 2) for value in row_snr]
+        # Absence is judged on the whole sweep (its own low-power SNR rule),
+        # and never when the usable rows show a transition.
         absence = assess_bare_only_absence(
             dataset,
             name,
-            transition,
+            full,
             run_parameters,
             (qubit_context or {}).get(name, {}),
             rules,
         )
+        if transition is not full and transition.get("classification") == "dressed_transition":
+            absence = {
+                key: value
+                for key, value in absence.items()
+                if key not in {"classification", "skip_subsequent_experiments"}
+            }
         transition.update(absence)
         if transition.get("skip_subsequent_experiments") is True:
             transition["validation_failures"] = []
         results[name] = transition
     return {"qubits": results, "rules": rules}
+
+
+def _power_row_snr(dataset: Any, name: str) -> Any:
+    """Per-power contrast of the resonance dip over the point-to-point noise.
+
+    (90th percentile - minimum) of the 3-point-smoothed |IQ| row, divided by
+    the robust point-to-point noise. None when the dataset has no |IQ|.
+    """
+    import numpy as np
+
+    if "IQ_abs" not in dataset.data_vars:
+        return None
+    data = dataset["IQ_abs"]
+    if "qubit" in data.dims:
+        data = data.sel(qubit=name)
+    if set(data.dims) != {"power_dbm", "freq"}:
+        return None
+    rows = np.asarray(data.transpose("power_dbm", "freq").values, dtype=float)
+    snr = []
+    for row in rows:
+        if row.size < 5 or not np.all(np.isfinite(row)):
+            snr.append(0.0)
+            continue
+        smooth = np.convolve(row, np.ones(3) / 3, mode="same")[1:-1]
+        diffs = np.diff(row)
+        noise = 1.4826 * float(np.median(np.abs(diffs - np.median(diffs)))) / math.sqrt(2)
+        contrast = float(np.percentile(smooth, 90) - np.min(smooth))
+        snr.append(contrast / noise if noise > 0 else float("inf"))
+    return np.asarray(snr, dtype=float)
+
+
+def _usable_power_mask(power: Any, row_snr: Any, rules: dict[str, Any]) -> Any:
+    """Keep the powers from the lowest one where the dip is clearly visible.
+
+    The cut is the lowest power from which two consecutive rows reach
+    ``min_power_row_snr``; everything below it is ignored. None disables it.
+    """
+    import numpy as np
+
+    threshold = rules.get("min_power_row_snr")
+    if row_snr is None or threshold is None or float(threshold) <= 0:
+        return None
+    power = np.asarray(power, dtype=float).reshape(-1)
+    if row_snr.size != power.size:
+        return None
+    order = np.argsort(power)
+    good = row_snr[order] >= float(threshold)
+    cut = None
+    for index in range(len(good) - 1):
+        if good[index] and good[index + 1]:
+            cut = index
+            break
+    if cut is None:
+        return None
+    keep_sorted = np.zeros(power.size, dtype=bool)
+    keep_sorted[cut:] = True
+    kept = np.zeros(power.size, dtype=bool)
+    kept[order] = keep_sorted
+    return kept
 
 
 def selected_readout_power_dbm(result: Any) -> float | None:

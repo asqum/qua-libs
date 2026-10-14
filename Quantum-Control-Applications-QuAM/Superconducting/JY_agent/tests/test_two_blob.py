@@ -267,7 +267,9 @@ class ReopenDownstreamTests(unittest.TestCase):
                 (workflow["id"],),
             )
             proposal = service.request_run(
-                workflow["id"], "06", {"qubits": targets}, "Ramsey.", "unittest"
+                workflow["id"], "06",
+                {"qubits": targets, "use_state_discrimination": False},
+                "Ramsey.", "unittest"
             )
             service.db.execute(
                 """

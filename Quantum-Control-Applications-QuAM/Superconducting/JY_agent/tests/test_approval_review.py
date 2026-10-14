@@ -350,7 +350,7 @@ class ResultSummaryTests(unittest.TestCase):
     """The results page summary lists one row per experiment of a session."""
 
     @staticmethod
-    def _item(node_id, status, analysis_status, outcomes, assets):
+    def _item(node_id, status, analysis_status, passing, assets, **extra):
         return {
             "run": {"node_id": node_id, "status": status},
             "analysis": (
@@ -358,38 +358,59 @@ class ResultSummaryTests(unittest.TestCase):
                 if analysis_status is None
                 else {
                     "analysis_status": analysis_status,
-                    "outcomes_advisory": outcomes,
+                    "passing_targets": passing,
+                    "outcomes_advisory": {name: "successful" for name in ("q1", "q2", "q10")},
+                    **extra,
                 }
             ),
             "asset_indices": assets,
         }
 
-    def test_a_qubit_counts_only_when_the_run_passed_and_the_node_agreed(self) -> None:
-        passed = self._item(
-            "02x",
-            "completed",
-            "pass",
-            {"q10": "successful", "q2": "successful", "q1": "failed"},
-            [0],
-        )
+    def test_a_qubit_counts_only_when_jy_passed_it(self) -> None:
+        passed = self._item("02x", "completed", "pass", ["q10", "q2"], [0])
         self.assertEqual(_successful_qubits(passed), ["q2", "q10"])
-
-        # A needs_review run never reports a success, even when the node did.
-        unreviewed = self._item(
-            "02c", "completed", "needs_review", {"q1": "successful"}, [1]
-        )
+        # The node's own outcomes never make a qubit successful.
+        unreviewed = self._item("02c", "completed", "needs_review", [], [1])
         self.assertEqual(_successful_qubits(unreviewed), [])
+        legacy = self._item("02c", "completed", "pass", None, [1])
+        self.assertEqual(_successful_qubits(legacy), [])
+        self.assertEqual(_successful_qubits(self._item("04", "running", None, [], [])), [])
 
-        self.assertEqual(
-            _successful_qubits(self._item("04", "running", None, {}, [])), []
+    def test_single_pass_node_lists_only_jy_passing_qubits(self) -> None:
+        item = self._item("07b", "completed", "needs_review", ["q3"], [0])
+        item["run"]["single_pass"] = True
+        item["run"]["parameters"] = {"qubits": ["q1", "q3"]}
+        self.assertEqual(_successful_qubits(item), ["q3"])
+
+    def test_03a_candidate_stages_and_withheld_qubits_are_not_successes(self) -> None:
+        coarse = self._item("03a", "completed", "pass", ["q9"], [0], **{"03a_stage": "coarse_candidate"})
+        self.assertEqual(_successful_qubits(coarse), [])
+        patch = [
+            {"op": "replace", "path": f"/qubits/{name}/extras/idle_freq", "value": 1.0}
+            for name in ("q1", "q9")
+        ]
+        fine = self._item(
+            "03a", "completed", "pass", ["q1", "q9"], [0],
+            **{"03a_stage": "fine", "candidate_state_patch": patch},
         )
+        fine["decision"] = {"decision": "repeat", "state_patch": patch[:1]}
+        self.assertEqual(_successful_qubits(fine), ["q1"])
+
+    def test_summary_lists_each_qubit_once_per_node(self) -> None:
+        history = [
+            self._item("07b", "completed", "pass", ["q1", "q3"], [0]),
+            self._item("07b", "completed", "pass", ["q3"], [1]),
+        ]
+        html = _session_summary_section("session-id", history, "zh-Hant")
+        self.assertIn("成功：q1", html)
+        self.assertEqual(html.count("q3"), 1)
 
     def test_summary_shows_qubits_and_plots_only_for_successful_runs(self) -> None:
         history = [
-            self._item("02x", "completed", "pass", {"q1": "successful"}, [0, 1]),
-            self._item("02c", "completed", "needs_review", {"q1": "successful"}, [2]),
-            self._item("03a", "failed", "failed", {}, []),
-            self._item("04", "running", None, {}, []),
+            self._item("02x", "completed", "pass", ["q1"], [0, 1]),
+            self._item("02c", "completed", "needs_review", [], [2]),
+            self._item("03a", "failed", "failed", [], []),
+            self._item("04", "running", None, [], []),
         ]
         html = _session_summary_section("session-id", history, "zh-Hant")
 
@@ -401,17 +422,12 @@ class ResultSummaryTests(unittest.TestCase):
         self.assertIn("成功：q1", html)
         self.assertIn("/session/session-id/assets/0", html)
         self.assertIn("/session/session-id/assets/1", html)
-        # Rows without a proven success carry no qubit list and no plot.
         self.assertNotIn("/session/session-id/assets/2", html)
         self.assertEqual(html.count("未成功"), 2)
         self.assertIn("執行中", html)
 
     def test_summary_caps_thumbnails_and_reports_the_remainder(self) -> None:
-        history = [
-            self._item(
-                "05", "completed", "pass", {"q1": "successful"}, list(range(8))
-            )
-        ]
+        history = [self._item("05", "completed", "pass", ["q1"], list(range(8)))]
         html = _session_summary_section("session-id", history, "zh-Hant")
 
         self.assertIn("/session/session-id/assets/5", html)
