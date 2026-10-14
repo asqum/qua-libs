@@ -104,12 +104,12 @@ qubit_pair_indexes = [4]  # The indexes of the qubit pairs to characterize
 class Parameters(NodeParameters):
 
     qubit_pairs: Optional[List[str]] = ["coupler_q%s_q%s"%(i,i+1) for i in qubit_pair_indexes]
-    num_shots: int = 5000
+    num_shots: int = 2000
     """Single shots per (input state, tomography setting); 144 settings per shot loop."""
     operation: str = "Cz_flattop"
     """Name of the CZ gate in qp.gates to characterize."""
     flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
-    reset_type: Literal['active', 'thermal'] = "active"
+    reset_type: Literal['active', 'thermal'] = 'thermal'
     readout_mitigation: Literal["none", "pair_confusion", "kron_resonator"] = "pair_confusion"
     """none: raw populations; pair_confusion: qp.confusion (34_2Q_confusion_matrix);
     kron_resonator: kron of the resonator.confusion_matrix of both qubits (07b_IQ_Blobs)."""
@@ -125,7 +125,7 @@ class Parameters(NodeParameters):
 
 
 node = QualibrationNode(
-    name="90a_cz_process_tomography", parameters=Parameters()
+    name="90_cz_process_tomography", parameters=Parameters()
 )
 assert not (node.parameters.simulate and node.parameters.load_data_id is not None), "If simulate is True, load_data_id must be None, and vice versa."
 

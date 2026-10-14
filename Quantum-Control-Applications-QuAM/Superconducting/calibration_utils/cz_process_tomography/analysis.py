@@ -1,5 +1,5 @@
 """
-Two-qubit quantum process tomography (QPT) analysis for 90a_cz_process_tomography.
+Two-qubit quantum process tomography (QPT) analysis for 90_cz_process_tomography.
 
 Every function in this module uses the conventions below. They are also exported as
 ``CONVENTIONS`` and saved with the node results so that data can be re-analysed offline.
@@ -8,7 +8,7 @@ Qubit and tensor-product ordering
     Qubit 0 = ``qubit_pair.qubit_control``, qubit 1 = ``qubit_pair.qubit_target``.
     |c t> has computational index 2*c + t, i.e. operators are kron(control, target).
     This is the ordering of ``state_control * 2 + state_target`` in 34_2Q_confusion_matrix,
-    40b_Bell_state_tomography and 100b_two_qubit_gate_set_tomography_ais.
+    40b_Bell_state_tomography and 94b_two_qubit_gate_set_tomography_ais.
 
 Readout assignment
     ``readout_state``: 0 -> |0> (Z = +1), 1 -> |1> (Z = -1). With GEF readout, 2 -> |2> (leaked).
