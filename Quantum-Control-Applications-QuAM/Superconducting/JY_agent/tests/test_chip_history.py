@@ -65,6 +65,10 @@ class ChipHistoryTests(unittest.TestCase):
             html = render_chip_history(history, lambda run, pos, thumb: f"/img/{run}/{pos}")
             self.assertIn("Snapshot", render_chip_history(history, lambda r, p, t: "", "en"))
             self.assertLess(html.index(">02x<"), html.index(">03a<"))
+            # The card and every node start folded and remember their state.
+            self.assertNotIn(" open", html)
+            self.assertIn(f'data-remember-open="chip-history:{history["chip"]}"', html)
+            self.assertIn(f'data-remember-open="chip-history:{history["chip"]}:02x"', html)
 
             # Assets: only this chip's runs, only plots under the data root.
             key = str(workflow["device_key"])

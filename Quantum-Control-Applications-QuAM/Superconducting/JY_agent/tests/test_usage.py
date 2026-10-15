@@ -8,7 +8,16 @@ from pathlib import Path
 from datetime import datetime, timedelta
 
 from jy_agent.approval_web import TAIPEI_TIMEZONE, _usage_range, _usage_section
-from jy_agent.usage import attribute_usage, call_cost, chip_usage, load_calls, parse_time
+from jy_agent.db import Database
+from jy_agent.usage import (
+    attribute_usage,
+    call_cost,
+    chip_usage,
+    chips_summary,
+    load_calls,
+    parse_time,
+    sync_calls,
+)
 
 PRICING = {
     "cache_write_5m_multiplier": 1.25,
@@ -148,6 +157,43 @@ class UsageTests(unittest.TestCase):
             self.assertEqual(session["total"]["calls"], 0)
             self.assertEqual(session["runs"], [])
 
+    def test_saved_calls_outlive_transcripts(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            db = Database(Path(folder) / "jy.sqlite3")
+            transcripts = Path(folder) / "projects"
+            transcripts.mkdir()
+            self.transcript(str(transcripts))
+            first = sync_calls(db, transcripts)
+            self.assertEqual(len(first), 9)
+            # A later, larger line of m8 grows the saved row.
+            more = [assistant("m8", "2026-10-02T11:30:05Z", ["Bash"], output=900)]
+            (transcripts / "t.jsonl").write_text("\n".join(json.dumps(x) for x in more), encoding="utf-8")
+            sync_calls(db, transcripts)
+            # Claude Code deletes the transcripts; the saved calls remain.
+            for path in transcripts.glob("*.jsonl"):
+                path.unlink()
+            kept = {call.message_id: call for call in sync_calls(db, transcripts)}
+            self.assertEqual(len(kept), 9)
+            self.assertEqual(kept["m8"].tokens["output"], 900)
+            self.assertEqual(kept["m8"].tools, {"Bash"})
+            self.assertEqual(kept["m6"].tokens["cache_write_1h"], 1000)
+            self.assertEqual(kept["m4"].tools, {"Bash", "mcp__jy_bringup__jy_autonomy_analyze_run"})
+            # Labels survive: the turn is saved with each call.
+            result = chip_usage(list(kept.values()), self.workflows(), {"w1": self.runs()}, PRICING, "chipA")
+            self.assertEqual(result["development"]["calls"], 2)
+            self.assertEqual(len(sync_calls(db, None)), 9)
+
+    def test_chips_summary(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            calls = load_calls(self.transcript(folder))
+            rows = chips_summary(calls, self.workflows(), {"chipA": 2}, PRICING)
+            self.assertEqual([row["chip_name"] for row in rows], ["chipB", "chipA"])
+            chip_b, chip_a = rows
+            self.assertEqual((chip_a["workflows"], chip_a["runs"], chip_a["calls"]), (2, 2, 7))
+            self.assertEqual(chip_a["first_at"], "2026-10-02T10:00:00+00:00")
+            self.assertEqual(chip_a["last_at"], "2026-10-02T11:20:01+00:00")
+            self.assertEqual((chip_b["calls"], chip_b["runs"]), (1, 0))  # m8
+
     def test_range_presets(self) -> None:
         now = datetime(2026, 10, 14, 15, 30, tzinfo=TAIPEI_TIMEZONE)
         self.assertEqual(_usage_range({}, now)[:3], ("chip", None, None))
@@ -170,6 +216,9 @@ class UsageTests(unittest.TestCase):
                     args = (calls, test.workflows(), {"w1": test.runs()}, PRICING, "chipA")
                     return {
                         "chip_name": "chipA",
+                        "device_key": "chipA",
+                        "chips": chips_summary(calls, test.workflows(), {"chipA": 2}, PRICING),
+                        "saved_since": calls[0].timestamp.isoformat(),
                         "overall": chip_usage(*args, day_zone=day_zone),
                         "range": chip_usage(*args, start, end, day_zone=day_zone),
                         "pricing": PRICING,
@@ -184,6 +233,11 @@ class UsageTests(unittest.TestCase):
             self.assertIn("2026-10-02 · 2 個實驗", html)
             self.assertIn("此時段全部用量", html)
             self.assertIn("19:10:00", html)  # run A in Taipei time
+            self.assertIn("各晶片總用量", html)
+            self.assertIn("全部晶片", html)
+            self.assertIn('<tr class="usage-current"><td class="text">chipA</td>', html)
+            self.assertLess(html.index("各晶片總用量"), html.index("估計總費用"))
+            self.assertIn("2026-10-01 開始", html)  # m0, saved since, in Taipei time
 
 
 if __name__ == "__main__":

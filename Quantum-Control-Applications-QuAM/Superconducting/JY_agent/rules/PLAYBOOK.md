@@ -163,7 +163,8 @@ the lock survives in recovery quarantine and the next Ensure is local-only.
   - empties `extras`;
   - sets T1, T2ramsey and T2echo to 100 µs and anharmonicity to 200 MHz;
   - sets saturation to amplitude 0.5 and length 20000 ns;
-  - sets the readout length and depletion time to 2000 ns;
+  - sets the readout length to 10000 ns (4000 ns from its first 03a) and the
+    depletion time to 2000 ns;
   - resets threshold, rus_exit_threshold and integration_weights_angle to 0
     and the confusion matrix to identity;
   - sets the z offsets and `freq_vs_flux_01_quad_term` to 0;
@@ -333,8 +334,8 @@ derivative-threshold fit is advisory and must be ignored when it is empty or
 disagrees with the dressed boundary.
 
 Operator instruction, 2026-10-02: the committed readout power is that dressed
-boundary minus `analysis."02c".readout_power_backoff_db` (3 dB since
-2026-10-13; 10 dB before), so 07d and 07b start below the bare-resonator
+boundary minus `analysis."02c".readout_power_backoff_db` (5 dB since
+2026-10-15; 3 dB from 2026-10-13, 10 dB before), so 07d and 07b start below the bare-resonator
 transition. Each readout line's
 `full_scale_power_dbm` (the MW-FEM port shared by its qubits) is then set to the
 smallest integer in [-11, 16] dBm for which every pulse amplitude stays at or
@@ -628,12 +629,16 @@ but not passing (for example q1/q2 failing the two-blob test) does not block
 keeps its 07d readout and gets no 07b threshold/angle/confusion update. Only a
 target explicitly marked scientifically unmeasurable at 07b is dropped.
 
-Operator instruction, 2026-10-02 (updated 2026-10-13): with 02c committing the
-dressed limit minus 3 dB, 07d sweeps the readout amplitude factor 0.2–1.41
-(22 points), so its search reaches back up to the dressed limit and never past
+Operator instruction, 2026-10-02 (updated 2026-10-15): with 02c committing the
+dressed limit minus 5 dB, 07d sweeps the readout amplitude factor 0.2–1.778
+(27 points), so its search reaches back up to the dressed limit and never past
 it (q2's third IQ cloud at factor 2.03 under the old 3.16 sweep). Since 2026-10-13 the
 readout duration sweeps up to 4000 ns (8 x 500 ns; the duration step must be a
-multiple of 4 ns), and `readout_length_normalize_ns` is 4000 so 07b keeps it. A run made on an older value of a
+multiple of 4 ns). Readout length is 10000 ns before 03a and drops to 4000 ns on
+a qubit's first 03a (`autonomy.pre_03a_readout_length_ns` /
+`first_03a_readout_length_ns`, set by `jy_request_readout_length_normalize`,
+which the server requires before the run); the 10000 ns cap leaves 07d's choice
+alone. A run made on an older value of a
 `single_pass_default_keys` entry (here `max_amplitude_factor`) no longer counts
 toward single pass, which is how the first group measured on the old 1.99
 sweep earns one more run. The node's own power-setting step restores the
@@ -776,17 +781,40 @@ baselines.
 
 ### 06 / 06b — Ramsey T2* and echo T2
 
-Operator instruction, 2026-10-02: the Ramsey detuning is inversely
-proportional to the window, `frequency_detuning_in_mhz x max_wait_time_in_ns/1000
-~= 4` (1 us -> 4 MHz, 10 us -> 0.4 MHz, 40 us -> 0.1 MHz), so every 06 plot shows
-about four fringes and can be read by eye. Choose the window from T2* (at least
-3.5 lifetimes) and omit `frequency_detuning_in_mhz`: the policy derives it. An
-explicit detuning more than 25% off the rule
-(`nodes."06".detuning_wait_product_*`) is refused before the hardware. Use a
-linear sweep with enough points to resolve the fringe (the defaults are 40 us,
-0.1 MHz, 400 linear points). `06_Ramsey.py` measures one qubit per batch, so the
+Operator instruction, 2026-10-02, tightened 2026-10-15: the Ramsey detuning is
+inversely proportional to the window, `frequency_detuning_in_mhz x
+(max_wait_time_in_ns - min_wait_time_in_ns) = 4000` exactly (1000 ns -> 4 MHz,
+20000 ns -> 0.2 MHz, 40000 ns -> 0.1 MHz), so every 06 plot shows four fringes
+and can be read by eye. `min_wait_time_in_ns` is always 16, and
+`max_wait_time_in_ns` is 16 plus a positive multiple of 500 (for example 20016).
+Choose the window from T2* (at least 3.5 lifetimes), round it up to the
+500 ns grid, and omit `frequency_detuning_in_mhz`: the policy derives it. Any
+other explicit detuning, or a wait time off the grid, is refused before the
+hardware (`nodes."06"` in `rules/policies.yaml`). Use a linear sweep with
+enough points to resolve the fringe (the defaults are 16 to 40016 ns, 0.1 MHz,
+400 linear points). `06_Ramsey.py` measures one qubit per batch, so the
 run time grows with qubits x points x averages; keep the window no longer than
 needed.
+
+Operator instruction 2026-10-15: 06 calibrates the drive frequency before it
+measures T2*, because a detuned qubit blurs the fringes of a long first window.
+Per qubit, starting over after a 04 -> 03a return:
+
+1. Calibrate: its first 06 uses max wait 1016 ns (4 MHz). That run only
+   corrects the frequency; it never resolves T2*, even if every check passes.
+2. Confirm: further 06 runs stay at 1016 ns until one shows both fringes on the
+   detuning. Every 1016 ns run commits its `frequency_correction_patch`, and
+   the server refuses the next 06 of that qubit until the previous correction
+   is in `state.json`. A short T2* (1016 ns covers at least 3.5 lifetimes)
+   can pass here.
+3. Measure: the window lengthens to about 4 x T2* (on the 500 ns grid) when an
+   earlier fit has relative uncertainty below 0.5, otherwise to the next rung of
+   1016 -> 4016 -> 16016 -> 40016 -> 100016 ns (the cap). A missed fringe at a
+   longer window still corrects the frequency and repeats that window.
+
+`jy_get_next_action` reports each qubit's `ramsey_stages` and proposes the run
+with that window; qubits at different stages run in separate groups. The
+settings are in `analysis."06"` of `rules/policies.yaml`.
 
 Operator instruction 2026-10-10: a qubit passes 06 only when both fitted
 fringe frequencies (detuning signs −1 and +1) lie within 20% of the set

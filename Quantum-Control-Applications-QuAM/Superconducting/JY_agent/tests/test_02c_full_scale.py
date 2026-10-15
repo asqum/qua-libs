@@ -69,7 +69,7 @@ class FullScale02cTests(unittest.TestCase):
         atomic_write_json(settings.wiring_path, wiring)
         raw = PolicyEngine(settings).raw
         # These cases test the full-scale arithmetic on the 10 dB backoff they
-        # were written for; the live backoff is 3 dB since 2026-10-13.
+        # were written for; the live backoff is 5 dB since 2026-10-15.
         raw["analysis"]["02c"]["readout_power_backoff_db"] = 10.0
         patch, errors = derive_02c_state_patch(
             settings, state, metrics(powers), targets or list(powers), raw

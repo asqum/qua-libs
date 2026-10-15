@@ -97,10 +97,14 @@ class PolicyEngine:
         ):
             # Operator instruction 2026-10-02: the Ramsey detuning follows the
             # window, so a run that does not name one gets the matching value.
-            merged["frequency_detuning_in_mhz"] = round(
-                float(product) / (float(merged["max_wait_time_in_ns"]) / 1000.0),
-                6,
+            # 2026-10-15: the window is max - min wait.
+            window_ns = float(merged["max_wait_time_in_ns"]) - float(
+                merged.get("min_wait_time_in_ns") or 0
             )
+            if window_ns > 0:
+                merged["frequency_detuning_in_mhz"] = round(
+                    float(product) / (window_ns / 1000.0), 6
+                )
         if self.settings.require_explicit_qubits and "qubits" not in parameters:
             raise PolicyError("An explicit qubits list is required for every run")
         for key, value in merged.items():
@@ -527,10 +531,11 @@ class PolicyEngine:
     ) -> None:
         """Keep the Ramsey detuning inversely proportional to its window.
 
-        Operator instruction 2026-10-02: detuning [MHz] x max wait [us] stays
-        near a fixed product (4 MHz*us: 1 us -> 4 MHz, 10 us -> 0.4 MHz), so
-        every Ramsey plot shows about the same number of fringes and is easy
-        to read by eye.
+        Operator instruction 2026-10-02: detuning [MHz] x window [us] stays at
+        a fixed product (4 MHz*us: 1 us -> 4 MHz, 10 us -> 0.4 MHz), so every
+        Ramsey plot shows the same number of fringes and is easy to read by
+        eye. 2026-10-15: the window is max - min wait, the product is exact,
+        min wait is fixed and max wait sits on min + a multiple of the step.
         """
 
         product = definition.get("detuning_wait_product_mhz_us")
@@ -539,11 +544,33 @@ class PolicyEngine:
         tolerance = float(definition.get("detuning_wait_product_tolerance", 0.25))
         detuning = parameters.get("frequency_detuning_in_mhz")
         wait_ns = parameters.get("max_wait_time_in_ns")
+        minimum_ns = parameters.get("min_wait_time_in_ns")
+        fixed_min = definition.get("fixed_min_wait_time_in_ns")
+        step = definition.get("max_wait_time_step_in_ns")
+        if fixed_min is not None and minimum_ns != fixed_min:
+            raise PolicyError(f"min_wait_time_in_ns must be {fixed_min} ns")
+        if (
+            step is not None
+            and is_finite_number(wait_ns)
+            and is_finite_number(minimum_ns)
+            and (
+                float(wait_ns) <= float(minimum_ns)
+                or (float(wait_ns) - float(minimum_ns)) % float(step)
+            )
+        ):
+            raise PolicyError(
+                f"max_wait_time_in_ns must be {minimum_ns} + a positive multiple "
+                f"of {step} ns (e.g. {float(minimum_ns) + 40 * float(step):g})"
+            )
+        cap = definition.get("max_wait_time_cap_ns")
+        if cap is not None and is_finite_number(wait_ns) and float(wait_ns) > float(cap):
+            raise PolicyError(f"max_wait_time_in_ns {float(wait_ns):g} exceeds {cap} ns")
         if not is_finite_number(detuning) or not is_finite_number(wait_ns):
             return
-        window_us = float(wait_ns) / 1000.0
+        window_us = (float(wait_ns) - float(minimum_ns or 0)) / 1000.0
         actual = float(detuning) * window_us
-        if abs(actual - float(product)) > tolerance * float(product):
+        # 1e-4 covers the derived value rounded to 6 decimals.
+        if abs(actual - float(product)) > max(tolerance, 1e-4) * float(product):
             expected = float(product) / window_us
             raise PolicyError(
                 f"frequency_detuning_in_mhz {float(detuning):g} with a "

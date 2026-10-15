@@ -1372,7 +1372,7 @@ class ActiveResetRepeatTests(unittest.TestCase):
                 )
             service.request_run(
                 workflow["id"], "06",
-                {"qubits": qualified, "reset_type": "active"},
+                {"qubits": qualified, "reset_type": "active", "max_wait_time_in_ns": 1016},
                 "Active group first batch.", "unittest",
             )
 

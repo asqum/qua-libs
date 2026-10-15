@@ -77,7 +77,12 @@ autonomy:
   # and depletion time at these values; 07d later picks each qubit's length.
   # Operator request 2026-10-13: 07d may pick readouts up to ~4000 ns, so the
   # cap no longer trims them (depletion keeps its 2000 ns cap).
-  readout_length_normalize_ns: 4000
+  # Operator instruction 2026-10-15: before 03a every target reads out for
+  # 10000 ns (set, not just capped, while the qubit has no 03a run); a qubit's
+  # first entry into 03a drops it to 4000 ns. The cap itself is 10000 ns.
+  readout_length_normalize_ns: 10000
+  pre_03a_readout_length_ns: 10000
+  first_03a_readout_length_ns: 4000
   readout_depletion_normalize_ns: 2000
   node_extras_prerequisites:
     "02x": ["bare_resonator_freq"]
@@ -218,7 +223,7 @@ fresh_qubit_defaults:
   anharmonicity_hz: 200000000
   saturation_amplitude: 0.5
   saturation_length_ns: 20000
-  readout_length_ns: 2000
+  readout_length_ns: 10000
   depletion_time_ns: 2000
   x180_amplitude: 0.05
   x180_length_ns:
@@ -395,6 +400,20 @@ analysis:
     noise_confirmation_num_averages: [2000, 4000, 8000]
     max_noise_confirmation_num_averages: 8000
   "06":
+    # Operator instruction 2026-10-15: 06 calibrates the drive frequency on a
+    # short window before it measures T2*, so a long first window cannot blur
+    # the fringes of a detuned qubit. Per qubit (restarting after a 04 -> 03a
+    # return): its first 06 runs at frequency_calibration_max_wait_ns and only
+    # corrects the frequency (it never resolves T2*); the next runs stay at
+    # that window until one shows both fringes on the detuning (confirmed);
+    # then the window lengthens -- to about target_lifetimes x T2* when a fit
+    # with relative uncertainty below reliable_relative_uncertainty gives it,
+    # otherwise to the next rung of max_wait_ladder_ns. Every run at the
+    # calibration window commits its frequency correction.
+    frequency_calibration_max_wait_ns: 1016
+    max_wait_ladder_ns: [1016, 4016, 16016, 40016, 100016]
+    target_lifetimes: 4.0
+    reliable_relative_uncertainty: 0.5
     # Operator instruction 2026-10-10: a qubit passes 06 only when both
     # Ramsey fringe frequencies (detuning signs -1 and +1) lie within this
     # fraction of the set detuning (1 MHz -> +-200 kHz). A good fit that
@@ -522,8 +541,8 @@ analysis:
     # Operator instruction 2026-10-02: read out below the dressed boundary,
     # so 07d/07b start clear of the bare-resonator transition. 2026-10-13
     # (CRSQ_26009_die(5,-1), q3-q5 not located at -10 dB): 10 -> 3 dB, for
-    # every 02c path (analysis patch and state patch).
-    readout_power_backoff_db: 3.0
+    # every 02c path (analysis patch and state patch). 2026-10-15: 3 -> 5 dB.
+    readout_power_backoff_db: 5.0
     # Each readout line's full scale is the smallest integer that keeps every
     # pulse at or below this amplitude (07d's max_readout_amplitude) and the
     # line's summed amplitude at or below
@@ -1040,6 +1059,9 @@ nodes:
     # Operator choice 2026-10-13: with the 3 dB 02c backoff, 1.41 (+3 dB)
     # reaches the dressed limit; 22 points give a ~0.06 step. Sweeping past
     # the limit drove q2 into a third IQ cloud (07b #457).
+    # Operator choice 2026-10-15: with the 5 dB backoff, 1.778 (+5 dB) reaches
+    # the dressed limit; 27 points keep the ~0.06 step. 07d stays single pass:
+    # new runs on these defaults count, an earlier 1.41 run gets one more pass.
     # num_runs 40 -> 100 (2026-10-02): the two-blob selection needs shots per
     # point; 9 pooled points x 200 shots resolve a few-% off-blob share.
     single_pass_default_keys: ["max_amplitude_factor", "num_runs"]
@@ -1050,8 +1072,8 @@ nodes:
       frequency_span_in_mhz: 6
       frequency_step_in_mhz: 0.2
       min_amplitude_factor: 0.2
-      max_amplitude_factor: 1.41
-      num_amplitudes: 22
+      max_amplitude_factor: 1.778
+      num_amplitudes: 27
       # Operator request 2026-10-13: up to ~4000 ns (8 durations of 500 ns; the
       # node needs max_duration / num_durations to be a multiple of 4 ns).
       max_duration_in_ns: 4000
@@ -1112,19 +1134,24 @@ nodes:
     name: "06_Ramsey"
     script: "06_Ramsey.py"
     flux_behavior: "joint"
-    # Operator instruction 2026-10-02: the detuning is inversely proportional
-    # to the window, detuning [MHz] x max wait [us] ~= 4 (1 us -> 4 MHz,
-    # 10 us -> 0.4 MHz), so every Ramsey plot shows about four fringes. A run
-    # that omits frequency_detuning_in_mhz gets the derived value; an explicit
-    # value more than the tolerance away is refused before the hardware.
+    # Operator instruction 2026-10-02, tightened 2026-10-15: the detuning is
+    # inversely proportional to the window, detuning [MHz] x (max - min wait)
+    # [ns] = 4000 exactly (20000 ns -> 0.2 MHz), so every Ramsey plot shows four
+    # fringes. min wait is always 16 ns and max wait is 16 + a multiple of
+    # 500 ns. A run that omits frequency_detuning_in_mhz gets the derived value;
+    # any other explicit value is refused before the hardware.
     detuning_wait_product_mhz_us: 4.0
-    detuning_wait_product_tolerance: 0.25
+    detuning_wait_product_tolerance: 0.0
+    fixed_min_wait_time_in_ns: 16
+    max_wait_time_step_in_ns: 500
+    # Operator choice 2026-10-15: T2* up to about 25 us.
+    max_wait_time_cap_ns: 100016
     defaults:
       num_averages: 1000
       reset_type: "thermal"
       frequency_detuning_in_mhz: 0.1
       min_wait_time_in_ns: 16
-      max_wait_time_in_ns: 40000
+      max_wait_time_in_ns: 40016
       num_time_points: 400
       log_or_linear_sweep: "linear"
       use_state_discrimination: true

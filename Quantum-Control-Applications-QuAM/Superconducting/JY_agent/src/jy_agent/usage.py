@@ -21,13 +21,19 @@ Operator request 2026-10-14: the page covers the whole chip, not only the
 current session. A workflow owns the calls from its creation to its close or
 the next workflow's creation, whichever is first; ``chip_usage`` adds up the
 windows of every workflow on one chip, optionally cut to a time range.
+
+Operator request 2026-10-15: usage is kept for good. Claude Code deletes old
+transcripts (about 30 days by default), so ``sync_calls`` saves each call's
+numbers in the JY database and the page reads the saved calls merged with the
+transcripts still on disk. ``chips_summary`` gives one row per chip.
 """
 
 from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass, field
+from bisect import bisect_left
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone, tzinfo
 from pathlib import Path
 from typing import Any, Iterable
@@ -173,6 +179,72 @@ def _tokens(usage: dict[str, Any]) -> dict[str, int]:
         "cache_read": int(usage.get("cache_read_input_tokens") or 0),
         "output": int(usage.get("output_tokens") or 0),
     }
+
+
+def stored_calls(db: Any) -> list[Call]:
+    """Every call saved in the JY database."""
+    calls = []
+    for row in db.all("SELECT * FROM usage_calls"):
+        stamp = parse_time(row["timestamp"])
+        if stamp is None:
+            continue
+        tools = json.loads(row["tools_json"] or "[]")
+        calls.append(
+            Call(
+                message_id=str(row["message_id"]),
+                timestamp=stamp,
+                model=str(row["model"]),
+                speed=str(row["speed"]),
+                tokens={key: int(row[key] or 0) for key in TOKEN_KEYS},
+                turn=str(row["turn"]),
+                tools={str(name) for name in tools},
+            )
+        )
+    return calls
+
+
+def sync_calls(db: Any, root: Path | None) -> list[Call]:
+    """Saved calls merged with the transcripts below ``root``; new or grown calls are saved.
+
+    Token counts only grow (a streaming line is replaced by the final one),
+    so a saved row keeps the larger of its stored and transcript values.
+    """
+    known = {call.message_id: call for call in stored_calls(db)}
+    changed: list[Call] = []
+    if root is not None and root.is_dir():
+        for call in load_calls(root):
+            saved = known.get(call.message_id)
+            if saved is None:
+                # A copy: load_calls returns objects its file cache keeps.
+                saved = replace(call, tokens=dict(call.tokens), tools=set(call.tools))
+                known[call.message_id] = saved
+                changed.append(saved)
+            elif not call.tools <= saved.tools or any(
+                call.tokens[key] > saved.tokens[key] for key in TOKEN_KEYS
+            ):
+                _absorb(saved, call.tools, call.tokens)
+                changed.append(saved)
+    if changed:
+        grow = ", ".join(f"{key} = MAX({key}, excluded.{key})" for key in TOKEN_KEYS)
+        with db.connect() as connection:
+            connection.executemany(
+                "INSERT INTO usage_calls (message_id, timestamp, model, speed, turn, "
+                f"tools_json, {', '.join(TOKEN_KEYS)}) VALUES ({', '.join('?' * (6 + len(TOKEN_KEYS)))}) "
+                f"ON CONFLICT(message_id) DO UPDATE SET tools_json = excluded.tools_json, {grow}",
+                [
+                    (
+                        call.message_id,
+                        call.timestamp.isoformat(),
+                        call.model,
+                        call.speed,
+                        call.turn,
+                        json.dumps(sorted(call.tools)),
+                        *(call.tokens[key] for key in TOKEN_KEYS),
+                    )
+                    for call in changed
+                ],
+            )
+    return sorted(known.values(), key=lambda item: item.timestamp)
 
 
 def call_cost(call: Call, pricing: dict[str, Any]) -> float | None:
@@ -398,6 +470,51 @@ def chip_usage(
                 day = call.timestamp.astimezone(day_zone).date().isoformat()
                 _add(result["days"].setdefault(day, _empty()), call, call_cost(call, pricing))
     result["runs"].sort(key=lambda row: parse_time(row["started_at"]))
+    return result
+
+
+def chips_summary(
+    calls: Iterable[Call],
+    workflows: Iterable[dict[str, Any]],
+    run_counts: dict[str, int],
+    pricing: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """One row per chip, newest activity first (operator request 2026-10-15).
+
+    A chip's usage is every call inside its workflow windows, the same total
+    ``chip_usage`` reports. ``last_at`` is its latest call, or its latest
+    workflow's creation when no call fell inside.
+    """
+    ordered = sorted(calls, key=lambda item: item.timestamp)
+    stamps = [call.timestamp for call in ordered]
+    rows: dict[str, dict[str, Any]] = {}
+    for workflow, opened, closed in workflow_windows(workflows):
+        key = workflow.get("device_key")
+        if not key:
+            continue
+        row = rows.setdefault(
+            str(key),
+            {
+                "device_key": str(key),
+                "chip_name": Path(str(key)).name,
+                "first_at": opened,
+                "last_at": opened,
+                "workflows": 0,
+                "runs": int(run_counts.get(str(key), 0)),
+                **_empty(),
+            },
+        )
+        row["workflows"] += 1
+        row["last_at"] = max(row["last_at"], opened)
+        low = bisect_left(stamps, opened)
+        high = len(ordered) if closed is None else bisect_left(stamps, closed)
+        for call in ordered[low:high]:
+            _add(row, call, call_cost(call, pricing))
+            row["last_at"] = max(row["last_at"], call.timestamp)
+    result = sorted(rows.values(), key=lambda row: row["last_at"], reverse=True)
+    for row in result:
+        row["first_at"] = row["first_at"].isoformat()
+        row["last_at"] = row["last_at"].isoformat()
     return result
 
 

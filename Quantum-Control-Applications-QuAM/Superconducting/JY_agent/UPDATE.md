@@ -1,5 +1,59 @@
 # Update log / 更新紀錄
 
+## 2026-10-15
+
+- 06 Ramsey：detuning [MHz] × (max wait − min wait) [ns] 必須剛好等於 4000
+  （20000 ns → 0.2 MHz），不再容許 25% 誤差；min wait 固定 16 ns，max wait 必須是
+  16 + 500 的倍數（例如 20016）。不給 detuning 時由 policy 自動算出。預設 max wait
+  40000 → 40016。
+- 06st_t2star 的 JY refit 改用帶振盪的衰減模型（damped cosine）擬合 Ramsey 條紋。
+- 02c 讀取功率改為 dressed 上限 −5 dB（原 −3 dB）；07d amplitude 掃描改為
+  0.2–1.778（+5 dB 回到 dressed 上限），27 點，07d 仍為 single pass。
+- Readout length：03a 之前所有目標 qubit 設為 10000 ns（fresh defaults 也改為
+  10000），qubit 第一次進 03a 時改為 4000 ns；上限截斷改為 10000 ns，depletion
+  維持 2000 ns。由 `jy_request_readout_length_normalize` 執行，server 會在 run 前要求。
+- 06 Ramsey 分段：每顆 qubit 第一次 06 一律用 max wait 1016 ns 只做頻率校正（不 commit
+  T2*）；接著在 1016 ns 重複到兩個 fringe 都對上 detuning 才加長；加長時依可信的
+  T2* 估計取約 4 倍，否則依 1016 → 4016 → 16016 → 40016 → 100016 ns 階梯。上限
+  100016 ns。前一次的頻率修正沒 commit 前不能跑下一次 06。04 → 03a 回頭後重新開始。
+
+- 06 Ramsey: detuning [MHz] x (max wait - min wait) [ns] must equal 4000 exactly
+  (20000 ns -> 0.2 MHz), no longer within 25%; min wait is fixed at 16 ns and max
+  wait is 16 + a multiple of 500 (e.g. 20016). An omitted detuning is derived.
+  Default max wait 40000 -> 40016.
+- The 06st_t2star JY refit fits a damped cosine to the Ramsey fringes.
+- 02c readout power is the dressed limit minus 5 dB (was 3 dB); the 07d
+  amplitude sweep is 0.2-1.778 (+5 dB back to the limit), 27 points, still
+  single pass.
+- Readout length: 10000 ns for every target before 03a (fresh defaults too),
+  4000 ns from a qubit's first 03a; the cap is 10000 ns and depletion stays at
+  2000 ns. jy_request_readout_length_normalize applies it; the server requires
+  it before the run.
+- 06 Ramsey stages: a qubit's first 06 runs at 1016 ns and only corrects the
+  frequency (no T2*); it stays at 1016 ns until both fringes sit on the
+  detuning, then lengthens to about 4 x a reliable T2* or along
+  1016 -> 4016 -> 16016 -> 40016 -> 100016 ns (the cap). The next 06 waits for
+  the previous frequency correction; a 04 -> 03a return starts over.
+
+- Token 用量永久保存：每筆 Claude Code API 呼叫的數字（時間、模型、各類 token、
+  工具類別；不含對話內容）存進 JY 資料庫的 `usage_calls`，Claude Code 刪掉舊對話
+  紀錄後仍可查詢。開啟 Token 用量頁與進入量測模式（背景執行）時更新。
+- Token 用量頁最上方新增「各晶片總用量」：每顆晶片的第一次／最近一次日期、
+  workflow 數、實驗數、總 token 與估計費用，目前 session 的晶片以底色標示。
+- 實驗結果頁的「晶片歷史結果」整張卡片與每個實驗節點預設收起；瀏覽器會記住展開
+  了哪些，自動刷新後維持。
+
+- Token usage is kept for good: each Claude Code API call's numbers (time,
+  model, token kinds, tool kinds; no conversation text) are saved in the JY
+  database table `usage_calls` and stay after Claude Code deletes old
+  transcripts. They update when the Token usage page opens and, in the
+  background, on measurement-mode entry.
+- The Token usage page starts with Usage by chip: first and latest date,
+  workflows, runs, total tokens and estimated cost per chip; this session's chip
+  is highlighted.
+- The Chip history card on the results page and each of its nodes start folded;
+  the browser remembers what was opened across automatic refreshes.
+
 ## 2026-10-14
 
 - 04 拉長 gate 的上限：共用 XY 線 1000 → 400 ns；私有線維持 100 ns。

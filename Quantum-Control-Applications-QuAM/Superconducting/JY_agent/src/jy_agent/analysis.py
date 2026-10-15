@@ -1540,6 +1540,18 @@ class SnapshotAnalyzer:
                 .get("max_fringe_detuning_error_fraction", 0.2)
             )
             fringes_by_qubit = (dataset_metrics or {}).get("ramsey_fringes_hz") or {}
+            # Operator instruction 2026-10-15: every run at the frequency-
+            # calibration window commits its correction, matched or not.
+            calibration_ns = (
+                self.policy.raw.get("analysis", {})
+                .get("06", {})
+                .get("frequency_calibration_max_wait_ns")
+            )
+            at_calibration_window = (
+                calibration_ns is not None
+                and _finite(maximum_ns)
+                and float(maximum_ns) == float(calibration_ns)
+            )
             if not isinstance(fit_results, dict) or not fit_results:
                 failures.append("06 has no Ramsey fit_results.")
             else:
@@ -1606,7 +1618,7 @@ class SnapshotAnalyzer:
                         # A missed detuning still corrects the drive frequency
                         # so the next 06 can confirm it; nothing else commits.
                         "frequency_correction_ready": (
-                            not fringe_matches
+                            (not fringe_matches or at_calibration_window)
                             and offset is not None
                             and fringes is not None
                             and all(value > 0 for value in fringes)

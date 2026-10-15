@@ -271,6 +271,7 @@ def render_chip_history(
             f'<section class="card"><h2>{heading}</h2><p>{intro}</p>'
             f'<p>{ui("此晶片尚無成功的實驗。", "No successful result on this chip yet.")}</p></section>'
         )
+    chip_key = f"chip-history:{history['chip']}"
     blocks = []
     for node in history["nodes"]:
         qubit_names = ", ".join(item["qubit"] for item in node["qubits"])
@@ -286,10 +287,12 @@ def render_chip_history(
                 + "</div></div>"
             )
         rows = []
+        node_key = f'{chip_key}:{node["node"]}'
         for item in node["qubits"]:
             newest, earlier = item["results"][0], item["results"][1:]
             older = (
-                f'<details><summary>{ui("較早的成功結果", "Earlier successes")} ({len(earlier)})</summary>'
+                f'<details data-remember-open="{html.escape(node_key)}:{html.escape(item["qubit"])}">'
+                f'<summary>{ui("較早的成功結果", "Earlier successes")} ({len(earlier)})</summary>'
                 + "".join(entry(result) for result in earlier)
                 + "</details>"
                 if earlier
@@ -299,18 +302,26 @@ def render_chip_history(
                 f'<div class="chip-qubit"><h4>{html.escape(item["qubit"])}</h4>{entry(newest)}{older}</div>'
             )
         blocks.append(
-            f'<details class="chip-node" open><summary><strong>{html.escape(node["node"])}</strong> '
+            f'<details class="chip-node" data-remember-open="{html.escape(node_key)}">'
+            f'<summary><strong>{html.escape(node["node"])}</strong> '
             f'<span class="muted">{html.escape(qubit_names)}</span></summary>'
             f"{shared}{''.join(rows)}</details>"
         )
+    # Operator request 2026-10-15: the card and every node start folded; the
+    # Dashboard script remembers what this browser opened across refreshes.
+    count = ui(f"{len(history['nodes'])} 個實驗", f"{len(history['nodes'])} nodes")
     return (
-        f'<section class="card chip-history"><h2>{heading}</h2><p class="muted">{intro}</p>'
+        f'<section class="card chip-history"><details data-remember-open="{html.escape(chip_key)}">'
+        f'<summary><h2>{heading}</h2> <span class="muted">{count}</span></summary>'
+        f'<p class="muted">{intro}</p>'
         + "".join(blocks)
-        + "</section>"
+        + "</details></section>"
     )
 
 
 CHIP_HISTORY_STYLE = """
+.chip-history > details > summary { cursor:pointer; }
+.chip-history > details > summary h2 { display:inline; }
 .chip-node { border-top:1px solid #21304d; padding:10px 0; }
 .chip-node > summary { cursor:pointer; font-size:1.05rem; }
 .chip-qubit { margin:10px 0 14px 14px; }

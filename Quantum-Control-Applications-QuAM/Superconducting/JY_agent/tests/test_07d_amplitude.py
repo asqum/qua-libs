@@ -98,7 +98,7 @@ class SinglePassDefaultKeysTests(unittest.TestCase):
             proposal = service.request_run(
                 workflow["id"], "07d", {"qubits": first}, "Group 1.", "unittest"
             )
-            for run_id, factor in (("old-sweep", 3.16),):
+            for run_id, factor in (("old-sweep", 3.16), ("older-sweep", 1.41)):
                 service.db.execute(
                     """
                     INSERT INTO runs(
@@ -117,7 +117,7 @@ class SinglePassDefaultKeysTests(unittest.TestCase):
                 service._single_pass_measured_targets(workflow, "07d"), set()
             )
             service.request_run(
-                workflow["id"], "07d", {"qubits": first}, "Redo on 1.41.", "unittest"
+                workflow["id"], "07d", {"qubits": first}, "Redo on 1.778.", "unittest"
             )
             service.db.execute(
                 """
@@ -129,7 +129,7 @@ class SinglePassDefaultKeysTests(unittest.TestCase):
                 (
                     workflow["id"],
                     proposal["id"],
-                    json.dumps({"qubits": first, "max_amplitude_factor": 1.41}),
+                    json.dumps({"qubits": first, "max_amplitude_factor": 1.778}),
                 ),
             )
             with self.assertRaisesRegex(Exception, "runs once per target"):

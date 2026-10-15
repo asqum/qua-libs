@@ -179,6 +179,21 @@ CREATE TABLE IF NOT EXISTS dashboard_devices (
     revoked_at TEXT,
     created_by TEXT NOT NULL
 );
+-- Operator request 2026-10-15: token numbers of every Claude Code API call,
+-- kept after Claude Code deletes old transcripts. No conversation text.
+CREATE TABLE IF NOT EXISTS usage_calls (
+    message_id TEXT PRIMARY KEY,
+    timestamp TEXT NOT NULL,
+    model TEXT NOT NULL,
+    speed TEXT NOT NULL,
+    turn TEXT NOT NULL,
+    tools_json TEXT NOT NULL,
+    input INTEGER NOT NULL,
+    cache_write_5m INTEGER NOT NULL,
+    cache_write_1h INTEGER NOT NULL,
+    cache_read INTEGER NOT NULL,
+    output INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS schema_meta (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
@@ -212,7 +227,7 @@ class Database:
             self._migrate(connection)
             connection.executescript(INDEXES)
             connection.execute(
-                "INSERT INTO schema_meta(key, value) VALUES ('schema_version', '5') "
+                "INSERT INTO schema_meta(key, value) VALUES ('schema_version', '6') "
                 "ON CONFLICT(key) DO UPDATE SET value = excluded.value"
             )
 

@@ -79,7 +79,7 @@ class FreshQubitDefaultsTests(unittest.TestCase):
             self.assertEqual(operations["saturation"]["amplitude"], 0.5)
             self.assertEqual(operations["saturation"]["length"], 20000)
             readout = qubit["resonator"]["operations"]["readout"]
-            self.assertEqual(readout["length"], 2000)
+            self.assertEqual(readout["length"], 10000)
             self.assertEqual(readout["threshold"], 0.0)
             self.assertEqual(readout["integration_weights_angle"], 0.0)
             self.assertEqual(qubit["resonator"]["depletion_time"], 2000)

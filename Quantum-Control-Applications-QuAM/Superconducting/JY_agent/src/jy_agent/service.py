@@ -827,6 +827,7 @@ class AgentService:
             raise ServiceError(
                 "Entry requires the exact JY measurement-mode phrase"
             )
+        self._sync_usage_in_background()
         self._reject_retained_hardware_lock()
         workflow = self._enter_or_resume_workflow(
             client_id,
@@ -925,6 +926,7 @@ class AgentService:
             )
         # Reject an out-of-policy budget before a workflow is created.
         self._resolve_autonomy_duration(duration_hours)
+        self._sync_usage_in_background()
         self._reject_retained_hardware_lock()
         workflow = self._enter_or_resume_workflow(
             client_id,
@@ -1978,8 +1980,21 @@ class AgentService:
                         f"{', '.join(fresh)} have no measurement record on this "
                         "chip; apply jy_request_fresh_qubit_defaults first"
                     )
+                staged = sorted(
+                    name
+                    for name, change in self._readout_length_normalize_patch(workflow)[1].items()
+                    if change.get("reason") in {"pre_03a", "first_03a"}
+                    and name in set(merged["qubits"])
+                )
+                if staged:
+                    raise AutonomyScopeError(
+                        f"{', '.join(staged)} need the 10000/4000 ns readout length "
+                        "around 03a; apply jy_request_readout_length_normalize first"
+                    )
             self._validate_active_reset_prerequisite(workflow, node_id, merged)
             self._validate_node_prerequisites(workflow, node_id, merged)
+            if node_id == "06" and not prerequisite_verification:
+                self._validate_06_stage(workflow, merged)
             if not conversational and not prerequisite_verification:
                 lo_patch, lo_details = self._xy_lo_plan(workflow, node_id)
                 if lo_patch:
@@ -2228,6 +2243,8 @@ class AgentService:
         result = self.analyzer.analyze_run(run)
         if run["node_id"] == "03a":
             result = self._require_reproduced_03a_line(run, result)
+        if run["node_id"] == "06":
+            result = self._06_calibration_run_result(run, result)
         self.db.execute(
             """
             UPDATE runs SET analysis_status = ?, analysis_json = ? WHERE id = ?
@@ -2244,6 +2261,165 @@ class AgentService:
             # Operator request 2026-10-13: the static chip history follows
             # every success, so it is current even after shutdown.
             self._refresh_static_chip_history(str(run["workflow_id"]))
+        return result
+
+    # -- 06 frequency calibration before T2*, operator instruction 2026-10-15 --
+
+    def _06_rules(self) -> dict[str, Any]:
+        return self.policy.raw.get("analysis", {}).get("06", {})
+
+    def _06_stage(
+        self, workflow_id: str, qubit: str, before_rowid: int | None = None
+    ) -> dict[str, Any]:
+        """Where `qubit` stands in 06: calibrate, confirm or measure.
+
+        Runs before the qubit's latest 04 -> 03a return do not count, so a
+        returned qubit calibrates again.
+        """
+
+        rules = self._06_rules()
+        calibration = int(rules.get("frequency_calibration_max_wait_ns", 1016))
+        prior = [
+            row
+            for row in self._qubit_runs(workflow_id, "06", qubit)
+            if before_rowid is None or int(row["run_rowid"]) < before_rowid
+        ]
+        windows: list[float] = []
+        confirmed = False
+        estimate: float | None = None
+        for index, row in enumerate(prior):
+            window = json_loads(row.get("parameters_json"), {}).get("max_wait_time_in_ns")
+            window = float(window) if _finite_number(window) else None
+            windows.append(window or 0.0)
+            fit = (
+                (json_loads(row.get("analysis_json"), {}).get("fit_quality") or {})
+                .get("results", {})
+                .get(qubit)
+            ) or {}
+            if index >= 1 and window == calibration and fit.get("fringe_matches_detuning") is True:
+                confirmed = True
+            decay, relative = fit.get("coherence_seconds"), fit.get("relative_uncertainty")
+            if (
+                _finite_number(decay)
+                and float(decay) > 0
+                and _finite_number(relative)
+                and float(relative) < float(rules.get("reliable_relative_uncertainty", 0.5))
+            ):
+                estimate = float(decay)
+        latest = prior[-1] if prior else None
+        stage = "calibrate" if not prior else "measure" if confirmed else "confirm"
+        if stage != "measure":
+            window = calibration
+        else:
+            ladder = [int(value) for value in rules.get("max_wait_ladder_ns", [calibration])]
+            longest = max(windows) if windows else calibration
+            if estimate is not None:
+                step = 500
+                wanted = float(rules.get("target_lifetimes", 4.0)) * estimate * 1e9
+                window = 16 + step * max(1, math.ceil(wanted / step))
+                if window <= longest:
+                    # That window was already tried and still under-covered.
+                    window = next((value for value in ladder if value > longest), ladder[-1])
+            else:
+                window = next((value for value in ladder if value > longest), ladder[-1])
+            window = min(max(window, calibration), ladder[-1])
+        return {
+            "stage": stage,
+            "max_wait_time_in_ns": int(window),
+            "latest_run_id": latest["id"] if latest else None,
+            "pending_correction": self._06_pending_correction(latest, qubit) if latest else None,
+        }
+
+    def _06_pending_correction(
+        self, run: dict[str, Any], qubit: str
+    ) -> dict[str, Any] | None:
+        """The run's idle_freq correction for `qubit` if the state lacks it."""
+
+        analysis = json_loads(run.get("analysis_json"), {})
+        wanted = next(
+            (
+                item.get("value")
+                for item in analysis.get("frequency_correction_patch") or []
+                if item.get("path") == f"/qubits/{qubit}/extras/idle_freq"
+            ),
+            None,
+        )
+        if not _finite_number(wanted):
+            return None
+        try:
+            current = load_state(self.settings.active_state)["qubits"][qubit]["extras"].get(
+                "idle_freq"
+            )
+        except Exception:
+            current = None
+        if _finite_number(current) and abs(float(current) - float(wanted)) <= 1.0:
+            return None
+        return {"run_id": run["id"], "idle_freq": float(wanted)}
+
+    def _validate_06_stage(self, workflow: dict[str, Any], parameters: dict[str, Any]) -> None:
+        window = parameters.get("max_wait_time_in_ns")
+        for qubit in sorted(str(name) for name in parameters.get("qubits", [])):
+            stage = self._06_stage(workflow["id"], qubit)
+            pending = stage["pending_correction"]
+            if pending is not None:
+                raise AutonomyScopeError(
+                    f"{qubit}: commit the frequency correction of 06 run "
+                    f"{pending['run_id']} (idle_freq {pending['idle_freq']:.6g} Hz) "
+                    "before the next 06"
+                )
+            if stage["stage"] != "measure" and window != stage["max_wait_time_in_ns"]:
+                raise AutonomyScopeError(
+                    f"{qubit} is at the 06 frequency-{stage['stage']} stage; run it "
+                    f"with max_wait_time_in_ns {stage['max_wait_time_in_ns']}"
+                )
+
+    def _06_calibration_run_result(
+        self, run: dict[str, Any], result: dict[str, Any]
+    ) -> dict[str, Any]:
+        """A qubit's first 06 corrects its frequency and never resolves T2*."""
+
+        names = json_loads(run.get("parameters_json"), {}).get("qubits", [])
+        rowid = self.db.one("SELECT rowid FROM runs WHERE id = ?", (run["id"],))
+        rowid = int(rowid["rowid"]) if rowid else None
+        first = [
+            str(name)
+            for name in names
+            if self._06_stage(run["workflow_id"], str(name), rowid)["stage"] == "calibrate"
+        ]
+        passing = [name for name in result.get("passing_targets") or [] if name in first]
+        if not passing:
+            return result
+        result = dict(result)
+        candidate = list(result.get("candidate_state_patch") or [])
+        correction = list(result.get("frequency_correction_patch") or [])
+        by_target = dict(result.get("failure_reasons_by_target") or {})
+        failures = list(result.get("failure_reasons") or [])
+        for name in passing:
+            pattern = re.compile(
+                rf"^/qubits/{name}/(xy/intermediate_frequency|extras/idle_freq)$"
+            )
+            correction += [item for item in candidate if pattern.match(str(item.get("path")))]
+            candidate = [
+                item
+                for item in candidate
+                if not str(item.get("path", "")).startswith(f"/qubits/{name}/")
+            ]
+            reason = (
+                f"{name}: its first 06 run only calibrates the frequency "
+                "(operator 2026-10-15); T2* comes from a later run."
+            )
+            by_target.setdefault(name, []).append(reason)
+            failures.append(reason)
+        result.update(
+            analysis_status="needs_review",
+            passing_targets=[
+                name for name in result.get("passing_targets") or [] if name not in passing
+            ],
+            candidate_state_patch=candidate,
+            frequency_correction_patch=correction,
+            failure_reasons_by_target=by_target,
+            failure_reasons=failures,
+        )
         return result
 
     def _require_reproduced_03a_line(
@@ -3528,7 +3704,13 @@ class AgentService:
     def _readout_length_normalize_patch(
         self, workflow: dict[str, Any], state: dict[str, Any] | None = None
     ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-        """Cap readout length and depletion time (operator choice 2026-10-07)."""
+        """Cap readout length and depletion time (operator choice 2026-10-07).
+
+        Operator instruction 2026-10-15: while the workflow is before 03a, a
+        target with no 03a run reads out for `pre_03a_readout_length_ns`; when
+        03a is about to measure a qubit for the first time its length drops to
+        `first_03a_readout_length_ns`. Each change records its `reason`.
+        """
         config = self.policy.raw.get("autonomy", {})
         length_cap = config.get("readout_length_normalize_ns")
         depletion_cap = config.get("readout_depletion_normalize_ns")
@@ -3537,6 +3719,20 @@ class AgentService:
         length_cap = int(length_cap)
         if length_cap < 16 or length_cap % 4:
             raise ServiceError("readout_length_normalize_ns must be a multiple of 4, >= 16")
+        pre_03a = config.get("pre_03a_readout_length_ns")
+        first_03a = config.get("first_03a_readout_length_ns")
+        sequence = list(self.settings.workflow_sequence)
+        node = workflow.get("current_node")
+        before_03a = (
+            "03a" in sequence
+            and node in sequence
+            and sequence.index(node) < sequence.index("03a")
+        )
+        entering_03a = (
+            set(self._active_targets_for_node(workflow, "03a"))
+            if node == "03a" and workflow.get("id")
+            else set()
+        )
         targets = json_loads(workflow.get("targets_json"), None)
         if not isinstance(targets, list):
             targets = list(workflow.get("targets") or [])
@@ -3553,15 +3749,32 @@ class AgentService:
                 continue  # a referenced readout operation is left alone
             change: dict[str, Any] = {}
             length = readout.get("length")
-            if isinstance(length, (int, float)) and length > length_cap:
+            new_length, reason = None, None
+            if isinstance(length, (int, float)) and not isinstance(length, bool):
+                no_03a = workflow.get("id") is None or not self._qubit_runs(
+                    workflow["id"], "03a", name
+                )
+                if before_03a and pre_03a is not None and no_03a and length != int(pre_03a):
+                    new_length, reason = int(pre_03a), "pre_03a"
+                elif (
+                    name in entering_03a
+                    and first_03a is not None
+                    and no_03a
+                    and length > int(first_03a)
+                ):
+                    new_length, reason = int(first_03a), "first_03a"
+                elif length > length_cap:
+                    new_length, reason = length_cap, "cap"
+            if new_length is not None:
                 patch.append(
                     {
                         "op": "replace",
                         "path": f"/qubits/{name}/resonator/operations/readout/length",
-                        "value": length_cap,
+                        "value": new_length,
                     }
                 )
-                change["length_ns"] = [length, length_cap]
+                change["length_ns"] = [length, new_length]
+                change["reason"] = reason
             depletion = resonator.get("depletion_time")
             if (
                 depletion_cap is not None
@@ -3717,9 +3930,9 @@ class AgentService:
         payload = {
             "patch": patch,
             "reason": (
-                "Cap readout length and depletion time at the configured values "
-                "so multiplexed points no longer wait for a long template pulse; "
-                "07d later selects each qubit's readout length."
+                "Readout length before 03a is 10000 ns and drops to 4000 ns on a "
+                "qubit's first 03a; lengths and depletion times above the caps are "
+                "trimmed. 07d later selects each qubit's readout length."
             ),
             "run_id": None,
             "base_hash": sha256_file(self.settings.active_state),
@@ -4913,21 +5126,18 @@ class AgentService:
         workflow to every workflow on the chip, with an optional time range.
         ``overall`` is the chip since its first workflow; ``range`` is cut to
         [start, end) and, with ``session_only``, to this session's workflow.
-        Read-only: parses the Claude Code transcripts; see ``usage.py``.
+        Reads the calls saved in the JY database merged with the Claude Code
+        transcripts still on disk, saving new ones (2026-10-15); see ``usage.py``.
+        ``chips`` has one summary row per chip.
         """
-        from .usage import chip_usage, default_transcript_dir, load_calls, parse_time
+        from .usage import chip_usage, chips_summary, parse_time
 
         config = self.policy.raw.get("usage", {})
         pricing = config.get("pricing", {})
         session = self.dashboard_status(session_id)
         workflow = self._workflow(str(session["workflow_id"]))
         device_key = str(workflow.get("device_key") or self._device_key())
-        configured = config.get("transcript_dir")
-        root = (
-            Path(str(configured)).expanduser()
-            if configured
-            else default_transcript_dir(self.settings.agent_root)
-        )
+        root = self._usage_transcript_dir()
         result: dict[str, Any] = {
             "workflow_id": str(workflow["id"]),
             "device_key": device_key,
@@ -4936,12 +5146,24 @@ class AgentService:
             "transcript_dir": str(root) if root else None,
             "pricing": pricing,
         }
-        if root is None or not root.is_dir():
-            result["error"] = "Claude Code transcript folder was not found."
+        calls = self.sync_usage(root)
+        if not calls:
+            result["error"] = "No saved usage and no Claude Code transcript folder was found."
             return result
+        result["saved_since"] = calls[0].timestamp.isoformat()
         workflows = self.db.all(
             "SELECT id, created_at, updated_at, status, device_key FROM workflows"
         )
+        run_counts = {
+            str(row["device_key"]): int(row["runs"])
+            for row in self.db.all(
+                "SELECT w.device_key AS device_key, COUNT(*) AS runs "
+                "FROM runs r JOIN workflows w ON w.id = r.workflow_id "
+                "WHERE w.device_key IS NOT NULL AND r.inherited_from_run_id IS NULL "
+                "GROUP BY w.device_key"
+            )
+        }
+        result["chips"] = chips_summary(calls, workflows, run_counts, pricing)
         runs_by_workflow: dict[str, list[dict[str, Any]]] = {}
         # Runs carried over from an earlier workflow were never measured again.
         for row in self.db.all(
@@ -4955,7 +5177,6 @@ class AgentService:
             runs_by_workflow.setdefault(str(row["workflow_id"]), []).append(
                 {**row, "qubits": qubits if isinstance(qubits, list) else []}
             )
-        calls = load_calls(root)
         overall = chip_usage(
             calls, workflows, runs_by_workflow, pricing, device_key, day_zone=day_zone
         )
@@ -4973,6 +5194,43 @@ class AgentService:
         )
         result.update({"overall": overall, "range": ranged})
         return result
+
+    def _usage_transcript_dir(self) -> Path | None:
+        from .usage import default_transcript_dir
+
+        configured = self.policy.raw.get("usage", {}).get("transcript_dir")
+        if configured:
+            return Path(str(configured)).expanduser()
+        return default_transcript_dir(self.settings.agent_root)
+
+    def sync_usage(self, root: Path | None = None) -> list[Any]:
+        """Save new transcript calls in the database and return every saved call."""
+        from .usage import sync_calls
+
+        return sync_calls(self.db, root if root is not None else self._usage_transcript_dir())
+
+    def _sync_usage_in_background(self) -> None:
+        """Save usage on entry so it survives even if the page is never opened.
+
+        Claude Code deletes old transcripts, and parsing them can take seconds,
+        so entry starts the save and does not wait for it. Only a runtime
+        inside the agent folder (the installed JY, not a test copy) saves.
+        """
+        if not self.settings.runtime.resolve().is_relative_to(self.settings.agent_root.resolve()):
+            return
+        root = self._usage_transcript_dir()
+        if root is None or not root.is_dir():
+            return
+
+        def work() -> None:
+            try:
+                self.sync_usage(root)
+            except Exception:  # usage bookkeeping must never affect measurement
+                import logging
+
+                logging.getLogger(__name__).exception("Saving token usage failed")
+
+        threading.Thread(target=work, name="jy-usage-sync", daemon=True).start()
 
     def dashboard_review_asset(self, session_id: str, index: int) -> Path:
         # 2026-10-04: a page with 50 images used to rebuild the whole review
@@ -5387,6 +5645,23 @@ class AgentService:
         if result.get("action") == "run" and isinstance(run, dict):
             node_id = str(run.get("node_id"))
             parameters = run.get("parameters")
+            if node_id == "06" and isinstance(parameters, dict) and parameters.get("qubits"):
+                # Operator instruction 2026-10-15: each qubit's stage sets the
+                # window; qubits needing another window wait for a later run.
+                names = sorted(str(name) for name in parameters["qubits"])
+                windows = {
+                    name: self._06_stage(workflow_id, name)["max_wait_time_in_ns"]
+                    for name in names
+                }
+                window = windows[names[0]]
+                batch = [name for name in names if windows[name] == window]
+                parameters["qubits"] = batch
+                run["qubits"] = batch
+                parameters["max_wait_time_in_ns"] = window
+                parameters.pop("frequency_detuning_in_mhz", None)
+                result.setdefault("rules", []).append(
+                    "PLAYBOOK: 06 calibrates the frequency before T2*"
+                )
             if (
                 isinstance(parameters, dict)
                 and self.policy.shared_xy_drive.get("statistics_readout_node")
@@ -5643,6 +5918,11 @@ class AgentService:
                         + (f" (at most {cap:g} ns)" if cap is not None else "")
                         + f". Returning to 03a is not yet allowed: {why}."
                     )
+        if node_id == "06":
+            # Operator instruction 2026-10-15: calibrate, confirm, then measure.
+            result["ramsey_stages"] = {
+                name: self._06_stage(workflow_id, name) for name in sorted(active)
+            }
         result["required_setup"] = self._required_setup_for_node(
             node_id, sorted(active), workflow_id
         )
@@ -5922,6 +6202,28 @@ class AgentService:
                         ),
                     }
                 )
+        try:
+            length_plan = self._readout_length_normalize_patch(
+                self._workflow(workflow_id), state
+            )[1]
+        except Exception:  # pragma: no cover - advisory only
+            length_plan = {}
+        staged = sorted(
+            name
+            for name, change in length_plan.items()
+            if change.get("reason") in {"pre_03a", "first_03a"}
+        )
+        if staged:
+            required.append(
+                {
+                    "tool": "jy_request_readout_length_normalize",
+                    "targets": ", ".join(staged),
+                    "why": (
+                        "Readout length is 10000 ns before 03a and 4000 ns from "
+                        "a qubit's first 03a (operator 2026-10-15)."
+                    ),
+                }
+            )
         if node_id == "03a" and not self._initial_03a_setup_taken(
             self._workflow(workflow_id)
         ):

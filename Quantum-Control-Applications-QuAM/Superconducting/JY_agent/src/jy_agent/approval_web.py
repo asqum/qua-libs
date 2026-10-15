@@ -66,6 +66,17 @@ AUTONOMY_EVENTS_SCRIPT = """(() => {
 """
 
 SESSION_DASHBOARD_SCRIPT = """(() => {
+  // Folded sections keep what this browser opened across automatic refreshes.
+  document.querySelectorAll('details[data-remember-open]').forEach((item) => {
+    const key = 'jy-open:' + item.dataset.rememberOpen;
+    let saved = null;
+    try { saved = window.localStorage.getItem(key); } catch (_) {}
+    if (saved === '1') item.open = true;
+    if (saved === '0') item.open = false;
+    item.addEventListener('toggle', () => {
+      try { window.localStorage.setItem(key, item.open ? '1' : '0'); } catch (_) {}
+    });
+  });
   const selector = document.querySelector('[data-experiment-selector]');
   const panels = Array.from(document.querySelectorAll('[data-experiment-panel]'));
   const available = panels.map((panel) => panel.dataset.experimentPanel);
@@ -1337,7 +1348,7 @@ def _session_dashboard_page(
         page_content = approval_html
     elif view == "usage":
         page_title = _ui(language, "JY Token 用量", "JY token usage")
-        page_intro = _ui(language, "此晶片所有實驗使用的模型、token 數與估計費用，可選時段計算；從本機 Claude Code 對話紀錄統計（只讀取數字）。", "Model, tokens and estimated cost of every experiment on this chip, for any time range, counted from the local Claude Code transcripts (numbers only).")
+        page_intro = _ui(language, "各晶片與此晶片每個實驗使用的模型、token 數與估計費用，可選時段計算；從本機 Claude Code 對話紀錄統計，數字永久存在 JY 資料庫。", "Model, tokens and estimated cost per chip and per experiment on this chip, for any time range, counted from the local Claude Code transcripts; the numbers are kept in the JY database.")
         page_content = _usage_section(service, session_id, language, query or {})
     elif view == "results":
         page_title = _ui(language, "JY 實驗結果", "JY experiment results")
@@ -1420,6 +1431,7 @@ button {{ margin-top:12px; border:0; color:white; background:#3568e8; font-weigh
 .usage-totals strong {{ display:block; font-size:1.25rem; }}
 .usage-totals small {{ display:block; color:#9fb2d7; }}
 .usage-table tr.usage-day td {{ background:#16223a; font-weight:700; border-top:2px solid #2b3b5d; }}
+.usage-table tr.usage-current td {{ background:#1b3263; }}
 .usage-table details summary {{ cursor:pointer; list-style:none; }}
 .usage-table details span {{ display:block; color:#9fb2d7; font-size:.8rem; }}
 .usage-presets {{ display:flex; flex-wrap:wrap; gap:8px; margin:0 0 12px; }}
@@ -1582,6 +1594,41 @@ def _usage_section(
         f"<th>{_ui(language, '估計費用', 'Est. cost')}</th>"
     )
 
+    # Operator request 2026-10-15: every chip measured so far, newest first.
+    def civil_date(value: Any) -> str:
+        parsed = local(value)
+        return parsed.strftime("%Y-%m-%d") if parsed else "-"
+
+    chip_rows = usage.get("chips") or []
+    chip_lines = "".join(
+        f'<tr class="{"usage-current" if row["device_key"] == usage.get("device_key") else ""}">'
+        f'<td class="text">{escape(str(row["chip_name"]))}</td>'
+        f'<td class="text">{escape(civil_date(row["first_at"]))}</td>'
+        f'<td class="text">{escape(civil_date(row["last_at"]))}</td>'
+        f'<td>{number(row["workflows"])}</td><td>{number(row["runs"])}</td>{cells(row)}</tr>'
+        for row in chip_rows
+    )
+    all_chips: dict[str, Any] = {
+        key: sum(row[key] for row in chip_rows)
+        for key in ("calls", "cost_usd", "unpriced_calls", "input", "cache_write_5m", "cache_write_1h", "cache_read", "output")
+    }
+    all_chips["models"] = {name: 1 for row in chip_rows for name in row["models"]}
+    chip_total = (
+        f'<tr class="usage-day"><td class="text" colspan="3">{_ui(language, "全部晶片", "All chips")}</td>'
+        f'<td>{number(sum(row["workflows"] for row in chip_rows))}</td>'
+        f'<td>{number(sum(row["runs"] for row in chip_rows))}</td>{cells(all_chips)}</tr>'
+        if len(chip_rows) > 1
+        else ""
+    )
+    chips = f"""
+    <section class="card"><h2>{_ui(language, '各晶片總用量', 'Usage by chip')}</h2>
+    <div class="table-scroll"><table class="usage-table">
+    <tr><th class="text">{_ui(language, '晶片', 'Chip')}</th><th class="text">{_ui(language, '第一次', 'First')}</th><th class="text">{_ui(language, '最近一次', 'Latest')}</th><th>Workflows</th><th>Runs</th>{head}</tr>
+    {chip_lines}{chip_total}
+    </table></div>
+    <p class="muted">{_ui(language, '目前這個 session 的晶片以底色標示；下方明細只算這顆晶片。', "This session's chip is highlighted; the details below cover this chip only.")}</p>
+    </section>""" if chip_rows else ""
+
     chip_started = local(overall.get("chip_started_at"))
     chip = f"""
     <section class="card"><h2>{_ui(language, '晶片', 'Chip')} {escape(str(usage.get('chip_name')))}</h2>
@@ -1708,9 +1755,10 @@ def _usage_section(
       <li>{_ui(language, '日期列是該日此晶片的全部用量（含量測前準備、程式開發、對話），實驗列只算該實驗。總 token = input + cache 寫入 + cache 讀取 + output，點數字可看拆分。', "A date row is all of this chip's usage that day (including before-run, development and conversation); an experiment row is that experiment only. Total tokens = input + cache write + cache read + output; click a number for the split.")}</li>
       <li>{_ui(language, '估計費用採 Anthropic API 公開價格（每百萬 token，USD）：', 'Estimated cost uses Anthropic API list prices (USD per million tokens): ')}{escape(price_text)}{_ui(language, '；cache 寫入為 input 價格的 1.25 倍（5 分鐘）或 2 倍（1 小時）。訂閱方案的實際計費方式不同，這裡是 API 等值費用。', '; cache writes cost 1.25x (5 min) or 2x (1 h) the input price. Subscription plans are billed differently; this is the API-equivalent cost.')}</li>
       <li>{_ui(language, 'Cache 讀取通常最大：每次呼叫都會重新送出整段對話。標 * 的列含沒有價格的模型。', 'Cache reads are usually the largest part because every call resends the whole conversation. Rows marked * include a model without a price.')}</li>
+      <li>{_ui(language, '用量數字（不含對話內容）會存進 JY 資料庫，Claude Code 刪掉舊對話紀錄後仍保留；每次開啟此頁與進入量測模式時更新。保存的資料從', 'Usage numbers (no conversation text) are saved in the JY database and stay after Claude Code deletes old transcripts; they update whenever this page opens or measurement mode is entered. Saved data starts at ')}{escape(civil_date(usage.get('saved_since')))}{_ui(language, ' 開始。', '.')}</li>
       <li>{_ui(language, '資料來源', 'Source')}: {escape(str(usage.get('transcript_dir')))}</li>
     </ul></section>"""
-    return chip + range_card + runs + nodes + notes
+    return chips + chip + range_card + runs + nodes + notes
 
 
 def _instrument_pause_notice(
