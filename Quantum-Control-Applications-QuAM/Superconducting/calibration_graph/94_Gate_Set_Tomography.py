@@ -39,7 +39,7 @@ class Parameters(NodeParameters):
     load_data_id: Optional[int] = None
     multiplexed: bool = False
 
-node = QualibrationNode(name=f"100_Gate_Set_Tomography", parameters=Parameters())
+node = QualibrationNode(name=f"94_Gate_Set_Tomography", parameters=Parameters())
 
 # %% {Initialize_QuAM_and_QOP}
 # Class containing tools to help handling units and conversions.

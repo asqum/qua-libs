@@ -1,7 +1,7 @@
 """
     Gate Set Tomography (Advance Input Stream)
     ==========================================
-    Variant of 100_Gate_Set_Tomography that streams germ sequences to the OPX via
+    Variant of 94_Gate_Set_Tomography that streams germ sequences to the OPX via
     ``advance_input_stream``, avoiding the OPX1000 static gate-table limit (~16000 ints).
 
     Germ sequences are pushed from Python with ``job.push_to_input_stream`` once per
@@ -47,7 +47,7 @@ class Parameters(NodeParameters):
     load_data_id: Optional[int] = None
     multiplexed: bool = False
 
-node = QualibrationNode(name="100a_Gate_Set_Tomography_AIS", parameters=Parameters())
+node = QualibrationNode(name="94a_Gate_Set_Tomography_AIS", parameters=Parameters())
 
 # %% {Initialize_QuAM_and_QOP}
 u = unit(coerce_to_integer=True)
