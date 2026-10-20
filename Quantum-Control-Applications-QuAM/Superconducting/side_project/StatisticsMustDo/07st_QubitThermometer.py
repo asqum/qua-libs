@@ -1,23 +1,19 @@
 """
-        IQ BLOBS
-This sequence involves measuring the state of the resonator 'N' times, first after thermalization (with the qubit
-in the |g> state) and then after applying a pi pulse to the qubit (bringing the qubit to the |e> state) successively.
-The resulting IQ blobs are displayed, and the data is processed to determine:
-    - The rotation angle required for the integration weights, ensuring that the separation between |g> and |e> states
-      aligns with the 'I' quadrature.
-    - The threshold along the 'I' quadrature for effective qubit state discrimination.
-    - The readout fidelity matrix, which is also influenced by the pi pulse fidelity.
+        QUBIT THERMOMETER
+This sequence measures the resonator 'N' times after thermalization (qubit in |g>), without driving the qubit.
+The IQ blob is fitted with the 2D Gaussian mixture model calibrated by 07st_ReadoutGMMCalibration (centers and std
+fixed, only the weights are fitted), giving the excited-state population P_e, which is converted to an effective
+qubit temperature Teff through the Boltzmann distribution at the qubit frequency.
+With histo_num > 1 the measurement is repeated and the Teff distribution is fitted with a normal distribution.
+
+Note: P_e also contains readout-induced excitation, so Teff is an upper bound of the qubit temperature.
 
 Prerequisites:
-    - Having found the resonance frequency of the resonator coupled to the qubit under study (resonator_spectroscopy).
-    - Having calibrated qubit pi pulse (x180) by running qubit.wait(qubit.thermalization_time * u.ns) spectroscopy, power_rabi and updated the state.
+    - Having run 07st_ReadoutGMMCalibration with the current readout settings (qubit.extras GMM_mean/GMM_std).
     - Set the desired flux bias
 
-Next steps before going to the next node:
-    - Update the rotation angle (rotation_angle) in the state.
-    - Update the g -> e thresholds (threshold & rus_threshold) in the state.
-    - Update the confusion matrices in the state.
-    - Save the current state
+State update (only when histo_num >= 100):
+    - qubit.extras['Teff_mK'] and qubit.extras['Teff_mK_dev'].
 """
 
 
@@ -29,17 +25,13 @@ from typing import List, Literal, Optional
 from qualibrate import QualibrationNode, NodeParameters
 from quam_libs.components import QuAM
 from quam_libs.experiments.iq_blobs.fetch_dataset import fetch_dataset_ground_only
-from quam_libs.experiments.iq_blobs.parameters import Parameters
 from quam_libs.experiments.simulation import simulate_and_plot
-from quam_libs.macros import qua_declaration, active_reset
-from quam_libs.lib.qua_datasets import convert_IQ_to_V
+from quam_libs.macros import qua_declaration
 from quam_libs.lib.plot_utils import QubitGrid, grid_iter
-from quam_libs.lib.save_utils import fetch_results_as_xarray
-from qualang_tools.analysis.discriminator import two_state_discriminator
+from quam_libs.lib.save_utils import restore_load_data_id, resolve_qubits_from_node
 from qualang_tools.results import progress_counter, fetching_tool
 from qualang_tools.multi_user import qm_session
 from qualang_tools.units import unit
-from qm import SimulationConfig
 from qm.qua import *
 from time import time 
 from scipy.stats import norm
@@ -49,12 +41,11 @@ from quam_libs.lib.qubit_thermometer import repetition_data, StateDiscrimination
 
 # %% {Node_parameters}
 class Parameters(NodeParameters):
-    qubits: Optional[List[str]] = None #The qubit to be measured. If None, all active qubits will be measured
+    qubits: Optional[List[str]] = ['q2'] #The qubit to be measured. If None, all active qubits will be measured
     num_runs: int = 2048*2
-    flux_point_joint_or_independent_or_arbitrary: Literal['joint', 'independent'] = 'independent'   
+    flux_point_joint_or_independent_or_arbitrary: Literal['joint', 'independent'] = 'joint'   
     simulate: bool = False
     timeout: int = 100
-    use_state_discrimination: bool = True
     load_data_id: Optional[int] = None
     multiplexed: bool = 1
     histo_num:int = 1
@@ -80,25 +71,31 @@ num_qubits = len(qubits)
 
 
 
-original_params = {q.name: {"XY-FSP":0, "x180_amp":0, "x90_amp":0} for q in qubits}
-
 for q in qubits:
     if q.extras.get("GMM_mean") is None or q.extras.get("GMM_std") is None:
         raise ValueError(f"Qubit {q.name} is missing GMM parameters. Please run the 'ReadoutGMMCalibration' node first.")
 
-    # Save original driving values
-    original_params[q.name]['XY-FSP'] = q.xy.opx_output.full_scale_power_dbm
-    original_params[q.name]['x180_amp'] = q.xy.operations["x180"].amplitude
-    original_params[q.name]['x90_amp'] = q.xy.operations["x90"].amplitude
-    
+# Set driving to minimum power only for generating the config, then restore the machine immediately
+# so that the modified values can never be saved into the state.
+original_params = {}
+try:
+    for q in qubits:
+        original_params[q.name] = {
+            "XY-FSP": q.xy.opx_output.full_scale_power_dbm,
+            "x180_amp": q.xy.operations["x180"].amplitude,
+            "x90_amp": q.xy.operations["x90"].amplitude,
+        }
+        q.xy.opx_output.full_scale_power_dbm = -11
+        q.xy.operations["x180"].amplitude = 0.0
+        q.xy.operations["x90"].amplitude = 0.0
 
-    # Set driving to minimum power
-    q.xy.opx_output.full_scale_power_dbm = -11
-    q.xy.operations["x180"].amplitude = 0.0
-    q.xy.operations["x90"].amplitude = 0.0
-
-
-config = machine.generate_config()
+    config = machine.generate_config()
+finally:
+    for q in qubits:
+        if q.name in original_params:
+            q.xy.opx_output.full_scale_power_dbm = original_params[q.name]['XY-FSP']
+            q.xy.operations["x180"].amplitude = original_params[q.name]['x180_amp']
+            q.xy.operations["x90"].amplitude = original_params[q.name]['x90_amp']
 
 # %% {QUA_program}
 n_runs = node.parameters.num_runs
@@ -138,6 +135,7 @@ with program() as iq_blobs:
                 [q.z.name for q in multiplexed_qubits.values()])
             else:
                 align()
+    
     with stream_processing():
         n_st.save("n")
         for i in range(num_qubits):
@@ -166,12 +164,11 @@ else:
             try: # prevent getting a unpredictable error like connection failed or qmm closed.
                 with qm_session(qmm, config, timeout=node.parameters.timeout) as qm:
                     job = qm.execute(iq_blobs)
-                    for i in range(num_qubits):
-                        results = fetching_tool(job, ["n"], mode="live")
-                        while results.is_processing():
-                            n = results.fetch_all()[0]
-                            if target_counts <= 5:
-                                progress_counter(n, n_runs, start_time=results.start_time)
+                    results = fetching_tool(job, ["n"], mode="live")
+                    while results.is_processing():
+                        n = results.fetch_all()[0]
+                        if target_counts <= 5:
+                            progress_counter(n, n_runs, start_time=results.start_time)
                 ds = fetch_dataset_ground_only(job, qubits, node.parameters)
                 dss.append(ds)
                 current_success += 1
@@ -184,22 +181,28 @@ else:
              
         end = time()
         print(f"Total {round(end-start,1)} sec for {current_success} counts")
+        if not dss:
+            raise RuntimeError(f"All {attempts} attempts failed, no data was acquired.")
         ds = xr.concat(dss, dim='iteration')
         node.results = {"ds": ds, "figs": {}, "results": {}}
-        reload_qbs = False
     else:
-        node = node.load_from_id(node.parameters.load_data_id)
-        ds = node.results["ds"] 
+        load_data_id = node.parameters.load_data_id
+        node = node.load_from_id(load_data_id)
+        ds = node.results["ds"]
+        # load_from_id restores the original run's parameters (load_data_id=None); keep it so the state is not updated
+        restore_load_data_id(node, load_data_id)
         machine = node.machine
-        reload_qbs = True
+        qubits = resolve_qubits_from_node(machine, node)
+        node.results["results"] = {}
 
 
 # %% {analysis}
 if not node.parameters.simulate:
     models = {q.name:[] for q in qubits}
     thermal_population = {q.name:[] for q in qubits}
+    Teff = {q.name:[] for q in qubits}
 
-    for iteration in range(ds.dims['iteration']):
+    for iteration in range(ds.sizes['iteration']):
         dss = prepare_ground_state_for_qcat(ds.isel(iteration=iteration))
         
         sep_data = repetition_data(dss, repetition_dim="qubit")
@@ -217,30 +220,28 @@ if not node.parameters.simulate:
            
             (p00, p01), (p10_dummy, p11_dummy) = analysis.analysis_result['gaussian_norms']
             thermal_population[qubit_name].append(p01)  
+            Teff[qubit_name].append(PetoT(p01, 2*np.pi*machine.qubits[qubit_name].xy.RF_frequency))
             
             # figs_dict = analysis._plot_results(qubit_name, None)
     
+    # Teff_mK is always the mean of the per-iteration Teff (PetoT is nonlinear, so it differs from PetoT(mean P_e))
     for q in qubits:
         node.results['results'][q.name] = {}
-        node.results['results'][q.name]["effective_temperature_mK"] = PetoT(np.average(thermal_population[q.name]), 2*np.pi*q.xy.RF_frequency)
-        
+        node.results['results'][q.name]["thermal_population"] = float(np.average(thermal_population[q.name]))
+        node.results['results'][q.name]["Teff_mK"] = float(np.average(Teff[q.name]))
         
 
     #%% {Plot}
     mu_collection, sig_collection = {}, {}
-    if reload_qbs:
-        qubits = [machine.qubits[q] for q in list(models.keys())]
     if node.parameters.histo_num == 1:
         ## prepare ground 1D histogram
         grid = QubitGrid(ds, [q.grid_location for q in qubits])
         for ax, qubit in grid_iter(grid):
-            Teff = models[qubit['qubit']][0].show_thermal_analysis(qubit['qubit'], machine.qubits[qubit['qubit']].xy.RF_frequency*1e-9, ax)
-            node.results["results"][qubit['qubit']]["Teff_mK"] = Teff
-            mu_collection[qubit['qubit']] = Teff
+            models[qubit['qubit']][0].show_thermal_analysis(qubit['qubit'], machine.qubits[qubit['qubit']].xy.RF_frequency*1e-9, ax)
         plt.suptitle("Ground State Preparation")
         plt.tight_layout()
         plt.show()
-        node.results["Pg_1DHistogran"] = grid.fig
+        node.results["Pg_1DHistogram"] = grid.fig
         ## raw data plot
         grid_2 = QubitGrid(ds, [q.grid_location for q in qubits])
         for ax, qubit in grid_iter(grid_2): 
@@ -258,20 +259,11 @@ if not node.parameters.simulate:
         plt.show()
         node.results["Outliers_Detection"] = grid_3.fig
     else:
-        from quam_libs.lib.qubit_thermometer import PetoT
-        Teff = {q.name:[] for q in qubits}
-        for q in qubits:
-            for iter in range(len(models[q.name])):
-                (p00, p01), (p10_dummy, p11_dummy) = models[q.name][iter].analysis_result['gaussian_norms']
-                Teff[q.name].append(PetoT(p01, 2*np.pi*q.xy.RF_frequency))
-        tot_c = 0
+        n_histo = ds.sizes['iteration']
         grid = QubitGrid(ds, [q.grid_location for q in qubits])
         for ax, qubit in grid_iter(grid):
             data = np.array(Teff[qubit['qubit']])
-            lower_bound = np.percentile(data, 1)   # 下界
-            upper_bound = np.percentile(data, 99)  # 上界
-            data = data[(data >= lower_bound) & (data <= upper_bound)]
-            tot_c = len(data)
+            data = data[np.isfinite(data)]
             counts, bins, _ = ax.hist(data, bins=15, alpha=0.7, color='skyblue', edgecolor='white', label='Counts')
             ### Normal distribution
             mu, sigma = norm.fit(data)
@@ -290,7 +282,7 @@ if not node.parameters.simulate:
             ax.grid(axis='y', alpha=0.3)
             
             stats_text = (
-                f"$T = {mu:.1f} \pm {sigma:.2f}$ mK\n"
+                rf"$T = {mu:.1f} \pm {sigma:.2f}$ mK"
             )
             ax.text(
                 0.05, 0.95, stats_text,
@@ -299,22 +291,21 @@ if not node.parameters.simulate:
                 verticalalignment="top",
                 bbox=dict(boxstyle="round", facecolor="white", alpha=0.7)
             )
-        plt.suptitle(f"Qubit Thermometer Statistics, #={tot_c}", fontsize=16, y=1.02)
+        plt.suptitle(f"Qubit Thermometer Statistics, #={n_histo}", fontsize=16, y=1.02)
         plt.tight_layout()
         plt.show()
         node.results["Temperature_statistics"] = grid.fig
         from numpy import random
-        idx = random.randint(tot_c)
-        ## prepare ground 1D histogram
+        idx = random.randint(n_histo)
+        ## prepare ground 1D histogram of one randomly picked iteration
         grid_3 = QubitGrid(ds, [q.grid_location for q in qubits])
         for ax, qubit in grid_iter(grid_3):
-            Teff = models[qubit['qubit']][idx].show_thermal_analysis(qubit['qubit'], machine.qubits[qubit['qubit']].xy.RF_frequency*1e-9, ax)
-            node.results["results"][qubit['qubit']]["Teff_mK"] = Teff
+            models[qubit['qubit']][idx].show_thermal_analysis(qubit['qubit'], machine.qubits[qubit['qubit']].xy.RF_frequency*1e-9, ax)
             
-        plt.suptitle("Ground State Preparation")
+        plt.suptitle(f"Ground State Preparation (iteration {idx})")
         plt.tight_layout()
         plt.show()
-        node.results[f"Pg_1DHistogran_idx_{idx}"] = grid_3.fig
+        node.results[f"Pg_1DHistogram_idx_{idx}"] = grid_3.fig
         ## raw data plot
         grid_2 = QubitGrid(ds, [q.grid_location for q in qubits])
         for ax, qubit in grid_iter(grid_2): 
@@ -333,10 +324,6 @@ if not node.parameters.simulate:
                     qubit.extras['Teff_mK_dev'] = sig_collection[qubit.name]
 
         # %% {Save_results}
-        for qubit in qubits:
-            qubit.xy.opx_output.full_scale_power_dbm = original_params[qubit.name]['XY-FSP']
-            qubit.xy.operations["x180"].amplitude = original_params[qubit.name]['x180_amp']
-            qubit.xy.operations["x90"].amplitude = original_params[qubit.name]['x90_amp']
         node.outcomes = {q.name: "successful" for q in qubits}
         node.results["initial_parameters"] = node.parameters.model_dump()
         node.save()          

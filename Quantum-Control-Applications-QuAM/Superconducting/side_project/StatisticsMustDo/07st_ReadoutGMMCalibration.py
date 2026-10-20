@@ -1,23 +1,20 @@
 """
-        IQ BLOBS
-This sequence involves measuring the state of the resonator 'N' times, first after thermalization (with the qubit
-in the |g> state) and then after applying a pi pulse to the qubit (bringing the qubit to the |e> state) successively.
-The resulting IQ blobs are displayed, and the data is processed to determine:
-    - The rotation angle required for the integration weights, ensuring that the separation between |g> and |e> states
-      aligns with the 'I' quadrature.
-    - The threshold along the 'I' quadrature for effective qubit state discrimination.
-    - The readout fidelity matrix, which is also influenced by the pi pulse fidelity.
+        READOUT GMM CALIBRATION
+This sequence measures the resonator 'N' times, first after thermalization (qubit in |g>) and then after a pi pulse
+(qubit in |e>). The IQ blobs of both prepared states are fitted with a 2-component 2D Gaussian mixture model (GMM)
+that shares one isotropic std, to determine:
+    - The GMM centers (GMM_mean) and the shared std (GMM_std) of the |g> and |e> blobs.
+    - The prepared-state populations (thermal excitation, relaxation), the overlap error and the readout SNR.
+
+Note: the confusion matrix and RO_fidelity come from the fitted Gaussian weights, so they do NOT include the
+overlap error between the two blobs (it is reported separately as overlap_error).
 
 Prerequisites:
-    - Having found the resonance frequency of the resonator coupled to the qubit under study (resonator_spectroscopy).
-    - Having calibrated qubit pi pulse (x180) by running qubit.wait(qubit.thermalization_time * u.ns) spectroscopy, power_rabi and updated the state.
+    - Having calibrated the readout (resonator_spectroscopy, IQ blobs) and the qubit pi pulse (x180).
     - Set the desired flux bias
 
-Next steps before going to the next node:
-    - Update the rotation angle (rotation_angle) in the state.
-    - Update the g -> e thresholds (threshold & rus_threshold) in the state.
-    - Update the confusion matrices in the state.
-    - Save the current state
+State update:
+    - qubit.extras['GMM_mean'] and qubit.extras['GMM_std'], used by 07st_QubitThermometer.
 """
 
 
@@ -30,40 +27,34 @@ from typing import List, Literal, Optional
 from qualibrate import QualibrationNode, NodeParameters
 from quam_libs.components import QuAM
 from quam_libs.experiments.iq_blobs.fetch_dataset import fetch_dataset
-from quam_libs.experiments.iq_blobs.parameters import Parameters
 from quam_libs.experiments.simulation import simulate_and_plot
 from quam_libs.macros import qua_declaration, active_reset
-from quam_libs.lib.qua_datasets import convert_IQ_to_V
 from quam_libs.lib.plot_utils import QubitGrid, grid_iter
-from quam_libs.lib.save_utils import fetch_results_as_xarray
-from qualang_tools.analysis.discriminator import two_state_discriminator
+from quam_libs.lib.save_utils import restore_load_data_id, resolve_qubits_from_node
 from qualang_tools.results import progress_counter, fetching_tool
 from qualang_tools.multi_user import qm_session
 from qualang_tools.units import unit
-from qm import SimulationConfig
 from qm.qua import *
-from time import time 
-from scipy.stats import norm
+from time import time
 from quam_libs.lib.qubit_thermometer import repetition_data, StateDiscrimination, prepare_dataset_for_qcat
 
 
 
 # %% {Node_parameters}
 class Parameters(NodeParameters):
-    qubits: Optional[List[str]] = ['q6'] #The qubit to be measured. If None, all active qubits will be measured
+    qubits: Optional[List[str]] = ['q2'] #The qubit to be measured. If None, all active qubits will be measured
     num_runs: int = 2048*2
-    flux_point_joint_or_independent_or_arbitrary: Literal['joint', 'independent'] = 'independent'   
+    flux_point_joint_or_independent_or_arbitrary: Literal['joint', 'independent'] = 'joint'
     simulate: bool = False
     timeout: int = 100
-    use_state_discrimination: bool = False
-    reset_type: Literal['thermal'] = "thermal"
+    reset_type: Literal['thermal', 'active'] = "thermal"
     load_data_id: Optional[int] = None
-    multiplexed: bool = 0
+    multiplexed: bool = 1
     
     
 
 node = QualibrationNode(
-    name="07st_QubitThermometer_histogram",
+    name="07st_ReadoutGMMCalibration",
     parameters=Parameters()
 )
 
@@ -130,7 +121,7 @@ with program() as iq_blobs:
                         if reset_type == "active":
                             active_reset(qubit)
                         elif reset_type == "thermal":
-                            qubit.wait(2*qubit.thermalization_time * u.ns)
+                            qubit.wait(2 * qubit.thermalization_time * u.ns)
                         else:
                             raise ValueError(f"Unrecognized reset type {reset_type}.")
 
@@ -145,12 +136,7 @@ with program() as iq_blobs:
                 qubit.resonator.wait(qubit.resonator.depletion_time * u.ns)
                 save(I_e[i], I_e_st[i])
                 save(Q_e[i], Q_e_st[i])
-            if node.parameters.multiplexed:
-                align(*[q.xy.name for q in multiplexed_qubits.values()] +
-                [q.resonator.name for q in multiplexed_qubits.values()] +
-                [q.z.name for q in multiplexed_qubits.values()])
-            else:
-                align()
+           
     with stream_processing():
         n_st.save("n")
         for i in range(num_qubits):
@@ -181,12 +167,11 @@ else:
             try: # prevent getting a unpredictable error like connection failed or qmm closed.
                 with qm_session(qmm, config, timeout=node.parameters.timeout) as qm:
                     job = qm.execute(iq_blobs)
-                    for i in range(num_qubits):
-                        results = fetching_tool(job, ["n"], mode="live")
-                        while results.is_processing():
-                            n = results.fetch_all()[0]
-                            if target_counts <= 5:
-                                progress_counter(n, n_runs, start_time=results.start_time)
+                    results = fetching_tool(job, ["n"], mode="live")
+                    while results.is_processing():
+                        n = results.fetch_all()[0]
+                        if target_counts <= 5:
+                            progress_counter(n, n_runs, start_time=results.start_time)
                 ds = fetch_dataset(job, qubits, node.parameters)
                 dss.append(ds)
                 current_success += 1
@@ -199,23 +184,27 @@ else:
              
         end = time()
         print(f"Total {round(end-start,1)} sec for {current_success} counts")
+        if not dss:
+            raise RuntimeError(f"All {attempts} attempts failed, no data was acquired.")
         ds = xr.concat(dss, dim='iteration')
         node.results = {"ds": ds, "figs": {}, "results": {}}
-        reload_qbs = False
     else:
-        node = node.load_from_id(node.parameters.load_data_id)
-        ds = node.results["ds"] 
+        load_data_id = node.parameters.load_data_id
+        node = node.load_from_id(load_data_id)
+        ds = node.results["ds"]
+        # load_from_id restores the original run's parameters (load_data_id=None); keep it so the state is not updated
+        restore_load_data_id(node, load_data_id)
         machine = node.machine
-        reload_qbs = True
+        qubits = resolve_qubits_from_node(machine, node)
+        node.results["results"] = {}
 
 
 # %% {analysis}
 if not node.parameters.simulate:
     models = {q.name:[] for q in qubits}
-    trained_params = {}
     RO_fidelity = {q.name:[] for q in qubits}
 
-    for iteration in range(ds.dims['iteration']):
+    for iteration in range(ds.sizes['iteration']):
         dss = prepare_dataset_for_qcat(ds.isel(iteration=iteration))
         
         sep_data = repetition_data(dss, repetition_dim="qubit")
@@ -227,21 +216,23 @@ if not node.parameters.simulate:
             analysis = StateDiscrimination(sq_data)
             analysis._start_analysis()
             models[qubit_name].append(analysis)
-            trained_params[qubit_name] = analysis.analysis_result['trained_paras']    # save trained parameters for each qubit
             (p00, p01), (p10, p11) = analysis.analysis_result['gaussian_norms']
             RO_fidelity[qubit_name].append(1 - 0.5*(p01+p10))
 
     
     for q in qubits:
+        # GMM parameters are taken from the first iteration, the same one used for the plots below
+        trained_params = models[q.name][0].analysis_result['trained_paras']
         node.results['results'][q.name] = {}
         
+        # Gaussian-weight fidelity, excludes the overlap error (see overlap_error)
         node.results['results'][q.name]["RO_fidelity"] = np.average(RO_fidelity[q.name])
-        node.results['results'][q.name]["GMM_mean"] = trained_params[q.name]['mean'].tolist()
+        node.results['results'][q.name]["GMM_mean"] = trained_params['mean'].tolist()
         
-        node.results['results'][q.name]["GMM_std"] = trained_params[q.name]['std']
+        node.results['results'][q.name]["GMM_std"] = float(trained_params['std'])
         # calc Overlap error
-        means = np.array(trained_params[q.name]['mean'])
-        std = trained_params[q.name]['std']
+        means = np.array(trained_params['mean'])
+        std = trained_params['std']
         d = np.linalg.norm(means[1] - means[0])
         snr = d / std
         overlap_error = 0.5 * math.erfc(snr / (2 * math.sqrt(2)))
@@ -250,20 +241,15 @@ if not node.parameters.simulate:
         
 
     #%% {Plot}
-    mu_collection, sig_collection = {}, {}
-    if reload_qbs:
-        qubits = [machine.qubits[q] for q in list(models.keys())]
-   
     ## prepare ground 1D histogram
     grid = QubitGrid(ds, [q.grid_location for q in qubits])
     for ax, qubit in grid_iter(grid):
         Teff = models[qubit['qubit']][0].show_thermal_analysis(qubit['qubit'], machine.qubits[qubit['qubit']].xy.RF_frequency*1e-9, ax)
         node.results["results"][qubit['qubit']]["Teff_mK"] = Teff
-        mu_collection[qubit['qubit']] = Teff
     plt.suptitle("Ground State Preparation")
     plt.tight_layout()
     plt.show()
-    node.results["Pg_1DHistogran"] = grid.fig
+    node.results["Pg_1DHistogram"] = grid.fig
     ## raw data plot
     grid_2 = QubitGrid(ds, [q.grid_location for q in qubits])
     for ax, qubit in grid_iter(grid_2): 
@@ -288,6 +274,14 @@ if not node.parameters.simulate:
     
     plt.show()
     node.results["Error_source"] = grid_4.fig
+
+    ## confusion matrix
+    grid_5 = QubitGrid(ds, [q.grid_location for q in qubits])
+    for ax, qubit in grid_iter(grid_5): 
+        models[qubit['qubit']][0].show_confusion_matrix(qubit['qubit'], ax)
+    plt.tight_layout()
+    plt.show()
+    node.results["confusion_matrix"] = grid_5.fig
     
 
     # %% {Update_state}

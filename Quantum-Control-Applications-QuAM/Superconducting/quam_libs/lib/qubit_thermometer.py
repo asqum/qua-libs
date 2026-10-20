@@ -661,6 +661,7 @@ class StateDiscrimination():
 
 
     def _analysis_by_multi_2Dgaussian(self, outlier_sigma=3):
+        self.outlier_sigma = outlier_sigma
         """
         1. Fit the 2D multi-Gaussian model on all data (concatenated over prepared_state).
         2. Use the trained model's parameters as initial guess to fit prepared_state=0 and prepared_state=1 separately.
@@ -1009,11 +1010,10 @@ class StateDiscrimination():
                              cmap='coolwarm', edgecolors='none', zorder=2)
 
         # 3. 處理中心點與標籤
-        # 依照 I 值排序：確保左邊永遠是 g，右邊永遠是 e
-        indexed_means = sorted(enumerate(means), key=lambda x: x[1][0])
+        # GMM component 0 由 prepared |g> 初始化，所以依 component 編號標示，而不是依 I 值左右
         state_labels = [r'$|g\rangle$', r'$|e\rangle$'] # 使用 Raw string 修正亂碼
 
-        for i, (idx, center) in enumerate(indexed_means):
+        for i, center in enumerate(means):
             # 畫中心黑點，稍微加大一點
             ax.scatter(center[0], center[1], c='black', s=20, zorder=10)
             
@@ -1064,16 +1064,15 @@ class StateDiscrimination():
         # 2. 繪製離群點：使用更鮮艷的顏色 (#e67e22)
         vibrant_orange = '#e67e22' 
 
-        for i in range(2):
-            if i in outlier_mask:
-                mask = outlier_mask[i]
-                i_vals = self.data['I'].sel(prepared_state=i).values[mask]
-                q_vals = self.data['Q'].sel(prepared_state=i).values[mask]
-                
-                
-                if len(i_vals) > 0:
-                    ax.scatter(i_vals, q_vals, s=10, color=vibrant_orange, 
-                               marker='.', zorder=3)
+        for i in range(min(2, len(outlier_mask))):
+            mask = outlier_mask[i]
+            i_vals = self.data['I'].sel(prepared_state=i).values[mask]
+            q_vals = self.data['Q'].sel(prepared_state=i).values[mask]
+            
+            
+            if len(i_vals) > 0:
+                ax.scatter(i_vals, q_vals, s=10, color=vibrant_orange, 
+                           marker='.', zorder=3)
 
         # 3. 繪製中心點與高斯圓圈
         trained_paras = analysis_result.get('trained_paras', {})
@@ -1091,7 +1090,9 @@ class StateDiscrimination():
         # 4. 文字框：確保 LaTeX 換行正確 (使用雙反斜線 \\)
         if 'outlier_probability' in analysis_result:
             prob = analysis_result['outlier_probability']
-            info_str = f"$|g\\rangle$={prob[0]:.1%}, $|e\\rangle$={prob[1]:.1%}"
+            # A pure 2D Gaussian already has exp(-k^2/2) of its shots beyond k*std (~1.1% for k=3)
+            baseline = np.exp(-getattr(self, "outlier_sigma", 3)**2 / 2)
+            info_str = f"$|g\\rangle$={prob[0]:.1%}, $|e\\rangle$={prob[1]:.1%} (Gaussian baseline {baseline:.1%})"
         else:
             info_str = ''
 
@@ -1110,6 +1111,22 @@ class StateDiscrimination():
         if len(means) > 0:
             all_i = [m[0] for m in means]
             ax.set_xlim(min(all_i) - 10*std, max(all_i) + 10*std)
+
+    def show_confusion_matrix(self, qubit_name, ax:Axes):
+        (p00, p01), (p10, p11) = self.analysis_result['gaussian_norms']
+        confusion = [[p00, p01], [p10, p11]]
+        ax.imshow(confusion)
+        ax.set_xticks([0, 1])
+        ax.set_yticks([0, 1])
+        ax.set_xticklabels(labels=["|g>", "|e>"])
+        ax.set_yticklabels(labels=["|g>", "|e>"])
+        ax.set_ylabel("Prepared")
+        ax.set_xlabel("Measured (Gaussian weights, excl. overlap)")
+        ax.text(0, 0, f"{100 * confusion[0][0]:.1f}%", ha="center", va="center", color="k")
+        ax.text(1, 0, f"{100 * confusion[0][1]:.1f}%", ha="center", va="center", color="w")
+        ax.text(0, 1, f"{100 * confusion[1][0]:.1f}%", ha="center", va="center", color="w")
+        ax.text(1, 1, f"{100 * confusion[1][1]:.1f}%", ha="center", va="center", color="k")
+        ax.set_title(qubit_name)
 
     def show_error_analysis(self, qubit_name, ax:Axes, sq_gate_error:float=None):
         # 1. 取得資料與分析結果
@@ -1133,7 +1150,7 @@ class StateDiscrimination():
         T1_error = p10 - p01 - sq_gate_error # assume single qubit control gate error can be ignored
 
         error_dict = {
-        r"$\epsilon_{RO}$": ro_error * 100,
+        r"$\epsilon_{RO}$ (excl. overlap)": ro_error * 100,
         r"$\epsilon_{overlap}$": overlap_error * 100,
         r"$\epsilon_{thermal}$": p01 * 100,
         r"$\epsilon_{relax}$": T1_error * 100,
@@ -1178,7 +1195,7 @@ class StateDiscrimination():
 
         # 6. 圖表美化與細節調整
         ax.set_title(
-            f"{qubit_name}\n SNR ~ {round(20 * np.log10(snr),1)} dB", fontsize=11, fontweight="bold"
+            f"{qubit_name}\n Power SNR ~ {round(20 * np.log10(snr),1)} dB", fontsize=11, fontweight="bold"
         )
         ax.set_ylabel("Error Rate (%)", fontsize=10)
         y_min = min(values) * 1.8 if min(values) < 0 else 0
@@ -1189,15 +1206,70 @@ class StateDiscrimination():
         ax.get_figure().suptitle("Readout Error Breakdown")
 
         ax.get_figure().tight_layout(rect=[0, 0.12, 1, 1])
-        # if warnings is not None:
-        #     ax.text(
-        #         0.5,
-        #         -0.25,
-        #         warnings,
-        #         transform=ax.transAxes,
-        #         ha="center",
-        #         va="top",
-        #         fontsize=8,
-        #         color="gray",
-        #     )
+
+    def show_2D_hitogram(self, qubit_name, ax:Axes):
+        from matplotlib.colors import LogNorm
+
+        n_states = self.hist_dataset.sizes['prepared_state']
+        fig = ax.figure
+        # 取得原本 ax 的 Subplot 規格並劃分為 1 列 n_states 欄
+        fig.suptitle(f"{qubit_name} 2D Histogram", fontsize=12, fontweight='bold')
+        # 建立分割後的 axes 陣列
+        # 建立分割後的 axes 陣
+        ax.axis('off')  # 隱藏原 ax 的邊框與刻度，作為背景容器
+
+        # 依欄位數量均分原 ax 空間
+        width = 1.0 / n_states
+        axes = [
+            ax.inset_axes([i * width, 0, width, 1.0]) 
+            for i in range(n_states)
+        ]
+
+        x = self.hist_dataset['x'].values
+        y = self.hist_dataset['y'].values
+        xedges = np.concatenate([x - (x[1] - x[0])/2, [x[-1] + (x[1] - x[0])/2]]) if len(x) > 1 else np.array([x[0]-0.5, x[0]+0.5])
+        yedges = np.concatenate([y - (y[1] - y[0])/2, [y[-1] + (y[1] - y[0])/2]]) if len(y) > 1 else np.array([y[0]-0.5, y[0]+0.5])
+        for i, state in enumerate(self.hist_dataset.coords['prepared_state'].values):
+            density = self.hist_dataset['density'].sel(prepared_state=state).values  # shape (len(y), len(x))
+            # Mask zero values so they are not shown in the log plot
+            density_masked = np.ma.masked_where(density <= 0, density)
+            pcm = axes[i].pcolormesh(xedges, yedges, density_masked, shading='auto', cmap='viridis', norm=LogNorm())
+            axes[i].set_title(f"prepared_state={state}")
+            axes[i].set_xlabel('I')
+            axes[i].set_ylabel('Q')
+
+            # Optionally plot GMM mean as black dots
+            if self.analysis_result is not None:
+                trained_paras = self.analysis_result.get('trained_paras', None)
+                if trained_paras is not None and 'mean' in trained_paras:
+                    mean = trained_paras['mean']
+                    plot_gmm_mean_on_axes(axes[i], mean)
+                if trained_paras is not None and 'covariance' in trained_paras:
+                    plot_gmm_circles_on_axis(axes[i], trained_paras)
+
+                y_offset = 0.98
+                if 'direct_counts' in self.analysis_result:
+                    direct_counts = self.analysis_result['direct_counts']
+                    text_msg = f"Direct counts:\n{direct_counts[i]}"
+                    axes[i].text(
+                        0.02, y_offset, text_msg,
+                        transform=axes[i].transAxes,
+                        fontsize=10,
+                        verticalalignment='top',
+                        horizontalalignment='left',
+                        bbox=dict(boxstyle='round', facecolor='white', alpha=0.7)
+                    )
+                    y_offset -= 0.18  # Move next box down
+                if 'gaussian_norms' in self.analysis_result:
+                    gaussian_norms = self.analysis_result['gaussian_norms']
+                    text_msg = f"Gaussian norms:\n{gaussian_norms[i]}"
+                    axes[i].text(
+                        0.02, y_offset, text_msg,
+                        transform=axes[i].transAxes,
+                        fontsize=10,
+                        verticalalignment='top',
+                        horizontalalignment='left',
+                        bbox=dict(boxstyle='round', facecolor='white', alpha=0.7)
+                    )
+
       

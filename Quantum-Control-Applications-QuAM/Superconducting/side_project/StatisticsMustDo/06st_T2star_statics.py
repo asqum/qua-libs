@@ -143,6 +143,8 @@ with program() as t1:
                     qubit.xy.frame_rotation_2pi(virtual_detuning_phases[i])
                     qubit.xy.play("x90")
 
+                    qubit.align()
+
                     # Measure the state of the resonators
                     if node.parameters.use_state_discrimination:
                         readout_state(qubit, state[i])
