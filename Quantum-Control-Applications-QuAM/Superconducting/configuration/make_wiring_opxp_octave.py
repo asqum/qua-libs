@@ -4,20 +4,21 @@ from qualang_tools.wirer import Instruments, Connectivity, allocate_wiring, visu
 from quam_libs.quam_builder.machine import build_quam_wiring
 
 # Define static parameters
-host_ip = "127.0.0.1"  # QOP IP address
-port = None  # QOP Port
-cluster_name = "Cluster_1"  # Name of the cluster
+host_ip = "10.21.30.201"  # QOP IP address
+port = 9593  # QOP Port
+cluster_name = "OPXplus_3"  # Name of the cluster
+# Octave addresses, only needed when connecting through port forwarding (otherwise set to None)
+octaves = {"oct1": ("10.21.30.201", 9573)}
 # Desired location of wiring.json and state.json
 # The folder must not contain other json files.
-path = "./quam_state"
+path = "./quam_state/test"
 
 # Define the available instrument setup
 instruments = Instruments()
-instruments.add_opx_plus(controllers=[1, 2])
-instruments.add_octave(indices=1)
-
+instruments.add_opx_plus(controllers=[1])
+instruments.add_octave(indices=[1])
 # Define which qubit indices are present in the system
-qubits = [1, 2]
+qubits = [1]
 # Allocate the wiring to the connectivity object based on the available instruments
 connectivity = Connectivity()
 
@@ -46,7 +47,7 @@ allocate_wiring(connectivity, instruments)
 #     allocate_wiring(connectivity, instruments, block_used_channels=False)
 
 # Build the wiring and network into a QuAM machine and save it as "wiring.json"
-build_quam_wiring(connectivity, host_ip, cluster_name, path)
+build_quam_wiring(connectivity, host_ip, cluster_name, path, port=port, octaves=octaves)
 
 # View wiring schematic
 visualize(connectivity.elements, available_channels=instruments.available_channels)

@@ -23,6 +23,7 @@ from .transmon import Transmon
 from .transmon_pair import TransmonPair
 
 from qm import QuantumMachinesManager, QuantumMachine
+from qm.octave import QmOctaveConfig
 from qualang_tools.results.data_handler import DataHandler
 
 from dataclasses import field
@@ -220,23 +221,31 @@ class QuAM(QuamRoot):
         settings = dict(
             host=self.network["host"],
             cluster_name=self.network["cluster_name"],
-            octave=self.get_octave_config(),
             timeout=timeout,
         )
-        if "port" in self.network:
-            print(self.network["port"])
+        if self.network.get("port") is not None:
             settings["port"] = self.network["port"]
+        # Only needed when the QOP gateway is bypassed (e.g. port forwarding), so the cluster can't report its Octaves
+        octaves = self.network.get("octaves")
+        if octaves:
+            octave_config = QmOctaveConfig()
+            for name, (ip, port) in octaves.items():
+                octave_config.add_device_info(name, ip, port)
+            settings["octave"] = octave_config
         self.qmm = QuantumMachinesManager(**settings)
         return self.qmm
 
-    def get_octave_config(self) -> dict:
-        """Return the Octave configuration."""
-        octave_config = None
-        for octave in self.octaves.values():
-            if octave_config is None:
-                octave_config = octave.get_octave_config()
-            else:
-                octave_config.add_device_info(octave.name, octave.ip, octave.port)
+    def get_octave_config(self) -> Optional[QmOctaveConfig]:
+        """Return the Octave configuration, using the IPs/ports stored in network."""
+        if not self.octaves:
+            return None
+
+        octave_config = next(iter(self.octaves.values())).get_octave_config()
+        octave_ips = self.network.get("octave_ips", [])
+        octave_ports = self.network.get("octave_ports", [])
+        for i, octave in enumerate(self.octaves.values()):
+            if i < len(octave_ips):
+                octave_config.add_device_info(octave.name, octave_ips[i], octave_ports[i])
 
         return octave_config
 
