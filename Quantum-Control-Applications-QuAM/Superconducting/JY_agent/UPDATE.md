@@ -2,6 +2,9 @@
 
 ## 2026-10-22
 
+- 分支分工：此分支凍結為量測用的可用版本（Dashboard 隨機公開網址、量測電腦上的靜態
+  歷史頁）；之後的開發與 TODO_LIST 移到 https://github.com/junyeeeeeeeeee/JY-agent-with-SCQC。
+- 10a 與統計節點（05st／06st）在擬合失敗時不再中斷；新增 JY 使用的 02 寬頻共振腔掃描節點。
 - 靜態量測歷史網站：`runtime/history_site/index.html` 列出所有晶片與每次量測工作階段；
   每個工作階段有一份實驗結果頁的靜態副本（圖、Decision、Reason、Next action），每顆
   晶片有它的歷史頁。每次分析、記錄判斷、工作階段開始或結束時更新；關閉 JY 服務後仍可
@@ -25,6 +28,12 @@
 - 更正 2026-10-20：首頁暫停後的簡易卡沒有核准碼（只選時長與判斷模式按「核准並繼續」，
   「進階」重新規劃才要核准碼）；續期卡也有時長與判斷模式選項。
 
+- Branches: this branch is frozen as the usable measurement version (the
+  Dashboard's random public URL, the static history page on the measurement
+  PC); further development and the TODO list continue in
+  https://github.com/junyeeeeeeeeee/JY-agent-with-SCQC.
+- 10a and the statistics nodes (05st/06st) no longer stop on a failed fit; the
+  02 broadband resonator spectroscopy node that JY runs is added.
 - Static measurement history: `runtime/history_site/index.html` lists every chip
   and every measurement session; each session has a static copy of its
   Experiment results page (plots, Decision, Reason, Next action) and each chip
