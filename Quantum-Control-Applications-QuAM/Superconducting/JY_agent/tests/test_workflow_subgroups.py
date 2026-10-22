@@ -250,6 +250,81 @@ class TestWorkflowSubgroups(unittest.TestCase):
         )
         self.assertEqual(resolve_03a_candidate_targets(rows), {"q1"})
 
+    def test_low_power_scan_dismisses_multiphoton_candidate(self) -> None:
+        # q7 2026-10-20: a narrow coarse line vanished at low power; the
+        # decided refinement must release the qubit for a window shift.
+        coarse = analysis_for("03a", ["q1"])
+        coarse["03a_stage"] = "coarse_candidate"
+        empty = analysis_for("03a", ["q1"])
+        empty["03a_stage"] = "refinement_candidate"
+        empty["dataset_metrics"]["qubits"]["q1"]["robust_snr"] = 2.1
+        rows = [
+            {
+                "status": "completed",
+                "analysis_status": "needs_review",
+                "analysis_json": json.dumps(coarse),
+                "parameters_json": json.dumps({"qubits": ["q1"], "num_averages": 500}),
+                "decision": "repeat",
+            },
+            {
+                "status": "completed",
+                "analysis_status": "failed",
+                "analysis_json": json.dumps(empty),
+                "parameters_json": json.dumps({"qubits": ["q1"], "num_averages": 500}),
+                "decision": None,
+            },
+        ]
+        # Undecided: the candidate still holds.
+        self.assertEqual(resolve_03a_candidate_targets(rows), {"q1"})
+        self.assertEqual(resolve_03a_shift_ready_targets(rows), set())
+        rows[1]["decision"] = "repeat"
+        self.assertEqual(resolve_03a_candidate_targets(rows), set())
+        self.assertEqual(resolve_03a_shift_ready_targets(rows), {"q1"})
+
+        # A later credible line makes it a candidate again.
+        rows.append(dict(rows[0], decision=None))
+        self.assertEqual(resolve_03a_candidate_targets(rows), {"q1"})
+        self.assertEqual(resolve_03a_shift_ready_targets(rows), set())
+
+    def test_low_power_scan_keeps_a_line_that_survives(self) -> None:
+        coarse = analysis_for("03a", ["q1"])
+        coarse["03a_stage"] = "coarse_candidate"
+        refined = analysis_for("03a", ["q1"])
+        refined["03a_stage"] = "refinement_candidate"
+        rows = [
+            {
+                "status": "completed",
+                "analysis_status": "needs_review",
+                "analysis_json": json.dumps(analysis),
+                "parameters_json": json.dumps({"qubits": ["q1"], "num_averages": 500}),
+                "decision": "repeat",
+            }
+            for analysis in (coarse, refined)
+        ]
+        self.assertEqual(resolve_03a_candidate_targets(rows), {"q1"})
+        self.assertEqual(resolve_03a_shift_ready_targets(rows), set())
+
+    def test_fine_line_held_for_upward_check_stays_a_candidate(self) -> None:
+        # q7 #746: a strong fine line failed only because its upward check
+        # was pending; that is not a vanished line.
+        coarse = analysis_for("03a", ["q1"])
+        coarse["03a_stage"] = "coarse_candidate"
+        held = analysis_for("03a", ["q1"])
+        held["03a_stage"] = "fine"
+        held["dataset_metrics"]["qubits"]["q1"]["robust_snr"] = 14.0
+        held["fit_quality"]["results"]["q1"]["fit_successful"] = False
+        rows = [
+            {
+                "status": "completed",
+                "analysis_status": status,
+                "analysis_json": json.dumps(analysis),
+                "parameters_json": json.dumps({"qubits": ["q1"], "num_averages": 4000}),
+                "decision": "repeat",
+            }
+            for analysis, status in ((coarse, "pass"), (held, "needs_review"))
+        ]
+        self.assertEqual(resolve_03a_candidate_targets(rows), {"q1"})
+
     def test_03a_subgroups_accumulate_before_advance(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
             state, wiring, all_targets = sample_multiplex_state_and_wiring()
@@ -1372,7 +1447,7 @@ class ActiveResetRepeatTests(unittest.TestCase):
                 )
             service.request_run(
                 workflow["id"], "06",
-                {"qubits": qualified, "reset_type": "active", "max_wait_time_in_ns": 1016},
+                {"qubits": qualified, "reset_type": "active", "max_wait_time_in_ns": 816},
                 "Active group first batch.", "unittest",
             )
 

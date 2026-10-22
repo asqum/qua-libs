@@ -42,6 +42,10 @@ def main() -> None:
     )
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("init", help="Create/check the local runtime database")
+    sub.add_parser(
+        "history-site",
+        help="Rebuild the static measurement history site (runtime/history_site)",
+    )
     status_parser = sub.add_parser("status", help="Show local workflow status")
     status_parser.add_argument("--workflow-id")
     approve_parser = sub.add_parser(
@@ -95,6 +99,12 @@ def main() -> None:
         control_parser.add_argument("lease_id")
         control_parser.add_argument("--reason", required=True)
     args = parser.parse_args()
+    if args.command not in {"serve", "stdio", "approval-serve"}:
+        # A short-lived command exits right away; write the static history
+        # site before it does (2026-10-22).
+        from .service import AgentService as _Service
+
+        _Service.HISTORY_SITE_ASYNC = False
 
     if args.command == "doctor":
         from .doctor import run_doctor
@@ -178,6 +188,11 @@ def main() -> None:
                 _print(result)
                 raise SystemExit(2)
             time.sleep(0.5)
+    elif args.command == "history-site":
+        from .history_site import write_history_site
+
+        index = write_history_site(service, everything=True)
+        _print({"status": "written", "index": str(index)})
     elif args.command == "status":
         _print(service.status(args.workflow_id))
     elif args.command == "approve":

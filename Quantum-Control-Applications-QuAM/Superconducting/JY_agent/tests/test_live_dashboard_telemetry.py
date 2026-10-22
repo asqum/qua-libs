@@ -786,9 +786,9 @@ class LiveDashboardTelemetryTests(unittest.TestCase):
             self.assertEqual(experience[0]["Decision"], "repeat")
             self.assertEqual(experience[0]["elapsed_seconds"], 10.0)
             retry = service.snr_retry_recommendation("live-run-2")
-            self.assertTrue(retry["retry_recommended"])
-            self.assertEqual(retry["low_snr_targets"], ["q1"])
-            self.assertEqual(retry["next_num_averages"], 8000)
+            # Operator instruction 2026-10-20: 05 is capped at 1000 averages and
+            # a run too noisy there has failed, so no higher-averaging retry.
+            self.assertFalse(retry["retry_recommended"])
 
             revision = service.autonomy_ui_revision(lease_id)
             service.db.event(

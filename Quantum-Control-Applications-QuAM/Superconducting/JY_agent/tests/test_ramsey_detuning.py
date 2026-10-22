@@ -25,7 +25,7 @@ class RamseyDetuningWindowTests(unittest.TestCase):
     def test_omitted_detuning_follows_the_window(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
             policy = self.policy(folder)
-            for wait_ns, expected_mhz in ((1016, 4.0), (10016, 0.4), (20016, 0.2), (60016, 4 / 60)):
+            for wait_ns, expected_mhz in ((816, 5.0), (10016, 0.4), (20016, 0.2), (60016, 4 / 60)):
                 merged, _ = policy.validate_run(
                     "06", {"qubits": ["q1"], "max_wait_time_in_ns": wait_ns}
                 )
@@ -76,9 +76,12 @@ class RamseyDetuningWindowTests(unittest.TestCase):
                 policy.validate_run(
                     "06", {"qubits": ["q1"], "min_wait_time_in_ns": 20, "max_wait_time_in_ns": 20020}
                 )
-            for wait_ns in (20000, 20100, 16):
-                with self.assertRaisesRegex(PolicyError, "multiple of 500"):
+            # Operator 2026-10-20: the grid is 16 + 400n ns.
+            for wait_ns in (20000, 20100, 16, 516, 1016):
+                with self.assertRaisesRegex(PolicyError, "multiple of 400"):
                     policy.validate_run("06", {"qubits": ["q1"], "max_wait_time_in_ns": wait_ns})
+            for wait_ns in (416, 816, 4016, 20016, 100016):
+                policy.validate_run("06", {"qubits": ["q1"], "max_wait_time_in_ns": wait_ns})
 
     def test_other_nodes_are_not_constrained(self) -> None:
         with tempfile.TemporaryDirectory() as folder:

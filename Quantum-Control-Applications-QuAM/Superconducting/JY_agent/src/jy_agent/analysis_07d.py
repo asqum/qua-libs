@@ -10,6 +10,14 @@ shot that sits on the excited blob (thermal population, decay during readout)
 is still on a blob and is counted by fidelity, not here. What this measure
 counts is a shot on *neither* blob: smear between them, a third cloud or a
 long streak, which is what a too-strong readout produces.
+
+Operator decision 2026-10-20: the point is chosen by JY's own score from the
+raw shots, not by the Qualibrate node's fidelity. The score weighs whether the
+two blobs separate above shots on neither blob, ``separation_weight`` :
+``outlier_weight`` (3:1, 5:1 from 2026-10-21): ``score = 5 x blob-overlap error + 1 x off-blob
+share``, lowest wins. The blob-overlap error is the 1D Gaussian overlap of two
+blobs ``d`` sigma apart, ``0.5 erfc(d / (2 sqrt 2))``. Fidelity is only
+reported.
 """
 
 from __future__ import annotations
@@ -18,6 +26,7 @@ import math
 from typing import Any
 
 import numpy as np
+from scipy.special import erfc
 
 # Median of a 2D isotropic Gaussian's radius, in units of sigma: sqrt(2 ln 2).
 _RAYLEIGH_MEDIAN = math.sqrt(2.0 * math.log(2.0))
@@ -41,6 +50,10 @@ def two_blob_metrics(
     max_outliers = float(rules.get("max_outlier_fraction", 0.03))
     radius = int(rules.get("neighborhood_points", 1))
     tolerance = float(rules.get("fidelity_tolerance_percent", 2.0))
+    separation_weight = rules.get("separation_weight")
+    if separation_weight is not None:
+        separation_weight = float(separation_weight)
+    outlier_weight = float(rules.get("outlier_weight", 1.0))
     expected = math.exp(-0.5 * sigma_cut**2)
     dims = ("qubit", "run", "freq", "amp", "duration")
     arrays = {
@@ -88,6 +101,39 @@ def two_blob_metrics(
         entry["acceptable_points"] = int(acceptable.sum())
         chosen = unconstrained
         entry["two_blob"] = False
+        if separation_weight is not None:
+            overlap = _neighborhood_mean(blob_overlap_error(separation), radius)
+            score = separation_weight * overlap + outlier_weight * pooled
+            pool = acceptable & np.isfinite(score)
+            entry["selection"] = "separation_weighted"
+            entry["separation_weight"] = separation_weight
+            entry["outlier_weight"] = outlier_weight
+            if not pool.any():
+                # Nothing within the off-blob limit: the best score still
+                # goes to 07b, which judges the shape.
+                pool = allowed & np.isfinite(score)
+                entry["least_outlier_fraction"] = float(
+                    np.nanmin(np.where(allowed, pooled, np.nan))
+                )
+            else:
+                entry["two_blob"] = True
+            if pool.any():
+                chosen = np.unravel_index(
+                    int(np.argmin(np.where(pool, score, np.inf))), score.shape
+                )
+            entry["selected"] = _describe(
+                chosen, freqs, amps, durations, fidelity, pooled, separation
+            )
+            entry["selected"]["blob_overlap_error"] = float(overlap[chosen])
+            entry["selected"]["score"] = float(score[chosen])
+            top = (
+                amps.size - 1
+                if cap is None
+                else int(np.max(np.nonzero(amps <= cap)[0]))
+            )
+            entry["selected"]["at_amplitude_top"] = bool(chosen[1] == top)
+            results[str(name)] = entry
+            continue
         if acceptable.any():
             blob = np.unravel_index(
                 int(np.argmax(np.where(acceptable, fidelity, -np.inf))), fidelity.shape
@@ -112,6 +158,12 @@ def two_blob_metrics(
         entry["selected"]["at_amplitude_top"] = bool(chosen[1] == top)
         results[str(name)] = entry
     return results
+
+
+def blob_overlap_error(separation_sigma: np.ndarray) -> np.ndarray:
+    """Share of shots misassigned between two Gaussian blobs d sigma apart."""
+
+    return 0.5 * erfc(np.asarray(separation_sigma, dtype=float) / (2.0 * math.sqrt(2.0)))
 
 
 def _point_outlier_fraction(

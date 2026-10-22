@@ -171,8 +171,8 @@ def guide_section(language: str, *, asset_prefix: str = "/guide/assets") -> str:
             "In the AI conversation, send “Enter JY automatic measurement mode” (or “Enter JY measurement mode” for per-run approval). The AI replies with this Dashboard's link.",
         ),
         (
-            "到「核准」頁：勾選要做的額外實驗、選擇量測方式（共用 XY 輸出時只能一次一顆）、選擇是否進行 flux 校正（共用 Z 輸出時無法選「是」），輸入核准文字後按「核准」。",
-            "On the Approval page: tick the optional experiments, choose the measurement mode (one qubit at a time only, when an XY output is shared), choose whether to calibrate flux (Yes is disabled when a Z output is shared), type the confirmation text and press Approve.",
+            "到「核准」頁：勾選要做的額外實驗、選擇量測方式（共用 XY 輸出時只能一次一顆）、選擇是否進行 flux 校正（共用 Z 輸出時無法選「是」），預覽後選擇自動核准時長（8／16／24 小時）與是否開啟全自動判斷模式，輸入核准文字後按「核准」。續期、暫停後繼續或 Recover 之後的接續只需選時長、判斷模式並核准。",
+            "On the Approval page: tick the optional experiments, choose the measurement mode (one qubit at a time only, when an XY output is shared), choose whether to calibrate flux (Yes is disabled when a Z output is shared), preview, then choose the hours (8/16/24) and whether full-auto judgement is on, type the confirmation text and press Approve. A renewal, a continue after a pause, or a continuation after a Recover asks only the hours and the judgement mode.",
         ),
         (
             "回到 AI 對話輸入「已核准」，AI 便在授權範圍內自動依序量測，不再逐次詢問。",
@@ -183,12 +183,12 @@ def guide_section(language: str, *, asset_prefix: str = "/guide/assets") -> str:
             "The Experiment results page shows every run's plots, decision and reason as they happen; anything that needs a person, such as an avoided crossing, is flagged in an orange card.",
         ),
         (
-            "「首頁」可暫停／繼續排程或結束自動授權；量完後在對話輸入「結束量測」，或在首頁做完整關機。",
-            "Home pauses/resumes scheduling or ends the authorization. When done, send “結束量測” (End measurement) in the conversation, or use full shutdown on Home.",
+            "「首頁」可暫停／繼續排程、「停止核准」（目前實驗跑完後重新核准，以重設時長與判斷模式）或結束自動授權；量完後在對話輸入「結束量測」，或在首頁做完整關機。",
+            "Home pauses/resumes scheduling, stops the authorization to set the hours and judgement mode again (after the current run), or ends the authorization. When done, send “結束量測” (End measurement) in the conversation, or use full shutdown on Home.",
         ),
         (
-            "儀器斷線時排程會自動暫停；確認儀器恢復後輸入「恢復量測」。上次殘留程式導致無法進入時輸入「恢復」。",
-            "If an instrument disconnects, scheduling pauses on its own; once it is back, send “恢復量測” (Resume measurement). If entry fails because something was left over, send “恢復” (Recover).",
+            "儀器斷線時排程會自動暫停；確認儀器恢復後輸入「恢復量測」（全自動判斷模式下儀器恢復回應後會自動繼續）。上次殘留程式導致無法進入時輸入「恢復」。",
+            "If an instrument disconnects, scheduling pauses on its own; once it is back, send “恢復量測” (Resume measurement); with full-auto judgement it resumes on its own once the instrument answers. If entry fails because something was left over, send “恢復” (Recover).",
         ),
     ]
     steps_html = "".join(f"<li>{_ui(language, zh, en)}</li>" for zh, en in steps)

@@ -20,10 +20,24 @@
    at a time. Every run/state approval appears on the Dashboard Approval page;
    results remain on the Results page and measurement controls on Home. The node may be
    any policy-registered experiment. In automatic mode call
-   `jy_enter_autonomy_mode`, give the human its session `browser_url`, wait with
-   `jy_wait_for_autonomy_status`, and use only `jy_autonomy_*` tools after the one
-   lease activation. When the host supports a durable goal, keep one automatic
-   session goal alive until completion, operator stop, lease expiry, or hard stop.
+   `jy_enter_autonomy_mode`, give the human its session `browser_url` with
+   `operator_handoff.chat`, and end the turn (fast entry, operator 2026-10-19:
+   entry runs only Ensure and the entry tool before that reply and never polls
+   for the lease approval). After the operator's `已核准`, confirm activation with
+   `jy_wait_for_autonomy_status` and use only `jy_autonomy_*` tools. When the host
+   supports a durable goal, keep one automatic session goal alive from that
+   `已核准` until completion, operator stop, lease expiry, or hard stop.
+   An expired lease is renewed, not re-entered (operator 2026-10-20): its
+   handoff asks for `繼續JY自動量測模式` (aliases `繼續 JY 自動量測模式`,
+   `Continue JY automatic measurement mode`). On that phrase run the same fast
+   entry with `jy_continue_autonomy_mode`: the renewal copies the old lease's
+   targets, nodes, limits, auto-commit statuses, halt conditions, options and
+   hours, the Approval page shows only the renewal card (hours, full-auto
+   judgement, code), and approval reactivates the same workflow at its current
+   node (see "Approval choices, re-authorization and full-auto judgement").
+   A paused lease resumes with that phrase; an active lease is only reported. After `已重新連線` /
+   `Reconnected` (sent after an MCP reconnect), verify the new MCP process
+   before continuing.
    A URL may be local or a
    token-protected public HTTPS URL; never replace it with a guessed URL.
    Preserve the same top-level `/` entry for the workflow/service lifetime. It
@@ -137,6 +151,20 @@ Before a new autonomy lease is created, the server revalidates previously
 advanced 04/05 evidence against the current SNR floors. If an older advancement
 no longer qualifies, the workflow deterministically reopens the earliest affected
 node and records `workflow_evidence_revalidation`; the new lease must start there.
+
+Operator request 2026-10-19: a manual pause from Dashboard Home also puts a
+"Paused: continue or re-plan" item on the Approval page
+(`autonomy_replan` proposal). **Continue** resumes the same lease unchanged
+(as does Home's Resume button, which drops the item). **Re-plan** offers the
+lease page's per-qubit plan for this workflow -- not measured, from the
+beginning, or restart at any node the qubit reached (default: where it
+stands) -- and, once the approval text is entered, stops this workflow and
+starts a new one: its lease (a fresh duration) is approved with the old
+workflow's options and that plan, so results before each qubit's start are
+inherited and a restarted qubit is measured again from its node onward. The
+bare Dashboard URL moves to the new session. After the operator replies, the
+agent reads the new workflow and lease from `jy_get_status` (event
+`autonomy_replanned`) instead of the old lease id.
 
 `暫停 JY 自動量測` pauses only the lease. Dialogue exit/stop/shutdown wording
 permanently stops the workflow and closes MCP, Approval HTTP, and the public
@@ -466,6 +494,12 @@ When a high-SNR coarse candidate fails reproducibility at the same power and
 2000 averages, record `manual_review` to explicitly reject that candidate.
 The rejected target is no longer treated as found, becomes eligible for an LO
 window shift, and may regain candidate status only from a later credible run.
+A coarse candidate whose line vanishes (robust SNR below the floor) in a decided
+low-power refinement or fine scan (any decision; operator rule 2026-10-20,
+q5/q7) is a multi-photon
+line: it is dismissed automatically and the qubit may shift at once, without
+the 2000-average confirmation, because the full-power coarse scan already
+covered that window.
 
 Use `jy_request_03a_window_shift` only for targets that satisfy the preceding
 shift rule. Move that unresolved subgroup to explicitly chosen 100 MHz-grid LO
@@ -520,6 +554,41 @@ the same span, amplitude, and averages together; isolate a qubit only when its
 LO/stage constraint differs. Do not advance to 04 until every active target has
 final fine-scan evidence.
 
+#### 03a upward check for f02/2 and other multi-photon lines
+
+Operator instruction 2026-10-19 (7SQ_4Fa3H die(5,1) q1: a line at 2.896 GHz
+gave a weak Rabi, no readout contrast and a jumping Ramsey frequency -- most
+likely f02/2). A fine line that passes every check is not committed at once:
+the server holds it as `upper_check_pending` and `jy_get_next_action` asks for
+the upward check (settings in `analysis."03a".upper_check_*`):
+
+1. `jy_request_03a_upper_check_center` (with the lease id, then
+   `jy_autonomy_apply_setup_state`) moves the qubit's drive 150 MHz above the
+   fine line, so the line sits near the lower edge of the check sweep.
+2. One 03a run over exactly 300 MHz at coarse drive (shared XY 1.0, private
+   XY its cap), 1 MHz step, 2000 averages. The 300 MHz span is reserved for
+   this check and refused for any qubit without a pending line.
+3. The server judges it (`03a_stage: upper_check`):
+   - A credible line (SNR >= 6, >= 5% from the edges) 50-300 MHz above the
+     fine line: the fine line was a multi-photon line and never commits. The
+     highest such line is the f01 candidate, even with an f02/2 line between
+     (operator 2026-10-19, q2 #648: f01 is usually the higher, wider line at
+     coarse power; f02/2 is narrower and taller there and fades at low
+     power). `jy_request_03a_candidate_center`, a refinement scan and the
+     low-power fine scan follow as usual, because the coarse drive broadens
+     it; that fine line then gets its own upward check.
+   - No such line: the fine line is f01. Centre it again and repeat its fine
+     scan; that one commits.
+
+Anharmonicity (optional) comes from the ladder f0k/k = f01 - (k-1) alpha/2,
+k = 2..`upper_check_max_photon_order`. The order counts only when its alpha
+lies in `upper_check_alpha_min/max_mhz` (150-300 MHz; typically 180-220) and
+every intermediate f0j/j shows as a peak (SNR >= 3, within 10 MHz) in the
+check. Only a unique order names the outcome (`reference_is_f02_half`,
+`reference_is_f03_third`, else `reference_is_multiphoton`). When the f01
+candidate is later confirmed, its fine commit adds alpha, recomputed from the
+fine positions, to `anharmonicity` and `extras.anharmonicity`.
+
 ### 04 — power Rabi
 
 Require a finite, nonzero fitted Pi amplitude and an oscillation that is not
@@ -571,6 +640,14 @@ qubit's pass ends at 04. A visible but noisy oscillation is optimised at 04
 (averages, gate time), never sent back.
 
 ### 05 — T1
+
+Operator instruction 2026-10-20 (applies to 05, 06 and 06b): at most 1000
+averages (`max_num_averages`) and 101 time points (`max_time_points`;
+`num_time_points` for 06, otherwise (max - min) / step + 1). The 06
+calibration window is 816 ns (101 points at 8 ns, 5 MHz detuning). A run
+still too noisy at 1000 averages has failed: do not escalate the averaging;
+mark the qubit scientifically unmeasurable at that node and move on.
+
 
 Require a finite positive exponential-decay lifetime, relative uncertainty below
 0.25, R-squared of at least 0.90, at least two samples per lifetime, and a wait-time
@@ -651,13 +728,16 @@ close its g/e shots are to two blobs, not by fidelity alone. A shot on the
 other blob (thermal population, decay) is a readout error that fidelity already
 counts; a shot beyond `analysis."07d".outlier_sigma` (3 sigma) of *both* blob
 centres is smear. The off-blob share is pooled over neighbouring frequency and
-amplitude points, and JY commits the highest-fidelity point whose pooled share
-is at most `max_outlier_fraction` (3%), rebuilding IF, amplitude and length from
-that point. Operator choice 2026-10-03: no point above the qubit's 02c
-dressed-limit power is ever chosen, and the two-blob point replaces the
-best-fidelity point only when it costs at most `fidelity_tolerance_percent`
-(2 points); otherwise the fidelity optimum is committed and 07b's two-blob test
-judges it. `num_runs` is 100 so each
+amplitude points. Operator decision 2026-10-20: JY chooses the point from its
+own raw-shot score, not from the node's fidelity. Among points whose pooled
+off-blob share is at most `max_outlier_fraction` (5%, as in 07b) it commits
+the lowest `separation_weight` x blob-overlap error + `outlier_weight` x
+off-blob share (5:1 since 2026-10-21, was 3:1; blob-overlap error = 0.5 erfc(d / 2 sqrt 2) for blobs d
+sigma apart, pooled the same way), rebuilding IF, amplitude and length from
+that point. If no point is within 5%, the best score is still committed and
+07b's two-blob test judges it. The node's fidelity is only reported. Operator
+choice 2026-10-03: no point above the qubit's 02c dressed-limit power is ever
+chosen. `num_runs` is 100 so each
 point has enough shots. 07b uses the same two-blob test on its 10000 shots
 (`analysis."07b".morphology_mode: "two_blob"`, at most 5% of a cloud on neither
 blob); the radius-quantile limits remain advisory notes. After a rule change,
@@ -762,6 +842,27 @@ walk failed 07b targets one isolated qubit at a time.
 
 ### Reset selection — thermal by default, active only after 07b evidence
 
+Operator choice 2026-10-19 (7SQ_4Fa3H die(5,1) q1, active 07b #632: 0.770,
+10.6%/9.0% of shots off both blobs): the active-reset repeat qualifies from
+fidelity 0.75 (`reset_policy.active_min_readout_fidelity`,
+`analysis."07b".active_reset_min_readout_fidelity`) with up to 15% of each
+cloud on neither blob (`active_reset_max_outlier_fraction`). The thermal 07b
+trigger that earns the repeat stays at 0.80 with the 5% two-blob test, and so
+does state discrimination. The repeat may also run late, off sequence, after
+the pass has left 07b (`jy_autonomy_start_run` node 07b with
+`reset_type_thermal_or_active: "active"`); the workflow stays where it is. The
+0.80 figures below predate this change.
+
+Thermal comparison (operator request 2026-10-19): once a statistics node
+(05st, 06st_t2star, 06st_t2e) has a decided active-reset run for the pass
+qubit, that node may run once more for the same qubit with
+`reset_type: "thermal"`, off sequence, while the qubit is still the current
+pass qubit (the shared XY LO is placed for it). Use the thermal baseline for
+`max_wait_time_in_ns`. Record its decision as `advance` or `manual_review`
+with no `next_node` and no state patch: the workflow stays where it is and the
+committed active-reset statistics are kept. Report both results side by side.
+Do this before recording the decision that ends the pass.
+
 Every registered experiment defaults to thermal reset. An operator or agent may
 deliberately run 07b with active reset to qualify a per-qubit switch. Active reset
 is unlocked for a qubit only when that active-reset 07b run retains normalized
@@ -786,13 +887,13 @@ inversely proportional to the window, `frequency_detuning_in_mhz x
 (max_wait_time_in_ns - min_wait_time_in_ns) = 4000` exactly (1000 ns -> 4 MHz,
 20000 ns -> 0.2 MHz, 40000 ns -> 0.1 MHz), so every 06 plot shows four fringes
 and can be read by eye. `min_wait_time_in_ns` is always 16, and
-`max_wait_time_in_ns` is 16 plus a positive multiple of 500 (for example 20016).
-Choose the window from T2* (at least 3.5 lifetimes), round it up to the
-500 ns grid, and omit `frequency_detuning_in_mhz`: the policy derives it. Any
+`max_wait_time_in_ns` is 16 plus a positive multiple of 400 (16 + 400n, operator
+2026-10-20; for example 816 or 20016). Choose the window from T2* (at least 3.5
+lifetimes), round it up to the 400 ns grid, and omit `frequency_detuning_in_mhz`: the policy derives it. Any
 other explicit detuning, or a wait time off the grid, is refused before the
 hardware (`nodes."06"` in `rules/policies.yaml`). Use a linear sweep with
-enough points to resolve the fringe (the defaults are 16 to 40016 ns, 0.1 MHz,
-400 linear points). `06_Ramsey.py` measures one qubit per batch, so the
+enough points to resolve the fringe (the defaults are 16 to 816 ns, 101
+linear points, 1000 averages). `06_Ramsey.py` measures one qubit per batch, so the
 run time grows with qubits x points x averages; keep the window no longer than
 needed.
 
@@ -800,16 +901,16 @@ Operator instruction 2026-10-15: 06 calibrates the drive frequency before it
 measures T2*, because a detuned qubit blurs the fringes of a long first window.
 Per qubit, starting over after a 04 -> 03a return:
 
-1. Calibrate: its first 06 uses max wait 1016 ns (4 MHz). That run only
+1. Calibrate: its first 06 uses max wait 816 ns (5 MHz). That run only
    corrects the frequency; it never resolves T2*, even if every check passes.
-2. Confirm: further 06 runs stay at 1016 ns until one shows both fringes on the
-   detuning. Every 1016 ns run commits its `frequency_correction_patch`, and
+2. Confirm: further 06 runs stay at 816 ns until one shows both fringes on the
+   detuning. Every 816 ns run commits its `frequency_correction_patch`, and
    the server refuses the next 06 of that qubit until the previous correction
-   is in `state.json`. A short T2* (1016 ns covers at least 3.5 lifetimes)
+   is in `state.json`. A short T2* (816 ns covers at least 3.5 lifetimes)
    can pass here.
-3. Measure: the window lengthens to about 4 x T2* (on the 500 ns grid) when an
+3. Measure: the window lengthens to about 4 x T2* (on the 400 ns grid) when an
    earlier fit has relative uncertainty below 0.5, otherwise to the next rung of
-   1016 -> 4016 -> 16016 -> 40016 -> 100016 ns (the cap). A missed fringe at a
+   816 -> 4016 -> 16016 -> 40016 -> 100016 ns (the cap). A missed fringe at a
    longer window still corrects the frequency and repeats that window.
 
 `jy_get_next_action` reports each qubit's `ramsey_stages` and proposes the run
@@ -993,10 +1094,21 @@ survive everything that can be corrected, so a crash is now classified:
   different value. The lease stays active, the server records
   `autonomy_recoverable_worker_exception` with the registered remedy, and you
   choose a corrected parameter. Never resend the value that crashed.
+- **A crash inside the node's fitting code is repeated.** Operator
+  instruction 2026-10-19 (q2 06 run 842fcbcf, Ramsey `fitting.py` KeyError on
+  `sign`). When the traceback runs through analysis/fitting code (quam_libs
+  analysis or fit modules, scipy.optimize, lmfit, qiskit_experiments) and
+  never into the `qm` client, the worker classifies it `analysis_failure`,
+  releases the hardware lock on an unchanged state file, and the lease stays
+  active (`autonomy_analysis_failure`). Repeat the same run unchanged; if the
+  same node crashes this way repeatedly, change the window or report it.
 - **Everything else pauses.** An unrecognized worker exception pauses the lease
   and scheduling, exactly like an instrument outage. Report to the operator
   what crashed and why, and resume the same lease with `恢復量測` once they
-  decide. No new approval is needed, and the lease is not lost.
+  decide. No new approval is needed, and the lease is not lost. Under
+  full-auto judgement (operator 2026-10-20) the server retries it instead and
+  marks the target incomplete after repeated failures; see "Approval choices,
+  re-authorization and full-auto judgement".
 
 Both currently registered signatures are also prevented before they run:
 fractional `min_power_dbm`/`max_power_dbm` in 02c is refused because the node
@@ -1032,6 +1144,103 @@ match the resolved targets carried into the node ("Run qubits must exactly
 match the resolved active targets"). Check `current_node` and
 `jy_get_next_action` before requesting the first run of a node, and never send
 it in parallel with the decision that advances to it.
+
+## Approval choices, re-authorization and full-auto judgement
+
+Operator decisions 2026-10-20.
+
+- **Hours.** Every lease approval chooses 8, 16 or 24 hours
+  (`autonomy.duration_choices_hours`), counted from the approval. Pass
+  `duration_hours` at entry only when the operator names one, and only as 8,
+  16 or 24 (other values are refused at entry); it only preselects the page,
+  which still decides.
+- **Which card.** Only a fresh start (the last workflow was ended with a
+  shutdown phrase or the Dashboard, or completed) shows the full lease page.
+  A renewal, a continue after a Home pause, and a continuation after a
+  Recover show the simple card: hours, full-auto judgement, approval code.
+  A workflow closed by `恢復` / `Recover` is continued by a new workflow on
+  the entry or continue phrase (each qubit where it stood, earlier results
+  inherited); a changed `active_qubit_names` brings back the full page.
+- **Home "停止核准".** The lease pauses at once, the running experiment
+  finishes, then the lease ends (`revoked`) and a renewal waits on the
+  Approval page. `jy_wait_for_autonomy_status` follows the successor and
+  reports `superseded_lease_id`: keep waiting, then use the new
+  `authorization.id` for every `jy_autonomy_*` call. Do not end the session
+  for it and do not ask for a phrase; the operator approves on the page and
+  sends `已核准` only if the host paused.
+- **Full-auto judgement** (`autonomy_leases.auto_judgement`, ticked on the
+  page). JY itself decides what used to pause for the operator:
+  - an unrecognized worker crash or a JY analyzer exception: the run counts
+    as failed and is retried; after `max_per_node_qubit` (2) automatic
+    retries of the same node/qubit the target is marked incomplete at that
+    node (an `autonomy_targets_scientifically_unmeasurable` mark with
+    `auto_judgement: true`), so the node advances without it;
+  - a single target that still times out on submission: marked incomplete,
+    the lease resumes;
+  - an instrument outage: the lease resumes once the QOP answers a probe
+    (every `instrument_probe_interval_seconds`);
+  - before each retry or automatic resume JY closes this chip's stale
+    quantum machine and its job (see "Close the stale quantum machine").
+  At most `max_per_lease` (10) such decisions per lease; after that the old
+  pause returns. While a hardware lock is retained (it exists and no run is
+  active) full-auto does not decide either: a retry could not start, so the
+  lease pauses for the operator. The three halt conditions and the expiry
+  always stay with the operator, and so does a manual pause. In this mode do not stop to ask
+  the operator about a failed run: record `repeat`, or `advance` when every
+  target is resolved or incomplete, and continue. Each decision is an
+  `auto_judgement_applied` event, listed on the Home authorization card.
+
+## The static history site
+
+Operator request 2026-10-22. `runtime/history_site/index.html` lists every
+chip and every measurement session; each session has a static copy of its
+Experiment results page (plots, Decision, Reason, Next action) and each chip
+its history. JY rewrites the affected pages after each analysis and
+decision and when a session starts or ends, and `jy-agent history-site`
+rebuilds them all. The folder opens on the lab PC with no service running;
+while a session runs the homepage links to its live Dashboard. Nothing in
+it is an instruction or a control.
+
+## Close the stale quantum machine
+
+Operator request 2026-10-20, from `calibration_graph/00x_close_specific_qm.ipynb`.
+When a run breaks off, the quantum machine it opened can stay open with its
+job running and block the next run's ports. `jy_close_stale_qm` (or the
+server, under full-auto judgement) lists the open machines, cancels the
+running/queued job of the one whose every port belongs to the active
+`state.json`, and closes it. A machine that only shares some ports may be
+someone else's: it is reported (`overlapping_not_closed`) and never closed.
+It is refused while a run is active or the hardware lock exists (the
+forced-stop path below is the only retained-lock exception). While the
+server closes a machine, `jy_autonomy_start_run` is refused with "new
+actions are blocked": wait about a minute and call again; it is not an error.
+Use `dry_run=true` to only list.
+
+Forced stop (operator decision 2026-10-20). When `結束量測` or an emergency
+stop terminates a worker after the grace period (`force_stopped`,
+`forced_after_grace`), the server, once the worker is verified dead, closes
+that run's chip machine (its own state.json/wiring.json), records a receipt
+(`runtime/recovery/<run>-qm-cleanup.json`, valid 10 minutes), records the
+post-run hash when the state is unchanged, and releases the lock through the
+recovery code path (archive + receipt). A machine of ours still open, an
+overlapping or unreadable machine, a failed cleanup, or a changed state keeps
+the lock (recovery quarantine). The OPX1000 is shared: machines with no port
+on this chip are other users' and are ignored, never closed and never a
+blocker. On the loopback operator console, "Close this chip's stale quantum
+machine" reruns the cleanup; recovery is then offered under the evidence mode
+`forced_stop_checkpoint` with the usual checkbox and typed confirmation.
+
+## Autopilot shadow mode
+
+Operator decision 2026-10-20 (step one of the server-side pipeline). Every
+`jy_autonomy_start_run` and every decision records an `autopilot_shadow`
+event: what `jy_get_next_action` would have run, or whether the rule
+"advance when every active target is resolved or incomplete, else repeat"
+agrees with the recorded decision. `jy_get_autopilot_shadow_report` gives the
+match rate per node, how many runs the planner could fully determine, the
+instrument share and the gaps between runs. The server does not act on it
+yet; once the operator opens nodes to the pipeline, rules 6, 7 and 9 relax
+for them (plots on the Dashboard, experience entries written by the server).
 
 ## Ask the server what to do next
 
@@ -1386,13 +1595,52 @@ qubit — and once per node.
 Operator request 2026-10-10. Every workflow records its chip (the QuAM state
 folder `config.toml` names). The lease approval page shows the chip's latest
 workflow: each node it reached, whether it finished, and the qubits that
-passed. The operator starts from the beginning or at any node up to the one it
+passed (since 2026-10-21 merged across all of the chip's workflows, see
+below). The operator starts from the beginning or at any node up to the one it
 stopped at; the agent never chooses this. Runs and decisions before the start
 node are copied in as inherited evidence (`runs.inherited_from_run_id`) and
 are not shown in this session's results. Starting after 02b keeps that
 workflow's flux choice; starting after the serialization node keeps its
 measurement mode, and a per-qubit workflow can only restart at or before it.
 If `state.json` changed since that workflow ended, the page warns.
+
+Operator request 2026-10-15: the page chooses the qubits, and where each one
+starts. Enter automatic mode without `targets`; the page lists every
+`active_qubit_names` qubit with one choice:
+
+- **Not measured:** the qubit is left out of the workflow and the lease, and
+  its state is untouched.
+- **From the beginning.**
+- **Resume at a node:** any node of the qubit's source workflow (below)
+  before which the qubit cleared every node, or the first node it did not
+  clear, plus the nodes of its own per-qubit pass there. A fresh qubit, one
+  with an unset readout IF, and one found absent there only start from the
+  beginning.
+
+A "Set all to" row applies one choice to every qubit when the form is
+previewed. The workflow starts at the earliest choice. A qubit that starts
+later carries a copy of only its own earlier runs (`passing_targets` and
+per-qubit analysis narrowed to it), so earlier nodes see it as resolved and
+measure the others alone; it joins at its own node. In the per-qubit mode a
+qubit starting after 03a begins its own pass there. The flux and mode locks
+above follow the earliest start.
+
+Operator decision 2026-10-21: the history is merged across every earlier
+workflow of the chip. The page's table is node x qubit; each cell is that
+qubit's most recent pass at that node from any workflow (short workflow id and
+time), with each workflow's own table folded below. Each qubit's **source
+workflow** is the one holding its most recent result (a pass, or a "no
+resonator" verdict); its resume choices and its inherited runs -- including
+its share of the shared nodes before the start, 02x/02c/02a -- come from that
+one workflow, so different qubits may inherit from different workflows. The
+new workflow records `options.qubit_sources` and, in `source_workflow_id`, the
+most recent of those sources (whose flux / mode choices set the locks). The
+state check is per qubit: a qubit whose committed result values (along its
+source's inheritance line) state.json no longer holds may resume at most at
+the first node that committed one of them; other qubits are unaffected. A
+workflow that already has runs (renewal, re-plan display, Dashboard Home)
+shows the same table including its own passes so far (marked *), without any
+start choice.
 
 The approval is two-step: the operator chooses, presses Preview to see which
 experiments will run, then ticks the agree box and enters the approval code.
@@ -1422,7 +1670,8 @@ beginning and a target's readout IF is 0 or duplicated; the page then prefills
 the chip's last 02 parameters. A later start point skips 02: the page hides the
 02 box and the server ignores its tick and fields. A later start is offered only
 when every unset-IF target was found absent at 02 in the chip's latest
-workflow (that mark is carried over); otherwise the page explains which qubits
+workflow (per qubit since 2026-10-21: in that qubit's source workflow; the mark
+is carried over); otherwise the page explains which qubits
 force a start from the beginning.
 
 ## One QUA thread per qubit

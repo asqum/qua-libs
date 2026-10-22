@@ -371,9 +371,22 @@ class LeaseDurationTests(unittest.TestCase):
                 make_settings(Path(folder), sample_state(0.2, 0.1))
             )
             result = service.enter_autonomy_mode(
-                "unittest-agent", AUTO_PHRASE, duration_hours=20
+                "unittest-agent", AUTO_PHRASE, duration_hours=16
             )
-            self.assertEqual(result["authorization"]["duration_hours"], 20.0)
+            self.assertEqual(result["authorization"]["duration_hours"], 16.0)
+
+    def test_entry_hours_must_be_an_approval_page_choice(self) -> None:
+        """2026-10-20: the page offers 8/16/24 h; 20 h used to show as 8 h."""
+
+        with tempfile.TemporaryDirectory() as folder:
+            service = AgentService(
+                make_settings(Path(folder), sample_state(0.2, 0.1))
+            )
+            with self.assertRaisesRegex(ServiceError, "Approval page choices"):
+                service.enter_autonomy_mode(
+                    "unittest-agent", AUTO_PHRASE, duration_hours=20
+                )
+            self.assertIsNone(service.db.one("SELECT id FROM workflows LIMIT 1"))
 
     def test_entry_without_a_budget_uses_the_configured_default(self) -> None:
         with tempfile.TemporaryDirectory() as folder:

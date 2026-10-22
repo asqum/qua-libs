@@ -124,9 +124,61 @@ def resolve_03a_candidate_targets(
     min_snr: float = DEFAULT_03A_MIN_ROBUST_SNR,
 ) -> set[str]:
     """Return credible 03a candidates after explicit human rejections."""
-    return _resolve_03a_targets(
-        list(run_rows), require_fine=False, min_snr=min_snr
-    )
+    candidates, _ = _03a_candidate_walk(list(run_rows), min_snr)
+    return candidates
+
+
+def _03a_candidate_walk(
+    rows: list[dict[str, Any]], min_snr: float
+) -> tuple[set[str], set[str]]:
+    """Return (candidates, dismissed) after walking the 03a rows in order.
+
+    Operator rule 2026-10-20 (q5/q7 window-shift lock): a decided low-power
+    refinement or fine scan that no longer shows a credible line for a
+    candidate dismisses it -- the coarse line vanished with power, so it was
+    multi-photon -- and the qubit may leave the window like any unresolved one.
+    """
+    candidates: set[str] = set()
+    dismissed: set[str] = set()
+    for row in rows:
+        credible = _resolve_usable_targets(
+            "03a", [row], require_fine_03a=False, min_03a_snr=min_snr
+        )
+        candidates.update(credible)
+        dismissed.difference_update(credible)
+        parameters = json_loads(row.get("parameters_json"), {})
+        names = parameters.get("qubits", [])
+        names = [str(name) for name in names] if isinstance(names, list) else []
+        if row.get("decision") == "manual_review":
+            candidates.difference_update(names)
+            continue
+        analysis = json_loads(row.get("analysis_json"), {})
+        if (
+            row.get("decision")
+            and row.get("status") in {None, "completed"}
+            and row.get("analysis_status") in {"pass", "needs_review", "failed"}
+            and analysis.get("03a_stage") in {"refinement_candidate", "fine"}
+        ):
+            # Vanished means the trace lost its line (SNR below the floor),
+            # not a fine line held back for other reasons such as its
+            # pending upward check.
+            metrics_by_name = analysis.get("dataset_metrics", {}).get("qubits", {})
+            if not isinstance(metrics_by_name, dict):
+                metrics_by_name = {}
+            vanished = set()
+            for name in names:
+                metrics = metrics_by_name.get(name)
+                snr = metrics.get("robust_snr") if isinstance(metrics, dict) else None
+                if (
+                    name in candidates
+                    and name not in credible
+                    and _finite(snr)
+                    and float(snr) < float(min_snr)
+                ):
+                    vanished.add(name)
+            candidates.difference_update(vanished)
+            dismissed.update(vanished)
+    return candidates, dismissed
 
 
 def _resolve_03a_targets(
@@ -169,10 +221,12 @@ def resolve_03a_shift_ready_targets(
     """Return unresolved targets allowed to move to another LO window.
 
     Edge-limited features may shift immediately. Interior low-SNR traces must
-    first be reconfirmed with at least the configured maximum averages.
+    first be reconfirmed with at least the configured maximum averages. A
+    candidate dismissed by a low-power scan may shift immediately too: the
+    full-power coarse scan already covered the window.
     """
     rows = list(run_rows)
-    candidates = resolve_03a_candidate_targets(rows, min_snr)
+    candidates, dismissed = _03a_candidate_walk(rows, min_snr)
     latest: dict[str, tuple[dict[str, Any], dict[str, Any]]] = {}
     for row in rows:
         if row.get("status") not in {None, "completed"}:
@@ -205,7 +259,7 @@ def resolve_03a_shift_ready_targets(
             and not isinstance(averages, bool)
             and averages >= int(max_noise_confirmation_averages)
         )
-        if edge_limited or sufficiently_averaged:
+        if edge_limited or sufficiently_averaged or name in dismissed:
             ready.add(name)
     return ready
 

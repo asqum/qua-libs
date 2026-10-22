@@ -20,6 +20,23 @@ autonomy:
   # does not fit in eight hours. The human still approves the actual number on
   # the Dashboard; this is the ceiling an agent may ask for.
   max_duration_hours: 24
+  # Operator decision 2026-10-20: the Approval page offers exactly these
+  # budgets (default the first). The clock starts at the approval.
+  duration_choices_hours: [8, 16, 24]
+  # Operator decision 2026-10-20: "全自動判斷模式", ticked on the Approval
+  # page. Pauses that used to wait for a person are decided by JY itself:
+  # an unrecognized worker crash or an analyzer exception is retried, a
+  # target that keeps failing (or that times out alone on submission) is
+  # marked incomplete at that node, and an instrument outage resumes on its
+  # own once the QOP answers again. Before each automatic retry JY closes
+  # this chip's stale quantum machine and its running job. The three halt
+  # conditions and the lease expiry always stay with the operator.
+  auto_judgement:
+    max_per_node_qubit: 2
+    max_per_lease: 10
+    instrument_probe_interval_seconds: 60
+    close_stale_qm: true
+    qm_cleanup_timeout_seconds: 120
   max_total_runs: null
   max_attempts_per_node_qubit: 20
   auto_state_commit_analysis_statuses: ["pass"]
@@ -40,7 +57,8 @@ autonomy:
   # lease only costs a new human approval. `parameter_policy_violation` and
   # out-of-scope requests therefore no longer halt; they are refused and
   # recorded. An unrecognized worker exception now pauses the lease for the
-  # operator (resumable with `恢復量測`) instead of ending it. Only the
+  # operator (resumable with `恢復量測`) instead of ending it; with full-auto
+  # judgement (`auto_judgement` above) it is retried instead. Only the
   # conditions below, which all mean JY can no longer account for the hardware
   # or the state file, still halt.
   halt_conditions:
@@ -64,7 +82,8 @@ autonomy:
   # protected node itself rejects: deterministic, reproducible, and fixed by
   # choosing a different value. The lease stays active so the agent can correct
   # the parameter; it must never resend the value that crashed. Every other
-  # worker exception pauses the lease for the operator. Add an entry only
+  # worker exception pauses the lease for the operator (or, under full-auto
+  # judgement, is retried and then marked incomplete). Add an entry only
   # together with its `rules/experiences/<node>.md` lesson.
   # 2026-10-07: the extras keys each node assigns inside Qualibrate's
   # record_state_updates(), which reads the old value first and raises KeyError
@@ -139,14 +158,17 @@ autonomy:
         is not a data-volume problem and goes to the operator.
 
 # Thermal reset is the safe default everywhere. Active reset is evidence-gated
-# per qubit by an active-reset 07b run with >= 80% fidelity (compact clouds only
-# while analysis."07b".active_reset_requires_morphology is true).
+# per qubit by an active-reset 07b run that reaches
+# reset_policy.active_min_readout_fidelity (compact clouds only while
+# analysis."07b".active_reset_requires_morphology is true).
 # If active reset is used for statistics, all three lifetime baselines must be
 # repeated and accepted with active reset before any statistics node may start.
 reset_policy:
   default_type: "thermal"
   active_qualification_node: "07b"
-  active_min_readout_fidelity: 0.80
+  # Operator choice 2026-10-19 (7SQ_4Fa3H die(5,1) q1 active 07b #632: 0.770,
+  # 10.6%/9.0% off-blob): active reset qualifies from 0.75 (was 0.80).
+  active_min_readout_fidelity: 0.75
   active_statistics_verification_nodes: ["05", "06", "06b"]
   # Operator choice 2026-10-04: after 07b, qubits qualified by an accepted
   # active-reset 07b run use active reset at every later node with a reset
@@ -318,10 +340,6 @@ analysis:
     max_frequency_span_mhz: 60.0
     # Protected-node fits treat the readout LO (IF=0, detuning −IF) as a peak.
     upconverter_exclusion_hz: 1000000.0
-  statistics:
-    # One requested statistics run contains 100 repetitions. Its raw iterations
-    # are not re-fitted or used as an additional all-or-nothing acceptance gate.
-    required_repetitions: 100
   "02x":
     # Visible interior dip is enough; 02x only fine-tunes stored resonator RF.
     min_robust_snr: 3.0
@@ -397,8 +415,10 @@ analysis:
     # CRSQ_26009_die(5,-1) readout gave clean T1 decays at SNR 8-12 that 8000
     # averages could not lift to 25.
     min_robust_snr: 15.0
-    noise_confirmation_num_averages: [2000, 4000, 8000]
-    max_noise_confirmation_num_averages: 8000
+    # Operator instruction 2026-10-20: T1/T2*/T2e run at most 1000 averages;
+    # a run still too noisy at 1000 counts as failed (no averaging ladder).
+    noise_confirmation_num_averages: [1000]
+    max_noise_confirmation_num_averages: 1000
   "06":
     # Operator instruction 2026-10-15: 06 calibrates the drive frequency on a
     # short window before it measures T2*, so a long first window cannot blur
@@ -410,8 +430,10 @@ analysis:
     # with relative uncertainty below reliable_relative_uncertainty gives it,
     # otherwise to the next rung of max_wait_ladder_ns. Every run at the
     # calibration window commits its frequency correction.
-    frequency_calibration_max_wait_ns: 1016
-    max_wait_ladder_ns: [1016, 4016, 16016, 40016, 100016]
+    # Operator instruction 2026-10-20: the first (calibration) window is
+    # 816 ns = 101 points at 8 ns.
+    frequency_calibration_max_wait_ns: 816
+    max_wait_ladder_ns: [816, 4016, 16016, 40016, 100016]
     target_lifetimes: 4.0
     reliable_relative_uncertainty: 0.5
     # Operator instruction 2026-10-10: a qubit passes 06 only when both
@@ -437,8 +459,14 @@ analysis:
     # fidelity earns one active-reset repeat, and that repeat qualifies the
     # qubit for active reset downstream. One number governs both, so the
     # trigger and the qualification floor are deliberately the same.
-    active_reset_min_readout_fidelity: 0.80
+    # Operator choice 2026-10-19 (q1 active #632: 0.770, 10.6%/9.0% off-blob):
+    # the active-reset repeat qualifies from 0.75 and its clouds may have up to
+    # `active_reset_max_outlier_fraction` of shots on neither blob. The thermal
+    # trigger that earns the repeat stays at 0.80 with the 5% two-blob test,
+    # and so does state discrimination.
+    active_reset_min_readout_fidelity: 0.75
     active_reset_trigger_fidelity: 0.80
+    active_reset_max_outlier_fraction: 0.15
     # Operator decision 2026-10-14: active reset needs two Gaussian blobs too,
     # both for the thermal trigger and for the active-reset repeat itself.
     active_reset_requires_morphology: true
@@ -462,12 +490,18 @@ analysis:
     # whose g/e shots, pooled over +-`neighborhood_points` in frequency and
     # amplitude, have at most `max_outlier_fraction` beyond `outlier_sigma` of
     # both blob centres.
+    # Operator decision 2026-10-20: the limit is 5% (as in 07b), and among the
+    # points within it JY's raw-shot score picks the one with the lowest
+    # separation_weight x blob-overlap error + outlier_weight x off-blob share
+    # (5:1, operator 2026-10-21; was 3:1: blob separation counts five times as much as shots on neither
+    # blob). The node's fidelity is only reported.
     outlier_sigma: 3.0
-    max_outlier_fraction: 0.03
+    max_outlier_fraction: 0.05
     neighborhood_points: 1
-    # Operator choice 2026-10-03: never above the 02c dressed-limit power, and
-    # prefer the two-blob point only when it costs at most this much fidelity
-    # (percentage points); otherwise keep the fidelity optimum for 07b to judge.
+    separation_weight: 5.0
+    outlier_weight: 1.0
+    # Operator choice 2026-10-03: never above the 02c dressed-limit power. The
+    # fidelity tolerance applies only without separation_weight (old rule).
     fidelity_tolerance_percent: 2.0
   "03a":
     initial_coarse_span_mhz: 800.0
@@ -520,6 +554,35 @@ analysis:
     # fine scan of a cross-LO-confirmed line, within the tolerance of its RF,
     # passes from this SNR. Reproducibility and 04 still apply.
     cross_lo_fine_min_robust_snr: 5.0
+    # Operator instruction 2026-10-19 (7SQ_4Fa3H die(5,1) q1 at 2.896 GHz,
+    # likely f02/2): a fine line commits only after an upward check. The
+    # qubit's drive is centred `upper_check_offset_mhz` above the fine line
+    # and one 03a run sweeps `upper_check_span_mhz` at coarse drive (shared
+    # XY 1.0, private XY its cap). A credible line (min_robust_snr,
+    # min_edge_fraction) `upper_check_min/max_separation_mhz` above means
+    # the fine line was a multi-photon line: the highest such line becomes
+    # the f01 candidate (centre, refinement, low-power fine scan, its own
+    # check). No such line confirms the fine line as f01.
+    upper_check_span_mhz: 300.0
+    upper_check_offset_mhz: 150.0
+    upper_check_step_mhz: 1.0
+    upper_check_num_averages: 2000
+    upper_check_min_separation_mhz: 50.0
+    # Operator choice 2026-10-19 (q2 #648: 2.7675 was f03/3, f01 3.0085 GHz
+    # lay 241 MHz up): any credible line up to the whole check span counts,
+    # and the highest-frequency one is the f01 candidate (f01 is usually the
+    # higher, wider line at coarse power; f02/2 narrower and taller, and it
+    # fades at low power). Anharmonicity follows the ladder f0k/k = f01 -
+    # (k-1) alpha/2: it is recorded only when exactly one order k up to
+    # upper_check_max_photon_order gives alpha inside the plausible window
+    # and every intermediate f0j/j (2 <= j < k) shows as a peak (SNR >=
+    # upper_check_ladder_min_snr) within upper_check_ladder_tolerance_mhz.
+    upper_check_max_separation_mhz: 300.0
+    upper_check_alpha_min_mhz: 150.0
+    upper_check_alpha_max_mhz: 300.0
+    upper_check_max_photon_order: 4
+    upper_check_ladder_min_snr: 3.0
+    upper_check_ladder_tolerance_mhz: 10.0
   "statistics":
     # 2026-10-13 (q1 06st_t2e #493): a statistics node that lost the
     # instrument after 3 of 100 repetitions still saved a summary. A result
@@ -648,6 +711,9 @@ state_commit:
     - "^/qubits/q[0-9]+/resonator/operations/readout/(threshold|rus_exit_threshold)$"
     - "^/qubits/q[0-9]+/resonator/confusion_matrix$"
     - "^/qubits/q[0-9]+/extras/(bare_resonator_freq|idle_freq|dressed_resonator_freq)$"
+    # Only a 03a fine line confirmed by the upward check writes this, with
+    # /qubits/qN/anharmonicity (operator 2026-10-19).
+    - "^/qubits/q[0-9]+/extras/anharmonicity$"
     # Flux calibration (02b/03b/06a, operator 2026-10-08). The 02b aSWAP
     # amplitude stays out on purpose.
     - "^/qubits/q[0-9]+/z/(joint_offset|independent_offset|min_offset)$"
@@ -1005,8 +1071,11 @@ nodes:
     name: "05_T1"
     script: "05_T1.py"
     flux_behavior: "joint"
+    # Operator instruction 2026-10-20: at most 1000 averages and 101 points.
+    max_num_averages: 1000
+    max_time_points: 101
     defaults:
-      num_averages: 2000
+      num_averages: 1000
       min_wait_time_in_ns: 16
       max_wait_time_in_ns: 200000
       wait_time_step_in_ns: 2000
@@ -1137,22 +1206,28 @@ nodes:
     # Operator instruction 2026-10-02, tightened 2026-10-15: the detuning is
     # inversely proportional to the window, detuning [MHz] x (max - min wait)
     # [ns] = 4000 exactly (20000 ns -> 0.2 MHz), so every Ramsey plot shows four
-    # fringes. min wait is always 16 ns and max wait is 16 + a multiple of
-    # 500 ns. A run that omits frequency_detuning_in_mhz gets the derived value;
+    # fringes. min wait is always 16 ns and max wait is 16 + 400n ns (operator
+    # 2026-10-20; was 500 ns), which puts the 816 ns calibration window on the
+    # grid. A run that omits frequency_detuning_in_mhz gets the derived value;
     # any other explicit value is refused before the hardware.
     detuning_wait_product_mhz_us: 4.0
     detuning_wait_product_tolerance: 0.0
     fixed_min_wait_time_in_ns: 16
-    max_wait_time_step_in_ns: 500
+    max_wait_time_step_in_ns: 400
     # Operator choice 2026-10-15: T2* up to about 25 us.
     max_wait_time_cap_ns: 100016
+    # Operator instruction 2026-10-20: at most 1000 averages and 101 points.
+    max_num_averages: 1000
+    max_time_points: 101
+    calibration_max_wait_time_in_ns: 816
     defaults:
       num_averages: 1000
       reset_type: "thermal"
       frequency_detuning_in_mhz: 0.1
       min_wait_time_in_ns: 16
-      max_wait_time_in_ns: 40016
-      num_time_points: 400
+      # The first 06 of a pass is the 816 ns frequency calibration.
+      max_wait_time_in_ns: 816
+      num_time_points: 101
       log_or_linear_sweep: "linear"
       use_state_discrimination: true
       flux_point_joint_or_independent: "joint"
@@ -1224,11 +1299,14 @@ nodes:
     name: "06b_T2_echo"
     script: "06b_T2_echo.py"
     flux_behavior: "joint"
+    # Operator instruction 2026-10-20: at most 1000 averages and 101 points.
+    max_num_averages: 1000
+    max_time_points: 101
     defaults:
       num_averages: 1000
       min_wait_time_in_ns: 16
       max_wait_time_in_ns: 200000
-      wait_time_step_in_ns: 1000
+      wait_time_step_in_ns: 2000
       flux_point_joint_or_independent_or_arbitrary: "joint"
       simulate: false
       timeout: 100
@@ -1360,7 +1438,8 @@ nodes:
     script: "StatisticsMustDo/06st_T2e_statics.py"
     flux_behavior: "joint"
     defaults:
-      num_averages: 1000
+      # Operator 2026-10-21: 500 (was 1000) to halve the T2e statistics time.
+      num_averages: 500
       min_wait_time_in_ns: 16
       max_wait_time_in_ns: 30000
       flux_point_joint_or_independent_or_arbitrary: "joint"

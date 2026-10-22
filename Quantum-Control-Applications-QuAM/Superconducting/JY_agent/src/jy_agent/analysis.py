@@ -194,9 +194,15 @@ class SnapshotAnalyzer:
                 if isinstance(result, dict) and result.get(
                     "state_discrimination_qualified"
                 ) is False:
+                    # 2026-10-19: active reset has its own, looser floor; do not
+                    # call it unusable when this run qualified it.
+                    usage = (
+                        "state discrimination (active reset is qualified)"
+                        if result.get("active_reset_qualified") is True
+                        else "state discrimination or active reset"
+                    )
                     warnings.append(
-                        f"{name} readout is not usable for state discrimination or "
-                        "active reset ("
+                        f"{name} readout is not usable for {usage} ("
                         + "; ".join(result.get("state_discrimination_reasons") or [])
                         + "); 07b still passes so the rotation angle and threshold "
                         "commit and later nodes measure the raw I quadrature."
@@ -1130,6 +1136,8 @@ class SnapshotAnalyzer:
                 r"^/qubits/q[0-9]+/xy/intermediate_frequency$",
                 r"^/qubits/q[0-9]+/resonator/operations/readout/integration_weights_angle$",
                 r"^/qubits/q[0-9]+/extras/idle_freq$",
+                # Added by the server's upward check (operator 2026-10-19).
+                r"^/qubits/q[0-9]+/(extras/)?anharmonicity$",
             ],
             "04": [
                 r"^/qubits/q[0-9]+/xy/operations/[A-Za-z0-9_-]+/amplitude$",
@@ -1456,9 +1464,25 @@ class SnapshotAnalyzer:
                         discrimination_reasons.append(
                             "IQ clouds are not two separated Gaussian blobs"
                         )
+                    # Operator choice 2026-10-19: the active-reset repeat has its
+                    # own, looser two-blob limit (shots on neither blob).
+                    active_outlier_max = rules_07b.get("active_reset_max_outlier_fraction")
+                    two_blob = (
+                        morphology.get("two_blob") if isinstance(morphology, dict) else None
+                    )
+                    active_morphology_pass = morphology_pass or (
+                        active_outlier_max is not None
+                        and isinstance(two_blob, dict)
+                        and all(
+                            _scalar_number(two_blob.get(key)) is not None
+                            and _scalar_number(two_blob.get(key))
+                            <= float(active_outlier_max)
+                            for key in ("g_on_neither_blob", "e_on_neither_blob")
+                        )
+                    )
                     active_reset_qualified = (
                         reset_type == "active"
-                        and (morphology_pass or not active_needs_morphology)
+                        and (active_morphology_pass or not active_needs_morphology)
                         and fidelity is not None
                         and active_min_fidelity <= fidelity <= 1.0
                     )
@@ -2958,6 +2982,35 @@ def _select_07d_readout_patch(
             for key in ("frequency_offset_hz", "amplitude_factor", "duration_ns")
         )
         cap = entry.get("max_amplitude_factor")
+        if entry.get("selection") == "separation_weighted":
+            # Operator decision 2026-10-20: JY's raw-shot score, 3:1.
+            text = (
+                f"{name} 07d separation-weighted point "
+                f"({entry['separation_weight']:g}:{entry['outlier_weight']:g}): "
+                f"{chosen['frequency_offset_hz'] / 1e6:+.2f} MHz, factor "
+                f"{chosen['amplitude_factor']:.3g}"
+                + (f" (cap {cap:.3g} = 02c dressed limit)" if cap is not None else "")
+                + f", {chosen['duration_ns']} ns; blobs {chosen['separation_sigma']:.2f} "
+                f"sigma apart (overlap error {chosen['blob_overlap_error']:.1%}), "
+                f"off-blob {chosen['outlier_fraction']:.1%}, node fidelity "
+                f"{chosen['fidelity_percent']:.1f}%"
+            )
+            if not entry.get("two_blob"):
+                text += (
+                    f"; no capped point is within {entry['max_outlier_fraction']:.0%} "
+                    "off-blob, so 07b judges this one"
+                )
+            if moved:
+                text += (
+                    f". The node's fidelity optimum ({unconstrained['fidelity_percent']:.1f}%) "
+                    f"had blobs {unconstrained['separation_sigma']:.2f} sigma apart."
+                )
+            warnings.append(text)
+            if chosen.get("at_amplitude_top"):
+                warnings.append(
+                    f"{name} 07d point sits at the top of the allowed amplitude range."
+                )
+            continue
         kind = "two-blob point" if entry.get("two_blob") else "fidelity optimum"
         text = (
             f"{name} 07d {kind}: {chosen['fidelity_percent']:.1f}% at "

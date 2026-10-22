@@ -11,16 +11,40 @@ playbook, then use the project `jy_bringup` MCP server:
 - `進入 JY 量測模式`: enter conversational measurement mode; each experiment
   or state change needs approval on the shared Dashboard.
 - `進入 JY 自動量測模式`: enter bounded automatic mode; request one bounded
-  lease approval, wait with `jy_wait_for_autonomy_status`, and stay inside its
-  targets, nodes, quotas, and hard policies. Keep the current agent run active
-  while Cursor permits it; Cursor has no repository rule that can guarantee an
-  indefinite model turn, so if the host pauses, resume from the same Dashboard
-  and the operator's `已核准` message.
+  lease approval, reply with the Dashboard and handoff, and end the turn. After
+  the operator's `已核准`, wait for results with `jy_wait_for_autonomy_status`
+  and stay inside its targets, nodes, quotas, and hard policies. Keep that agent
+  run active while Cursor permits it; Cursor has no repository rule that can
+  guarantee an indefinite model turn, so if the host pauses, resume from the
+  same Dashboard and the operator's `已核准` message.
+
+- `繼續JY自動量測模式` (aliases `繼續 JY 自動量測模式`, `Continue JY automatic measurement mode`): continue automatic mode on the open
+  workflow with `jy_continue_autonomy_mode`. An expired or ended lease is
+  renewed with its old scope (the Approval page shows only the renewal card:
+  hours, full-auto judgement and code), a paused lease resumes, an active one
+  is only reported. After a Recover the phrase starts a continuation workflow
+  with the same simple card. Home "停止核准" ends the lease after the current
+  run; `jy_wait_for_autonomy_status` follows the renewal (`superseded_lease_id`),
+  so keep waiting and use the new `authorization.id`.
+
+With full-auto judgement on, do not stop to ask the operator about a failed run:
+record `repeat` and rerun; the server keeps the lease, closes this chip's stale
+QM first and marks the node/qubit incomplete after two more failures; outages
+resume by themselves. After 10 automatic decisions per lease, or while a
+hardware lock is retained, the old pause returns; halts and expiry still go to
+the operator.
+
+Fast entry (operator 2026-10-19): on either entry phrase or the continue phrase,
+run only Ensure and the matching `jy_enter_*` / `jy_continue_autonomy_mode` tool
+before replying; read AGENTS.md and the playbook afterwards. Reply at once with
+the bare `browser_url` and `operator_handoff.chat` as a three-item list, and
+never poll for the lease approval. After an MCP reconnect, `已重新連線` /
+`Reconnected` means: verify the new MCP process, then continue.
 
 For both modes, show only the entry result's top-level `browser_url`. Approval,
 controls, and all experiment results share that Dashboard service. The common
-`/` entry links to the session Home, Approval, and Experiment results pages; do
-not enumerate those internal routes as separate websites.
+`/` entry links to the session Home, Approval, Experiment results, Token usage,
+and Guide pages; do not enumerate those internal routes as separate websites.
 The public URL is bare and has no bootstrap query. Browsers use the fixed ignored
 `JY_agent/runtime/dashboard-password.txt`; never create device-pairing links.
 
@@ -61,7 +85,9 @@ depending on the MCP, deleting a retained lock, or killing an unverified
 process. Recognized instrument-connectivity failures pause scheduling and are
 reported on the Dashboard. After on-site inspection, `恢復量測` / `Resume
 measurement` calls `jy_resume_measurement_mode` for the same workflow/session;
-the current node restarts as a new run. A retained hardware lock blocks this
+the current node restarts as a new run. Under full-auto judgement the server
+resumes the same lease by itself after a successful QOP probe; keep waiting
+with `jy_wait_for_autonomy_status`. A retained hardware lock blocks this
 resume and still requires local recovery. See
 `Quantum-Control-Applications-QuAM/Superconducting/JY_agent/Command.md` for the
 complete bilingual aliases.

@@ -252,6 +252,11 @@ class Database:
             ("workflows", "source_workflow_id", "TEXT"),
             ("workflows", "start_node", "TEXT"),
             ("runs", "inherited_from_run_id", "TEXT"),
+            # Operator decisions 2026-10-20: the approval page's full-auto
+            # judgement choice, and why a workflow ended (an operator end
+            # brings back the full lease page; a recovery end continues).
+            ("autonomy_leases", "auto_judgement", "INTEGER NOT NULL DEFAULT 0"),
+            ("workflows", "end_kind", "TEXT"),
         ):
             columns = {
                 str(row[1])
@@ -261,6 +266,14 @@ class Database:
                 connection.execute(
                     f"ALTER TABLE {table} ADD COLUMN {column} {declaration}"
                 )
+                if (table, column) == ("workflows", "end_kind"):
+                    # Workflows that ended before end_kind existed were ended
+                    # by the operator as far as JY can tell, so a later
+                    # Recover must not turn them into a continuation.
+                    connection.execute(
+                        "UPDATE workflows SET end_kind = 'operator' "
+                        "WHERE status NOT IN ('active', 'paused')"
+                    )
 
     @contextmanager
     def connect(self) -> Iterator[sqlite3.Connection]:

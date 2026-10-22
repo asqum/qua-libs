@@ -31,12 +31,25 @@ modes. Any of {list(settings.measurement_mode_entry_phrases)!r} starts conversat
 one policy-registered experiment at a time with `jy_request_conversational_run`
 and a human approval for each run and state commit on the shared session
 dashboard. Any of {list(settings.autonomy_mode_entry_phrases)!r} starts bounded automation:
-call jy_enter_autonomy_mode, show its session Dashboard URL, wait for the one
-lease approval, keep the automatic agent task alive with
+call jy_enter_autonomy_mode, show its session Dashboard URL, and end the turn;
+after the operator sends `已核准`, keep the automatic agent task alive with
 jy_wait_for_autonomy_status while no action is ready, and then use only
-jy_autonomy_* execution tools. The automation lease
-enforces target/node scope, an expiry (eight hours by default; pass
-duration_hours at entry only when the operator asks for a different budget),
+jy_autonomy_* execution tools. Fast entry: on either entry phrase, run only the
+host Ensure step and the `jy_enter_*` call before replying -- read the playbook
+afterwards -- then reply at once with the bare `browser_url` and
+`operator_handoff.chat`; never poll for the lease approval. Any of
+{list(settings.autonomy_continue_phrases)!r} continues the open workflow's
+automation with jy_continue_autonomy_mode under the same fast-entry rule: an
+expired or otherwise ended lease gets a renewal proposal that copies its scope
+(the Approval page shows only "renew, continue from <qubit> / <node>", the
+hours and full-auto choices and the approval code; the workflow, current node
+and per-qubit pass are kept), a
+paused lease resumes, and an active lease is only reported. When
+jy_wait_for_autonomy_status reports an expired lease, copy its handoff, whose
+reply phrase is the continue phrase. The automation lease
+enforces target/node scope, an expiry (the operator picks 8, 16 or 24 hours on
+the Approval page; pass duration_hours at entry, as one of those, only when the
+operator names one),
 twenty attempts per node/qubit, and pass-backed state commits.
 Call jy_get_next_action for the deterministic plan -- current node, per-target
 resolved/incomplete/unresolved sets, attempts left, required setup tools, and
@@ -48,9 +61,30 @@ The lease survives everything correctable. A request refused before the worker
 reaches hardware -- out-of-policy parameter, out-of-scope targets, a premature
 analyze -- is recorded and refused, not halted; fix it and continue. A worker
 crash matching a registered signature in autonomy.recoverable_worker_exceptions
-keeps the lease and tells you the remedy; any other worker crash pauses the
-lease for the operator and resumes with the resume phrase. Only snapshot_missing,
-state_hash_conflict, and hardware_lock_anomaly end the lease.
+keeps the lease and tells you the remedy; without full-auto judgement any
+other worker crash pauses the lease for the operator and resumes with the
+resume phrase. Besides snapshot_missing, state_hash_conflict and
+hardware_lock_anomaly, a start refused for a non-recoverable reason (for
+example a missing decision or a launch failure) also ends the lease.
+The Approval page sets the lease hours (8/16/24) and "full-auto judgement"
+(operator 2026-10-20). With full-auto judgement on, JY itself decides the
+pauses that used to wait for the operator: an unknown worker or analyzer
+error is retried (the server closes this chip's stale quantum machine first;
+a start refused while it does is not an error -- wait and call again), a
+target that keeps failing is marked incomplete, and an instrument outage
+resumes once the QOP answers. Never pause the session to ask the operator
+about those; record the decision (`repeat`, or `advance` once every target is
+resolved or incomplete) and continue. After 10 such decisions per lease, or
+while a hardware lock is retained, the old pause returns. Home "停止核准" ends the lease
+after the current run and puts a renewal on the Approval page:
+jy_wait_for_autonomy_status then follows the new lease and reports
+`superseded_lease_id`; keep waiting and use the new `authorization.id`.
+After a Recover (not an operator end), entry or the continue phrase starts a
+continuation workflow whose Approval card asks only hours, judgement and the
+approval code.
+jy_close_stale_qm closes this chip's leftover quantum machine and job when a
+run broke off; jy_get_autopilot_shadow_report compares the deterministic
+planner with the agent's choices and reports the scheduling gaps.
 Recognized instrument-connectivity failures pause the experiment and scheduling
 instead of becoming a generic crash. Preserve the same workflow/session, wait for
 the operator to repair connectivity, then use jy_resume_measurement_mode with one
@@ -227,14 +261,14 @@ def begin_jy_bringup(client_id: str) -> str:
     """Start a policy-gated JY bring-up session."""
     return (
         f"Wait until the user says one of "
-        f"{list(settings.measurement_mode_entry_phrases)!r}. Then read jy://playbook and "
-        "call jy_enter_measurement_mode with "
+        f"{list(settings.measurement_mode_entry_phrases)!r}. Then call "
+        "jy_enter_measurement_mode with "
         f"client_id={client_id!r} only unless the operator explicitly overrides "
         "targets or multiplexed. A new workflow uses state.json "
-        "active_qubit_names and defaults multiplexed=true. Preserve and show the "
-        "returned session browser URL. Call jy_list_experiments, then discuss and "
-        "propose one experiment at a time; each run/state approval appears on that "
-        "page."
+        "active_qubit_names and defaults multiplexed=true. Immediately show the "
+        "returned session browser URL and operator_handoff.chat. Then read "
+        "jy://playbook, call jy_list_experiments, and propose one experiment at a "
+        "time; each run/state approval appears on that page."
     )
 
 
@@ -243,13 +277,15 @@ def begin_jy_autonomy(client_id: str) -> str:
     """Start the bounded automatic bring-up mode."""
     return (
         f"Wait until the user says one of {list(settings.autonomy_mode_entry_phrases)!r}. "
-        "Read jy://playbook and jy://policies, then call jy_enter_autonomy_mode "
+        "Call jy_enter_autonomy_mode "
         f"with client_id={client_id!r} only unless the operator explicitly overrides "
         "targets or multiplexed. A new workflow uses state.json "
-        "active_qubit_names and defaults multiplexed=true. Show its session "
-        "browser URL and wait for the one lease approval with "
-        "jy_wait_for_autonomy_status. Use only jy_autonomy_* execution tools within "
-        "scope and wait on new events between actions."
+        "active_qubit_names and defaults multiplexed=true. Immediately show its "
+        "session browser URL and operator_handoff.chat, then end the turn without "
+        "polling for the lease approval. After the operator sends 已核准, read "
+        "jy://playbook and jy://policies, confirm activation with "
+        "jy_wait_for_autonomy_status, use only jy_autonomy_* execution tools within "
+        "scope, and wait on new events between actions."
     )
 
 
@@ -297,9 +333,9 @@ def jy_enter_autonomy_mode(
 
     Omit targets to use state.json active_qubit_names. Omit multiplexed to
     default true for a new workflow; omitted multiplexed does not change an
-    existing workflow. Pass duration_hours only when the operator asks for a
-    different budget than the configured default; it applies to a new lease
-    and the human still approves the number shown on the Dashboard.
+    existing workflow. Pass duration_hours (8, 16 or 24) only when the
+    operator names a budget; it preselects the Approval page choice for a new
+    lease, and the human still picks the hours there.
     """
     request = {
         "client_id": client_id,
@@ -321,6 +357,31 @@ def jy_enter_autonomy_mode(
             duration_hours=duration_hours,
             reason=reason,
         ),
+    )
+
+
+@mcp.tool()
+def jy_continue_autonomy_mode(
+    client_id: str,
+    activation_phrase: str,
+    operation_id: str | None = None,
+) -> dict[str, Any]:
+    """Continue the open workflow's automatic mode (renew, resume, or report).
+
+    For the continue phrase (`繼續JY自動量測模式`). An expired or otherwise
+    ended latest lease of the still-active workflow gets a renewal proposal
+    copying its targets, nodes, limits and duration; the Dashboard shows a
+    simple renewal card and approving it activates the lease on the same
+    workflow. A paused lease resumes without approval; an active one is
+    returned unchanged. Same return shape as jy_enter_autonomy_mode: reply
+    with the bare top-level browser_url and operator_handoff.chat.
+    """
+    request = {"client_id": client_id, "activation_phrase": activation_phrase}
+    return _mutation(
+        "jy_continue_autonomy_mode",
+        operation_id,
+        request,
+        lambda: service.continue_autonomy_mode(client_id, activation_phrase),
     )
 
 
@@ -428,6 +489,43 @@ def jy_get_autonomy_status(
 ) -> dict[str, Any]:
     """Get authorization scope, expiry, counters, stop reason, and control URL."""
     return service.autonomy_status(lease_id=lease_id, workflow_id=workflow_id)
+
+
+@mcp.tool()
+def jy_close_stale_qm(
+    client_id: str,
+    reason: str,
+    dry_run: bool = False,
+    operation_id: str | None = None,
+) -> dict[str, Any]:
+    """Close this chip's leftover quantum machine and its running job.
+
+    Use it when a run broke off (crash, lost connection) and the next run
+    cannot open the ports. Only a machine whose every port belongs to the
+    active state.json is closed; one that merely shares ports is reported and
+    left alone. Refused while a run is active or the hardware lock exists.
+    Set dry_run to only list the open machines.
+    """
+    request = {"client_id": client_id, "reason": reason, "dry_run": dry_run}
+    return _mutation(
+        "jy_close_stale_qm",
+        operation_id,
+        request,
+        lambda: service.close_stale_qm(client_id, reason, dry_run=dry_run),
+    )
+
+
+@mcp.tool()
+def jy_get_autopilot_shadow_report(
+    workflow_id: str | None = None,
+) -> dict[str, Any]:
+    """Shadow mode: how often the deterministic planner matched the agent.
+
+    Per stage (run start, decision) and node: total, matched, and how many
+    runs the planner could fully determine, plus the instrument share and
+    the median/mean gap between runs.
+    """
+    return service.autopilot_shadow_report(workflow_id)
 
 
 @mcp.tool()
@@ -1460,6 +1558,38 @@ def jy_request_03a_candidate_center(
         operation_id,
         request,
         lambda: service.request_03a_candidate_center(
+            workflow_id, qubits, client_id, autonomy_lease_id
+        ),
+    )
+
+
+@mcp.tool()
+def jy_request_03a_upper_check_center(
+    workflow_id: str,
+    qubits: list[str],
+    client_id: str,
+    autonomy_lease_id: str | None = None,
+    operation_id: str | None = None,
+) -> dict[str, Any]:
+    """Centre the drive above a fine 03a line for its f02/2 upward check.
+
+    Operator instruction 2026-10-19: a fine 03a line commits only after one
+    03a run at coarse drive sweeps the check span above it. With
+    autonomy_lease_id it is delegated; apply it with
+    jy_autonomy_apply_setup_state, then run the check jy_get_next_action
+    proposes.
+    """
+    request = {
+        "workflow_id": workflow_id,
+        "qubits": qubits,
+        "client_id": client_id,
+        "autonomy_lease_id": autonomy_lease_id,
+    }
+    return _mutation(
+        "jy_request_03a_upper_check_center",
+        operation_id,
+        request,
+        lambda: service.request_03a_upper_check_center(
             workflow_id, qubits, client_id, autonomy_lease_id
         ),
     )

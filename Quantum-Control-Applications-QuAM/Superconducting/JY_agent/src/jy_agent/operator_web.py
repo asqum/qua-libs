@@ -84,6 +84,20 @@ async def handle_operator_console(
                     f"Hardware lock for run {result['run_id']} was safely archived. "
                     "Any queued full shutdown will now continue automatically."
                 )
+            elif operation == "close_stale_qm":
+                receipt = service.close_stale_qm_for_retained_lock(actor)
+                if receipt.get("problems"):
+                    error = (
+                        "The stale-QM cleanup ran but this chip is not clear yet: "
+                        + " ".join(str(item) for item in receipt["problems"])
+                    )
+                else:
+                    closed = receipt.get("summary", {}).get("closed") or []
+                    success = (
+                        "No quantum machine of this chip remains open"
+                        + (f" (closed {', '.join(closed)})" if closed else "")
+                        + ". Other users' machines were left alone."
+                    )
             else:
                 raise ServiceError("Unknown operator-console operation")
         except (
@@ -164,10 +178,13 @@ def _recovery_section(service: AgentService, csrf: str) -> str:
     failure_list = "".join(
         f"<li>{escape(str(item))}</li>" for item in inspection.get("failures", [])
     )
+    qm_html = (
+        _stale_qm_html(service, run_id, csrf) if checks.get("forced_stop") else ""
+    )
     if not inspection.get("ready"):
         return f"""<section class="card"><h2>Hardware-lock recovery</h2>
         <p class="notice error">Recovery is blocked. The lock remains untouched.</p>
-        <ul>{failure_list}</ul><code>{escape(json.dumps(checks, ensure_ascii=False, indent=2))}</code></section>"""
+        <ul>{failure_list}</ul>{qm_html}<code>{escape(json.dumps(checks, ensure_ascii=False, indent=2))}</code></section>"""
     mismatch = ""
     if checks.get("configured_state_differs_from_run"):
         mismatch = (
@@ -176,7 +193,7 @@ def _recovery_section(service: AgentService, csrf: str) -> str:
         )
     confirmation = f"RECOVER HARDWARE LOCK {run_id}"
     return f"""<section class="card"><h2>Hardware-lock recovery</h2>
-    <p>All software checks pass: lock/run/request identity, no live worker, no active database run, matching run state and recovery hashes, and no restore error.</p>{mismatch}
+    <p>All software checks pass: lock/run/request identity, no live worker, no active database run, matching run state and recovery hashes, and no restore error.</p>{mismatch}{qm_html}
     <code>{escape(json.dumps(checks, ensure_ascii=False, indent=2))}</code>
     <p class="warning">Before continuing, physically inspect the connected QOP/OPX and instruments. Do not recover while any job or output is active.</p>
     <form method="post" action="/operator"><input type="hidden" name="operation" value="recover_lock">
@@ -186,6 +203,58 @@ def _recovery_section(service: AgentService, csrf: str) -> str:
     <p>Type exactly:</p><code>{escape(confirmation)}</code>
     <input name="confirmation" autocomplete="off" spellcheck="false" required>
     <button type="submit" class="danger">Safely archive the retained lock</button></form></section>"""
+
+
+_QM_VERDICT_LABELS = {
+    "ours": "this chip's machine",
+    "overlapping": "shares this chip's ports - blocks recovery, not closed",
+    "unrelated": "other user, ignored",
+    "unreadable": "ports unreadable - blocks recovery",
+}
+
+
+def _stale_qm_html(service: AgentService, run_id: str, csrf: str) -> str:
+    """The forced-stop QM cleanup form and the last recorded cleanup result."""
+
+    receipt = HardwareLockRecovery(service.settings, service.db).read_qm_receipt(run_id)
+    rows = ""
+    status = "<p>No stale-QM cleanup has been recorded for this run yet.</p>"
+    if receipt is not None:
+        report = receipt.get("report") if isinstance(receipt.get("report"), dict) else {}
+        for machine in report.get("machines") or []:
+            if not isinstance(machine, dict):
+                continue
+            verdict = str(machine.get("verdict") or "unreadable")
+            label = _QM_VERDICT_LABELS.get(verdict, _QM_VERDICT_LABELS["unreadable"])
+            if verdict == "ours":
+                label += ": closed" if machine.get("closed") is True else ": STILL OPEN"
+            rows += (
+                f"<tr><td>{escape(str(machine.get('qm_id') or '?'))}</td>"
+                f"<td>{escape(verdict)}</td><td>{escape(label)}</td></tr>"
+            )
+        if not rows:
+            rows = '<tr><td colspan="3">No open quantum machine was listed.</td></tr>'
+        problems = receipt.get("problems") or []
+        verdict_text = (
+            "Blocking: " + " ".join(str(item) for item in problems)
+            if problems
+            else "Clear: no machine of this chip, or sharing its ports, remains open."
+        )
+        status = (
+            f"<p>Last check {escape(str(receipt.get('checked_at') or '?'))} "
+            f"(valid {HardwareLockRecovery.QM_RECEIPT_MAX_AGE_SECONDS // 60} minutes). "
+            f"{escape(verdict_text)}</p>"
+            '<div class="scroll"><table><tr><th>Quantum machine</th><th>Class</th>'
+            f"<th>Meaning</th></tr>{rows}</table></div>"
+        )
+    return f"""<h3>This chip's stale quantum machine</h3>
+    <p>The run was force-stopped, so its quantum machine may still be open on the shared QOP.
+    The cleanup closes only a machine whose every port belongs to this chip's state.json (halting its job first);
+    machines of other users (no shared port) are listed as ignored and never touched.</p>
+    {status}
+    <form method="post" action="/operator"><input type="hidden" name="operation" value="close_stale_qm">
+    <input type="hidden" name="csrf_token" value="{escape(csrf)}">
+    <button type="submit">Close this chip's stale quantum machine</button></form>"""
 
 
 def _single(fields: dict[str, list[str]], name: str) -> str:

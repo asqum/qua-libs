@@ -1,5 +1,222 @@
 # Update log / 更新紀錄
 
+## 2026-10-22
+
+- 靜態量測歷史網站：`runtime/history_site/index.html` 列出所有晶片與每次量測工作階段；
+  每個工作階段有一份實驗結果頁的靜態副本（圖、Decision、Reason、Next action），每顆
+  晶片有它的歷史頁。每次分析、記錄判斷、工作階段開始或結束時更新；關閉 JY 服務後仍可
+  在量測電腦開啟；有工作階段進行中時，首頁連到它的即時 Dashboard。
+  `jy-agent history-site` 重建全部頁面（也會補上這個功能之前的工作階段）。
+- 全自動判斷模式：hardware lock 被保留（存在但沒有 run 在跑）時不再代為決定，lease
+  照舊暫停等人（之前會記成重跑，下一次啟動被 lock 拒絕而 halt）。
+- 進入時的 `duration_hours` 必須是核准頁的選項（8／16／24），其他值在進入時就拒絕
+  （之前會靜默變成 8）。續期沿用原本的時數。
+- 首頁新增「全自動判斷模式」卡片，顯示開／關與代為決定的紀錄（核准分頁的授權卡也有）。
+- 單顆 submission timeout 的提示說明全自動判斷時會自動繼續。
+- 移除 `rules/policies.yaml` 中被覆蓋的重複 `analysis.statistics` 區塊（行為不變），並修正
+  與數值不符的註解。
+- 文件同步：README、WORKFLOW、AUTONOMY、CLIENTS、PUBLIC_DASHBOARD、debugQA、AGENTS、
+  Command、PLAYBOOK、experiences 與根目錄 CLAUDE.md／AGENTS.md／Cursor 規則／skill，
+  改為目前的授權時長、核准卡、全自動判斷、讀取門檻、首頁五種控制與五個分頁、密碼登入、
+  強制停止後自動解鎖。TODO_LIST 依程式現況重寫。
+- 補記先前未寫入的設定：06 頻率校正窗 816 ns（101 點、8 ns）；05／06／06b 最多 1000
+  averages 與 101 點；active reset 資格 0.75（blob 外 ≤15%，2026-10-19）；03a 往上檢查
+  f02/2（2026-10-19）。
+- 更正 2026-10-20：首頁暫停後的簡易卡沒有核准碼（只選時長與判斷模式按「核准並繼續」，
+  「進階」重新規劃才要核准碼）；續期卡也有時長與判斷模式選項。
+
+- Static measurement history: `runtime/history_site/index.html` lists every chip
+  and every measurement session; each session has a static copy of its
+  Experiment results page (plots, Decision, Reason, Next action) and each chip
+  its history. Pages are rewritten after each analysis and decision and when a
+  session starts or ends; the folder opens on the lab PC with no JY service
+  running, and while a session runs the homepage links to its live Dashboard.
+  `jy-agent history-site` rebuilds everything (including sessions from before
+  this feature).
+- Full-auto judgement does not decide while a hardware lock is retained (it
+  exists and no run is active); the lease pauses for the operator as before
+  (it used to record a retry whose start was refused, halting the lease).
+- An entry `duration_hours` must be an Approval page choice (8/16/24); any
+  other value is refused at entry (it used to show as 8). Renewals keep their
+  hours.
+- Home has a full-auto judgement card (on/off and its log), as does the
+  Approval tab's authorization card.
+- The single-target submission-timeout message says full-auto resumes on its
+  own.
+- Removed the shadowed duplicate `analysis.statistics` block from
+  `rules/policies.yaml` (no behaviour change) and fixed stale comments.
+- Documentation brought up to date (README, WORKFLOW, AUTONOMY, CLIENTS,
+  PUBLIC_DASHBOARD, debugQA, AGENTS, Command, PLAYBOOK, experiences, and the
+  root CLAUDE.md/AGENTS.md/Cursor rule/skill): lease hours, approval cards,
+  full-auto judgement, readout thresholds, five Home controls and five tabs,
+  password login, forced-stop lock release. TODO_LIST rewritten against the
+  code.
+- Previously unlisted settings: the 06 frequency-calibration window is 816 ns
+  (101 points at 8 ns); 05/06/06b take at most 1000 averages and 101 points;
+  active reset qualifies at 0.75 with ≤15% off-blob shots (2026-10-19); 03a
+  checks upward for f02/2 (2026-10-19).
+- Correction to 2026-10-20: the simple card after a Home pause has no approval
+  code (hours and judgement, then "Approve and continue"; only the folded
+  re-plan needs the code); the renewal card also has the hours and judgement
+  choices.
+
+## 2026-10-21
+
+- 06st_t2e 預設 num_averages 改為 500（原 1000），T2e 統計時間約減半。
+  06st_t2e default num_averages is now 500 (was 1000), roughly halving the T2e statistics time.
+- 晶片歷史合併：核准頁的表格改為 node x qubit，合併這顆 chip 所有 workflow，每格是該
+  qubit 在該實驗最近一次成功的結果（workflow 編號與時間）；各 workflow 原本的表收在下方。
+  每顆 qubit 的接續選項與沿用的結果改由「最近一次結果所在的 workflow」提供（不同 qubit
+  可來自不同 workflow，含 02x/02c/02a 等共用實驗），記錄在 `options.qubit_sources`，
+  `source_workflow_id` 為其中最近的一個。state.json 檢查改為逐 qubit：該 qubit 寫入過
+  的值已不同時，只限制它最晚從第一個不符的實驗開始。已有 run 的 workflow（續期、首頁）
+  也顯示同一張表並包含自己目前的結果（標 *），但不提供起點選擇；首頁新增此表。
+  Chip history merged: the Approval table is node x qubit across every workflow of
+  the chip (each cell the qubit's most recent pass, with workflow and time), each
+  workflow's own table folded below. Each qubit resumes from, and inherits from, the
+  workflow holding its most recent result (`options.qubit_sources`;
+  `source_workflow_id` is the most recent of them). The state check is per qubit.
+  Workflows with runs (renewal, Home) show the table with their own passes (*),
+  without start choices; Dashboard Home shows it too.
+- `jy_get_next_action` 對已完成（無目前 node）的 workflow 回傳 `action: "complete"`，
+  不再出現 `'None' is not in list`。
+  `jy_get_next_action` returns `action: "complete"` for a finished workflow instead
+  of failing with `'None' is not in list`.
+- 07d 選點權重改為 5:1（兩球分開程度 : off-blob 比例；原 3:1）。
+  07d selection weight is now 5:1 (blob separation : off-blob share; was 3:1).
+
+## 2026-10-20
+
+- 07d 讀取點改由 JY 自己的 raw-shot 分析決定（不再用 node 的 fidelity 選點）：在
+  off-blob ≤ 5%（同 07b）的點中，取 3 × 兩球重疊誤差 + 1 × off-blob 比例最小者
+  （`analysis."07d".separation_weight` / `outlier_weight`）；fidelity 只作報告。
+  07d now picks the readout point from JY's raw-shot score: lowest
+  3 x blob-overlap error + 1 x off-blob share among points within 5% off-blob.
+- 06 Ramsey 的 max wait 改為 16 + 400n ns（原為 16 + 500n）；816 ns 頻率校正窗因此
+  落在格點上，不再需要例外。06 預設 max wait 改為 816 ns。
+  06 Ramsey max wait is now 16 + 400n ns (was 16 + 500n), so the 816 ns
+  calibration window is on the grid; the 06 default max wait is 816 ns.
+- 03a window shift：粗掃的候選線在已決策的低功率 refinement／fine 掃描中消失
+  （robust SNR 低於門檻）時視為多光子線，自動解除候選，可立即換窗。
+  A coarse 03a candidate whose line vanishes (SNR below the floor) in a decided
+  low-power scan is dismissed, so the qubit may shift window at once.
+- 核准時長與全自動判斷：每份 lease 核准都選擇 8／16／24 小時（從核准起算）與是否
+  開啟「全自動判斷模式」。首頁新增 `停止核准`：目前實驗跑完後結束本授權，Approval
+  頁重新出現簡易核准，等候中的 agent 會跟到新的 lease（`superseded_lease_id`）。
+- 簡易卡與完整卡：只有全新開始（上次是結束量測或已完成）才顯示完整選項卡；續期、
+  首頁暫停後繼續（重新規劃收在「進階」）、Recover 之後的接續都只問時長、判斷模式與
+  核准碼。Recover 關閉的 workflow 在 `進入JY自動量測模式` 或 `繼續JY自動量測模式` 時
+  由新的接續 workflow 從各 qubit 停下處繼續（沿用之前的結果與選項）；
+  `active_qubit_names` 改變時改回完整卡。workflow 新增 `end_kind` 記錄由誰結束。
+- 全自動判斷模式：不明的 worker／分析錯誤自動重跑，同一 node/qubit 重跑 2 次後標為
+  incomplete 並繼續；單一 qubit 仍 submission timeout 時標為 incomplete 並繼續；儀器
+  斷線在 QOP 恢復回應後自動繼續（每 60 秒探測一次）；每份 lease 最多 10 次，用完則
+  照舊暫停等人。三個 halt 條件與到期仍需人工。紀錄顯示在首頁授權卡。
+- 關閉殘留的 quantum machine：`jy_agent/qm_cleanup.py`（由
+  `00x_close_specific_qm.ipynb` 改寫）只關閉所有 port 都屬於目前 state.json 的 QM，
+  先 cancel 其 running／queued job；只部分重疊的 QM 只回報不關。全自動判斷在重跑或
+  自動繼續前會先執行；MCP 工具 `jy_close_stale_qm`（可 `dry_run`）。執行中的 run
+  或 hardware lock 存在時拒絕。
+- 流水線影子模式：每次啟動 run 與記錄決策時，記下確定性規劃器會怎麼做；
+  `jy_get_autopilot_shadow_report` 依 node 回報吻合率、可完全決定的比例、儀器使用
+  比例與 run 之間的空檔。尚未由 server 自動執行。
+- Watchdog 對同一個失敗 run 只記一次 submission-timeout／分析失敗／可恢復例外事件
+  （之前每 2 秒重記一次，累積 17117 筆）。
+- 每顆 qubit 起點（2026-10-15 功能）修正：一顆一顆量（per-qubit pass）時，qubit 的
+  可選起點包含它在自己 pass 中已量到的實驗（例如 workflow 已回到 03a 量 q2 時，q1
+  仍可從 05 繼續）；之前只算到 workflow 當時所在的節點。讀取 IF 未設定的 qubit 設為
+  「不量」時，02 不再被強制執行；此時 02 是預設勾選的一般選項，只要量測其中任一顆，
+  server 仍會要求 02。
+- 是否為「由使用者結束」也看 audit log：有 Dashboard 完整關機或結束指令紀錄的
+  workflow，即使之後被 Recover 關閉（例如保留了 hardware lock），下次進入仍顯示完整
+  選項卡，不會被當成接續。
+
+- Lease hours and full-auto judgement: every lease approval chooses 8/16/24 h
+  (from the approval) and whether full-auto judgement is on. Home gains
+  `Stop authorization`: the current run finishes, the lease ends and the
+  Approval page asks again; the waiting agent follows the new lease
+  (`superseded_lease_id`).
+- Simple and full cards: only a fresh start (the last workflow was ended or
+  completed) shows the full lease card; a renewal, a continue after a Home
+  pause (re-plan folded under "Advanced") and a continuation after a Recover
+  ask only hours, judgement and the code. A workflow closed by Recover is
+  continued by a new workflow on entry or the continue phrase, each qubit
+  where it stopped; changed `active_qubit_names` bring back the full card.
+  Workflows record who ended them (`end_kind`).
+- Full-auto judgement: an unknown worker or analyzer error is retried; a
+  node/qubit that failed twice more is marked incomplete; a single target that
+  still times out on submission is marked incomplete; an instrument outage
+  resumes once the QOP answers (probed every 60 s); at most 10 decisions per
+  lease, then the old pause. The halt conditions and the expiry stay human.
+  The log is on the Home authorization card.
+- Stale quantum machine cleanup: `jy_agent/qm_cleanup.py` (from
+  `00x_close_specific_qm.ipynb`) closes only a QM whose every port belongs to
+  the active state.json, cancelling its running/queued job first; an
+  overlapping QM is reported, not closed. Full-auto judgement runs it before a
+  retry or an automatic resume; MCP tool `jy_close_stale_qm` (with `dry_run`).
+  Refused while a run is active or the hardware lock exists.
+- Pipeline shadow mode: each run start and decision records what the
+  deterministic planner would have done; `jy_get_autopilot_shadow_report`
+  gives the match rate per node, the share it could fully determine, the
+  instrument share and the gaps between runs. The server does not act on it
+  yet.
+- The watchdog logs a failed run's submission-timeout, analysis-failure and
+  recoverable-exception event once (it re-logged every 2 s: 17 117 events).
+- Per-qubit plan fixes (the 2026-10-15 feature): in a one-qubit-at-a-time
+  pass, a qubit's choices include the nodes it reached in its own pass (q1 can
+  resume at 05 while the workflow is back at 03a for q2); before, they stopped
+  at the workflow's node. A qubit with an unset readout IF that is set to "not
+  measured" no longer forces 02; 02 is then an ordinary box, ticked by
+  default, and the server still requires it while any such qubit is measured.
+- Who ended a workflow is also read from the audit log: one with a Dashboard
+  full shutdown or a shutdown phrase stays an operator end even when a later
+  Recover closed it (for example over a retained hardware lock), so the next
+  entry shows the full lease page, not a continuation.
+
+- 強制停止後的硬體鎖：worker 在寬限期後被終止（`force_stopped`／
+  `forced_after_grace`）時，server 確認 worker 已結束後，用該 run 的
+  state.json／wiring.json 關閉本晶片殘留的 QM，記錄收據
+  `runtime/recovery/<run>-qm-cleanup.json`（10 分鐘內有效），state 未變時補記
+  `active_state_hash_after`，並沿用 recovery 的流程（封存＋收據）自動釋放鎖。本晶片
+  QM 仍開著、有重疊或無法讀取的 QM、清理失敗或 state 改變時，維持原本的鎖與隔離。
+  新證據模式 `forced_stop_checkpoint`；本機 operator console 新增「Close this chip's
+  stale quantum machine」，並列出 ours／overlapping／unrelated。OPX1000 為共用：
+  與本晶片無共用 port 的 QM（其他使用者）一律忽略，不關閉、不阻擋。
+
+- Hardware lock after a forced stop: when a worker is terminated after the
+  grace period (`force_stopped` / `forced_after_grace`), the server, once the
+  worker is verified dead, closes this chip's stale QM using the run's
+  state.json/wiring.json, records a receipt
+  (`runtime/recovery/<run>-qm-cleanup.json`, valid 10 minutes), records
+  `active_state_hash_after` when the state is unchanged, and releases the lock
+  through the recovery code path (archive + receipt). A machine of ours still
+  open, an overlapping or unreadable machine, a failed cleanup or a changed
+  state keeps the lock and quarantine as before. New evidence mode
+  `forced_stop_checkpoint`; the loopback operator console gains "Close this
+  chip's stale quantum machine" and lists ours/overlapping/unrelated. The
+  OPX1000 is shared: a machine with no port on this chip (another user's) is
+  ignored, never closed and never a blocker.
+
+- 新指令 `繼續JY自動量測模式`（`繼續 JY 自動量測模式`、`Continue JY automatic
+  measurement mode`，MCP 工具 `jy_continue_autonomy_mode`）：自動授權到期（或已
+  結束）而 workflow 仍開著時建立續期，沿用上一份的 targets、節點、上限、自動寫入
+  狀態、中止條件、選項與時數；Approval 頁只顯示「續期 N 小時，從 <qubit> / <node>
+  繼續」、沿用範圍與核准碼，核准後同一個 workflow 立即繼續，不回到起點。lease 暫停
+  時直接恢復；仍有效時只回報。lease 到期時 handoff 改為回傳此指令。
+- `已重新連線` / `Reconnected`：在 `/mcp` → `jy_bringup` → Reconnect 之後輸入，agent
+  確認新的 MCP process 後繼續。
+
+- New phrase `繼續JY自動量測模式` (aliases `繼續 JY 自動量測模式`, `Continue JY
+  automatic measurement mode`; MCP tool `jy_continue_autonomy_mode`): an expired
+  or ended lease of the open workflow is renewed with its targets, nodes, limits,
+  auto-commit statuses, halt conditions, options and hours. The Approval page
+  shows only "renew N h, continue from <qubit> / <node>", the copied scope and
+  the approval code; approval continues the same workflow at once. A paused
+  lease resumes; an active one is only reported. An expired lease's handoff now
+  asks for this phrase.
+- `已重新連線` / `Reconnected`: sent after `/mcp` -> `jy_bringup` -> Reconnect;
+  the agent verifies the new MCP process and continues.
+
 ## 2026-10-15
 
 - 06 Ramsey：detuning [MHz] × (max wait − min wait) [ns] 必須剛好等於 4000
@@ -16,6 +233,10 @@
   T2*）；接著在 1016 ns 重複到兩個 fringe 都對上 detuning 才加長；加長時依可信的
   T2* 估計取約 4 倍，否則依 1016 → 4016 → 16016 → 40016 → 100016 ns 階梯。上限
   100016 ns。前一次的頻率修正沒 commit 前不能跑下一次 06。04 → 03a 回頭後重新開始。
+- 自動量測核准頁面改為每顆 qubit 各自選擇：不量、從頭，或從上次量到的實驗繼續
+  （已通過的 node 或第一個沒通過的 node）；最上面「全部設為」一次套用。整體從最早的
+  起點開始，較晚的 qubit 只沿用自己之前的結果，走到自己的起點才加入。不量的 qubit
+  從 workflow 與 lease 排除。進入自動模式時不再指定 targets。
 
 - 06 Ramsey: detuning [MHz] x (max wait - min wait) [ns] must equal 4000 exactly
   (20000 ns -> 0.2 MHz), no longer within 25%; min wait is fixed at 16 ns and max
@@ -34,6 +255,12 @@
   detuning, then lengthens to about 4 x a reliable T2* or along
   1016 -> 4016 -> 16016 -> 40016 -> 100016 ns (the cap). The next 06 waits for
   the previous frequency correction; a 04 -> 03a return starts over.
+- The automatic-measurement approval page picks each qubit: not measured,
+  from the beginning, or resume where it stopped (a cleared node or the first
+  one it did not clear); a Set-all row applies one choice. The workflow starts
+  at the earliest choice, a later qubit carries only its own earlier results
+  and joins at its node, and a skipped qubit leaves the workflow and lease.
+  Automatic mode is entered without targets.
 
 - Token 用量永久保存：每筆 Claude Code API 呼叫的數字（時間、模型、各類 token、
   工具類別；不含對話內容）存進 JY 資料庫的 `usage_calls`，Claude Code 刪掉舊對話

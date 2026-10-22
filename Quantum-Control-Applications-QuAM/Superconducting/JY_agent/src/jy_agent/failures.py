@@ -107,6 +107,13 @@ def classify_failure(exc: BaseException) -> FailureClassification:
     type_names = {type(item).__name__.casefold() for item in chain}
     messages = "\n".join(str(item).casefold() for item in chain)
 
+    # Operator instruction 2026-10-19 (q2 06 run 842fcbcf, Ramsey fitting.py
+    # KeyError): a crash raised inside a node's analysis/fitting code happens
+    # after the instrument has returned the data, so it never needs the
+    # hardware lock; the run is simply repeated.
+    if _raised_in_analysis(chain):
+        return FailureClassification("analysis_failure", safe_to_release_lock=True)
+
     if _looks_like_qop_compile_failure(type_names, messages):
         return FailureClassification(
             "qop_compile_failure",
@@ -207,6 +214,30 @@ def _failed_during_program_submission(exc: BaseException) -> bool:
         if name in _PROGRAM_SUBMISSION_FUNCTIONS and _is_qm_frame(filename):
             return True
     return False
+
+
+def _raised_in_analysis(chain: tuple[BaseException, ...]) -> bool:
+    """True when the traceback runs through fitting code and never into ``qm``."""
+
+    frames = [filename for item in chain for _name, filename in _traceback_frames(item)]
+    if any(_is_qm_frame(filename) for filename in frames):
+        return False
+    return any(_is_analysis_frame(filename) for filename in frames)
+
+
+def _is_analysis_frame(filename: str) -> bool:
+    try:
+        parts = [part.casefold() for part in PurePath(filename).parts]
+    except (TypeError, ValueError):  # pragma: no cover - defensive
+        return False
+    name = parts[-1] if parts else ""
+    if "quam_libs" in parts and (
+        "analysis" in parts or name in {"fit.py", "fitting.py"} or "fit" in parts
+    ):
+        return True
+    if "lmfit" in parts or "qiskit_experiments" in parts:
+        return True
+    return "scipy" in parts and "optimize" in parts
 
 
 def _is_qm_frame(filename: str) -> bool:

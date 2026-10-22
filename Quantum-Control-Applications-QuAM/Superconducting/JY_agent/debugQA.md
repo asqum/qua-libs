@@ -166,10 +166,12 @@ Quick tunnel URL 會隨重新建立而改變，舊 URL 過期是正常的。只�
 - `runtime/public-tunnel.stderr.log`：Cloudflare tunnel 錯誤。
 - `runtime/server-bootstrap.json`：service PID、port、status 與 URL metadata。
 
-分享 log 前必須移除 query string 的 `bootstrap_code`、`pairing_code`，不要貼出
-`public-dashboard-access.token` 內容。若任何 access secret／未使用的配對連結曾
-貼進 issue 或公開 log，應完整執行安全停止；`stop_server.ps1` 會刪除舊 secret 並
-清空公開 URL metadata。重新進入模式會建立新的 service lifetime。
+分享 log 前不要貼出 `runtime/dashboard-password.txt` 或
+`public-dashboard-access.token` 的內容；Dashboard 已不使用 `bootstrap_code`、
+`pairing_code` 或配對連結。若密碼曾貼進 issue 或公開 log，先更換
+`dashboard-password.txt` 的內容（單行 12–256 字元），再完整執行安全停止並重新進入；
+`stop_server.ps1` 會刪除舊 access token 並清空公開 URL metadata。重新進入模式會建立
+新的 service lifetime，舊瀏覽器的登入 cookie 隨之失效。
 
 ## Q11：一行話判斷「該 reload client 還是重跑 Ensure」？
 
@@ -189,8 +191,8 @@ Quick tunnel URL 會隨重新建立而改變，舊 URL 過期是正常的。只�
 重新綁到新 lease，於是舊控制頁與新結果看起來像分裂的網站。
 
 目前 entry result 最外層的 `browser_url` 是唯一應交給使用者的共用 `/` 入口。
-它會解析目前 session，再連到三個同 hostname、同 cookie、同 service lifetime 的
-分頁：首頁、核准、實驗結果。它們不是不同網站。舊 `/approve/...`、
+它會解析目前 session，再連到五個同 hostname、同 cookie、同 service lifetime 的
+分頁：首頁、核准、實驗結果、Token 用量、使用說明。它們不是不同網站。舊 `/approve/...`、
 `/autonomy/...`、`/session/...` 只做 303 redirect；direct/replacement lease 也會
 重新綁定同一 session。結果下拉紀錄會保留到完整關機。
 
@@ -201,17 +203,15 @@ SQLite lease/session 關聯。接著確認所有分頁是否同 hostname、entry
 
 ## Q13：桌面可開 Dashboard，但手機用同一網址得到 `403 Forbidden`，為什麼？
 
-初次 entry URL 的 `bootstrap_code` 是短效且只能使用一次。桌面第一次開啟後已把
-它換成桌面專屬 secure cookie；手機再重播同一 URL 會被當成 replay 拒絕，這是
-安全設計。正確流程是在量測電腦開啟：
+這是舊版一次性 `bootstrap_code` 被重播造成的；現在已沒有 bootstrap code 或
+pairing link。公開 Dashboard 以固定密碼保護：手機與桌面都直接開啟最新 entry 回傳
+的同一個裸 `browser_url`，未登入時會被導到 `/login`，輸入存在量測電腦
+`runtime/dashboard-password.txt` 的實驗室密碼即可。每個瀏覽器各自取得 12 小時
+cookie；不要把密碼放進網址或聊天訊息。
 
-```text
-http://127.0.0.1:8765/operator
-```
-
-輸入手機名稱，建立一條 10 分鐘的一次性 pairing link，再傳到手機開啟。手機與
-桌面各自持有 12 小時 cookie；本機頁可以個別撤銷，不必重啟 tunnel，也不要自行
-拼接或傳送 master token。
+登入頁的錯誤：`401` 密碼錯誤；`429` 嘗試過多，稍後再試；`503` 密碼檔無法讀取，
+在量測電腦檢查 `dashboard-password.txt`。若送出表單時仍得到 `403`，代表該瀏覽器
+來源不被信任（例如仍開著舊 tunnel 網址的分頁）；改開最新 `browser_url` 後再操作。
 
 ## Q14：`Decision: halted`／頁面「已中止」等於完整 `結束量測` 嗎？
 
@@ -221,7 +221,10 @@ http://127.0.0.1:8765/operator
 
 1. 對 active run 發出安全停止並等待 terminal；
 2. 若 worker 在 grace period 後仍存活，只 force-stop DB 記錄與 command/token 都吻合的 PID；
-3. 若 retained hardware lock 存在，永久停止 workflow 並轉為 `recovery_required`，不刪 lock；
+   接著 server 只關閉本晶片殘留的 QM 與其 job，若已沒有本晶片（或與其共用 port）
+   的 QM 且 state hash 未變，就自動釋放 lock（`forced_stop_checkpoint`）；
+3. 若 retained hardware lock 仍存在（QM 清理失敗、state 回復失敗、缺少退出證據等），
+   永久停止 workflow 並轉為 `recovery_required`，不刪 lock；
 4. 確認所有 JY worker 已死亡後，延遲呼叫受驗證的 `stop_server.ps1` 關閉 MCP、Dashboard 與 tunnel。
 
 若最後的 helper 無法啟動，頁面會顯示錯誤並保留可重試按鈕。
@@ -244,7 +247,7 @@ recovery backup 三者完全同 hash 時採用相容證據。兩條路徑仍都�
 失敗，頁面只顯示阻擋原因且 lock 不變。CLI `-Action RecoverLock -RunId <run-id>`
 仍保留為相同安全邏輯的 fallback；永遠不要手動刪除 `runtime\hardware.lock`。
 Recovery-only 的 `remote_provider=local` 只是隔離狀態，不是永久偏好；lock 正式復原
-後，下一次正常進入會重啟服務並恢復 token-protected Cloudflare Dashboard。只有 MCP
+後，下一次正常進入會重啟服務並恢復以密碼保護的 Cloudflare Dashboard。只有 MCP
 listener 與本機 operator console 永遠維持 `127.0.0.1`，不會對外公開。
 
 ## Q16：為什麼以前網頁關機後，再輸入 `結束量測` 會說 worker 異常且 lock 阻擋？
@@ -259,10 +262,13 @@ request 尚未持久化，watchdog 隨後只看到「worker 消失、沒有 snap
 判斷究竟是協作停止、grace 後強制停止，還是無意圖的異常退出。
 
 正常的 Pause 不會停止 active worker；正常的 `結束量測` 會走 authenticated
-cooperative stop，完成 state cleanup 後自動釋放 lock。只有作業系統直接殺死 worker、
-Python/native crash、斷電或 cleanup/state 證據不完整時才保留 lock。這種狀況不能在
-沒有硬體側可驗證 safe-state receipt 的前提下安全地自動解鎖；本機實體確認是最後的
-安全邊界，不應以自動刪檔取代。
+cooperative stop，完成 state cleanup 後自動釋放 lock。grace period 後由 JY 強制停止
+的 worker 也不一定留下 lock：server 先關閉本晶片殘留的 QM 與其 job（其他使用者的
+QM 一律忽略），清理乾淨且 state hash 未變時自動釋放 lock。只有 Task Manager／作業
+系統直接殺死 worker、Python/native crash、斷電、缺少 exit 證據、active node 無法確認
+停止、QM 清理失敗或 state 回復失敗時才保留 lock。這種狀況不能在沒有硬體側可驗證
+safe-state receipt 的前提下安全地自動解鎖；本機實體確認是最後的安全邊界，不應以
+自動刪檔取代。
 
 ## Q17：Codex Terra/Sol 為何會結束回合？可以讓自動量測永遠保持運行嗎？
 
@@ -280,8 +286,13 @@ Terra 與 Sol 都受同一個 Codex task/goal 生命週期控制；模型名稱�
 Worker 會辨識 QOP/OPX、Octave、gRPC 與底層 transport 的連線例外，將 run 記為
 `termination_cause=instrument_unreachable`，並把一般模式 workflow 或自動模式 lease
 切到 `paused`。Results 頁會顯示「儀器錯誤：量測已暫停」，後續不會再排新實驗。
-先檢查儀器電源、QOP/OPX 服務與實驗室網路；恢復後在 AI 對話重新輸入原本的
-進入模式指令。
+先檢查儀器電源、QOP/OPX 服務與實驗室網路；恢復後在 AI 對話輸入 `恢復量測`／
+`Resume measurement`（自動模式也可在 Home 按「繼續排程」），同一 workflow 與
+lease 會以新 run-id 重跑目前 node，不必重新輸入進入模式指令。若該 lease 開啟了
+「全自動判斷模式」，server 每 60 秒探測一次 QOP，探測成功後先關閉本晶片殘留的 QM，
+再自動繼續同一授權；agent 只要繼續用 `jy_wait_for_autonomy_status` 等待。本 lease
+已用完 10 次自動判斷時改回人工 `恢復量測`；lock 留在 quarantine 時（見下段）全自動
+判斷不會繼續，須先完成本機 recovery。
 
 只有 exception 能證明 TCP／server discovery 根本沒有建立連線、active state 已回到
 pre-run hash 且沒有 restore error 時，worker 才會自動釋放本次 lock。若是在硬體
@@ -314,6 +325,8 @@ executable 與 command line 驗證並關閉 MCP、Dashboard、Cloudflare tunnel 
 - `blocked`：listener／worker 身分無法驗證，沒有誤殺程序；在量測電腦執行 Doctor。
 - `closed_recovery_required`：所有服務已關，但硬體 safe state 無法由軟體證明，lock
   留在本機 quarantine。
+- `closed_configuration_attention`：所有可驗證的 JY 服務已關，但啟動設定檢查失敗；
+  先在量測電腦執行 Doctor 修正設定，再重新進入模式。
 
 Terminal fallback 是 `.\jy_agent.ps1 -Action Recover`；正常使用者不必手動輸入。
 

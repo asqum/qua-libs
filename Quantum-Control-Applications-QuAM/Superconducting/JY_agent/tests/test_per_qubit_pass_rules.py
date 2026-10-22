@@ -567,26 +567,47 @@ class PerQubitStartTests(unittest.TestCase):
             self.earlier(service)
             entered = service.enter_autonomy_mode("unittest-agent", AUTO_PHRASE, list(TARGETS))
             proposal = service.proposal(entered["approval"]["id"])
+            # 2026-10-15: the per-qubit plan replaced the pass-start selects.
+            # A qubit still resumes where it reached in its own pass (q1 got
+            # to 05), even though the workflow had moved back to 03a for q2.
+            plan = proposal["payload"]["workflow_options_offer"]["qubit_plan"]["qubits"]
+            self.assertEqual(
+                plan["q1"], ["skip", "beginning", "02a", "03a", "04", "07d", "07b", "05"]
+            )
+            self.assertEqual(plan["q2"], ["skip", "beginning", "02a", "03a"])
             html = _lease_options_fields(proposal, "zh-Hant")
-            self.assertIn('name="qubit_start__q1"', html)
-            self.assertIn('<option value="05">05</option>', html)
+            self.assertIn('name="qubit_plan__q1"', html)
+            self.assertIn('<option value="05">', html)
+            self.assertNotIn('name="qubit_start__q1"', html)
             parsed = _lease_options_from_fields(
                 {
                     "drive_mode": ["per_qubit"],
                     "flux_calibration": ["no"],
-                    "start_node": ["03a"],
-                    "qubit_start__q1": ["05"],
-                    "qubit_start__q2": ["03a"],
+                    "qubit_plan__q1": ["05"],
+                    "qubit_plan__q2": ["03a"],
+                    "qubit_plan__q3": ["03a"],
                 },
                 proposal,
             )
-            self.assertEqual(parsed["qubit_start_nodes"], {"q1": "05", "q2": "03a"})
-            later = _lease_options_from_fields(
-                {"drive_mode": ["per_qubit"], "flux_calibration": ["no"],
-                 "start_node": ["02a"], "qubit_start__q1": ["05"]},
-                proposal,
+            self.assertEqual(parsed["qubit_plan"], {"q1": "05", "q2": "03a", "q3": "03a"})
+            choice = {
+                "optional_nodes": [],
+                "drive_mode": "per_qubit",
+                "flux_calibration": False,
+                "node_parameters": {},
+                "qubit_plan": parsed["qubit_plan"],
+            }
+            with self.assertRaisesRegex(ServiceError, "cannot start at 05"):
+                service.preview_lease_options(
+                    proposal["id"], {**choice, "qubit_plan": {**parsed["qubit_plan"], "q2": "05"}}
+                )
+            service._approve_pending_proposal(
+                proposal["id"], "human", "unit_test", lease_options=choice
             )
-            self.assertEqual(later["qubit_start_nodes"], {})
+            workflow = service._decode_workflow(service._workflow(proposal["workflow_id"]))
+            # q1 goes first and starts its pass at 05 with its own earlier runs.
+            self.assertEqual(workflow["current_node"], "05")
+            self.assertEqual(workflow["options"]["qubit_start_nodes"], {"q1": "05"})
 
     def test_per_qubit_starts_need_the_pass_start(self) -> None:
         from test_autonomy import AUTO_PHRASE

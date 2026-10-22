@@ -1,7 +1,7 @@
 """06 calibrates the frequency before it measures T2* (operator 2026-10-15).
 
-First 06 of a qubit: 1016 ns, corrects the frequency, never resolves T2*.
-Then 1016 ns again until both fringes sit on the detuning (confirmed).
+First 06 of a qubit: 816 ns, corrects the frequency, never resolves T2*.
+Then 816 ns again until both fringes sit on the detuning (confirmed).
 Then the window lengthens: about 4 x T2* from a reliable fit, else the ladder.
 """
 
@@ -80,16 +80,16 @@ class RamseyFrequencyStageTests(unittest.TestCase):
                     "Long first window.", "unittest",
                 )
             service.request_run(
-                workflow["id"], "06", {"qubits": ["q1"], "max_wait_time_in_ns": 1016, "use_state_discrimination": False},
+                workflow["id"], "06", {"qubits": ["q1"], "max_wait_time_in_ns": 816, "use_state_discrimination": False},
                 "Calibrate.", "unittest",
             )
             plan = service.next_action(workflow["id"])
-            self.assertEqual(plan["ramsey_stages"]["q1"]["max_wait_time_in_ns"], 1016)
+            self.assertEqual(plan["ramsey_stages"]["q1"]["max_wait_time_in_ns"], 816)
 
     def test_first_run_corrects_the_frequency_and_never_resolves(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
             service, workflow = build(folder)
-            add_run(service, workflow, "r1", 1016, matches=True)
+            add_run(service, workflow, "r1", 816, matches=True)
             result = service._06_calibration_run_result(
                 {"id": "r1", "workflow_id": workflow["id"],
                  "parameters_json": json.dumps({"qubits": ["q1"]})},
@@ -115,24 +115,24 @@ class RamseyFrequencyStageTests(unittest.TestCase):
     def test_uncommitted_correction_blocks_the_next_06(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
             service, workflow = build(folder)
-            add_run(service, workflow, "r1", 1016, matches=False, correction=4.002e9)
+            add_run(service, workflow, "r1", 816, matches=False, correction=4.002e9)
             with self.assertRaisesRegex(AutonomyScopeError, "commit the frequency correction"):
                 service.request_run(
-                    workflow["id"], "06", {"qubits": ["q1"], "max_wait_time_in_ns": 1016, "use_state_discrimination": False},
+                    workflow["id"], "06", {"qubits": ["q1"], "max_wait_time_in_ns": 816, "use_state_discrimination": False},
                     "Confirm.", "unittest",
                 )
             set_idle(service, 4.002e9)
             self.assertEqual(service._06_stage(workflow["id"], "q1")["stage"], "confirm")
             service.request_run(
-                workflow["id"], "06", {"qubits": ["q1"], "max_wait_time_in_ns": 1016, "use_state_discrimination": False},
+                workflow["id"], "06", {"qubits": ["q1"], "max_wait_time_in_ns": 816, "use_state_discrimination": False},
                 "Confirm.", "unittest",
             )
 
     def test_confirmed_qubit_lengthens_from_a_reliable_estimate(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
             service, workflow = build(folder)
-            add_run(service, workflow, "r1", 1016, matches=True)
-            add_run(service, workflow, "r2", 1016, matches=True, decay=3.0e-6, relative=0.3)
+            add_run(service, workflow, "r1", 816, matches=True)
+            add_run(service, workflow, "r2", 816, matches=True, decay=3.0e-6, relative=0.3)
             stage = service._06_stage(workflow["id"], "q1")
             self.assertEqual(stage["stage"], "measure")
             # 4 x 3 us = 12000 ns -> 16 + 24 x 500
@@ -141,8 +141,8 @@ class RamseyFrequencyStageTests(unittest.TestCase):
     def test_without_an_estimate_the_window_climbs_the_ladder(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
             service, workflow = build(folder)
-            add_run(service, workflow, "r1", 1016, matches=True)
-            add_run(service, workflow, "r2", 1016, matches=True, decay=5e-5, relative=2.0)
+            add_run(service, workflow, "r1", 816, matches=True)
+            add_run(service, workflow, "r2", 816, matches=True, decay=5e-5, relative=2.0)
             self.assertEqual(service._06_stage(workflow["id"], "q1")["max_wait_time_in_ns"], 4016)
             add_run(service, workflow, "r3", 4016, matches=True)
             self.assertEqual(service._06_stage(workflow["id"], "q1")["max_wait_time_in_ns"], 16016)
@@ -152,7 +152,7 @@ class RamseyFrequencyStageTests(unittest.TestCase):
             service, _workflow = build(folder)
             with self.assertRaisesRegex(Exception, "exceeds 100016"):
                 service.policy.validate_run(
-                    "06", {"qubits": ["q1"], "max_wait_time_in_ns": 100516}
+                    "06", {"qubits": ["q1"], "max_wait_time_in_ns": 100416}
                 )
 
 

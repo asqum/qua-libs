@@ -1,8 +1,9 @@
 # Calibration experience log
 
-This directory preserves reproducible experience for every bring-up node:
-`02`, `02x`, `02c`, `02a`, `02b`, `03a`, `03b`, `04`, `05`, `07b`, `06`,
-`06a`, `06b`, `10a`, `05st`, `06st_t2star`, and `06st_t2e`.
+This directory preserves reproducible experience for every bring-up node, in
+the `config/agent.yaml` `workflow.sequence` order:
+`02`, `02x`, `02c`, `02a`, `02b`, `03a`, `03b`, `04`, `07d`, `07b`, `05`,
+`06`, `06a`, `06b`, `10a`, `05st`, `06st_t2star`, and `06st_t2e`.
 
 Before proposing a run, read the relevant `<node>.md` file when it exists.
 Accepted settings are evidence-backed starting points, not universal defaults;
@@ -15,7 +16,11 @@ Scheduling: start every node with one multiplexed run of all active targets and
 the same parameters. After analysis, omit already-resolved qubits and retry
 unresolved targets together with modified settings. Split into subgroups only
 when they cannot share the sweep. Do not begin a node with sequential isolated
-one-qubit runs.
+one-qubit runs. Exceptions: the policy caps runs of `04` at 5 targets and `07d`
+at 4 (`max_multiplex_targets` in `rules/policies.yaml`), so the first run is
+the first capped group; after `07b` the active- and thermal-reset groups each
+get their own first batch; and in per-qubit mode (always with a shared XY
+output) one qubit at a time goes through every node from `03a` on.
 
 Append an `Accepted setting` only after a saved snapshot passes the complete
 node-specific checks. Include:

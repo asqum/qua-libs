@@ -14,6 +14,7 @@ class McpSmokeTests(unittest.IsolatedAsyncioTestCase):
             names = {tool.name for tool in listing.tools}
             self.assertIn("jy_enter_measurement_mode", names)
             self.assertIn("jy_enter_autonomy_mode", names)
+            self.assertIn("jy_continue_autonomy_mode", names)
             self.assertIn("jy_list_experiments", names)
             self.assertIn("jy_get_status", names)
             self.assertIn("jy_request_run", names)

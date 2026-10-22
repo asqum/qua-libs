@@ -271,6 +271,7 @@ def run_request(request_path: Path) -> int:
             classification.category == "instrument_unreachable"
         )
         qop_compile_failure = classification.category == "qop_compile_failure"
+        analysis_failure = classification.category == "analysis_failure"
         # A submission timeout pauses only when a single target already failed
         # to be accepted; with more than one target the group is halved and the
         # lease keeps running.
@@ -284,7 +285,7 @@ def run_request(request_path: Path) -> int:
         )
         hardware_cleanup_error: str | None = None
         if (
-            (instrument_unreachable or submission_timeout)
+            (instrument_unreachable or submission_timeout or analysis_failure)
             and not hardware_cleanup_verified
             and execution_phase == "hardware_execution"
         ):
@@ -308,6 +309,9 @@ def run_request(request_path: Path) -> int:
             and (
                 instrument_unreachable
                 or submission_timeout
+                # Operator instruction 2026-10-19: a fitting crash comes after
+                # the data was returned, so it never retains the lock.
+                or analysis_failure
                 or (
                     hardware_cleanup_verified
                     and qop_compile_failure
@@ -496,7 +500,8 @@ def _failure_operator_message(
                 "單一 qubit 的程式仍然無法送進 QOP，已無法再拆分，本次實驗與"
                 "後續排程已暫停。儀器有回應健康檢查，所以這不是網路問題，"
                 "請檢查 QOP 的工作佇列或重啟 QOP；確認後回 AI 對話輸入"
-                "「恢復量測」。"
+                "「恢復量測」。若已開啟全自動判斷模式，JY 會把這顆 qubit 在"
+                "此節點標為 incomplete 並自動繼續，不需輸入。"
             ),
             "en": (
                 "A single-qubit program still could not be submitted to the "
@@ -504,7 +509,9 @@ def _failure_operator_message(
                 "and new scheduling were paused. The instrument answered a "
                 "health check, so this is not a network fault: check the QOP "
                 "job queue or restart the QOP, then enter 'Resume measurement' "
-                f"in the AI conversation. {detail}"
+                "in the AI conversation. With full-auto judgement on, JY marks "
+                "this qubit incomplete at this node and resumes by itself. "
+                f"{detail}"
             ).strip(),
         }
     if not instrument_unreachable:

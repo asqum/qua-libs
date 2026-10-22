@@ -133,6 +133,7 @@ class PolicyEngine:
                     f"this chip shares Z lines ({described})."
                 )
         self._validate_common_sweep(merged)
+        self._validate_node_caps(node_id, definition, merged)
         self._validate_detuning_wait_product(definition, merged)
         self._validate_node_specific(node_id, merged, state)
         self._validate_runtime_estimate(node_id, merged, state)
@@ -525,6 +526,40 @@ class PolicyEngine:
             raise PolicyError(f"Unknown policy type rule {rule!r}")
         if not valid:
             raise PolicyError(f"Parameter {key!r} violates rule {rule!r}: {value!r}")
+
+    @staticmethod
+    def _validate_node_caps(
+        node_id: str, definition: dict[str, Any], parameters: dict[str, Any]
+    ) -> None:
+        """Per-node averaging and time-point caps (operator 2026-10-20).
+
+        T1/T2*/T2e runs were too slow: `max_num_averages` caps num_averages,
+        and `max_time_points` caps the sweep length -- `num_time_points` where
+        the node has it, otherwise (max - min) / step + 1.
+        """
+
+        cap = definition.get("max_num_averages")
+        averages = parameters.get("num_averages")
+        if cap is not None and is_finite_number(averages) and averages > int(cap):
+            raise PolicyError(
+                f"{node_id} num_averages {averages} exceeds the cap {cap}; a run too "
+                "noisy at the cap counts as failed"
+            )
+        points_cap = definition.get("max_time_points")
+        if points_cap is None:
+            return
+        points = parameters.get("num_time_points")
+        if points is None:
+            low = parameters.get("min_wait_time_in_ns")
+            high = parameters.get("max_wait_time_in_ns")
+            step = parameters.get("wait_time_step_in_ns")
+            if all(is_finite_number(value) for value in (low, high, step)) and step > 0:
+                points = math.floor((float(high) - float(low)) / float(step)) + 1
+        if is_finite_number(points) and points > int(points_cap):
+            raise PolicyError(
+                f"{node_id} sweep has {int(points)} time points; the cap is "
+                f"{points_cap} (raise wait_time_step_in_ns or lower num_time_points)"
+            )
 
     def _validate_detuning_wait_product(
         self, definition: dict[str, Any], parameters: dict[str, Any]

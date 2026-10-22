@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import html
 import math
+import os
 import re
 import shutil
 from pathlib import Path
@@ -332,11 +333,26 @@ figcaption { font-size:.75rem; overflow-wrap:anywhere; }
 """
 
 
-def write_static_chip_history(service: Any, device_key: str) -> Path:
-    """Write the chip history as a self-contained folder that survives shutdown."""
+def link_or_copy(source: Path, target: Path) -> None:
+    """Hard-link a plot into a static page folder, or copy it across volumes."""
+
+    try:
+        os.link(source, target)
+    except OSError:
+        shutil.copy2(source, target)
+
+
+def write_static_chip_history(
+    service: Any, device_key: str, folder: Path | None = None
+) -> Path:
+    """Write the chip history as a self-contained folder that survives shutdown.
+
+    `folder` defaults to runtime/chip_history/<chip>; the static history site
+    (2026-10-22) writes its own copy under history_site/chips/<chip>.
+    """
 
     history = collect_chip_history(service, device_key)
-    folder = service.settings.runtime / "chip_history" / history["chip"]
+    folder = folder or service.settings.runtime / "chip_history" / history["chip"]
     images = folder / "images"
     images.mkdir(parents=True, exist_ok=True)
     names: dict[tuple[str, int], str] = {}
@@ -351,7 +367,7 @@ def write_static_chip_history(service: Any, device_key: str) -> Path:
                 name = f"{result['run_id']}_{position}{source.suffix.lower()}"
                 target = images / name
                 if not target.is_file():
-                    shutil.copy2(source, target)
+                    link_or_copy(source, target)
                 names[(result["run_id"], position)] = f"images/{name}"
 
     def image_url(run_id: str, position: int, _thumb: bool) -> str:

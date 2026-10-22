@@ -40,8 +40,9 @@ an `initialize response` fails.
   沒有成功取得 `jy_enter_*` 回傳時仍不得宣稱已進入量測模式。
 - Claude Code 讀取 repository root `.mcp.json`，`${CLAUDE_PROJECT_DIR:-.}` 讓 launcher
   不依賴使用者從哪個 working directory 啟動；project MCP 第一次仍會要求信任。
-- Cursor IDE／CLI 讀取 repository root `.cursor/mcp.json`，並由 always-applied rule 將兩個中文
-  入口語句導向 `jy_bringup`。第一次同樣需接受 project MCP。
+- Cursor IDE／CLI 讀取 repository root `.cursor/mcp.json`，並由 always-applied rule 將兩個
+  入口語句（含省略空格與英文別名）以及接續語句 `繼續JY自動量測模式` 導向
+  `jy_bringup`。第一次同樣需接受 project MCP。
 
 Actual bootstrap behavior by client:
 
@@ -53,7 +54,9 @@ Actual bootstrap behavior by client:
   launcher independent of the shell's starting directory. Project MCP trust is
   still required once.
 - Cursor IDE/CLI reads `.cursor/mcp.json`; the always-applied project rule maps
-  the two Chinese entry phrases to `jy_bringup`. It also requires one-time trust.
+  both entry phrases (with or without spaces, plus their English aliases) and
+  the continue phrase `繼續JY自動量測模式` to `jy_bringup`. It also requires
+  one-time trust.
 
 `Ensure = ready` only reports the HTTP/Dashboard infrastructure. It does not add
 an MCP server to an already-created conversation. If that conversation's tool

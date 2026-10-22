@@ -163,6 +163,12 @@ class WorkflowOptionTests(unittest.TestCase):
             self.assertIn('name="drive_mode" value="multiplex" required disabled>', html)
             self.assertIn("con1/8/3", html)
             self.assertIn("（建議）", html)
+            # 2026-10-15: a fresh workflow asks, per qubit, where it starts;
+            # the single start point and per-qubit pass starts are gone.
+            plan = proposal["payload"]["workflow_options_offer"]["qubit_plan"]["qubits"]
+            for qubit in plan:
+                self.assertIn(f'name="qubit_plan__{qubit}"', html)
+            self.assertNotIn('name="start_node"', html)
             parsed = _lease_options_from_fields(
                 {"optional_node": ["05st"], "drive_mode": ["per_qubit"]}, proposal
             )
@@ -173,8 +179,8 @@ class WorkflowOptionTests(unittest.TestCase):
                     "drive_mode": "per_qubit",
                     "flux_calibration": None,
                     "node_parameters": {},
-                    "start_node": None,
-                    "qubit_start_nodes": {},
+                    # An untouched row starts its qubit from the beginning.
+                    "qubit_plan": {qubit: "beginning" for qubit in plan},
                 },
             )
             self.assertIsNone(_lease_options_from_fields({}, {"kind": "run", "payload": {}}))
@@ -276,8 +282,12 @@ class ForcedBroadbandTests(unittest.TestCase):
             self.assertEqual(item["node"], "02")
             self.assertTrue(item["required"])
             html = _lease_options_fields(proposal, "en")
-            self.assertIn('<input type="hidden" name="optional_node" value="02">', html)
-            self.assertIn("Required: readout IFs", html)
+            # 2026-10-20: next to the per-qubit plan 02 is a ticked, ordinary
+            # box (the unset qubits may be left out); the server still
+            # refuses to drop it while one of them is measured.
+            self.assertIn('name="optional_node" value="02" checked', html)
+            self.assertNotIn('<input type="hidden" name="optional_node" value="02">', html)
+            self.assertIn("Required while any of", html)
             with self.assertRaisesRegex(ServiceError, "02 is required"):
                 approve(service, proposal, {"optional_nodes": [], "drive_mode": "multiplex"})
             self.assertEqual(service._workflow(workflow["id"])["current_node"], "02")
@@ -357,6 +367,59 @@ class ForcedBroadbandTests(unittest.TestCase):
 
             with self.assertRaisesRegex(PolicyError, "must equal the readout output LO written"):
                 service.policy.validate_state_patch(bad, active)
+
+    def test_readout_lo_recentre_follows_the_02_design_shift(self) -> None:
+        import json
+
+        with tempfile.TemporaryDirectory() as folder:
+            service, workflow, proposal = self.build_unset(folder)
+            from jy_agent.state import load_state
+
+            active = load_state(service.settings.active_state)
+            active["ports"]["mw_outputs"]["con1"]["8"]["1"] = {
+                "band": 2,
+                "upconverter_frequency": 5_400_000_000,
+            }
+            active["ports"]["mw_inputs"] = {
+                "con1": {"8": {"2": {"band": 2, "downconverter_frequency": 5_400_000_000}}}
+            }
+            atomic_write_json(service.settings.active_state, active)
+            # The raw designs fit LO 5.4 GHz, so no recentre before any 02 run.
+            service.db.execute(
+                "UPDATE workflows SET options_json = ? WHERE id = ?",
+                (
+                    json.dumps(
+                        {"node_parameters": {"02": {"res_num": 3, "res_design_freq": [5.2, 5.3, 5.5]}}}
+                    ),
+                    workflow["id"],
+                ),
+            )
+            self.assertFalse(
+                service._readout_lo_recenter_plan(service._workflow(workflow["id"]))["patch"]
+            )
+            # 02 found a +50 MHz shift; q3's shifted design (5.8 GHz) is
+            # 400 MHz above the LO, beyond the usable window.
+            metrics = {
+                "design_shift_hz": 50e6,
+                "qubits": {
+                    "q1": {"status": "matched", "measured_freq": 5.25e9, "shifted_design_freq": 5.25e9},
+                    "q2": {"status": "matched", "measured_freq": 5.352e9, "shifted_design_freq": 5.35e9},
+                    "q3": {"status": "mismatch", "measured_freq": 5.0e9, "shifted_design_freq": 5.8e9},
+                },
+            }
+            service.db.execute(
+                "INSERT INTO runs(id, workflow_id, proposal_id, node_id, parameters_json, "
+                "status, analysis_status, analysis_json) VALUES "
+                "('offline-02', ?, ?, '02', '{}', 'completed', 'needs_review', ?)",
+                (workflow["id"], proposal["id"], json.dumps({"dataset_metrics": metrics})),
+            )
+            plan = service._readout_lo_recenter_plan(service._workflow(workflow["id"]))
+            line = plan["details"]["#/ports/mw_outputs/con1/8/1"]
+            self.assertEqual(line["new_lo_hz"], 5_500_000_000)
+            self.assertEqual(
+                line["design_frequencies_hz"],
+                {"q1": 5.25e9, "q2": 5.352e9, "q3": 5.8e9},
+            )
 
     def test_only_02_skips_the_spacing_check(self) -> None:
         from jy_agent.policy import PolicyError

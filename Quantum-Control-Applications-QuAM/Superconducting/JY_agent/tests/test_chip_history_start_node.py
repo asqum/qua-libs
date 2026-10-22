@@ -232,7 +232,15 @@ class SkippedBroadbandTests(unittest.TestCase):
         proposal = service.proposal(entered["approval"]["id"])
         return proposal
 
-    def test_absent_unset_qubit_allows_a_later_start_without_02(self) -> None:
+    def test_absent_unset_qubit_starts_only_from_the_beginning(self) -> None:
+        """2026-10-15: the per-qubit plan replaced the single later start.
+
+        The chip history still records that q1 was found absent at 02 (so the
+        old single start was not blocked), but a qubit found absent at 02 has
+        no record to resume from: the plan offers it only "not measured" or
+        "from the beginning", and from the beginning its unset IF needs 02.
+        """
+
         with tempfile.TemporaryDirectory() as folder:
             service = self.service(folder)
             self.source(service, absent_at_02=True)
@@ -240,6 +248,7 @@ class SkippedBroadbandTests(unittest.TestCase):
             offer = proposal["payload"]["workflow_options_offer"]
             self.assertEqual(offer["start_node"]["start_blocked_by"], [])
             self.assertIn("02x", offer["start_node"]["start_nodes"])
+            self.assertEqual(offer["qubit_plan"]["qubits"], {"q1": ["skip", "beginning"]})
             broadband = next(item for item in offer["optional_nodes"] if item["node"] == "02")
             self.assertTrue(broadband.get("required"))
             # The last 02 parameters prefill a fresh start.
@@ -247,17 +256,82 @@ class SkippedBroadbandTests(unittest.TestCase):
             from jy_agent.approval_web import _lease_options_from_fields
 
             parsed = _lease_options_from_fields(
-                {"optional_node": ["02"], "drive_mode": ["multiplex"], "start_node": ["02x"]},
+                {
+                    "optional_node": ["02"],
+                    "drive_mode": ["multiplex"],
+                    # A stray single start point is ignored next to the plan.
+                    "start_node": ["02x"],
+                    "qubit_plan__q1": ["beginning"],
+                    "node02_res_num": ["1"],
+                    "node02_res_design_freq": ["5.6"],
+                },
                 proposal,
             )
-            self.assertEqual(parsed["optional_nodes"], [])
-            self.assertEqual(parsed["node_parameters"], {})
+            self.assertEqual(parsed["optional_nodes"], ["02"])
+            self.assertEqual(
+                parsed["node_parameters"], {"02": {"res_num": 1, "res_design_freq": [5.6]}}
+            )
+            with self.assertRaisesRegex(ServiceError, "cannot start at 02x"):
+                service.preview_lease_options(
+                    proposal["id"], {**parsed, "qubit_plan": {"q1": "02x"}}
+                )
+            with self.assertRaisesRegex(ServiceError, "02 is required"):
+                service.preview_lease_options(
+                    proposal["id"], {**parsed, "optional_nodes": [], "node_parameters": {}}
+                )
             service._approve_pending_proposal(
                 proposal["id"], "human", "unit_test", lease_options=parsed
             )
             workflow = service.db.one(
                 "SELECT current_node FROM workflows WHERE id = ?", (proposal["workflow_id"],)
             )
+            self.assertEqual(workflow["current_node"], "02")
+
+    def test_a_skipped_unset_qubit_does_not_force_02(self) -> None:
+        """Only the qubits the plan measures can make 02 required."""
+
+        from copy import deepcopy
+
+        from test_core import sample_multiplex_state_and_wiring
+        from jy_agent.util import atomic_write_json
+
+        state, wiring, _targets = sample_multiplex_state_and_wiring()
+        keep = ["q3", "q4"]
+        state["qubits"] = {name: deepcopy(state["qubits"][name]) for name in keep}
+        state["qubits"]["q3"]["resonator"]["intermediate_frequency"] = 0
+        state["active_qubit_names"] = keep
+        wiring["wiring"]["qubits"] = {name: wiring["wiring"]["qubits"][name] for name in keep}
+        with tempfile.TemporaryDirectory() as folder:
+            settings = replace(
+                make_settings(Path(folder), state),
+                workflow_sequence=("02", "02x", "02c", "02a", "03a", "04"),
+            )
+            atomic_write_json(settings.wiring_path, wiring)
+            service = AgentService(settings)
+            entered = service.enter_autonomy_mode("unittest-agent", AUTO_PHRASE)
+            proposal = service.proposal(entered["approval"]["id"])
+            broadband = next(
+                item
+                for item in proposal["payload"]["workflow_options_offer"]["optional_nodes"]
+                if item["node"] == "02"
+            )
+            self.assertEqual(broadband["required_because"], ["q3"])
+            base = {"optional_nodes": [], "drive_mode": "multiplex", "node_parameters": {}}
+            with self.assertRaisesRegex(ServiceError, r"02 is required: readout IFs of \['q3'\]"):
+                service.preview_lease_options(
+                    proposal["id"], {**base, "qubit_plan": {"q3": "beginning", "q4": "beginning"}}
+                )
+            service._approve_pending_proposal(
+                proposal["id"],
+                "human",
+                "unit_test",
+                lease_options={**base, "qubit_plan": {"q3": "skip", "q4": "beginning"}},
+            )
+            workflow = service.db.one(
+                "SELECT current_node, targets_json FROM workflows WHERE id = ?",
+                (proposal["workflow_id"],),
+            )
+            self.assertEqual(json.loads(workflow["targets_json"]), ["q4"])
             self.assertEqual(workflow["current_node"], "02x")
 
     def test_unset_qubit_not_found_absent_forces_the_beginning(self) -> None:

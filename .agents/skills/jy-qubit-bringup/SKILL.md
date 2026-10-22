@@ -5,7 +5,29 @@ description: Operate JY superconducting-qubit measurement from the repository-ro
 
 # JY repository-root entry
 
-Read the complete nested instructions before taking JY actions:
+Fast entry (operator 2026-10-19): on an entry phrase, run only Ensure and the
+matching `jy_enter_*` tool, then reply at once with the bare `browser_url` and
+`operator_handoff.chat` as a three-item markdown list, and end the turn without
+polling for the lease approval. Read the nested instructions below after that
+reply (automatic mode: after the operator sends `已核准`). The continue phrase
+`繼續JY自動量測模式` (aliases `繼續 JY 自動量測模式`, `Continue JY automatic measurement mode`) uses the same fast entry with
+`jy_continue_autonomy_mode`: it renews an expired or ended lease on the same
+workflow (the Approval page shows only the renewal card: hours, full-auto
+judgement and code), resumes a paused lease, or reports an active one; after a
+Recover it starts a continuation workflow with the same simple card. Home
+"停止核准" ends the lease after the current run, and
+`jy_wait_for_autonomy_status` follows the renewal (`superseded_lease_id`); keep
+waiting and use the new `authorization.id`. After an MCP reconnect, `已重新連線` /
+`Reconnected` means: verify the new MCP process, then continue.
+
+With full-auto judgement on, do not stop to ask the operator about a failed run:
+record `repeat` and rerun; the server keeps the lease, closes this chip's stale
+QM first and marks the node/qubit incomplete after two more failures; outages
+resume by themselves. After 10 automatic decisions per lease, or while a
+hardware lock is retained, the old pause returns; halts and expiry still go to
+the operator.
+
+Read the complete nested instructions before taking any other JY action:
 
 - `../../../Quantum-Control-Applications-QuAM/Superconducting/JY_agent/AGENTS.md`
 - `../../../Quantum-Control-Applications-QuAM/Superconducting/JY_agent/rules/PLAYBOOK.md`
@@ -25,11 +47,12 @@ For `進入 JY 量測模式`, call `jy_enter_measurement_mode` with `client_id` 
 and defaults `multiplexed=true`. Then propose exactly
 one registered run or state change at a time and wait for each Dashboard approval.
 For `進入 JY 自動量測模式`, call `jy_enter_autonomy_mode` the same way (omit
-`targets` and `multiplexed` unless overridden), wait for the bounded
-lease approval with `jy_wait_for_autonomy_status`, then use only `jy_autonomy_*`
-execution/state tools within scope. This exact automatic-mode phrase also
-authorizes a host that supports durable goals (for example Codex `/goal`) to
-create one goal for this measurement session. Its objective is to keep
+`targets` and `multiplexed` unless overridden), reply with the Dashboard and
+handoff, and end the turn. After the operator sends `已核准`, confirm the lease
+with `jy_wait_for_autonomy_status`, then use only `jy_autonomy_*`
+execution/state tools within scope. That `已核准` for the automatic-mode lease
+also authorizes a host that supports durable goals (for example Codex `/goal`)
+to create one goal for this measurement session. Its objective is to keep
 advancing the authorized JY workflow until one of these terminal conditions:
 the workflow completes, the operator stops it, the lease expires, or a
 server-enforced hard stop occurs. Do not create a durable goal for conversational
@@ -45,7 +68,8 @@ exact English aliases.
 For either mode, show only the entry result's top-level `browser_url`; approval
 and control fields are internal navigation metadata for the same Dashboard and
 must not be presented as extra websites. The public `/` entry links to Home,
-Approval, and Experiment results pages for the active session.
+Approval, Experiment results, Token usage, and Guide pages for the active
+session.
 Return the bare URL without a bootstrap query. Every browser uses the fixed
 ignored `JY_agent/runtime/dashboard-password.txt`; do not create pairing links.
 Never approve for the operator or bypass policy, snapshot, state-hash, lock, or
@@ -79,7 +103,9 @@ local safety recovery is still required.
 Treat recognized instrument-connectivity failures as paused measurement state,
 not a generic crash. Do not schedule another experiment until connectivity is
 repaired and the operator issues `恢復量測` / `Resume measurement`; then call
-`jy_resume_measurement_mode` for the same workflow/session. Restart the current
+`jy_resume_measurement_mode` for the same workflow/session. Exception: under
+full-auto judgement the server resumes the same lease by itself after a
+successful QOP probe; keep waiting with `jy_wait_for_autonomy_status`. Restart the current
 node as a new run rather than claiming to continue the interrupted Python stack.
 Do not resume through a retained hardware lock; use local recovery. If the AI app disconnects, Dashboard controls
 remain available; after reconnection, `結束量測` / `End measurement` verifies

@@ -74,6 +74,13 @@ class Settings:
         "進入JY自動量測模式",
         "Enter JY automatic measurement mode",
     )
+    # Operator decision 2026-10-20: renew an ended lease (or resume a paused
+    # one) on the same workflow instead of re-entering automatic mode.
+    autonomy_continue_phrases: tuple[str, ...] = (
+        "繼續JY自動量測模式",
+        "繼續 JY 自動量測模式",
+        "Continue JY automatic measurement mode",
+    )
     recovery_phrases: tuple[str, ...] = (
         "恢復",
         "恢复",
@@ -219,6 +226,13 @@ class Settings:
             ),
             "interaction.autonomy_mode_entry_phrases",
         )
+        autonomy_continue_phrases = _string_tuple(
+            interaction.get(
+                "autonomy_continue_phrases",
+                list(cls.autonomy_continue_phrases),
+            ),
+            "interaction.autonomy_continue_phrases",
+        )
         recovery_phrases = _string_tuple(
             interaction.get("recovery_phrases", ["恢復", "Recover"]),
             "interaction.recovery_phrases",
@@ -283,6 +297,7 @@ class Settings:
             autonomy_mode_entry_phrase=autonomy_mode_entry_phrase,
             measurement_mode_entry_phrases=measurement_entry_phrases,
             autonomy_mode_entry_phrases=autonomy_entry_phrases,
+            autonomy_continue_phrases=autonomy_continue_phrases,
             recovery_phrases=recovery_phrases,
             measurement_resume_phrases=measurement_resume_phrases,
             approval_transport=approval_transport,

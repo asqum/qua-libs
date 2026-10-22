@@ -29,8 +29,10 @@ from .service import AgentService, ServiceError
 
 MAX_FORM_BYTES = 4096
 # Confirmation, token and ids plus the lease-page checkboxes, the mode and
-# flux choices and the 02 inputs.
-MAX_APPROVAL_FORM_FIELDS = 20
+# flux choices, the 02 inputs and one start choice per qubit (2026-10-15).
+# 20 rejected a seven-qubit chip with "Max number of fields exceeded"
+# (operator 2026-10-19); MAX_FORM_BYTES still bounds the request.
+MAX_APPROVAL_FORM_FIELDS = 200
 SUMMARY_THUMBNAIL_LIMIT = 6
 TAIPEI_TIMEZONE = timezone(timedelta(hours=8), name="Asia/Taipei")
 CACHEABLE_ASSET_CACHE_CONTROL = "private, max-age=604800, immutable"
@@ -202,6 +204,7 @@ _ZH_ENUMS = {
     "recovery_only": "僅限本機復原",
     "waiting_for_run": "等待量測停止",
     "waiting_for_force_exit": "等待強制停止完成",
+    "closing_stale_qm": "正在關閉本晶片殘留的量子機器",
     "ready": "準備關閉服務",
     "quarantine_ready": "準備隔離並關閉服務",
     "dispatching": "正在關閉服務",
@@ -729,7 +732,15 @@ async def handle_session_dashboard(
         operation = _single_field(fields, "operation")
         if view is not None and operation not in {
             "home": {"shutdown", "control"},
-            "approval": {"approve", "preview"},
+            "approval": {
+                "approve",
+                "preview",
+                "replan_continue",
+                "replan_apply",
+                "lease_renew",
+                "continuation_approve",
+                "continuation_expand",
+            },
             "results": set(),
             "usage": set(),
             "guide": set(),
@@ -794,6 +805,7 @@ async def handle_session_dashboard(
                 actor=principal.actor,
                 approval_method=principal.method,
                 lease_options=lease_options,
+                authorization_choices=_authorization_choices_from_fields(fields),
             )
             if str(review.get("session", {}).get("mode")) == "autonomous":
                 success = _ui(
@@ -807,6 +819,103 @@ async def handle_session_dashboard(
                     "請回對話視窗輸入「已核准」後便會開始執行實驗。",
                     "Return to the conversation and enter ‘已核准’ to start the experiment.",
                 )
+        elif operation == "lease_renew":
+            # Operator decision 2026-10-20: a renewal copies the ended lease's
+            # scope, so only the approval code is asked for.
+            resolved_view = "approval"
+            proposal_id = _single_field(fields, "proposal_id")
+            pending = review.get("pending_proposal") or {}
+            if proposal_id != str(pending.get("id", "")):
+                raise ServiceError("This proposal is no longer the pending session action.")
+            service.renew_lease_from_browser(
+                proposal_id,
+                _single_field(fields, "confirmation"),
+                _single_field(fields, "csrf_token"),
+                request.client.host if request.client is not None else "",
+                actor=principal.actor,
+                approval_method=principal.method,
+                authorization_choices=_authorization_choices_from_fields(fields),
+            )
+            success = _ui(
+                language,
+                "已核准續期；AI agent 會在同一個 workflow 接著量測。若對話已被平台暫停，請回對話視窗輸入「已核准」。",
+                "Renewal approved. The AI agent continues the same workflow. If the host paused the conversation, return to it and enter ‘已核准’.",
+            )
+        elif operation == "continuation_approve":
+            # Operator decision 2026-10-20: after a Recover, continue with the
+            # earlier workflow's choices; only hours, judgement and the code.
+            resolved_view = "approval"
+            proposal_id = _single_field(fields, "proposal_id")
+            pending = review.get("pending_proposal") or {}
+            if proposal_id != str(pending.get("id", "")):
+                raise ServiceError("This proposal is no longer the pending session action.")
+            service.approve_continuation_from_browser(
+                proposal_id,
+                _single_field(fields, "confirmation"),
+                _single_field(fields, "csrf_token"),
+                request.client.host if request.client is not None else "",
+                actor=principal.actor,
+                approval_method=principal.method,
+                authorization_choices=_authorization_choices_from_fields(fields),
+            )
+            success = _ui(
+                language,
+                "已核准接續；AI agent 會從各 qubit 停下的實驗繼續。若對話已被平台暫停，請回對話視窗輸入「已核准」。",
+                "Continuation approved; the AI agent continues each qubit where it stopped. If the host paused the conversation, return to it and enter ‘已核准’.",
+            )
+        elif operation == "continuation_expand":
+            resolved_view = "approval"
+            service.expand_continuation_from_browser(
+                _single_field(fields, "proposal_id"),
+                _single_field(fields, "csrf_token"),
+                principal.actor,
+            )
+            success = _ui(
+                language,
+                "已改為完整選項；請重新選擇後預覽並核准。",
+                "Showing the full options; choose, preview and approve.",
+            )
+        elif operation == "replan_continue":
+            # Operator request 2026-10-19: after a manual pause, continue the
+            # same authorization unchanged.
+            resolved_view = "approval"
+            service.replan_continue_from_browser(
+                _single_field(fields, "proposal_id"),
+                _single_field(fields, "csrf_token"),
+                principal.actor,
+                _authorization_choices_from_fields(fields),
+            )
+            success = _ui(
+                language,
+                "已繼續同一份自動授權；AI agent 會接著排程。",
+                "Continued the same automatic authorization; the AI agent resumes scheduling.",
+            )
+        elif operation == "replan_apply":
+            # ... or re-plan where each qubit (re)starts in a new workflow.
+            resolved_view = "approval"
+            proposal_id = _single_field(fields, "proposal_id")
+            pending = review.get("pending_proposal") or {}
+            offered = ((pending.get("payload") or {}).get("qubit_plan") or {}).get("qubits") or {}
+            everyone = (fields.get("qubit_plan__all") or [""])[0]
+            plan: dict[str, str] = {}
+            for qubit, choices in offered.items():
+                values = fields.get(f"qubit_plan__{qubit}", [])
+                if len(values) > 1:
+                    raise ServiceError(f"Choose exactly one start point for {qubit}.")
+                choice = values[0] if values else "skip"
+                if everyone and everyone in choices:
+                    choice = everyone
+                plan[str(qubit)] = choice
+            service.replan_apply_from_browser(
+                proposal_id,
+                _single_field(fields, "confirmation"),
+                _single_field(fields, "csrf_token"),
+                plan,
+                principal.actor,
+                _authorization_choices_from_fields(fields),
+            )
+            # The new workflow has its own session; the bare entry follows it.
+            return RedirectResponse(f"/?lang={language}", status_code=303)
         elif operation == "control":
             resolved_view = "home"
             session = review["session"]
@@ -968,6 +1077,78 @@ def _asset_version(path: Any) -> str:
 
     return _asset_token(path)
 
+
+
+# Shared by the live Dashboard and the static history site (2026-10-22).
+DASHBOARD_STYLE = """
+:root { color-scheme:dark; font-family:system-ui,-apple-system,sans-serif; }
+* { box-sizing:border-box; }
+body { margin:0; background:#08101d; color:#edf4ff; line-height:1.55; }
+main { max-width:1040px; margin:24px auto; padding:0 16px 52px; }
+.language-switch { position:fixed; top:10px; right:12px; z-index:10; padding:8px 10px; background:#121d31; border:1px solid #2b3b5d; border-radius:10px; }
+.language-switch label { display:block; color:#9fb2d7; font-size:.75rem; margin-bottom:3px; }
+.language-switch select { width:auto; padding:6px 28px 6px 8px; }
+.card { background:#121d31; border:1px solid #2b3b5d; border-radius:14px; padding:18px; margin:16px 0; }
+dl { display:grid; grid-template-columns:160px 1fr; gap:8px 14px; } dd { margin:0; overflow-wrap:anywhere; }
+dt,.muted { color:#9fb2d7; }
+pre { overflow:auto; white-space:pre-wrap; word-break:break-word; background:#070d18; padding:14px; border-radius:8px; }
+.result-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr)); gap:14px; }
+figure { margin:0; padding:10px; background:#070d18; border-radius:10px; }
+img { display:block; width:100%; height:auto; border-radius:7px; }
+.summary-list { margin:0; padding:0; list-style:none; }
+.chip-node { border-top:1px solid #21304d; padding:10px 0; }
+.chip-node > summary { cursor:pointer; font-size:1.05rem; }
+.chip-qubit { margin:10px 0 14px 14px; }
+.chip-qubit h4 { margin:6px 0; }
+.chip-values { list-style:none; padding:0; margin:4px 0 8px; display:flex; flex-wrap:wrap; gap:4px 18px; }
+.chip-qubit details { margin-left:8px; }
+figcaption { font-size:.75rem; overflow-wrap:anywhere; }
+.summary-row { display:grid; grid-template-columns:minmax(150px,230px) 1fr; gap:6px 16px; align-items:start; padding:12px 0; border-top:1px solid #21304d; }
+.summary-row:first-child { border-top:0; padding-top:4px; }
+.summary-name a { color:#cfe0ff; font-weight:700; text-decoration:none; overflow-wrap:anywhere; }
+.summary-name a:hover { text-decoration:underline; }
+.summary-row p { margin:0 0 6px; }
+.summary-ok { color:#8ce0b0; overflow-wrap:anywhere; }
+.summary-thumbs { display:flex; flex-wrap:wrap; gap:8px; }
+.summary-thumbs a { display:block; width:112px; }
+.summary-thumbs img { width:112px; border:1px solid #2b3b5d; background:#070d18; }
+select,input,button { width:100%; padding:12px; border-radius:8px; font:inherit; }
+select,input { color:white; background:#07101f; border:1px solid #6680b5; }
+button { margin-top:12px; border:0; color:white; background:#3568e8; font-weight:750; cursor:pointer; }
+.pause { background:#9a6700; } .resume { background:#16794a; } .stop { background:#b4232d; }
+.emergency { background:#ff1738; border:2px solid white; }
+.shutdown-button { background:#b4232d; border:2px solid #ffd6dc; }
+.warning { padding:12px; border-radius:8px; background:#5b3a12; color:#ffe7b0; }
+.instrument-alert { border-color:#f0a93b; background:#3b2b15; }
+.confirmation { display:block; padding:12px; background:#070d18; border-radius:8px; user-select:all; overflow-wrap:anywhere; }
+.lease-options { border:1px solid #2b3b5d; border-radius:10px; padding:10px 14px; margin:14px 0; } .lease-options legend { padding:0 6px; font-weight:700; } .lease-options .choice, .choice { display:flex; gap:10px; align-items:flex-start; margin:8px 0; } .lease-options .choice input, .choice input[type=checkbox] { width:auto; margin-top:5px; flex:none; } .warning { color:#ffd479; }
+.notice { padding:12px; border-radius:8px; } .error { background:#5a1e2a; } .success { background:#14532d; }
+.dashboard-nav { display:grid; grid-template-columns:repeat(5,1fr); gap:10px; margin:18px 0; }
+.usage-table { width:100%; border-collapse:collapse; font-size:.9rem; font-variant-numeric:tabular-nums; }
+.usage-table th,.usage-table td { padding:6px 8px; border-top:1px solid #21304d; text-align:right; white-space:nowrap; }
+.usage-table th:first-child,.usage-table td:first-child,.usage-table td.text,.usage-table th.text { text-align:left; }
+.usage-table th { color:#9fb2d7; font-weight:600; }
+.table-scroll { overflow-x:auto; }
+.usage-totals { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; }
+.usage-totals div { background:#070d18; border-radius:10px; padding:10px 12px; }
+.usage-totals strong { display:block; font-size:1.25rem; }
+.usage-totals small { display:block; color:#9fb2d7; }
+.usage-table tr.usage-day td { background:#16223a; font-weight:700; border-top:2px solid #2b3b5d; }
+.usage-table tr.usage-current td { background:#1b3263; }
+.usage-table details summary { cursor:pointer; list-style:none; }
+.usage-table details span { display:block; color:#9fb2d7; font-size:.8rem; }
+.usage-presets { display:flex; flex-wrap:wrap; gap:8px; margin:0 0 12px; }
+.usage-presets a { color:#cfe0ff; background:#121d31; border:1px solid #2b3b5d; border-radius:999px; padding:6px 14px; text-decoration:none; }
+.usage-presets a.active { background:#234b9d; border-color:#7ba2ff; color:white; }
+.usage-range { display:grid; grid-template-columns:1fr 1fr auto; gap:10px; align-items:end; }
+.usage-range button { margin-top:0; width:auto; }
+@media(max-width:600px) { .usage-range { grid-template-columns:1fr; } }
+.dashboard-nav a { color:#cfe0ff; background:#121d31; border:1px solid #2b3b5d; border-radius:10px; padding:12px; text-align:center; text-decoration:none; }
+.dashboard-nav a.active { background:#234b9d; border-color:#7ba2ff; color:white; }
+.badge { display:inline-block; min-width:1.5em; margin-left:4px; padding:0 .4em; border-radius:999px; background:#07101f; }
+[hidden] { display:none !important; }
+@media(max-width:600px) { dl { grid-template-columns:1fr; gap:2px; } dd { margin-bottom:8px; } .dashboard-nav { grid-template-columns:1fr; } .summary-row { grid-template-columns:1fr; } }
+"""
 
 def _asset_url(session_id: str, item: dict[str, Any], position: int, *, thumb: bool = False) -> str:
     index = item.get("asset_indices", [])[position]
@@ -1165,7 +1346,13 @@ def _session_dashboard_page(
     operational_notice = _instrument_pause_notice(review, language)
 
     approval_html = ""
-    if pending is not None and _lease_option_offer(pending) is not None:
+    if pending is not None and str(pending.get("kind")) == "autonomy_replan":
+        approval_html = _replan_card(service, session_id, pending, language)
+    elif pending is not None and _is_lease_renewal(pending):
+        approval_html = _lease_renewal_card(service, session_id, pending, workflow, language)
+    elif pending is not None and _is_continuation(pending):
+        approval_html = _continuation_card(service, session_id, pending, language)
+    elif pending is not None and _lease_option_offer(pending) is not None:
         approval_html = _lease_approval_card(
             service, session_id, pending, language, lease_preview
         )
@@ -1184,6 +1371,7 @@ def _session_dashboard_page(
             <input type="hidden" name="proposal_id" value="{escape(proposal_id)}">
             <input type="hidden" name="csrf_token" value="{escape(csrf)}">
             {_lease_options_fields(pending, language)}
+            {_authorization_choice_fields(service, language, hours=(pending.get('payload') or {}).get('duration_hours'), suffix='-generic') if str(pending.get('kind')) == 'autonomy_lease' else ''}
             <label for="confirmation">{_ui(language, '核准文字', 'Confirmation')}</label>
             <input id="confirmation" name="confirmation" type="text"
                    autocomplete="off" autocapitalize="off" spellcheck="false" required>
@@ -1207,8 +1395,10 @@ def _session_dashboard_page(
             {_workflow_options_rows(workflow, language)}
             <dt>{_ui(language, '每個節點／qubit 上限', 'Per node/qubit limit')}</dt><dd>{escape(str(authorization.get('max_attempts_per_node_qubit')))}</dd>
             <dt>{_ui(language, '到期時間', 'Expires')}</dt><dd>{escape(_format_taipei_time(authorization.get('expires_at')))}</dd>
+            <dt>{_ui(language, '全自動判斷模式', 'Full-auto judgement')}</dt><dd>{_ui(language, '開', 'on') if authorization.get('auto_judgement') else _ui(language, '關', 'off')}</dd>
           </dl>
           <p class="muted">{_ui(language, '只有超出原授權範圍時，系統才會顯示新的人工核准要求。', 'A new human approval appears only when an action exceeds the existing authorization.')}</p>
+          {_auto_judgement_log_html(service, authorization, language)}
         </section>"""
 
     autonomy_controls = ""
@@ -1227,6 +1417,8 @@ def _session_dashboard_page(
             <input type="hidden" name="operation" value="control">
             <input type="hidden" name="csrf_token" value="{escape(csrf)}">
             {pause_or_resume}
+            <button name="action" value="reauthorize" class="pause">{_ui(language, '停止核准（重新設定時長與判斷模式）', 'Stop authorization (set hours and judgement again)')}</button>
+            <p class="muted">{_ui(language, '目前的實驗會跑完，接著本授權結束，核准頁面重新出現簡易核准（時長、全自動判斷）；核准後從同一處繼續。', 'The current run finishes, then this authorization ends and the Approval page asks again (hours, full-auto judgement); approving continues from the same point.')}</p>
             <button name="action" value="stop" class="stop">{_ui(language, '結束自動授權（保留網站）', 'End automation authorization (keep site)')}</button>
             <p class="muted">{_ui(language, '結束自動授權會撤銷本次 lease，要求目前 worker 安全停止，但保留 workflow、Dashboard 與 server；之後需重新授權才能自動續跑。', 'Ending automation revokes this lease and asks the current worker to stop gracefully, while keeping the workflow, Dashboard, and servers. Automatic work requires a new authorization afterward.')}</p>
             <button name="action" value="emergency_stop" class="emergency">{_ui(language, '緊急停止 worker（保留網站）', 'Emergency-stop worker (keep site)')}</button>
@@ -1367,7 +1559,9 @@ def _session_dashboard_page(
         page_content = (
             status_html
             + autonomy_controls
+            + _auto_judgement_home_section(service, authorization, language)
             + shutdown_control
+            + _chip_progress_section(service, workflow, language)
             + continuity_html
             + device_html
         )
@@ -1378,73 +1572,7 @@ def _session_dashboard_page(
 <script defer src="/assets/session-dashboard.js"></script>
 <title>{escape(page_title)}</title>
 <style>
-:root {{ color-scheme:dark; font-family:system-ui,-apple-system,sans-serif; }}
-* {{ box-sizing:border-box; }}
-body {{ margin:0; background:#08101d; color:#edf4ff; line-height:1.55; }}
-main {{ max-width:1040px; margin:24px auto; padding:0 16px 52px; }}
-.language-switch {{ position:fixed; top:10px; right:12px; z-index:10; padding:8px 10px; background:#121d31; border:1px solid #2b3b5d; border-radius:10px; }}
-.language-switch label {{ display:block; color:#9fb2d7; font-size:.75rem; margin-bottom:3px; }}
-.language-switch select {{ width:auto; padding:6px 28px 6px 8px; }}
-.card {{ background:#121d31; border:1px solid #2b3b5d; border-radius:14px; padding:18px; margin:16px 0; }}
-dl {{ display:grid; grid-template-columns:160px 1fr; gap:8px 14px; }} dd {{ margin:0; overflow-wrap:anywhere; }}
-dt,.muted {{ color:#9fb2d7; }}
-pre {{ overflow:auto; white-space:pre-wrap; word-break:break-word; background:#070d18; padding:14px; border-radius:8px; }}
-.result-grid {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr)); gap:14px; }}
-figure {{ margin:0; padding:10px; background:#070d18; border-radius:10px; }}
-img {{ display:block; width:100%; height:auto; border-radius:7px; }}
-.summary-list {{ margin:0; padding:0; list-style:none; }}
-.chip-node {{ border-top:1px solid #21304d; padding:10px 0; }}
-.chip-node > summary {{ cursor:pointer; font-size:1.05rem; }}
-.chip-qubit {{ margin:10px 0 14px 14px; }}
-.chip-qubit h4 {{ margin:6px 0; }}
-.chip-values {{ list-style:none; padding:0; margin:4px 0 8px; display:flex; flex-wrap:wrap; gap:4px 18px; }}
-.chip-qubit details {{ margin-left:8px; }}
-figcaption {{ font-size:.75rem; overflow-wrap:anywhere; }}
-.summary-row {{ display:grid; grid-template-columns:minmax(150px,230px) 1fr; gap:6px 16px; align-items:start; padding:12px 0; border-top:1px solid #21304d; }}
-.summary-row:first-child {{ border-top:0; padding-top:4px; }}
-.summary-name a {{ color:#cfe0ff; font-weight:700; text-decoration:none; overflow-wrap:anywhere; }}
-.summary-name a:hover {{ text-decoration:underline; }}
-.summary-row p {{ margin:0 0 6px; }}
-.summary-ok {{ color:#8ce0b0; overflow-wrap:anywhere; }}
-.summary-thumbs {{ display:flex; flex-wrap:wrap; gap:8px; }}
-.summary-thumbs a {{ display:block; width:112px; }}
-.summary-thumbs img {{ width:112px; border:1px solid #2b3b5d; background:#070d18; }}
-select,input,button {{ width:100%; padding:12px; border-radius:8px; font:inherit; }}
-select,input {{ color:white; background:#07101f; border:1px solid #6680b5; }}
-button {{ margin-top:12px; border:0; color:white; background:#3568e8; font-weight:750; cursor:pointer; }}
-.pause {{ background:#9a6700; }} .resume {{ background:#16794a; }} .stop {{ background:#b4232d; }}
-.emergency {{ background:#ff1738; border:2px solid white; }}
-.shutdown-button {{ background:#b4232d; border:2px solid #ffd6dc; }}
-.warning {{ padding:12px; border-radius:8px; background:#5b3a12; color:#ffe7b0; }}
-.instrument-alert {{ border-color:#f0a93b; background:#3b2b15; }}
-.confirmation {{ display:block; padding:12px; background:#070d18; border-radius:8px; user-select:all; overflow-wrap:anywhere; }}
-.lease-options {{ border:1px solid #2b3b5d; border-radius:10px; padding:10px 14px; margin:14px 0; }} .lease-options legend {{ padding:0 6px; font-weight:700; }} .lease-options .choice {{ display:flex; gap:10px; align-items:flex-start; margin:8px 0; }} .lease-options .choice input {{ width:auto; margin-top:5px; flex:none; }} .warning {{ color:#ffd479; }}
-.notice {{ padding:12px; border-radius:8px; }} .error {{ background:#5a1e2a; }} .success {{ background:#14532d; }}
-.dashboard-nav {{ display:grid; grid-template-columns:repeat(5,1fr); gap:10px; margin:18px 0; }}
-.usage-table {{ width:100%; border-collapse:collapse; font-size:.9rem; font-variant-numeric:tabular-nums; }}
-.usage-table th,.usage-table td {{ padding:6px 8px; border-top:1px solid #21304d; text-align:right; white-space:nowrap; }}
-.usage-table th:first-child,.usage-table td:first-child,.usage-table td.text,.usage-table th.text {{ text-align:left; }}
-.usage-table th {{ color:#9fb2d7; font-weight:600; }}
-.table-scroll {{ overflow-x:auto; }}
-.usage-totals {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; }}
-.usage-totals div {{ background:#070d18; border-radius:10px; padding:10px 12px; }}
-.usage-totals strong {{ display:block; font-size:1.25rem; }}
-.usage-totals small {{ display:block; color:#9fb2d7; }}
-.usage-table tr.usage-day td {{ background:#16223a; font-weight:700; border-top:2px solid #2b3b5d; }}
-.usage-table tr.usage-current td {{ background:#1b3263; }}
-.usage-table details summary {{ cursor:pointer; list-style:none; }}
-.usage-table details span {{ display:block; color:#9fb2d7; font-size:.8rem; }}
-.usage-presets {{ display:flex; flex-wrap:wrap; gap:8px; margin:0 0 12px; }}
-.usage-presets a {{ color:#cfe0ff; background:#121d31; border:1px solid #2b3b5d; border-radius:999px; padding:6px 14px; text-decoration:none; }}
-.usage-presets a.active {{ background:#234b9d; border-color:#7ba2ff; color:white; }}
-.usage-range {{ display:grid; grid-template-columns:1fr 1fr auto; gap:10px; align-items:end; }}
-.usage-range button {{ margin-top:0; width:auto; }}
-@media(max-width:600px) {{ .usage-range {{ grid-template-columns:1fr; }} }}
-.dashboard-nav a {{ color:#cfe0ff; background:#121d31; border:1px solid #2b3b5d; border-radius:10px; padding:12px; text-align:center; text-decoration:none; }}
-.dashboard-nav a.active {{ background:#234b9d; border-color:#7ba2ff; color:white; }}
-.badge {{ display:inline-block; min-width:1.5em; margin-left:4px; padding:0 .4em; border-radius:999px; background:#07101f; }}
-[hidden] {{ display:none !important; }}
-@media(max-width:600px) {{ dl {{ grid-template-columns:1fr; gap:2px; }} dd {{ margin-bottom:8px; }} .dashboard-nav {{ grid-template-columns:1fr; }} .summary-row {{ grid-template-columns:1fr; }} }}
+{DASHBOARD_STYLE}
 </style></head>
 <body data-session-events="{escape(events_url)}">{_language_switch(language)}<main>
 <h1>{escape(page_title)}</h1>
@@ -1466,6 +1594,25 @@ MODEL_LABELS = {
 
 
 USAGE_PRESETS = ("chip", "session", "today", "7d", "month")
+
+
+def _chip_progress_section(service: AgentService, workflow: Any, language: str) -> str:
+    """Dashboard Home: the merged chip history, refreshed with the page.
+
+    Operator decision 2026-10-21: the Approval page's node x qubit table,
+    including this workflow's passes so far.
+    """
+
+    workflow_id = workflow.get("id") if isinstance(workflow, dict) else None
+    getter = getattr(service, "chip_progress_for_workflow", None)
+    history = getter(str(workflow_id)) if workflow_id and callable(getter) else None
+    if not isinstance(history, dict):
+        return ""
+    return (
+        '<section class="card chip-progress">'
+        f"<h2>{_ui(language, '這顆 chip 的量測進度', 'This chip’s progress')}</h2>"
+        f"{_chip_history_tables(history, language)}</section>"
+    )
 
 
 def _usage_range(
@@ -1877,8 +2024,11 @@ def _session_summary_section(
     session_id: str,
     history: list[dict[str, Any]],
     language: str = "zh-Hant",
+    *,
+    asset_url: Any = None,
 ) -> str:
     """List every experiment of this session with its successful qubits."""
+    asset_url = asset_url or _asset_url
     heading = _ui(language, "結果摘要", "Result summary")
     if not history:
         return (
@@ -1898,7 +2048,7 @@ def _session_summary_section(
             shown = asset_indices[:SUMMARY_THUMBNAIL_LIMIT]
             thumbnails = "".join(
                 f'<a href="{target}" data-experiment-link="{ordinal}">'
-                f'<img src="{_asset_url(session_id, item, plot_number - 1, thumb=True)}" '
+                f'<img src="{asset_url(session_id, item, plot_number - 1, thumb=True)}" '
                 f'alt="{escape(_ui(language, "實驗結果圖", "Experiment result plot"))} {ordinal}-{plot_number}" '
                 f'loading="lazy"></a>'
                 for plot_number, _asset_index in enumerate(shown, start=1)
@@ -1942,11 +2092,14 @@ def _operator_notice_section(
     session_id: str,
     history: list[dict[str, Any]],
     language: str = "zh-Hant",
+    *,
+    asset_url: Any = None,
 ) -> str:
     """Findings that need a person, such as a 02b avoided crossing.
 
     Operator request 2026-10-08: show the picture and say what to do.
     """
+    asset_url = asset_url or _asset_url
 
     cards: list[str] = []
     for ordinal, item in enumerate(history, start=1):
@@ -1960,7 +2113,7 @@ def _operator_notice_section(
             messages = notice.get("message") or {}
             message = messages.get(language) or messages.get("en") or ""
             figures = "".join(
-                f'<figure><img src="{_asset_url(session_id, item, position)}" '
+                f'<figure><img src="{asset_url(session_id, item, position)}" '
                 f'alt="{escape(qubit)} avoided crossing" loading="lazy"></figure>'
                 for position, path in enumerate(plots)
                 if "avoided-crossing" in Path(path).name
@@ -1981,7 +2134,10 @@ def _session_history_section(
     session_id: str,
     history: list[dict[str, Any]],
     language: str = "zh-Hant",
+    *,
+    asset_url: Any = None,
 ) -> str:
+    asset_url = asset_url or _asset_url
     if not history:
         return (
             f'<section class="card"><h2>{_ui(language, "實驗結果", "Experiment results")}</h2>'
@@ -2003,7 +2159,7 @@ def _session_history_section(
         analysis = item.get("analysis") or {}
         decision = item.get("decision") or {}
         figures = "".join(
-            f'<figure><img src="{_asset_url(session_id, item, plot_number - 1)}" '
+            f'<figure><img src="{asset_url(session_id, item, plot_number - 1)}" '
             f'alt="{escape(_ui(language, "實驗結果圖", "Experiment result plot"))} {ordinal}-{plot_number}" loading="lazy">'
             f'<figcaption>{_ui(language, "結果圖", "Plot")} {plot_number}</figcaption></figure>'
             for plot_number, _asset_index in enumerate(
@@ -2321,7 +2477,7 @@ def _proposal_page(
     .notice {{ padding: 14px; border-radius: 8px; }}
     a {{ color: #8ab4ff; }}
     .error {{ background: #5a1e2a; }} .success {{ background: #14532d; }}
-    .lease-options {{ border:1px solid #2b3b5d; border-radius:10px; padding:10px 14px; margin:14px 0; }} .lease-options legend {{ padding:0 6px; font-weight:700; }} .lease-options .choice {{ display:flex; gap:10px; align-items:flex-start; margin:8px 0; }} .lease-options .choice input {{ width:auto; margin-top:5px; flex:none; }}
+    .lease-options {{ border:1px solid #2b3b5d; border-radius:10px; padding:10px 14px; margin:14px 0; }} .lease-options legend {{ padding:0 6px; font-weight:700; }} .lease-options .choice, .choice {{ display:flex; gap:10px; align-items:flex-start; margin:8px 0; }} .lease-options .choice input, .choice input[type=checkbox] {{ width:auto; margin-top:5px; flex:none; }}
     .warning {{ color: #ffd479; }} .muted {{ color: #9fb2d7; }}
     details summary {{ cursor: pointer; font-weight: 700; }}
     @media (max-width: 600px) {{
@@ -2627,8 +2783,19 @@ def _lease_options_fields(
         return ""
     parts: list[str] = []
     history = offer.get("start_node")
-    if isinstance(history, dict):
+    plan = offer.get("qubit_plan")
+    if isinstance(plan, dict):
+        parts.append(_qubit_plan_fieldset(plan, history, language, selected))
+    elif isinstance(history, dict):
         parts.append(_start_node_fieldset(history, language, selected))
+    elif isinstance(offer.get("chip_history"), dict):
+        # Operator decision 2026-10-21: a workflow with runs of its own sees
+        # the merged history (its own passes included) without a start choice.
+        parts.append(
+            '<fieldset class="lease-options">'
+            f"<legend>{_ui(language, '這顆 chip 的量測紀錄', 'This chip’s measured history')}</legend>"
+            f"{_chip_history_tables(offer['chip_history'], language)}</fieldset>"
+        )
     flux = offer.get("flux_calibration")
     flux_optional = (
         set(flux.get("optional") or []) if isinstance(flux, dict) else set()
@@ -2670,7 +2837,21 @@ def _lease_options_fields(
                 f'<label class="choice"><input type="checkbox" name="optional_node" '
                 f'value="{escape(node)}"{checked}> {escape(_ui(language, zh, en))}</label>'
             )
-            if item.get("required"):
+            if item.get("required") and isinstance(offer.get("qubit_plan"), dict):
+                # The per-qubit plan may leave the unset qubits out, and then
+                # 02 is not needed: keep an ordinary (ticked) box and let the
+                # server check the qubits that are really measured.
+                names = ", ".join(str(name) for name in item.get("required_because") or [])
+                note = _ui(
+                    language,
+                    f"只要量測 {names} 其中任一顆就必須執行：它們的讀取 IF 為 0 或重複，請填"
+                    f"共振腔數量與設計頻率；全部設為不量時才可取消勾選。",
+                    f"Required while any of {names} is measured: their readout IFs are "
+                    f"zero or duplicated, so enter the resonator count and design "
+                    f"frequencies; untick only when none of them is measured.",
+                )
+                box += f'<p class="warning">{escape(note)}</p>'
+            elif item.get("required"):
                 # A disabled box is not submitted, so a hidden field carries it.
                 names = ", ".join(str(name) for name in item.get("required_because") or [])
                 note = _ui(
@@ -2837,8 +3018,9 @@ def _lease_approval_card(
         confirm_html = f"""
             {_lease_preview_section(preview, language)}
             <input type="hidden" name="preview_digest" value="{escape(str(digest))}">
+            {_authorization_choice_fields(service, language, hours=(pending.get('payload') or {}).get('duration_hours'), suffix='-lease')}
             <label class="choice agree"><input type="checkbox" name="agree" value="yes" required>
-              {_ui(language, '我已確認以上會執行的實驗、起點與選項。', 'I have checked the experiments, start point and choices above.')}</label>
+              <span>{_ui(language, '我已確認以上會執行的實驗、起點與選項。', 'I have checked the experiments, start point and choices above.')}</span></label>
             <p>{_ui(language, '勾選後輸入以下完整文字：', 'Then enter the complete text below:')}</p>
             <code class="confirmation">{escape(confirmation)}</code>
             <label for="confirmation">{_ui(language, '核准文字', 'Confirmation')}</label>
@@ -2863,6 +3045,571 @@ def _lease_approval_card(
             {confirm_html}
           </form>
         </section>"""
+
+
+def _auto_judgement_home_section(
+    service: AgentService, authorization: dict[str, Any] | None, language: str
+) -> str:
+    """Home card: whether full-auto judgement is on and what it decided."""
+
+    if not authorization:
+        return ""
+    state = (
+        _ui(language, "開", "on")
+        if authorization.get("auto_judgement")
+        else _ui(language, "關", "off")
+    )
+    log = _auto_judgement_log_html(service, authorization, language)
+    empty = (
+        ""
+        if log or not authorization.get("auto_judgement")
+        else f'<p class="muted">{_ui(language, "目前還沒有代為決定的事項。", "Nothing has been decided on your behalf yet.")}</p>'
+    )
+    return f"""
+        <section class="card"><h2>{_ui(language, '全自動判斷模式', 'Full-auto judgement')}：{state}</h2>
+          {empty}{log}
+        </section>"""
+
+
+def _auto_judgement_log_html(
+    service: AgentService, authorization: dict[str, Any], language: str
+) -> str:
+    """What JY decided on the operator's behalf, for review afterwards."""
+
+    try:
+        entries = service.auto_judgement_log(str(authorization.get("id")))
+    except Exception:
+        return ""
+    if not entries:
+        return ""
+    labels = {
+        "retry": _ui(language, "自動重跑", "retried"),
+        "mark_incomplete": _ui(language, "標為 incomplete", "marked incomplete"),
+        "mark_incomplete_and_resume": _ui(language, "標為 incomplete 並繼續", "marked incomplete, resumed"),
+        "resume_after_outage": _ui(language, "儀器恢復後自動繼續", "resumed after the outage"),
+    }
+    items = "".join(
+        "<li>"
+        + escape(_format_taipei_time(entry.get("created_at")))
+        + " · "
+        + escape(str(entry.get("node_id") or ""))
+        + " "
+        + escape(", ".join(str(name) for name in entry.get("targets") or []))
+        + " · "
+        + escape(labels.get(str(entry.get("action")), str(entry.get("action"))))
+        + " ("
+        + escape(str(entry.get("cause") or ""))
+        + ")</li>"
+        for entry in entries
+    )
+    return (
+        f"<details><summary>{_ui(language, '全自動判斷紀錄', 'Full-auto judgement log')}"
+        f" ({len(entries)})</summary><ul>{items}</ul></details>"
+    )
+
+
+def _authorization_choice_fields(
+    service: AgentService,
+    language: str,
+    *,
+    hours: Any = None,
+    auto_judgement: bool = False,
+    suffix: str = "",
+) -> str:
+    """The hours and full-auto judgement choice on every lease approval.
+
+    Operator decision 2026-10-20: 8/16/24 h (policy `duration_choices_hours`),
+    counted from this approval, and whether JY itself decides what used to
+    pause for a person.
+    """
+
+    choices = service.authorization_duration_choices()
+    try:
+        wanted = float(hours) if hours is not None else choices[0]
+    except (TypeError, ValueError):
+        wanted = choices[0]
+    selected = wanted if wanted in choices else choices[0]
+    options = "".join(
+        f'<option value="{value:g}"{" selected" if value == selected else ""}>'
+        f"{value:g} {_ui(language, '小時', 'h')}</option>"
+        for value in choices
+    )
+    checked = " checked" if auto_judgement else ""
+    field_id = f"duration-hours{suffix}"
+    return f"""
+            <fieldset class="lease-options authorization-choices">
+              <legend>{_ui(language, '授權設定', 'Authorization')}</legend>
+              <label for="{field_id}">{_ui(language, '自動核准時長（從核准起算）', 'Authorization hours (from this approval)')}</label>
+              <select id="{field_id}" name="duration_hours">{options}</select>
+              <label class="choice"><input type="checkbox" name="auto_judgement" value="yes"{checked}>
+                <span><strong>{_ui(language, '全自動判斷模式', 'Full-auto judgement')}</strong><br>
+                <span class="muted">{_ui(language, '原本會暫停等人判斷的情況改由 JY 決定：不明的 worker／分析錯誤會自動重跑，同一 qubit 在同一節點重跑超過上限就標為 incomplete 並繼續；儀器斷線會在 QOP 恢復回應後自動繼續；每次重跑前會先關閉本晶片殘留的 quantum machine 與 job。hardware lock、state 衝突、snapshot 遺失與授權到期仍需人工。', 'Pauses that used to wait for a person are decided by JY: an unknown worker or analyzer error is retried, a qubit that keeps failing at a node is marked incomplete and the workflow moves on, and an instrument outage resumes once the QOP answers again. Before each retry JY closes this chip’s stale quantum machine and job. A hardware lock, a state conflict, a missing snapshot and the expiry still need you.')}</span></span></label>
+            </fieldset>"""
+
+
+def _authorization_choices_from_fields(
+    fields: dict[str, list[str]],
+) -> dict[str, Any] | None:
+    """The hours and judgement mode a form submitted, or None if it had none."""
+
+    hours = fields.get("duration_hours")
+    if not hours:
+        return None
+    if len(hours) != 1:
+        raise ServiceError("Choose exactly one authorization duration.")
+    auto = fields.get("auto_judgement", [])
+    if auto not in ([], ["yes"]):
+        raise ServiceError("The full-auto judgement choice is invalid.")
+    return {"duration_hours": hours[0], "auto_judgement": auto == ["yes"]}
+
+
+def _is_continuation(proposal: dict[str, Any]) -> bool:
+    return str(proposal.get("kind")) == "autonomy_lease" and isinstance(
+        (proposal.get("payload") or {}).get("continuation"), dict
+    )
+
+
+def _continuation_card(
+    service: AgentService,
+    session_id: str,
+    pending: dict[str, Any],
+    language: str,
+) -> str:
+    """Continue after a Recover (operator decision 2026-10-20).
+
+    The measurement was closed by a recovery, not by the operator, so the
+    choices of the earlier workflow are kept and each qubit starts where it
+    stood. The card asks only for the hours, the judgement mode and the code;
+    "full options" brings back the complete lease page.
+    """
+
+    proposal_id = str(pending["id"])
+    csrf = service.approval_csrf_token(proposal_id)
+    payload = pending.get("payload") or {}
+    continuation = payload.get("continuation") or {}
+    plan = continuation.get("qubit_plan") or {}
+    rows = "".join(
+        f"<dt>{escape(str(name))}</dt><dd>"
+        + escape(
+            _ui(language, "不量測", "not measured")
+            if choice == "skip"
+            else _ui(language, "從頭開始", "from the beginning")
+            if choice == "beginning"
+            else str(choice)
+        )
+        + "</dd>"
+        for name, choice in sorted(plan.items(), key=lambda item: _natural_key(item[0]))
+    )
+    confirmation = f"APPROVE {proposal_id}"
+    action = f"/session/{escape(session_id)}/approval?lang={escape(language)}"
+    return f"""
+        <section class="card approval continuation">
+          <h2>{_ui(language, '接續量測（復原後）', 'Continue the measurement (after a recovery)')}</h2>
+          <p>{_ui(language, '上一個 workflow 是被 Recover 關閉的，不是結束量測。接續時沿用原本的選項，各 qubit 從停下的實驗繼續，之前的結果會沿用。', 'The previous workflow was closed by a Recover, not ended. It continues with the same choices; each qubit starts where it stopped and earlier results are kept.')}</p>
+          <dl>{rows}</dl>
+          <form method="post" action="{action}">
+            <input type="hidden" name="operation" value="continuation_approve">
+            <input type="hidden" name="proposal_id" value="{escape(proposal_id)}">
+            <input type="hidden" name="csrf_token" value="{escape(csrf)}">
+            {_authorization_choice_fields(service, language, hours=payload.get('duration_hours'), auto_judgement=bool(payload.get('auto_judgement_default')), suffix='-continue')}
+            <p>{_ui(language, '確認後輸入以下完整文字：', 'Then enter the complete text below:')}</p>
+            <code class="confirmation">{escape(confirmation)}</code>
+            <label for="continuation-confirmation">{_ui(language, '核准文字', 'Confirmation')}</label>
+            <input id="continuation-confirmation" name="confirmation" type="text"
+                   autocomplete="off" autocapitalize="off" spellcheck="false" required>
+            <button type="submit">{_ui(language, '核准接續', 'Approve and continue')}</button>
+          </form>
+          <form method="post" action="{action}">
+            <input type="hidden" name="operation" value="continuation_expand">
+            <input type="hidden" name="proposal_id" value="{escape(proposal_id)}">
+            <input type="hidden" name="csrf_token" value="{escape(csrf)}">
+            <button type="submit" class="pause">{_ui(language, '改用完整選項重新設定', 'Use the full options instead')}</button>
+          </form>
+        </section>"""
+
+
+def _natural_key(name: Any) -> tuple[Any, ...]:
+    import re
+
+    return tuple(
+        int(part) if part.isdigit() else part for part in re.split(r"(\d+)", str(name))
+    )
+
+
+def _is_lease_renewal(proposal: dict[str, Any]) -> bool:
+    return str(proposal.get("kind")) == "autonomy_lease" and bool(
+        (proposal.get("payload") or {}).get("renewal_of")
+    )
+
+
+def _lease_renewal_card(
+    service: AgentService,
+    session_id: str,
+    pending: dict[str, Any],
+    workflow: Any,
+    language: str,
+) -> str:
+    """Renew an ended lease on the same workflow (operator decision 2026-10-20).
+
+    The scope is copied from the previous lease and shown read-only; there is
+    no start-node, qubit-plan or options form, only the approval code.
+    """
+
+    proposal_id = str(pending["id"])
+    csrf = service.approval_csrf_token(proposal_id)
+    payload = pending.get("payload") or {}
+    position = payload.get("renewal") or {}
+    node = str(position.get("current_node") or "")
+    qubit = position.get("current_qubit")
+    where = (
+        f"{qubit} / {node}"
+        if qubit
+        else f"{', '.join(str(name) for name in position.get('targets') or [])} / {node}"
+    )
+    hours = payload.get("duration_hours")
+    hours_text = f"{float(hours):g}" if isinstance(hours, (int, float)) else str(hours)
+    title = _ui(
+        language,
+        f"續期授權，從 {where} 繼續",
+        f"Renew the authorization, continuing from {where}",
+    )
+    options_source = workflow if isinstance(workflow, dict) else {}
+    if not options_source.get("options") and isinstance(payload.get("workflow_options"), dict):
+        options_source = {"options": payload["workflow_options"]}
+    confirmation = f"APPROVE {proposal_id}"
+    action = f"/session/{escape(session_id)}/approval?lang={escape(language)}"
+    return f"""
+        <section class="card approval renewal">
+          <h2>{escape(title)}</h2>
+          <p>{_ui(language, '上一份自動授權已結束。續期沿用同一個 workflow 與原授權範圍，不會重新從頭開始，也不會更改起點、qubit 計畫或選項。', 'The previous automatic authorization has ended. The renewal keeps the same workflow and the same scope; nothing restarts, and the start point, qubit plan and options stay as they are.')}</p>
+          <dl>
+            <dt>{_ui(language, '續期自', 'Renews')}</dt><dd>{escape(str(payload.get('renewal_of')))}</dd>
+            <dt>{_ui(language, '上次期限', 'Previous duration')}</dt><dd>{escape(hours_text)} {_ui(language, '小時', 'h')}</dd>
+            <dt>{_ui(language, '目標', 'Targets')}</dt><dd>{escape(', '.join(str(name) for name in payload.get('targets') or []))}</dd>
+            <dt>{_ui(language, '允許的節點', 'Allowed nodes')}</dt><dd>{escape(', '.join(str(name) for name in payload.get('allowed_nodes') or []))}</dd>
+            {_workflow_options_rows(options_source, language)}
+            <dt>{_ui(language, '每個節點／qubit 上限', 'Per node/qubit limit')}</dt><dd>{escape(str(payload.get('max_attempts_per_node_qubit')))}</dd>
+            <dt>{_ui(language, '自動寫入的分析結果', 'Auto-committed analysis results')}</dt><dd>{escape(', '.join(str(item) for item in payload.get('auto_state_commit_analysis_statuses') or []))}</dd>
+            <dt>{_ui(language, '中止條件', 'Halt conditions')}</dt><dd>{escape(', '.join(str(item) for item in payload.get('halt_conditions') or []))}</dd>
+          </dl>
+          {_renewal_history_html(service, workflow, language)}
+          <form method="post" action="{action}">
+            <input type="hidden" name="operation" value="lease_renew">
+            <input type="hidden" name="proposal_id" value="{escape(proposal_id)}">
+            <input type="hidden" name="csrf_token" value="{escape(csrf)}">
+            {_authorization_choice_fields(service, language, hours=hours, auto_judgement=bool(payload.get('auto_judgement_default')), suffix='-renew')}
+            <p>{_ui(language, '確認後輸入以下完整文字：', 'Then enter the complete text below:')}</p>
+            <code class="confirmation">{escape(confirmation)}</code>
+            <label for="renew-confirmation">{_ui(language, '核准文字', 'Confirmation')}</label>
+            <input id="renew-confirmation" name="confirmation" type="text"
+                   autocomplete="off" autocapitalize="off" spellcheck="false" required>
+            <button type="submit">{_ui(language, '核准續期', 'Approve renewal')}</button>
+          </form>
+        </section>"""
+
+
+def _renewal_history_html(service: AgentService, workflow: Any, language: str) -> str:
+    """The merged chip history on the renewal card, folded (2026-10-21)."""
+
+    workflow_id = workflow.get("id") if isinstance(workflow, dict) else None
+    getter = getattr(service, "chip_progress_for_workflow", None)
+    history = getter(str(workflow_id)) if workflow_id and callable(getter) else None
+    if not isinstance(history, dict):
+        return ""
+    return (
+        f"<details><summary>{_ui(language, '這顆 chip 的量測紀錄', 'This chip’s measured history')}</summary>"
+        f"{_chip_history_tables(history, language)}</details>"
+    )
+
+
+def _replan_card(
+    service: AgentService,
+    session_id: str,
+    pending: dict[str, Any],
+    language: str,
+) -> str:
+    """After a manual pause: continue, or (folded away) re-plan the qubits.
+
+    Operator request 2026-10-19, simplified 2026-10-20: the card shows only
+    the hours, the full-auto judgement choice and Continue, which resumes
+    the same lease with the clock restarted. Re-plan stays available under a
+    folded section: each qubit is not measured, starts from the beginning,
+    or restarts at any node it reached (default: where it stands); approving
+    it ends this workflow and starts a new one with a new lease.
+    """
+
+    proposal_id = str(pending["id"])
+    csrf = service.approval_csrf_token(proposal_id)
+    payload = pending.get("payload") or {}
+    plan = payload.get("qubit_plan") or {}
+    selected = {"qubit_plan": payload.get("default_plan") or {}}
+    try:
+        lease = service._autonomy_row(str(payload.get("lease_id")))
+    except Exception:
+        lease = {}
+    hours = lease.get("duration_hours")
+    auto = bool(lease.get("auto_judgement"))
+    confirmation = f"APPROVE {proposal_id}"
+    action = f"/session/{escape(session_id)}/approval?lang={escape(language)}"
+    return f"""
+        <section class="card approval">
+          <h2>{_ui(language, '已暫停：核准後繼續', 'Paused: approve to continue')}</h2>
+          <p>{_ui(language, '首頁已暫停排程。選擇授權時長與判斷模式後繼續同一份授權（時長從現在起算）。', 'Scheduling was paused from Home. Choose the hours and the judgement mode, then continue the same authorization (the hours count from now).')}</p>
+          <form method="post" action="{action}">
+            <input type="hidden" name="operation" value="replan_continue">
+            <input type="hidden" name="proposal_id" value="{escape(proposal_id)}">
+            <input type="hidden" name="csrf_token" value="{escape(csrf)}">
+            {_authorization_choice_fields(service, language, hours=hours, auto_judgement=auto, suffix='-continue')}
+            <button type="submit" class="resume">{_ui(language, '核准並繼續', 'Approve and continue')}</button>
+          </form>
+          <details>
+            <summary>{_ui(language, '進階：重新規劃各 qubit 的起點', 'Advanced: re-plan where each qubit starts')}</summary>
+            <form method="post" action="{action}">
+              <input type="hidden" name="operation" value="replan_apply">
+              <input type="hidden" name="proposal_id" value="{escape(proposal_id)}">
+              <input type="hidden" name="csrf_token" value="{escape(csrf)}">
+              {_qubit_plan_fieldset(plan, payload.get("start_node"), language, selected)}
+              {_authorization_choice_fields(service, language, hours=hours, auto_judgement=auto, suffix='-replan')}
+              <p class="warning">{_ui(language, '重新規劃會結束目前的 workflow，並以新的 workflow 與新的授權（重新計時）從所選 node 開始；各 qubit 起點之前的結果會沿用。網址不變，頁面會跳到新的工作階段。', 'Re-planning ends this workflow and starts a new one with a new authorization (fresh time limit) at the chosen nodes; results before each qubit’s start are kept. The address stays the same; the page moves to the new session.')}</p>
+              <p>{_ui(language, '確認後輸入以下完整文字：', 'Then enter the complete text below:')}</p>
+              <code class="confirmation">{escape(confirmation)}</code>
+              <label for="replan-confirmation">{_ui(language, '核准文字', 'Confirmation')}</label>
+              <input id="replan-confirmation" name="confirmation" type="text"
+                     autocomplete="off" autocapitalize="off" spellcheck="false" required>
+              <button type="submit">{_ui(language, '核准重新規劃', 'Approve re-plan')}</button>
+            </form>
+          </details>
+        </section>"""
+
+
+def _short_taipei_time(value: Any) -> str:
+    """MM-DD HH:MM in Taipei time, for the dense chip-history cells."""
+    try:
+        parsed = datetime.fromisoformat(str(value))
+    except ValueError:
+        return str(value or "")
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(TAIPEI_TIMEZONE).strftime("%m-%d %H:%M")
+
+
+def _workflow_node_table(nodes: Any, language: str) -> str:
+    """One workflow's node / status / passed-qubit table."""
+
+    rows = []
+    for item in nodes or []:
+        if not isinstance(item, dict):
+            continue
+        status = (
+            _ui(language, "完成", "Finished")
+            if item.get("finished")
+            else _ui(language, "已量但未完成", "Measured, not finished")
+            if item.get("ran")
+            else _ui(language, "未量", "Not measured")
+        )
+        passed = ", ".join(str(name) for name in item.get("passed") or []) or "—"
+        rows.append(
+            f"<tr><td>{escape(str(item.get('node')))}</td><td>{escape(status)}</td>"
+            f"<td>{escape(passed)}</td></tr>"
+        )
+    return (
+        f'<table class="history"><thead><tr><th>Node</th><th>{_ui(language, "狀態", "Status")}</th>'
+        f'<th>{_ui(language, "通過的 qubit", "Passed qubits")}</th></tr></thead>'
+        f"<tbody>{''.join(rows)}</tbody></table>"
+    )
+
+
+def _chip_history_tables(history: Any, language: str) -> str:
+    """The chip's merged node x qubit history and, folded, each workflow's own.
+
+    Operator decision 2026-10-21: each cell is that qubit's most recent pass
+    at that node from any workflow of the chip (short workflow id and time);
+    the per-qubit resume source and any state.json mismatch follow, and the
+    individual workflows stay below for reference.
+    """
+
+    if not isinstance(history, dict):
+        return ""
+    merged = history.get("merged") or {}
+    qubits = [str(name) for name in merged.get("qubits") or []]
+    nodes = [item for item in merged.get("nodes") or [] if isinstance(item, dict)]
+    current_id = history.get("current_workflow_id")
+    device = str(history.get("device_key") or "").replace("\\", "/").rstrip("/").split("/")[-1]
+    parts = [
+        "<p>"
+        + escape(
+            _ui(
+                language,
+                f"這顆 chip（{device}）所有 workflow 合併：每格是該 qubit 在該實驗最近一次成功的結果（workflow 編號前 8 碼與時間，台北時間）。",
+                f"All workflows of this chip ({device}) merged: each cell is that qubit's most recent successful result at that node (first 8 characters of the workflow id and the Taipei time).",
+            )
+        )
+        + "</p>"
+    ]
+    if nodes and qubits:
+        head = "".join(f"<th>{escape(name)}</th>" for name in qubits)
+        body = []
+        for item in nodes:
+            cells = item.get("cells") or {}
+            row = []
+            for name in qubits:
+                cell = cells.get(name)
+                if not isinstance(cell, dict):
+                    row.append('<td class="muted">—</td>')
+                    continue
+                full_id = str(cell.get("workflow_id") or "")
+                mark = " *" if cell.get("current") else ""
+                row.append(
+                    f'<td title="{escape(full_id)}">{escape(full_id[:8] + mark)}'
+                    f"<br><small>{escape(_short_taipei_time(cell.get('date')))}</small></td>"
+                )
+            body.append(
+                f"<tr><td><strong>{escape(str(item.get('node')))}</strong></td>{''.join(row)}</tr>"
+            )
+        parts.append(
+            '<div class="chip-merged" style="overflow-x:auto">'
+            f'<table class="history chip-merged-table"><thead><tr><th>Node</th>{head}</tr></thead>'
+            f"<tbody>{''.join(body)}</tbody></table></div>"
+        )
+    else:
+        parts.append(
+            '<p class="muted">'
+            + _ui(language, "這顆 chip 還沒有成功的結果。", "No successful result on this chip yet.")
+            + "</p>"
+        )
+    if current_id:
+        short = str(current_id)[:8]
+        parts.append(
+            '<p class="muted">'
+            + escape(
+                _ui(
+                    language,
+                    f"標 * 的是目前這個 workflow（{short}）的結果。",
+                    f"Cells marked * are from this workflow ({short}).",
+                )
+            )
+            + "</p>"
+        )
+    sources = history.get("qubit_sources") or {}
+    if sources:
+        listed = ", ".join(
+            f"{name} ← {str(sid)[:8]}"
+            for name, sid in sorted(sources.items(), key=lambda pair: _natural_key(pair[0]))
+        )
+        parts.append(
+            '<p class="muted">'
+            + escape(
+                _ui(
+                    language,
+                    f"各 qubit 接續時沿用的 workflow（最近一次結果所在）：{listed}",
+                    f"Workflow each qubit resumes from (where its most recent result is): {listed}",
+                )
+            )
+            + "</p>"
+        )
+    for name, node in sorted(
+        (history.get("qubit_state_mismatch_node") or {}).items(),
+        key=lambda pair: _natural_key(pair[0]),
+    ):
+        sid = str(sources.get(name) or "")[:8]
+        parts.append(
+            '<p class="warning">'
+            + escape(
+                _ui(
+                    language,
+                    f"{name}：目前 state.json 與 {sid} 寫入的值不同（自 {node} 起），所以 {name} 最晚只能從 {node} 開始。",
+                    f"{name}: the current state.json no longer holds the values {sid} committed (from {node} on), so {name} can start at {node} at the latest.",
+                )
+            )
+            + "</p>"
+        )
+    workflows = [item for item in history.get("workflows") or [] if isinstance(item, dict)]
+    if workflows:
+        folded = []
+        for item in workflows:
+            wid = str(item.get("workflow_id") or "")
+            started = _format_taipei_time(item.get("created_at"))
+            status = _localized_enum(language, item.get("status"))
+            reached = item.get("reached_node")
+            label = _ui(
+                language,
+                f"{wid}（{started} 開始，{status}，量到 {reached}）"
+                + ("，目前的 workflow" if item.get("current") else ""),
+                f"{wid} (started {started}, {status}, reached {reached})"
+                + (", this workflow" if item.get("current") else ""),
+            )
+            folded.append(
+                f"<h4>{escape(label)}</h4>{_workflow_node_table(item.get('nodes'), language)}"
+            )
+        summary = _ui(
+            language,
+            f"各 workflow 的紀錄（{len(workflows)} 個）",
+            f"Each workflow on its own ({len(workflows)})",
+        )
+        parts.append(
+            f"<details><summary>{escape(summary)}</summary>" + "".join(folded) + "</details>"
+        )
+    return "".join(parts)
+
+
+def _qubit_plan_fieldset(
+    plan: dict[str, Any],
+    history: Any,
+    language: str,
+    selected: dict[str, Any] | None,
+) -> str:
+    """Which qubits this measurement covers and where each one starts.
+
+    Operator request 2026-10-15: one choice per qubit -- not measured, from
+    the beginning, or resume at a node it reached -- since 2026-10-21 in the
+    chip workflow holding its most recent result. The "all" row sets every qubit at once when the form is
+    previewed (a node a qubit cannot resume at leaves that qubit as it was).
+    """
+
+    qubits = plan.get("qubits") or {}
+    chosen = (selected or {}).get("qubit_plan") or {}
+
+    def label(choice: str) -> str:
+        if choice == "skip":
+            return _ui(language, "不量", "Not measured")
+        if choice == "beginning":
+            return _ui(language, "從頭", "From the beginning")
+        return _ui(language, f"從 {choice} 開始", f"Start at {choice}")
+
+    rows = []
+    every: list[str] = []
+    for qubit, choices in qubits.items():
+        current = str(chosen.get(qubit, "beginning"))
+        options = "".join(
+            f'<option value="{escape(str(choice))}"'
+            f'{" selected" if str(choice) == current else ""}>{escape(label(str(choice)))}</option>'
+            for choice in choices
+        )
+        for choice in choices:
+            if str(choice) not in every:
+                every.append(str(choice))
+        rows.append(
+            f'<tr><td>{escape(str(qubit))}</td>'
+            f'<td><select name="qubit_plan__{escape(str(qubit))}">{options}</select></td></tr>'
+        )
+    all_options = f'<option value="">{escape(_ui(language, "（各自選擇）", "(choose per qubit)"))}</option>' + "".join(
+        f'<option value="{escape(choice)}">{escape(label(choice))}</option>' for choice in every
+    )
+    history_html = _chip_history_tables(history, language)
+    note = _ui(
+        language,
+        "每顆 qubit 可選不量、從頭，或從上次量到的實驗繼續（之前的結果沿用）。整體從最早的起點開始，較晚的 qubit 走到自己的起點才加入。",
+        "Each qubit is not measured, starts from the beginning, or continues where it stopped (earlier results are kept). The measurement starts at the earliest choice; later qubits join at their own node.",
+    )
+    return f"""<fieldset class="lease-options">
+      <legend>{_ui(language, '量測哪些 qubit、各從哪裡開始（必選）', 'Qubits and where each starts (required)')}</legend>
+      {history_html}
+      <p class="muted">{escape(note)}</p>
+      <table class="history qubit-plan"><tbody>
+      <tr><td><strong>{_ui(language, '全部設為', 'Set all to')}</strong></td><td><select name="qubit_plan__all">{all_options}</select></td></tr>
+      {''.join(rows)}
+      </tbody></table>
+    </fieldset>"""
 
 
 def _start_node_fieldset(
@@ -2928,6 +3675,7 @@ def _start_node_fieldset(
       <p>{escape(_ui(language, f"這顆 chip（{history.get('device_key')}）最近一次的 workflow：{history.get('source_workflow_id')}（{created} 開始），量到 {history.get('reached_node')}；當時 flux 校正：{'是' if flux else '否'}。", f"This chip's ({history.get('device_key')}) latest workflow: {history.get('source_workflow_id')} (started {created}), reached {history.get('reached_node')}; flux calibration then: {'yes' if flux else 'no'}."))}</p>
       <table class="history"><thead><tr><th>Node</th><th>{_ui(language, '狀態', 'Status')}</th><th>{_ui(language, '通過的 qubit', 'Passed qubits')}</th></tr></thead>
       <tbody>{''.join(rows)}</tbody></table>
+      {_chip_history_tables(history, language) if history.get("merged") else ""}
       {''.join(radios)}
       {_qubit_start_fields(history, language, selected)}
       <p class="muted">{_ui(language, '從 02b 之後的 node 開始時，flux 校正固定沿用上次的選擇；上次未選 flux 時不會出現 03b。', 'Starting after 02b keeps the last flux choice; without flux last time, 03b does not appear.')}</p>
@@ -3000,12 +3748,18 @@ def _lease_preview_section(preview: dict[str, Any], language: str) -> str:
         if not isinstance(item, dict):
             continue
         node = str(item.get("start_node"))
-        label = _ui(language, f"從 {node} 開始", f"starts at {node}")
+        label = (
+            _ui(language, "不量", "not measured")
+            if node == "skip"
+            else _ui(language, "從頭", "from the beginning")
+            if node == "beginning"
+            else _ui(language, f"從 {node} 開始", f"starts at {node}")
+        )
         starts.append(
             f"<li><strong>{escape(str(item.get('qubit')))}</strong> — {escape(label)}</li>"
         )
     starts_html = (
-        f"<h3>{_ui(language, '每顆 qubit 的起點（一次量一顆）', 'Where each qubit starts (one qubit at a time)')}</h3>"
+        f"<h3>{_ui(language, '每顆 qubit 的起點', 'Where each qubit starts')}</h3>"
         f'<ul class="preview-qubits">{"".join(starts)}</ul>'
         if starts
         else ""
@@ -3234,9 +3988,42 @@ def _lease_options_from_fields(
     if len(start_values) > 1:
         raise ServiceError("Choose exactly one start point.")
     offer = _lease_option_offer(proposal) or {}
-    if isinstance(offer.get("start_node"), dict) and not start_values:
+    if (
+        isinstance(offer.get("start_node"), dict)
+        and not isinstance(offer.get("qubit_plan"), dict)
+        and not start_values
+    ):
         raise ServiceError("Choose where this measurement starts.")
     start_node = start_values[0] if start_values else None
+    plan_offer = offer.get("qubit_plan")
+    if isinstance(plan_offer, dict):
+        # Operator request 2026-10-15: one choice per qubit. The plan replaces
+        # the single start point, so a stray start_node field is ignored.
+        offered = plan_offer.get("qubits") or {}
+        everyone = (fields.get("qubit_plan__all") or [""])[0]
+        plan: dict[str, str] = {}
+        for qubit, choices in offered.items():
+            values = fields.get(f"qubit_plan__{qubit}", [])
+            if len(values) > 1:
+                raise ServiceError(f"Choose exactly one start point for {qubit}.")
+            choice = values[0] if values else "beginning"
+            if everyone and everyone in choices:
+                choice = everyone
+            plan[str(qubit)] = choice
+        first = plan_offer.get("first_node")
+        if all(choice != "beginning" for choice in plan.values()) and first is not None:
+            # 02 runs only from the beginning.
+            selected = [node for node in selected if node != "02"]
+        node_parameters = (
+            {"02": _broadband_parameters_from_fields(fields)} if "02" in selected else {}
+        )
+        return {
+            "optional_nodes": selected,
+            "drive_mode": modes[0] if modes else None,
+            "flux_calibration": (flux_values[0] == "yes") if flux_values else None,
+            "node_parameters": node_parameters,
+            "qubit_plan": plan,
+        }
     if start_node not in (None, "", "beginning"):
         # Operator choice 2026-10-11: 02 runs only from the beginning; a later
         # start ignores its tick and its (hidden) parameter fields.

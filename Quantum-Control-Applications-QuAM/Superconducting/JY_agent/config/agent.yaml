@@ -84,6 +84,14 @@ interaction:
     - "進入 JY 自動量測模式"
     - "進入JY自動量測模式"
     - "Enter JY automatic measurement mode"
+  # Operator decision 2026-10-20: continue the open workflow's automation. An
+  # ended (e.g. expired) lease gets a renewal that copies its scope; its card
+  # asks only the hours, full-auto judgement and the approval code; a paused
+  # lease resumes; an active one is unchanged.
+  autonomy_continue_phrases:
+    - "繼續JY自動量測模式"
+    - "繼續 JY 自動量測模式"
+    - "Continue JY automatic measurement mode"
   recovery_phrases:
     - "恢復"
     - "恢复"

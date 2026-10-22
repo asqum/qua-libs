@@ -21,6 +21,7 @@ from urllib.parse import urlsplit
 from .analysis import AnalysisError, SnapshotAnalyzer, evidence_digest
 from .config import Settings
 from .db import Database
+from .instrument_probe import probe_qop
 from .policy import PolicyEngine, PolicyError
 from .runner import ExperimentRunner, RunnerError
 from .state import (
@@ -165,6 +166,22 @@ def resume_autonomy_operator_handoff() -> dict[str, str]:
     )
 
 
+def expired_lease_operator_handoff() -> dict[str, str]:
+    """Operator decision 2026-10-20: an ended lease is renewed, not re-entered."""
+
+    return operator_handoff(
+        "自動授權已到期；如要接著量測，在對話輸入續期指令，再到 Approval 頁核准續期。",
+        "繼續JY自動量測模式",
+    )
+
+
+def continue_autonomy_operator_handoff() -> dict[str, str]:
+    return operator_handoff(
+        "無需新操作；同一份自動授權有效，AI agent 會從目前的 qubit／node 接著量測。",
+        "已核准",
+    )
+
+
 # Operator choice 2026-10-04: at these nodes a target that passed analysis but
 # was deliberately left out of the decision patch (a suspect fit, such as
 # q9/q10's sub-microsecond Ramsey at 3.3 samples per lifetime) is not resolved,
@@ -227,11 +244,77 @@ READOUT_REOPEN_NODES = frozenset(
 DRIVE_MODES = ("per_qubit", "multiplex")
 
 
+def _restrict_to_qubit(value: Any, qubit: str) -> Any:
+    """Keep only `qubit`'s entries: dicts keyed by qubit names, qubit lists."""
+
+    return _restrict_to_qubits(value, {qubit})
+
+
+def _restrict_to_qubits(value: Any, qubits: Collection[str]) -> Any:
+    """Keep only the entries of `qubits` (dicts keyed by qubit names, qubit lists)."""
+
+    keep = {str(name) for name in qubits}
+    if isinstance(value, dict):
+        keys = [str(key) for key in value]
+        if keys and all(re.fullmatch(r"q[0-9]+", key) for key in keys):
+            return {
+                key: _restrict_to_qubits(item, keep)
+                for key, item in value.items()
+                if str(key) in keep
+            }
+        return {key: _restrict_to_qubits(item, keep) for key, item in value.items()}
+    if isinstance(value, list) and value and all(
+        isinstance(item, str) and re.fullmatch(r"q[0-9]+", item) for item in value
+    ):
+        return [item for item in value if item in keep]
+    if isinstance(value, list):
+        return [_restrict_to_qubits(item, keep) for item in value]
+    return value
+
+
+def _json_pointer_value(document: Any, pointer: str) -> tuple[bool, Any]:
+    """(present, value) of a JSON pointer such as /qubits/q1/xy/RF_frequency."""
+
+    current = document
+    for raw in pointer.split("/")[1:]:
+        part = raw.replace("~1", "/").replace("~0", "~")
+        if isinstance(current, dict) and part in current:
+            current = current[part]
+        elif isinstance(current, list) and part.isdigit() and int(part) < len(current):
+            current = current[int(part)]
+        else:
+            return False, None
+    return True, current
+
+
+def _same_state_value(left: Any, right: Any) -> bool:
+    """Equal state values, floats compared to a relative 1e-9."""
+
+    if isinstance(left, bool) or isinstance(right, bool):
+        return left == right
+    if isinstance(left, (int, float)) and isinstance(right, (int, float)):
+        return math.isclose(float(left), float(right), rel_tol=1e-9, abs_tol=0.0)
+    if isinstance(left, list) and isinstance(right, list):
+        return len(left) == len(right) and all(
+            _same_state_value(a, b) for a, b in zip(left, right)
+        )
+    if isinstance(left, dict) and isinstance(right, dict):
+        return set(left) == set(right) and all(
+            _same_state_value(left[key], right[key]) for key in left
+        )
+    return left == right
+
+
 def _natural_qubit_key(name: str) -> tuple[Any, ...]:
     """Sort q2 before q10."""
     return tuple(
         int(part) if part.isdigit() else part for part in re.split(r"(\d+)", str(name))
     )
+
+
+def _canonical_json(value: Any) -> str:
+    """Order-independent JSON for comparing two parameter sets."""
+    return json.dumps(value, sort_keys=True, default=str)
 
 
 # Operator request 2026-10-07: run parameters the operator supplies on the
@@ -268,6 +351,29 @@ class AgentService:
         self._watchdog_stop = threading.Event()
         # session id -> (Dashboard event revision, result plot paths)
         self._dashboard_plot_cache: dict[str, tuple[int, list[str]]] = {}
+        # Full-auto judgement (operator decision 2026-10-20): one background
+        # stale-QM cleanup or automatic resume at a time; tests replace the
+        # two instrument-facing callables.
+        self._qm_cleanup_active = threading.Event()
+        self._auto_judgement_lock = threading.Lock()
+        self._auto_judgement_thread: threading.Thread | None = None
+        self._qm_cleanup_runner: Callable[[bool], dict[str, Any]] = (
+            self._run_qm_cleanup_subprocess
+        )
+        # Retained-lock stale-QM cleanup for a run's own state.json/wiring.json
+        # (state, wiring, dry_run) -> report; tests replace it.
+        self._qm_cleanup_runner_for: Callable[[Path, Path, bool], dict[str, Any]] = (
+            self._run_qm_cleanup_subprocess_for
+        )
+        self._forced_release_lock = threading.Lock()
+        self._forced_release_threads: dict[str, threading.Thread] = {}
+        self._forced_release_results: dict[str, dict[str, Any]] = {}
+        self._instrument_probe: Callable[[Path], Any] = probe_qop
+        self._auto_probe_at: dict[str, float] = {}
+        self._history_site_lock = threading.Lock()
+        self._history_site_thread: threading.Thread | None = None
+        self._history_site_pending: set[str] = set()
+        self._history_site_dirty = False
         self._backfill_device_keys()
         self._backfill_inherited_marks()
 
@@ -663,11 +769,23 @@ class AgentService:
         targets: list[str] | None = None,
         allowed_nodes: list[str] | None = None,
         duration_hours: float | None = None,
+        *,
+        renewal_of: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Create the one human approval that bounds unattended JY actions."""
+        """Create the one human approval that bounds unattended JY actions.
+
+        `renewal_of` (an ended lease row of this workflow) makes this a renewal
+        (operator decision 2026-10-20): the new lease copies that lease's
+        scope and its proposal carries no lease-page choices, so the Approval
+        page shows only the duration, where the workflow continues, and the
+        approval code.
+        """
         if not client_id.strip():
             raise ServiceError("client_id is required for the audit log")
-        if activation_phrase not in self.settings.autonomy_mode_entry_phrases:
+        accepted_phrases = set(self.settings.autonomy_mode_entry_phrases)
+        if renewal_of is not None:
+            accepted_phrases |= set(self.settings.autonomy_continue_phrases)
+        if activation_phrase not in accepted_phrases:
             raise ServiceError(
                 "Autonomy requires the exact autonomous-measurement entry phrase"
             )
@@ -695,6 +813,13 @@ class AgentService:
         )
 
         workflow_targets = json_loads(workflow["targets_json"], [])
+        if renewal_of is not None:
+            if renewal_of.get("workflow_id") != workflow_id:
+                raise ServiceError("A renewal must copy a lease of the same workflow")
+            targets = list(json_loads(renewal_of.get("targets_json"), []))
+            allowed_nodes = list(json_loads(renewal_of.get("allowed_nodes_json"), []))
+            if duration_hours is None:
+                duration_hours = float(renewal_of["duration_hours"])
         resolved_targets = targets or list(workflow_targets)
         if (
             not resolved_targets
@@ -713,7 +838,16 @@ class AgentService:
             current_index = min(current_index, sequence.index(serial_node))
         remaining_nodes = sequence[current_index:]
         resolved_nodes = allowed_nodes or remaining_nodes
-        if (
+        if renewal_of is not None:
+            # The renewal keeps the approved node scope as it was; it must
+            # still cover where the workflow stands.
+            if workflow["current_node"] not in resolved_nodes:
+                raise ServiceError(
+                    "The previous authorization does not cover the current node "
+                    f"{workflow['current_node']}; enter automatic mode again with "
+                    f"{self.settings.autonomy_mode_entry_phrase!r} for a new scope"
+                )
+        elif (
             not resolved_nodes
             or len(set(resolved_nodes)) != len(resolved_nodes)
             or resolved_nodes[0] != remaining_nodes[0]
@@ -726,9 +860,26 @@ class AgentService:
                 "and start at the current node"
             )
         config = self.policy.raw["autonomy"]
-        duration_hours = self._resolve_autonomy_duration(duration_hours)
+        # A renewal keeps its old hours; a new request preselects one of the
+        # Approval page choices (audit 2026-10-20: others became 8 silently).
+        duration_hours = (
+            self._resolve_autonomy_duration(duration_hours)
+            if renewal_of is not None
+            else self._resolve_requested_duration(duration_hours)
+        )
         max_total_runs = config.get("max_total_runs")
         max_attempts = int(config["max_attempts_per_node_qubit"])
+        auto_statuses = list(config["auto_state_commit_analysis_statuses"])
+        halt_conditions = list(config["halt_conditions"])
+        if renewal_of is not None:
+            max_total_runs = renewal_of.get("max_total_runs")
+            max_attempts = int(renewal_of["max_attempts_per_node_qubit"])
+            auto_statuses = list(
+                json_loads(renewal_of.get("auto_state_commit_statuses_json"), auto_statuses)
+            )
+            halt_conditions = list(
+                json_loads(renewal_of.get("halt_conditions_json"), halt_conditions)
+            )
         lease_id = uuid.uuid4().hex
         payload = {
             "lease_id": lease_id,
@@ -738,16 +889,22 @@ class AgentService:
             "duration_hours": duration_hours,
             "max_total_runs": max_total_runs,
             "max_attempts_per_node_qubit": max_attempts,
-            "auto_state_commit_analysis_statuses": list(
-                config["auto_state_commit_analysis_statuses"]
-            ),
+            "auto_state_commit_analysis_statuses": auto_statuses,
             "pause_on_analysis_statuses": list(
                 config.get("pause_on_analysis_statuses", [])
             ),
-            "halt_conditions": list(config["halt_conditions"]),
+            "halt_conditions": halt_conditions,
             "manual_controls": ["pause", "stop", "emergency_stop"],
-            "workflow_options_offer": self._lease_option_offer(workflow),
         }
+        if renewal_of is not None:
+            # No lease-page choices: the workflow keeps its stored options.
+            payload["renewal_of"] = str(renewal_of["id"])
+            payload["renewal"] = self._renewal_position(workflow)
+            # The renewal card pre-ticks the ended lease's judgement mode.
+            payload["auto_judgement_default"] = bool(renewal_of.get("auto_judgement"))
+            payload["workflow_options"] = self._workflow_options(workflow)
+        else:
+            payload["workflow_options_offer"] = self._lease_option_offer(workflow)
         proposal = self._create_proposal(
             workflow_id,
             "autonomy_lease",
@@ -777,8 +934,8 @@ class AgentService:
                     duration_hours,
                     max_total_runs,
                     max_attempts,
-                    json_dumps(config["auto_state_commit_analysis_statuses"]),
-                    json_dumps(config["halt_conditions"]),
+                    json_dumps(auto_statuses),
+                    json_dumps(halt_conditions),
                     now,
                     now,
                     client_id,
@@ -925,9 +1082,16 @@ class AgentService:
                 "Entry requires the exact JY autonomous-measurement phrase"
             )
         # Reject an out-of-policy budget before a workflow is created.
-        self._resolve_autonomy_duration(duration_hours)
+        self._resolve_requested_duration(duration_hours)
         self._sync_usage_in_background()
         self._reject_retained_hardware_lock()
+        recovered = self._recovered_workflow() if targets is None else None
+        if recovered is not None:
+            # Operator decision 2026-10-20: after a Recover (not an operator
+            # end) the measurement continues with the simple approval card.
+            return self._continuation_result(
+                recovered, client_id, duration_hours=duration_hours
+            )
         workflow = self._enter_or_resume_workflow(
             client_id,
             activation_phrase,
@@ -1006,6 +1170,197 @@ class AgentService:
         }
         return self._with_autonomy_dashboard(result, client_id)
 
+    # -- Lease renewal, operator decisions 2026-10-20 ---------------------------
+
+    def continue_autonomy_mode(
+        self,
+        client_id: str,
+        activation_phrase: str,
+    ) -> dict[str, Any]:
+        """`繼續JY自動量測模式`: continue the open workflow's automation.
+
+        An ended (expired, stopped, halted, revoked) latest lease of the
+        still-active workflow gets a renewal proposal that copies its scope;
+        the Approval page shows only the renewal card. A paused lease resumes
+        without approval, an active or pending one is returned as it is. With
+        no open workflow the operator has to enter automatic mode instead.
+        The result has the same shape as enter_autonomy_mode's.
+        """
+
+        continue_phrases = set(self.settings.autonomy_continue_phrases)
+        resume_only = set(AUTONOMY_RESUME_PHRASES) - continue_phrases
+        if activation_phrase not in continue_phrases | resume_only:
+            raise ServiceError(
+                "Continuing requires the exact phrase, one of "
+                f"{list(self.settings.autonomy_continue_phrases)!r}"
+            )
+        if not client_id.strip():
+            raise ServiceError("client_id is required for the audit log")
+        entry = self.settings.autonomy_mode_entry_phrase
+        row = self.db.one(
+            "SELECT * FROM workflows WHERE status IN ('active', 'paused') "
+            "ORDER BY created_at DESC LIMIT 1"
+        )
+        if row is None:
+            recovered = self._recovered_workflow()
+            if recovered is not None:
+                self._sync_usage_in_background()
+                return self._continuation_result(recovered, client_id)
+            raise ServiceError(
+                f"No open JY workflow to continue; enter automatic mode with {entry!r}"
+            )
+        workflow = self._decode_workflow(row)
+        lease_row = self.db.one(
+            "SELECT * FROM autonomy_leases WHERE workflow_id = ? "
+            "ORDER BY created_at DESC LIMIT 1",
+            (workflow["id"],),
+        )
+        if lease_row is None:
+            raise ServiceError(
+                "This workflow has no automatic authorization to continue; enter "
+                f"automatic mode with {entry!r}"
+            )
+        self._sync_usage_in_background()
+        lease = self.autonomy_status(lease_id=lease_row["id"])
+        result: dict[str, Any] = {"workflow": workflow, "mode": "autonomous"}
+        if lease["status"] == "pending":
+            result.update(
+                authorization=lease,
+                approval=self.proposal(lease["proposal_id"]),
+                next_action="human_approval",
+            )
+            return self._with_autonomy_dashboard(result, client_id)
+        if lease["status"] == "active":
+            result.update(
+                authorization=lease, next_action="continue_authorized_workflow"
+            )
+            result = self._with_autonomy_dashboard(result, client_id)
+            result["operator_handoff"] = continue_autonomy_operator_handoff()
+            return result
+        if lease["status"] == "paused":
+            if workflow["status"] == "paused":
+                resumed = self.resume_measurement_mode(
+                    workflow["id"], client_id, activation_phrase
+                )
+                lease = resumed.get("authorization") or self.autonomy_status(
+                    lease_id=lease["id"]
+                )
+                workflow = self._decode_workflow(self._workflow(workflow["id"]))
+            else:
+                lease = self.resume_autonomy(lease["id"], client_id, activation_phrase)
+            self._cancel_replan_proposals(workflow["id"], client_id)
+            result.update(
+                workflow=workflow,
+                authorization=lease,
+                next_action="continue_authorized_workflow",
+            )
+            result = self._with_autonomy_dashboard(result, client_id)
+            result["operator_handoff"] = continue_autonomy_operator_handoff()
+            return result
+        # The latest lease has ended.
+        if activation_phrase in resume_only:
+            raise ServiceError(
+                f"The authorization is {lease['status']}, not paused; renew it with "
+                f"{self.settings.autonomy_continue_phrases[0]!r}"
+            )
+        if workflow["status"] != "active":
+            raise ServiceError(
+                "The workflow is paused for the instruments; send "
+                f"{self.settings.measurement_resume_phrases[0]!r} after the repair, "
+                "then continue"
+            )
+        self._reject_retained_hardware_lock()
+        now = utc_now()
+        self.db.execute(
+            "UPDATE proposals SET status = 'expired' "
+            "WHERE workflow_id = ? AND status = 'pending' "
+            "AND autonomy_lease_id IS NULL AND expires_at <= ?",
+            (workflow["id"], now),
+        )
+        self._cancel_replan_proposals(workflow["id"], client_id)
+        if self.db.one(
+            "SELECT id FROM proposals WHERE workflow_id = ? AND status = 'pending' "
+            "AND autonomy_lease_id IS NULL AND kind != 'autonomy_lease' LIMIT 1",
+            (workflow["id"],),
+        ):
+            raise ServiceError(
+                "Automatic mode cannot continue while a conversational proposal is "
+                "pending; approve, expire, or cancel that proposal first"
+            )
+        previous = self._autonomy_row(lease["id"])
+        proposal = self.request_autonomy_lease(
+            workflow["id"],
+            client_id,
+            activation_phrase,
+            f"Operator renewed the {previous['status']} automatic authorization "
+            f"{previous['id']} with {activation_phrase!r}.",
+            renewal_of=previous,
+        )
+        result.update(
+            workflow=self._decode_workflow(self._workflow(workflow["id"])),
+            authorization=proposal["autonomy"],
+            approval=proposal,
+            next_action="human_approval",
+            renewal_of=previous["id"],
+        )
+        return self._with_autonomy_dashboard(result, client_id)
+
+    def _renewal_position(self, workflow: dict[str, Any]) -> dict[str, Any]:
+        """Where a renewed lease continues: the node and the per-qubit pass."""
+
+        position: dict[str, Any] = {
+            "current_node": str(workflow["current_node"]),
+            "current_qubit": None,
+            "targets": sorted(
+                json_loads(workflow.get("targets_json"), workflow.get("targets") or []),
+                key=_natural_qubit_key,
+            ),
+        }
+        try:
+            serial = self._serial_pass_state(workflow)
+        except Exception:  # pragma: no cover - display only
+            serial = None
+        sequence = list(self.settings.workflow_sequence)
+        if (
+            serial is not None
+            and serial.get("current")
+            and serial["node"] in sequence
+            and position["current_node"] in sequence
+            and sequence.index(position["current_node"]) >= sequence.index(serial["node"])
+        ):
+            position["current_qubit"] = serial["current"]
+            position["pass_index"] = serial["index"]
+            position["pass_total"] = serial["total"]
+        return position
+
+    def renew_lease_from_browser(
+        self,
+        proposal_id: str,
+        confirmation: str,
+        csrf_token: str,
+        remote_host: str,
+        *,
+        actor: str | None = None,
+        approval_method: str = "local_browser",
+        authorization_choices: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Approve a renewal card: the copied lease starts on the same workflow."""
+
+        row = self.db.one("SELECT kind, payload_json FROM proposals WHERE id = ?", (proposal_id,))
+        if row is None or row["kind"] != "autonomy_lease" or not json_loads(
+            row["payload_json"], {}
+        ).get("renewal_of"):
+            raise ServiceError("This proposal is not an authorization renewal.")
+        return self.approve_from_browser(
+            proposal_id,
+            confirmation,
+            csrf_token,
+            remote_host,
+            actor=actor,
+            approval_method=approval_method,
+            authorization_choices=authorization_choices,
+        )
+
     def _with_autonomy_dashboard(
         self, result: dict[str, Any], client_id: str
     ) -> dict[str, Any]:
@@ -1025,6 +1380,1203 @@ class AgentService:
         if result.get("next_action") == "human_approval":
             result["operator_handoff"] = approval_operator_handoff()
         return result
+
+    # -- Approval-page choices and Home re-authorization (operator 2026-10-20) --
+
+    REAUTHORIZE_REASON = (
+        "Re-authorization requested from Home: the current run finishes, then "
+        "the Approval page asks again for the hours and the judgement mode."
+    )
+
+    def authorization_duration_choices(self) -> list[float]:
+        """The budgets the Approval page offers; the first is the default."""
+
+        config = self.policy.raw["autonomy"]
+        raw = config.get("duration_choices_hours") or [config["duration_hours"]]
+        return [float(value) for value in raw]
+
+    def _resolve_authorization_choices(
+        self, choices: dict[str, Any] | None
+    ) -> dict[str, Any] | None:
+        """Validate the Approval page's hours and full-auto judgement choice."""
+
+        if choices is None:
+            return None
+        resolved: dict[str, Any] = {
+            "auto_judgement": bool(choices.get("auto_judgement"))
+        }
+        hours = choices.get("duration_hours")
+        if hours is not None:
+            try:
+                value = float(hours)
+            except (TypeError, ValueError) as exc:
+                raise ServiceError("Choose how many hours the authorization lasts") from exc
+            offered = self.authorization_duration_choices()
+            if value not in offered:
+                raise ServiceError(
+                    "The authorization lasts one of "
+                    + ", ".join(f"{item:g}" for item in offered)
+                    + " hours"
+                )
+            resolved["duration_hours"] = self._resolve_autonomy_duration(value)
+        return resolved
+
+    def _store_authorization_choices(
+        self,
+        connection: sqlite3.Connection,
+        proposal: dict[str, Any],
+        choices: dict[str, Any] | None,
+        actor: str,
+    ) -> None:
+        """Write the hours and the judgement mode onto the lease being approved."""
+
+        lease_id = proposal.get("autonomy_lease_id")
+        if not choices or not lease_id:
+            return
+        if "duration_hours" in choices:
+            connection.execute(
+                "UPDATE autonomy_leases SET duration_hours = ? WHERE id = ?",
+                (float(choices["duration_hours"]), str(lease_id)),
+            )
+        connection.execute(
+            "UPDATE autonomy_leases SET auto_judgement = ? WHERE id = ?",
+            (1 if choices.get("auto_judgement") else 0, str(lease_id)),
+        )
+        self.db.event(
+            "autonomy_authorization_choices",
+            actor,
+            {"lease_id": str(lease_id), **choices},
+            proposal["workflow_id"],
+            connection=connection,
+        )
+
+    def _restart_lease_clock(
+        self, lease_id: str, choices: dict[str, Any], actor: str
+    ) -> None:
+        """A paused lease continued from the Approval page restarts its clock."""
+
+        row = self._autonomy_row(lease_id)
+        hours = float(choices.get("duration_hours", row["duration_hours"]))
+        now = datetime.now(timezone.utc)
+        self.db.execute(
+            "UPDATE autonomy_leases SET duration_hours = ?, auto_judgement = ?, "
+            "expires_at = ?, updated_at = ? WHERE id = ? AND status = 'paused'",
+            (
+                hours,
+                1 if choices.get("auto_judgement") else 0,
+                (now + timedelta(hours=hours)).isoformat(timespec="seconds"),
+                now.isoformat(timespec="seconds"),
+                lease_id,
+            ),
+        )
+        self.db.event(
+            "autonomy_authorization_choices",
+            actor,
+            {"lease_id": lease_id, **choices, "duration_hours": hours, "clock_restarted": True},
+            row["workflow_id"],
+        )
+
+    def request_reauthorization(self, lease_id: str, actor: str) -> dict[str, Any]:
+        """Home "停止核准": end this lease after the current run and ask again.
+
+        The lease pauses at once, so nothing new is scheduled; the running
+        experiment finishes. Then the lease ends and a renewal proposal with
+        the same scope appears on the Approval page, where the operator picks
+        the hours and the judgement mode again.
+        """
+
+        lease = self._expire_autonomy_if_needed(self._autonomy_row(lease_id))
+        if lease["status"] not in {"active", "paused"}:
+            raise ServiceError(
+                f"The authorization is {lease['status']}; there is nothing to re-authorize"
+            )
+        workflow = self._workflow(lease["workflow_id"])
+        if workflow["status"] != "active":
+            raise ServiceError(
+                "The workflow is paused for the instruments; resume the measurement first"
+            )
+        now = utc_now()
+        self.db.execute(
+            "UPDATE autonomy_leases SET status = 'paused', stopped_reason = ?, "
+            "updated_at = ? WHERE id = ? AND status IN ('active', 'paused')",
+            (self.REAUTHORIZE_REASON, now, lease_id),
+        )
+        self.db.execute(
+            "UPDATE measurement_sessions SET status = 'paused', updated_at = ? "
+            "WHERE autonomy_lease_id = ? AND status = 'active'",
+            (now, lease_id),
+        )
+        self._cancel_replan_proposals(str(workflow["id"]), actor)
+        self.db.event(
+            "autonomy_reauthorization_requested",
+            actor,
+            {"lease_id": lease_id},
+            workflow["id"],
+        )
+        self._finish_reauthorization(lease_id, actor)
+        return self.autonomy_status(lease_id=lease_id)
+
+    def _finish_reauthorization(
+        self, lease_id: str, actor: str
+    ) -> dict[str, Any] | None:
+        """Once no run is active, end the lease and offer its renewal."""
+
+        row = self._autonomy_row(lease_id)
+        if row["status"] != "paused" or row.get("stopped_reason") != self.REAUTHORIZE_REASON:
+            return None
+        if self.db.one(
+            "SELECT id FROM runs WHERE autonomy_lease_id = ? "
+            "AND status IN ('starting', 'running', 'stopping') LIMIT 1",
+            (lease_id,),
+        ):
+            return None
+        workflow = self._workflow(row["workflow_id"])
+        if workflow["status"] != "active":
+            return None
+        now = utc_now()
+        changed = self.db.execute(
+            "UPDATE autonomy_leases SET status = 'revoked', stopped_reason = ?, "
+            "updated_at = ? WHERE id = ? AND status = 'paused' AND stopped_reason = ?",
+            ("Re-authorized from Home.", now, lease_id, self.REAUTHORIZE_REASON),
+        )
+        if changed != 1:
+            return None
+        self.db.execute(
+            "UPDATE measurement_sessions SET status = 'revoked', updated_at = ? "
+            "WHERE autonomy_lease_id = ?",
+            (now, lease_id),
+        )
+        self.db.execute(
+            "UPDATE proposals SET status = 'cancelled' WHERE autonomy_lease_id = ? "
+            "AND status IN ('pending', 'approved') AND uses = 0",
+            (lease_id,),
+        )
+        try:
+            proposal = self.request_autonomy_lease(
+                str(workflow["id"]),
+                actor,
+                self.settings.autonomy_continue_phrases[0],
+                f"Operator re-authorization from Home of lease {lease_id}.",
+                renewal_of=self._autonomy_row(lease_id),
+            )
+        except ServiceError as exc:
+            self.db.event(
+                "autonomy_reauthorization_failed",
+                actor,
+                {"lease_id": lease_id, "error": str(exc)},
+                workflow["id"],
+            )
+            return None
+        self.db.event(
+            "autonomy_reauthorization_offered",
+            actor,
+            {
+                "lease_id": lease_id,
+                "new_lease_id": proposal["autonomy"]["id"],
+                "proposal_id": proposal["id"],
+            },
+            workflow["id"],
+        )
+        return proposal
+
+    def _successor_lease(self, lease_id: str) -> dict[str, Any] | None:
+        """The newer usable lease of the same workflow, once this one ended."""
+
+        row = self._autonomy_row(lease_id)
+        if row["status"] in {"pending", "active", "paused"}:
+            return None
+        return self.db.one(
+            "SELECT * FROM autonomy_leases WHERE workflow_id = ? AND id != ? "
+            "AND created_at >= ? AND status IN ('pending', 'active', 'paused') "
+            "ORDER BY created_at DESC, rowid DESC LIMIT 1",
+            (row["workflow_id"], lease_id, row["created_at"]),
+        )
+
+    # -- Continue after a Recover with the simple card (operator 2026-10-20) ----
+
+    def _recovered_workflow(self) -> dict[str, Any] | None:
+        """The latest workflow when a Recover, not the operator, closed it."""
+
+        if self.db.one(
+            "SELECT id FROM workflows WHERE status IN ('active', 'paused') LIMIT 1"
+        ):
+            return None
+        row = self.db.one(
+            "SELECT * FROM workflows ORDER BY created_at DESC, rowid DESC LIMIT 1"
+        )
+        if (
+            row is None
+            or row.get("end_kind") != "recovery"
+            or self._operator_ended(str(row["id"]))
+        ):
+            return None
+        try:
+            active = set(self._active_qubit_names_from_state())
+        except ServiceError:
+            return None
+        if active != set(json_loads(row.get("targets_json"), [])):
+            # The operator changed active_qubit_names since: a new plan, so
+            # the full lease page, not a continuation.
+            return None
+        return row
+
+    def _operator_ended(self, workflow_id: str) -> bool:
+        """Whether the audit log shows that the operator ended this workflow.
+
+        A Dashboard full shutdown or a shutdown phrase is an operator end even
+        when a later Recover closed the workflow (a retained lock) or when it
+        happened before `end_kind` existed (2026-10-20: a shutdown at 06:22
+        was labelled `recovery` by a Recover at 07:31).
+        """
+
+        return (
+            self.db.one(
+                "SELECT 1 FROM events WHERE workflow_id = ? AND ("
+                "event_type = 'full_shutdown_requested' OR ("
+                "event_type IN ('workflow_stopped', 'workflow_quarantined') AND "
+                "json_extract(payload_json, '$.reason') LIKE "
+                "'Operator issued shutdown phrase%')) LIMIT 1",
+                (workflow_id,),
+            )
+            is not None
+        )
+
+    def _carry_over_lease_options(
+        self,
+        old_options: dict[str, Any],
+        offer: dict[str, Any],
+        qubit_plan: dict[str, str],
+    ) -> dict[str, Any]:
+        """The lease-page choices of an earlier workflow, for its successor."""
+
+        excluded = set(old_options.get("excluded_nodes") or [])
+        optional = [
+            str(item["node"])
+            for item in offer.get("optional_nodes", [])
+            if isinstance(item, dict) and str(item.get("node")) not in excluded
+        ]
+        if all(choice != "beginning" for choice in qubit_plan.values()):
+            optional = [node for node in optional if node != "02"]
+        return {
+            "optional_nodes": optional,
+            "drive_mode": old_options.get("drive_mode"),
+            "flux_calibration": bool(old_options.get("flux_calibration")),
+            "node_parameters": old_options.get("node_parameters") or {},
+            "qubit_plan": qubit_plan,
+        }
+
+    def _start_continuation_workflow(
+        self,
+        old: dict[str, Any],
+        client_id: str,
+        *,
+        duration_hours: float | None = None,
+    ) -> dict[str, Any]:
+        """A new workflow that picks up where a recovered one stood.
+
+        Like a Dashboard re-plan, it inherits the earlier results and starts
+        each qubit where it stood, with the old workflow's options. Its lease
+        proposal carries those choices, so the Approval page shows only the
+        hours, the judgement mode and the approval code. A plan with no qubit
+        left falls back to the full lease page.
+        """
+
+        phrase = self.settings.autonomy_mode_entry_phrase
+        targets = sorted(json_loads(old["targets_json"], []), key=_natural_qubit_key)
+        initial = json_loads(old.get("initial_parameters_json"), {}) or {}
+        new = self.start_workflow(
+            targets,
+            {"multiplexed": bool(initial.get("multiplexed", True))},
+            client_id,
+            phrase,
+        )
+        proposal = self.request_autonomy_lease(
+            new["id"],
+            client_id,
+            phrase,
+            f"Continue workflow {old['id']} after a recovery.",
+            duration_hours=duration_hours,
+        )
+        self.db.execute(
+            "UPDATE workflows SET end_kind = 'continued' WHERE id = ?", (old["id"],)
+        )
+        row = self.db.one("SELECT payload_json FROM proposals WHERE id = ?", (proposal["id"],))
+        payload = json_loads(row["payload_json"] if row else None, {})
+        offer = payload.get("workflow_options_offer") or {}
+        offered = (offer.get("qubit_plan") or {}).get("qubits") or {}
+        old_options = self._workflow_options(old)
+        old_plan = old_options.get("qubit_plan") or {}
+        plan = {
+            str(name): (
+                "skip"
+                if old_plan.get(name) == "skip"
+                else (choices[-1] if len(choices) > 2 else "beginning")
+            )
+            for name, choices in offered.items()
+        }
+        if not plan or all(choice == "skip" for choice in plan.values()):
+            return proposal
+        payload["continuation"] = {
+            "of_workflow_id": old["id"],
+            "current_node": old.get("current_node"),
+            "qubit_plan": plan,
+            "lease_options": self._carry_over_lease_options(old_options, offer, plan),
+        }
+        old_lease = self.db.one(
+            "SELECT auto_judgement FROM autonomy_leases WHERE workflow_id = ? "
+            "ORDER BY created_at DESC, rowid DESC LIMIT 1",
+            (old["id"],),
+        )
+        payload["auto_judgement_default"] = bool((old_lease or {}).get("auto_judgement"))
+        self.db.execute(
+            "UPDATE proposals SET payload_json = ? WHERE id = ?",
+            (json_dumps(payload), proposal["id"]),
+        )
+        self.db.event(
+            "autonomy_continuation_offered",
+            client_id,
+            {"old_workflow_id": old["id"], "proposal_id": proposal["id"], "qubit_plan": plan},
+            new["id"],
+        )
+        refreshed = self.proposal(proposal["id"])
+        refreshed["autonomy"] = proposal["autonomy"]
+        return refreshed
+
+    def _continuation_result(
+        self,
+        old: dict[str, Any],
+        client_id: str,
+        duration_hours: float | None = None,
+    ) -> dict[str, Any]:
+        self._reject_retained_hardware_lock()
+        proposal = self._start_continuation_workflow(
+            old, client_id, duration_hours=duration_hours
+        )
+        workflow = self._decode_workflow(self._workflow(proposal["workflow_id"]))
+        result = {
+            "workflow": workflow,
+            "mode": "autonomous",
+            "authorization": proposal["autonomy"],
+            "approval": proposal,
+            "next_action": "human_approval",
+            "continuation_of": old["id"],
+        }
+        return self._with_autonomy_dashboard(result, client_id)
+
+    def approve_continuation_from_browser(
+        self,
+        proposal_id: str,
+        confirmation: str,
+        csrf_token: str,
+        remote_host: str,
+        *,
+        actor: str | None = None,
+        approval_method: str = "local_browser",
+        authorization_choices: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Approve the simple continuation card with its stored choices."""
+
+        row = self.db.one("SELECT kind, payload_json FROM proposals WHERE id = ?", (proposal_id,))
+        continuation = json_loads(row["payload_json"] if row else None, {}).get("continuation")
+        if row is None or row["kind"] != "autonomy_lease" or not isinstance(continuation, dict):
+            raise ServiceError("This proposal is not a continuation after a recovery.")
+        return self.approve_from_browser(
+            proposal_id,
+            confirmation,
+            csrf_token,
+            remote_host,
+            actor=actor,
+            approval_method=approval_method,
+            lease_options=continuation["lease_options"],
+            authorization_choices=authorization_choices,
+        )
+
+    def expand_continuation_from_browser(
+        self, proposal_id: str, csrf_token: str, actor: str
+    ) -> None:
+        """Show the full lease page instead of the continuation card."""
+
+        if not hmac.compare_digest(csrf_token, self.approval_csrf_token(proposal_id)):
+            raise ServiceError("The browser approval token was invalid.")
+        row = self.db.one("SELECT * FROM proposals WHERE id = ?", (proposal_id,))
+        if row is None or row["status"] != "pending":
+            raise ServiceError("This approval is no longer pending.")
+        payload = json_loads(row["payload_json"], {})
+        if payload.pop("continuation", None) is None:
+            return
+        self.db.execute(
+            "UPDATE proposals SET payload_json = ? WHERE id = ?",
+            (json_dumps(payload), proposal_id),
+        )
+        self.db.event(
+            "autonomy_continuation_expanded", actor, {"proposal_id": proposal_id}, row["workflow_id"]
+        )
+
+    # -- Full-auto judgement (operator decision 2026-10-20) ----------------------
+
+    def _auto_judgement_settings(self) -> dict[str, Any]:
+        return dict(self.policy.raw["autonomy"].get("auto_judgement") or {})
+
+    def _auto_judgement_events(self, lease_id: str) -> list[dict[str, Any]]:
+        return [
+            json_loads(row["payload_json"], {})
+            for row in self.db.all(
+                "SELECT payload_json FROM events WHERE event_type = 'auto_judgement_applied' "
+                "AND json_extract(payload_json, '$.lease_id') = ? ORDER BY id",
+                (lease_id,),
+            )
+        ]
+
+    def auto_judgement_log(self, lease_id: str, limit: int = 20) -> list[dict[str, Any]]:
+        """What JY decided on the operator's behalf under this lease, newest first."""
+
+        rows = self.db.all(
+            "SELECT created_at, payload_json FROM events "
+            "WHERE event_type = 'auto_judgement_applied' "
+            "AND json_extract(payload_json, '$.lease_id') = ? ORDER BY id DESC LIMIT ?",
+            (lease_id, int(limit)),
+        )
+        return [
+            {"created_at": row["created_at"], **json_loads(row["payload_json"], {})}
+            for row in rows
+        ]
+
+    def _auto_judgement_budget_left(self, lease_id: str) -> bool:
+        limit = int(self._auto_judgement_settings().get("max_per_lease", 10))
+        return len(self._auto_judgement_events(lease_id)) < limit
+
+    def _mark_targets_incomplete_automatically(
+        self, lease_id: str, run: dict[str, Any], targets: list[str], reason: str
+    ) -> None:
+        self.db.event(
+            "autonomy_targets_scientifically_unmeasurable",
+            "auto_judgement",
+            {
+                "lease_id": lease_id,
+                "run_id": run["id"],
+                "node_id": run["node_id"],
+                "targets": sorted(targets),
+                "reason": reason,
+                "auto_judgement": True,
+            },
+            run["workflow_id"],
+        )
+
+    def _auto_handle_failed_run(
+        self, run: dict[str, Any], cause: str, detail: str, *, close_qm: bool = True
+    ) -> bool:
+        """Decide a failure that used to pause for a person, when the lease allows.
+
+        The same node/qubit is retried up to `max_per_node_qubit` times; after
+        that the targets are marked incomplete at this node so the workflow
+        moves on. Either way this chip's stale quantum machine is closed
+        before the next run. Returns False when the lease is not in full-auto
+        judgement mode or its budget is spent, so the caller pauses as before.
+        """
+
+        lease_id = run.get("autonomy_lease_id")
+        if not lease_id:
+            return False
+        lease = self._autonomy_row(str(lease_id))
+        if not int(lease.get("auto_judgement") or 0) or lease["status"] not in {
+            "active",
+            "paused",
+        }:
+            return False
+        events = self._auto_judgement_events(str(lease_id))
+        if any(event.get("run_id") == run["id"] for event in events):
+            return True
+        if self._hardware_lock_retained():
+            # A retry cannot start while the lock is retained (the start
+            # would be refused and the lease halted), so the operator decides,
+            # as without full-auto judgement (audit 2026-10-20).
+            return False
+        if not self._auto_judgement_budget_left(str(lease_id)):
+            return False
+        node_id = str(run["node_id"])
+        targets = sorted(
+            str(name) for name in json_loads(run.get("parameters_json"), {}).get("qubits", [])
+        )
+        per_target = int(self._auto_judgement_settings().get("max_per_node_qubit", 2))
+        retries = [
+            event
+            for event in events
+            if event.get("action") == "retry" and event.get("node_id") == node_id
+        ]
+        exhausted = sorted(
+            name
+            for name in targets
+            if sum(1 for event in retries if name in event.get("targets", [])) >= per_target
+        )
+        resolved = self._node_target_resolution(str(run["workflow_id"]), node_id)
+        exhausted = [name for name in exhausted if name not in resolved]
+        if exhausted:
+            action = "mark_incomplete"
+            self._mark_targets_incomplete_automatically(
+                str(lease_id),
+                run,
+                exhausted,
+                f"Full-auto judgement: {node_id} failed {per_target + 1} times "
+                f"({cause}); marked incomplete at this node.",
+            )
+        else:
+            action = "retry"
+        self.db.event(
+            "auto_judgement_applied",
+            "auto_judgement",
+            {
+                "lease_id": str(lease_id),
+                "run_id": run["id"],
+                "node_id": node_id,
+                "targets": targets,
+                "action": action,
+                "marked_incomplete": exhausted,
+                "cause": cause,
+                "detail": str(detail or "")[:500],
+            },
+            run["workflow_id"],
+        )
+        if close_qm:
+            self._schedule_qm_cleanup(str(run["workflow_id"]), f"{cause} of run {run['id']}")
+        return True
+
+    def _hardware_lock_retained(self) -> bool:
+        """The hardware lock exists although no run is active (kept for recovery)."""
+
+        return self.settings.lock_path.exists() and not self.db.one(
+            "SELECT id FROM runs WHERE status IN ('starting', 'running', 'stopping') LIMIT 1"
+        )
+
+    def _auto_pause_cause(
+        self, lease: dict[str, Any]
+    ) -> tuple[str, dict[str, Any]] | None:
+        """For a paused full-auto lease: the instrument pause JY may lift itself."""
+
+        if (
+            lease["status"] != "paused"
+            or not int(lease.get("auto_judgement") or 0)
+            or lease.get("stopped_reason") == self.REAUTHORIZE_REASON
+        ):
+            return None
+        resumed = self.db.one(
+            "SELECT MAX(id) AS id FROM events WHERE workflow_id = ? AND event_type IN "
+            "('measurement_mode_resumed', 'autonomy_resumed', 'autonomy_pause')",
+            (lease["workflow_id"],),
+        )
+        pause = self.db.one(
+            "SELECT * FROM events WHERE workflow_id = ? AND id > ? AND event_type IN "
+            "('measurement_paused_for_instrument_error', 'instrument_error_paused') "
+            "ORDER BY id DESC LIMIT 1",
+            (lease["workflow_id"], int((resumed or {}).get("id") or 0)),
+        )
+        if pause is None:
+            return None
+        run_id = json_loads(pause.get("payload_json"), {}).get("run_id")
+        run = self.db.one("SELECT * FROM runs WHERE id = ?", (run_id,)) if run_id else None
+        if run is None or run.get("autonomy_lease_id") != lease["id"]:
+            return None
+        if self._program_submission_timeout(run) is not None:
+            return "single_target_submission_timeout", run
+        return "instrument_outage", run
+
+    def _auto_resume_paused_lease(self, lease: dict[str, Any]) -> bool:
+        """Lift an instrument pause under full-auto judgement.
+
+        A target that timed out alone on submission is marked incomplete and
+        the lease resumes; an outage resumes once the QOP answers a probe
+        again (at most once per `instrument_probe_interval_seconds`). The
+        stale quantum machine is closed before resuming.
+        """
+
+        found = self._auto_pause_cause(lease)
+        if found is None or self._hardware_lock_retained():
+            return False
+        cause, run = found
+        if self.db.one(
+            "SELECT id FROM runs WHERE workflow_id = ? "
+            "AND status IN ('starting', 'running', 'stopping') LIMIT 1",
+            (lease["workflow_id"],),
+        ):
+            return False
+        if not self._auto_judgement_budget_left(str(lease["id"])):
+            return False
+        detail: dict[str, Any] = {}
+        if cause == "instrument_outage":
+            interval = float(
+                self._auto_judgement_settings().get("instrument_probe_interval_seconds", 60)
+            )
+            now = time.monotonic()
+            if now - self._auto_probe_at.get(str(lease["id"]), -math.inf) < interval:
+                return False
+            self._auto_probe_at[str(lease["id"])] = now
+            probe = self._instrument_probe(self.settings.wiring_path)
+            if not getattr(probe, "reachable", False):
+                return False
+            detail["instrument_probe"] = (
+                probe.as_dict() if hasattr(probe, "as_dict") else str(probe)
+            )
+        targets = sorted(
+            str(name) for name in json_loads(run.get("parameters_json"), {}).get("qubits", [])
+        )
+        if self._auto_judgement_settings().get("close_stale_qm", True):
+            try:
+                detail["qm_cleanup"] = self.close_stale_qm(
+                    "auto_judgement", f"{cause} of run {run['id']}"
+                )
+            except ServiceError as exc:
+                detail["qm_cleanup"] = {"ok": False, "error": str(exc)}
+        try:
+            self.resume_measurement_mode(
+                str(lease["workflow_id"]),
+                "auto_judgement",
+                self.settings.measurement_resume_phrases[0],
+            )
+        except ServiceError as exc:
+            self.db.event(
+                "auto_judgement_resume_refused",
+                "auto_judgement",
+                {"lease_id": lease["id"], "run_id": run["id"], "error": str(exc)},
+                lease["workflow_id"],
+            )
+            return False
+        marked: list[str] = []
+        if cause == "single_target_submission_timeout":
+            resolved = self._node_target_resolution(
+                str(run["workflow_id"]), str(run["node_id"])
+            )
+            marked = [name for name in targets if name not in resolved]
+            if marked:
+                self._mark_targets_incomplete_automatically(
+                    str(lease["id"]),
+                    run,
+                    marked,
+                    "Full-auto judgement: the program still timed out on submission "
+                    "with a single target; marked incomplete at this node.",
+                )
+        self.db.event(
+            "auto_judgement_applied",
+            "auto_judgement",
+            {
+                "lease_id": str(lease["id"]),
+                "run_id": run["id"],
+                "node_id": run["node_id"],
+                "targets": targets,
+                "action": (
+                    "mark_incomplete_and_resume"
+                    if cause == "single_target_submission_timeout"
+                    else "resume_after_outage"
+                ),
+                "marked_incomplete": marked,
+                "cause": cause,
+                **detail,
+            },
+            run["workflow_id"],
+        )
+        return True
+
+    def _schedule_auto_judgement(self) -> None:
+        """From the watchdog: lift eligible instrument pauses off-thread."""
+
+        candidates = self.db.all(
+            "SELECT * FROM autonomy_leases WHERE status = 'paused' AND auto_judgement = 1"
+        )
+        if not candidates:
+            return
+        with self._auto_judgement_lock:
+            if (
+                self._auto_judgement_thread is not None
+                and self._auto_judgement_thread.is_alive()
+            ):
+                return
+
+            def work() -> None:
+                for lease in candidates:
+                    try:
+                        self._auto_resume_paused_lease(self._autonomy_row(str(lease["id"])))
+                    except Exception as exc:  # pragma: no cover - logged, retried
+                        self.db.event(
+                            "auto_judgement_error",
+                            "auto_judgement",
+                            {"lease_id": lease["id"], "error": f"{type(exc).__name__}: {exc}"},
+                            lease["workflow_id"],
+                        )
+
+            self._auto_judgement_thread = threading.Thread(
+                target=work, name="jy-auto-judgement", daemon=True
+            )
+            self._auto_judgement_thread.start()
+
+    # -- Close this chip's stale quantum machine (operator request 2026-10-20) --
+
+    def close_stale_qm(
+        self, client_id: str, reason: str, *, dry_run: bool = False
+    ) -> dict[str, Any]:
+        """List the open quantum machines and close the one that is this chip's.
+
+        Only a machine whose every port belongs to the active state.json is
+        closed, after halting its running job; one that merely shares ports
+        is reported and left alone. Refused while a run is active or while
+        the hardware lock exists, because the run may still own that machine.
+        """
+
+        if not client_id.strip():
+            raise ServiceError("client_id is required for the audit log")
+        active = self.db.one(
+            "SELECT id FROM runs WHERE status IN ('starting', 'running', 'stopping') LIMIT 1"
+        )
+        if active is not None:
+            raise ServiceError(
+                f"Run {active['id']} is active and may own the quantum machine; "
+                "wait for it to end first"
+            )
+        if self.settings.lock_path.exists():
+            raise ServiceError(
+                "The JY hardware lock exists; recover it before closing quantum machines"
+            )
+        report = self._qm_cleanup_runner(dry_run)
+        self.db.event(
+            "stale_qm_cleanup",
+            client_id,
+            {"reason": reason, "dry_run": dry_run, "report": report},
+        )
+        return report
+
+    def _run_qm_cleanup_subprocess(self, dry_run: bool) -> dict[str, Any]:
+        return self._run_qm_cleanup_subprocess_for(
+            self.settings.active_state, self.settings.wiring_path, dry_run
+        )
+
+    def _run_qm_cleanup_subprocess_for(
+        self, state_path: Path, wiring_path: Path, dry_run: bool
+    ) -> dict[str, Any]:
+        timeout = float(
+            self._auto_judgement_settings().get("qm_cleanup_timeout_seconds", 120)
+        )
+        command = [
+            str(self.settings.qualibrate_python),
+            "-m",
+            "jy_agent.qm_cleanup",
+            "--state",
+            str(state_path),
+            "--wiring",
+            str(wiring_path),
+        ]
+        if dry_run:
+            command.append("--dry-run")
+        environment = os.environ.copy()
+        python_paths = [
+            str(self.settings.agent_root / "src"),
+            str(self.settings.superconducting_root),
+        ]
+        if environment.get("PYTHONPATH"):
+            python_paths.append(environment["PYTHONPATH"])
+        environment["PYTHONPATH"] = os.pathsep.join(python_paths)
+        creation_flags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+        try:
+            completed = subprocess.run(
+                command,
+                cwd=self.settings.superconducting_root,
+                env=environment,
+                capture_output=True,
+                timeout=timeout,
+                creationflags=creation_flags,
+            )
+        except subprocess.TimeoutExpired:
+            return {"ok": False, "error": f"Stale-QM cleanup timed out after {timeout:g} s"}
+        except OSError as exc:
+            return {"ok": False, "error": f"Could not start the stale-QM cleanup: {exc}"}
+        output = completed.stdout.decode("utf-8", "replace").strip().splitlines()
+        for line in reversed(output):
+            try:
+                report = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(report, dict):
+                return report
+        return {
+            "ok": False,
+            "error": completed.stderr.decode("utf-8", "replace")[-1000:]
+            or f"exit code {completed.returncode}",
+        }
+
+    def _schedule_qm_cleanup(self, workflow_id: str, reason: str) -> None:
+        """Close the stale machine off-thread; new runs wait until it is done."""
+
+        if not self._auto_judgement_settings().get("close_stale_qm", True):
+            return
+        if self._qm_cleanup_active.is_set():
+            return
+        self._qm_cleanup_active.set()
+
+        def work() -> None:
+            try:
+                deadline = time.monotonic() + 600
+                while time.monotonic() < deadline and self.db.one(
+                    "SELECT id FROM runs WHERE status IN "
+                    "('starting', 'running', 'stopping') LIMIT 1"
+                ):
+                    time.sleep(2)
+                self.close_stale_qm("auto_judgement", reason)
+            except Exception as exc:
+                self.db.event(
+                    "stale_qm_cleanup_failed",
+                    "auto_judgement",
+                    {"reason": reason, "error": f"{type(exc).__name__}: {exc}"},
+                    workflow_id,
+                )
+            finally:
+                self._qm_cleanup_active.clear()
+
+        threading.Thread(target=work, name="jy-stale-qm-cleanup", daemon=True).start()
+
+    # -- Retained-lock stale-QM cleanup and forced-stop auto release ------------
+    # Operator decision 2026-10-20: a worker terminated after the emergency-stop
+    # grace leaves this chip's quantum machine open on the (shared) QOP.  JY
+    # closes it for the run's own state.json/wiring.json, records a receipt
+    # that HardwareLockRecovery accepts as `forced_stop_checkpoint` evidence,
+    # and releases the lock itself when everything checks out.  Machines with
+    # no port on this chip belong to other users and are never touched.
+
+    def _retained_lock_run(self) -> tuple[dict[str, Any], Path, Path]:
+        """The terminal run that owns the retained lock and its chip files."""
+
+        try:
+            lock = json.loads(self.settings.lock_path.read_text(encoding="utf-8-sig"))
+        except (OSError, ValueError) as exc:
+            raise ServiceError(f"No readable hardware lock: {exc}") from exc
+        run_id = str(lock.get("run_id") or "") if isinstance(lock, dict) else ""
+        run = self.db.one("SELECT * FROM runs WHERE id = ?", (run_id,)) if run_id else None
+        if run is None:
+            raise ServiceError("The hardware lock names no recorded run")
+        if run["status"] in {"starting", "running", "stopping"}:
+            raise ServiceError(f"Run {run_id} is still active; wait for it to end")
+        active = self.db.one(
+            "SELECT id FROM runs WHERE status IN ('starting', 'running', 'stopping') LIMIT 1"
+        )
+        if active is not None:
+            raise ServiceError(f"Run {active['id']} is active; wait for it to end")
+        pid = run.get("pid")
+        if isinstance(pid, int) and self.runner.process_is_alive(pid):
+            raise ServiceError(f"The worker process {pid} of run {run_id} is still alive")
+        try:
+            request = json.loads(
+                (self.settings.runtime / "requests" / f"{run_id}.json").read_text(
+                    encoding="utf-8-sig"
+                )
+            )
+        except (OSError, ValueError):
+            request = {}
+        state_path = Path(str(request.get("active_state") or self.settings.active_state))
+        wiring_path = Path(str(request.get("wiring_path") or self.settings.wiring_path))
+        return run, state_path, wiring_path
+
+    def close_stale_qm_for_retained_lock(self, actor: str) -> dict[str, Any]:
+        """Close the retained-lock run's stale quantum machine and record a receipt.
+
+        Closes only a machine whose every port is this chip's; one that
+        shares ports is reported, and other users' machines are ignored.
+        """
+
+        from .recovery import HardwareLockRecovery
+
+        run, state_path, wiring_path = self._retained_lock_run()
+        self._qm_cleanup_active.set()
+        try:
+            try:
+                report = self._qm_cleanup_runner_for(state_path, wiring_path, False)
+            except Exception as exc:
+                report = {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+        finally:
+            self._qm_cleanup_active.clear()
+        receipt = HardwareLockRecovery(self.settings, self.db).record_qm_cleanup(
+            str(run["id"]),
+            report,
+            state_path=state_path,
+            wiring_path=wiring_path,
+            actor=actor,
+            dry_run=False,
+        )
+        return receipt
+
+    def release_lock_after_forced_stop(self, run_id: str, actor: str) -> dict[str, Any]:
+        """After a verified forced termination: clean up the QM, then release.
+
+        Never raises.  Releases the lock (archive + receipt, the operator
+        recovery's code path) only when the cleanup left no machine of ours
+        or overlapping ours and the state hashes are unchanged; otherwise the
+        lock stays and the operator console shows what is missing.
+        """
+
+        from .recovery import HardwareLockRecovery, HardwareLockRecoveryError
+
+        outcome: dict[str, Any] = {"run_id": run_id, "released": False}
+        try:
+            try:
+                lock = json.loads(self.settings.lock_path.read_text(encoding="utf-8-sig"))
+            except (OSError, ValueError):
+                lock = None
+            if not isinstance(lock, dict) or lock.get("run_id") != run_id:
+                outcome["reason"] = "The hardware lock is absent or owned by another run."
+                return outcome
+            run, state_path, wiring_path = self._retained_lock_run()
+            if not (
+                run.get("status") == "force_stopped"
+                or run.get("termination_cause") == "forced_after_grace"
+            ):
+                outcome["reason"] = "The lock-owning run was not force-stopped."
+                return outcome
+            receipt = self.close_stale_qm_for_retained_lock(actor)
+            outcome["qm_cleanup"] = {
+                "summary": receipt.get("summary"),
+                "problems": receipt.get("problems"),
+            }
+            before = str(run.get("active_state_hash_before") or "")
+            try:
+                current = sha256_file(state_path)
+            except OSError:
+                current = None
+            if before and current == before and not run.get("active_state_hash_after"):
+                self.db.execute(
+                    "UPDATE runs SET active_state_hash_after = ? WHERE id = ? "
+                    "AND active_state_hash_after IS NULL",
+                    (current, run_id),
+                )
+                outcome["active_state_hash_after_recorded"] = True
+            if receipt.get("problems"):
+                outcome["reason"] = "; ".join(receipt["problems"])
+            else:
+                result = HardwareLockRecovery(
+                    self.settings, self.db
+                ).release_after_forced_stop(run_id, actor=actor)
+                outcome.update(released=True, recovery=result)
+        except (ServiceError, HardwareLockRecoveryError) as exc:
+            outcome["reason"] = str(exc)
+        except Exception as exc:  # never break the shutdown path
+            outcome["reason"] = f"{type(exc).__name__}: {exc}"
+        owner = self.db.one("SELECT workflow_id FROM runs WHERE id = ?", (run_id,))
+        self.db.event(
+            "forced_stop_lock_released" if outcome["released"] else "forced_stop_lock_retained",
+            actor,
+            outcome,
+            owner.get("workflow_id") if owner else None,
+        )
+        return outcome
+
+    def _forced_stop_lock_owner(self) -> str | None:
+        """The retained lock's run id when that run was force-stopped and has exited."""
+
+        try:
+            lock = json.loads(self.settings.lock_path.read_text(encoding="utf-8-sig"))
+        except (OSError, ValueError):
+            return None
+        run_id = str(lock.get("run_id") or "") if isinstance(lock, dict) else ""
+        run = self.db.one("SELECT * FROM runs WHERE id = ?", (run_id,)) if run_id else None
+        if run is None or not (
+            run.get("status") == "force_stopped"
+            or run.get("termination_cause") == "forced_after_grace"
+        ):
+            return None
+        pid = run.get("pid")
+        if isinstance(pid, int) and self.runner.process_is_alive(pid):
+            return None
+        return run_id
+
+    def _forced_stop_release_state(self, run_id: str, actor: str) -> dict[str, Any] | None:
+        """Start (once) or report the background forced-stop release for a run.
+
+        Returns None while it runs, else its outcome.
+        """
+
+        with self._forced_release_lock:
+            if run_id in self._forced_release_results:
+                return self._forced_release_results[run_id]
+            thread = self._forced_release_threads.get(run_id)
+            if thread is not None and thread.is_alive():
+                return None
+
+            def work() -> None:
+                try:
+                    outcome = self.release_lock_after_forced_stop(run_id, actor)
+                except Exception as exc:  # pragma: no cover - defensive
+                    outcome = {
+                        "run_id": run_id,
+                        "released": False,
+                        "reason": f"{type(exc).__name__}: {exc}",
+                    }
+                with self._forced_release_lock:
+                    self._forced_release_results[run_id] = outcome
+
+            thread = threading.Thread(
+                target=work, name=f"jy-forced-release-{run_id[:8]}", daemon=True
+            )
+            self._forced_release_threads[run_id] = thread
+            thread.start()
+            return None
+
+    def _schedule_release_after_forced_stop(self, run_id: str, actor: str) -> None:
+        """For an autonomy emergency stop: wait for the worker to exit, then release."""
+
+        run = self.db.one("SELECT pid FROM runs WHERE id = ?", (run_id,))
+        pid = run.get("pid") if run else None
+
+        def work() -> None:
+            deadline = time.monotonic() + 60
+            while (
+                isinstance(pid, int)
+                and self.runner.process_is_alive(pid)
+                and time.monotonic() < deadline
+            ):
+                time.sleep(1)
+            if self._forced_stop_release_state(run_id, actor) is None:
+                thread = self._forced_release_threads.get(run_id)
+                if thread is not None:
+                    thread.join()
+
+        threading.Thread(
+            target=work, name=f"jy-forced-release-wait-{run_id[:8]}", daemon=True
+        ).start()
+
+    # -- Autopilot shadow mode (operator decision 2026-10-20) ---------------------
+
+    def _shadow_run_record(
+        self,
+        workflow_id: str,
+        lease_id: str,
+        node_id: str,
+        parameters: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        """What the deterministic planner would have started instead.
+
+        Computed before the run (the plan depends on the state before it);
+        the caller logs it once the run has really started.
+        """
+
+        try:
+            plan = self.next_action(workflow_id)
+        except Exception:
+            return None
+        predicted = plan.get("run") if plan.get("action") == "run" else None
+        notes = " ".join(str(note) for note in plan.get("notes") or [])
+        deterministic = predicted is not None and "No registered deterministic" not in notes
+        predicted_parameters = dict((predicted or {}).get("parameters") or {})
+        actual = dict(parameters or {})
+        same_node = predicted is not None and predicted.get("node_id") == node_id
+        return {
+            "stage": "run",
+            "lease_id": lease_id,
+            "node_id": node_id,
+            "predicted_action": plan.get("action"),
+            "predicted": predicted,
+            "actual": {"node_id": node_id, "parameters": actual},
+            "deterministic": deterministic,
+            "match_node": same_node,
+            "match_qubits": same_node
+            and sorted(map(str, predicted_parameters.get("qubits", [])))
+            == sorted(map(str, actual.get("qubits", []))),
+            "match_parameters": same_node
+            and _canonical_json(predicted_parameters) == _canonical_json(actual),
+        }
+
+    def _shadow_predicted_decision(
+        self, workflow: dict[str, Any], run: dict[str, Any]
+    ) -> str | None:
+        """advance when every active target is resolved or incomplete, else repeat."""
+
+        node_id = str(run["node_id"])
+        if node_id != str(workflow["current_node"]) or not run.get("autonomy_lease_id"):
+            return None
+        active = self._active_targets_for_node(workflow, node_id)
+        resolved = self._node_target_resolution(str(workflow["id"]), node_id) & active
+        incomplete = self._autonomy_incomplete_targets_for_node(str(workflow["id"]), node_id)
+        unresolved = active - resolved - incomplete
+        if self._node_is_single_pass(node_id):
+            unresolved -= self._single_pass_measured_targets(workflow, node_id)
+        return "advance" if not unresolved else "repeat"
+
+    def autopilot_shadow_report(
+        self, workflow_id: str | None = None, limit: int = 2000
+    ) -> dict[str, Any]:
+        """How often the deterministic planner agreed with the agent, and the gaps.
+
+        Shadow mode is the first step of the server-side pipeline: the planner
+        acts on nothing, it only records what it would have done next to what
+        the agent did. The match rate per node says which nodes can safely be
+        run without the agent; the gap statistics are the time it would save.
+        """
+
+        where = "event_type = 'autopilot_shadow'"
+        params: list[Any] = []
+        if workflow_id:
+            where += " AND workflow_id = ?"
+            params.append(workflow_id)
+        rows = self.db.all(
+            f"SELECT payload_json FROM events WHERE {where} ORDER BY id DESC LIMIT ?",
+            (*params, int(limit)),
+        )
+        by_stage: dict[str, dict[str, Any]] = {}
+        mismatches: list[dict[str, Any]] = []
+        for row in rows:
+            payload = json_loads(row["payload_json"], {})
+            stage = str(payload.get("stage"))
+            node = str(payload.get("node_id"))
+            summary = by_stage.setdefault(stage, {"total": 0, "matched": 0, "by_node": {}})
+            per_node = summary["by_node"].setdefault(node, {"total": 0, "matched": 0})
+            if stage == "run":
+                matched = bool(payload.get("match_parameters"))
+                summary.setdefault("deterministic", 0)
+                per_node.setdefault("deterministic", 0)
+                if payload.get("deterministic"):
+                    summary["deterministic"] += 1
+                    per_node["deterministic"] += 1
+            else:
+                matched = bool(payload.get("match"))
+            summary["total"] += 1
+            per_node["total"] += 1
+            if matched:
+                summary["matched"] += 1
+                per_node["matched"] += 1
+            elif len(mismatches) < 20:
+                mismatches.append(payload)
+        run_where = "autonomy_lease_id IS NOT NULL AND started_at IS NOT NULL"
+        run_params: list[Any] = []
+        if workflow_id:
+            run_where += " AND workflow_id = ?"
+            run_params.append(workflow_id)
+        runs = self.db.all(
+            "SELECT autonomy_lease_id, started_at, finished_at FROM runs "
+            f"WHERE {run_where} ORDER BY started_at",
+            tuple(run_params),
+        )
+        busy: list[float] = []
+        gaps: list[float] = []
+        for first, second in zip(runs, runs[1:]):
+            if (
+                first["autonomy_lease_id"] != second["autonomy_lease_id"]
+                or not first["finished_at"]
+            ):
+                continue
+            start = datetime.fromisoformat(str(first["started_at"]))
+            end = datetime.fromisoformat(str(first["finished_at"]))
+            following = datetime.fromisoformat(str(second["started_at"]))
+            gap = (following - end).total_seconds()
+            if gap < 0 or gap > 3600:
+                continue  # a pause, an expiry or a night, not scheduling time
+            busy.append((end - start).total_seconds())
+            gaps.append(gap)
+        timing: dict[str, Any] = {"pairs": len(gaps)}
+        if gaps:
+            timing.update(
+                instrument_share=round(sum(busy) / (sum(busy) + sum(gaps)), 3),
+                gap_median_s=round(statistics.median(gaps), 1),
+                gap_mean_s=round(statistics.mean(gaps), 1),
+                run_median_s=round(statistics.median(busy), 1),
+            )
+        return {
+            "workflow_id": workflow_id,
+            "stages": by_stage,
+            "recent_mismatches": mismatches,
+            "timing": timing,
+        }
 
     def _active_qubit_names_from_state(self) -> list[str]:
         state = load_state(self.settings.active_state)
@@ -1126,14 +2678,29 @@ class AgentService:
         after_event_id: int = 0,
         timeout_seconds: float = 45.0,
     ) -> dict[str, Any]:
-        """Wait briefly for approval, a result/control event, or terminal lease state."""
+        """Wait briefly for approval, a result/control event, or terminal lease state.
+
+        A lease ended by a Home re-authorization (operator decision
+        2026-10-20) is followed to its successor; `superseded_lease_id` then
+        names the old one and `authorization` is the new lease to use.
+        """
         timeout = max(0.0, min(float(timeout_seconds), 55.0))
         cursor = max(0, int(after_event_id))
         deadline = time.monotonic() + timeout
+        superseded: str | None = None
+        successor = self._successor_lease(lease_id)
+        if successor is not None:
+            superseded, lease_id = lease_id, str(successor["id"])
         initial_status = self.autonomy_status(lease_id=lease_id)["status"]
         while True:
             status = self.autonomy_status(lease_id=lease_id)
             events = self.autonomy_ui_events_after(lease_id, cursor)
+            if status["status"] not in {"pending", "active", "paused"}:
+                successor = self._successor_lease(lease_id)
+                if successor is not None:
+                    superseded = lease_id
+                    lease_id = str(successor["id"])
+                    status = self.autonomy_status(lease_id=lease_id)
             if (
                 events["events"]
                 or status["status"] != initial_status
@@ -1145,6 +2712,7 @@ class AgentService:
                         "authorization": status,
                         "cursor": events["cursor"],
                         "events": events["events"],
+                        **({"superseded_lease_id": superseded} if superseded else {}),
                     }
                 )
             remaining = deadline - time.monotonic()
@@ -1155,16 +2723,24 @@ class AgentService:
                         "authorization": status,
                         "cursor": events["cursor"],
                         "events": [],
+                        **({"superseded_lease_id": superseded} if superseded else {}),
                     }
                 )
             time.sleep(min(0.25, remaining))
 
     def _with_wait_operator_handoff(self, result: dict[str, Any]) -> dict[str, Any]:
-        status = str((result.get("authorization") or {}).get("status") or "")
-        if status == "pending":
+        authorization = result.get("authorization") or {}
+        status = str(authorization.get("status") or "")
+        if status == "pending" or (
+            status == "paused"
+            and authorization.get("stopped_reason") == self.REAUTHORIZE_REASON
+        ):
+            # A Home re-authorization waits for the Approval page, not a phrase.
             result["operator_handoff"] = approval_operator_handoff()
         elif status == "paused":
             result["operator_handoff"] = resume_autonomy_operator_handoff()
+        elif status == "expired":
+            result["operator_handoff"] = expired_lease_operator_handoff()
         return result
 
     def mark_scientifically_unmeasurable(
@@ -1284,6 +2860,7 @@ class AgentService:
             *self.settings.autonomy_mode_entry_phrases,
             *self.settings.measurement_resume_phrases,
             *AUTONOMY_RESUME_PHRASES,
+            *self.settings.autonomy_continue_phrases,
         }:
             raise ServiceError(
                 "Resuming autonomy requires an exact resume or "
@@ -1354,6 +2931,8 @@ class AgentService:
             *self.settings.measurement_resume_phrases,
             *self.settings.measurement_mode_entry_phrases,
             *self.settings.autonomy_mode_entry_phrases,
+            *self.settings.autonomy_continue_phrases,
+            *AUTONOMY_RESUME_PHRASES,
         }:
             raise ServiceError(
                 "Resuming requires an exact measurement-resume or mode-entry phrase"
@@ -1515,16 +3094,25 @@ class AgentService:
     ) -> dict[str, Any]:
         """Return to 07d after the readout-selection or 07b blob rule changed.
 
-        Operator instruction 2026-10-02. Allowed only from 07b or 06, with no
-        run active and no active or paused autonomy lease, so a new lease is
-        approved for the repeated readout nodes. 07d and 07b runs from before
-        the reopen no longer count toward single pass or target resolution.
+        Operator instruction 2026-10-02. Allowed from any node after 07d in the
+        workflow sequence (2026-10-20: q7 at 10a after the 07d scoring change;
+        was 07b or 06 only), with no run active and no active or paused
+        autonomy lease, so a new lease is approved for the repeated readout
+        nodes. 07d and 07b runs from before the reopen no longer count toward
+        single pass or target resolution.
         """
         if not client_id.strip() or not reason.strip():
             raise ServiceError("07d reopening requires actor and reason")
         workflow = self._workflow(workflow_id)
-        if workflow["status"] != "active" or workflow["current_node"] not in {"07b", "06"}:
-            raise ServiceError("07d may be reopened only from 07b or 06")
+        sequence = self._workflow_sequence(workflow)
+        current = workflow["current_node"]
+        after_07d = (
+            "07d" in sequence
+            and current in sequence
+            and sequence.index(current) > sequence.index("07d")
+        )
+        if workflow["status"] != "active" or not (after_07d or current in {"07b", "06"}):
+            raise ServiceError("07d may be reopened only from a node after 07d")
         active_run = self.db.one(
             "SELECT id FROM runs WHERE workflow_id = ? "
             "AND status IN ('starting', 'running', 'stopping') LIMIT 1",
@@ -1562,7 +3150,14 @@ class AgentService:
         workflow_id: str,
         client_id: str,
         reason: str,
+        *,
+        end_kind: str = "operator",
     ) -> dict[str, Any]:
+        """End a workflow; `end_kind` says who ended it (operator 2026-10-20).
+
+        Only a workflow a Recover closed (`recovery`) is continued with the
+        simple approval card; every other end brings back the full lease page.
+        """
         if not client_id.strip():
             raise ServiceError("client_id is required for the audit log")
         if not reason.strip():
@@ -1587,10 +3182,10 @@ class AgentService:
         final_status = "recovery_required" if recovery_required else "stopped"
         self.db.execute(
             """
-            UPDATE workflows SET status = ?, updated_at = ?
+            UPDATE workflows SET status = ?, updated_at = ?, end_kind = ?
             WHERE id = ?
             """,
-            (final_status, utc_now(), workflow_id),
+            (final_status, utc_now(), end_kind, workflow_id),
         )
         self.db.execute(
             "UPDATE autonomy_leases SET status = 'revoked', stopped_reason = ?, "
@@ -1618,6 +3213,7 @@ class AgentService:
             },
             workflow_id,
         )
+        self._refresh_history_site(workflow_id, wait=True)
         return self._decode_workflow(self._workflow(workflow_id))
 
     def prepare_recovery_close(self, actor: str) -> dict[str, Any]:
@@ -1709,12 +3305,20 @@ class AgentService:
             "SELECT id FROM workflows WHERE status IN "
             "('active','paused','recovery_required')"
         )
+        end_kinds = {
+            str(workflow["id"]): (
+                "operator" if self._operator_ended(str(workflow["id"])) else "recovery"
+            )
+            for workflow in workflows
+        }
         with self.db.transaction(immediate=True) as connection:
             for workflow in workflows:
                 workflow_id = str(workflow["id"])
                 connection.execute(
-                    "UPDATE workflows SET status = ?, updated_at = ? WHERE id = ?",
-                    (final_status, now, workflow_id),
+                    # An operator shutdown that left a lock stays an operator end.
+                    "UPDATE workflows SET status = ?, updated_at = ?, "
+                    "end_kind = COALESCE(end_kind, ?) WHERE id = ?",
+                    (final_status, now, end_kinds[workflow_id], workflow_id),
                 )
                 connection.execute(
                     "UPDATE measurement_sessions SET status = ?, updated_at = ? "
@@ -1749,6 +3353,8 @@ class AgentService:
                     workflow_id,
                     connection=connection,
                 )
+        for workflow in workflows:
+            self._refresh_history_site(str(workflow["id"]), wait=True)
         return {
             "status": "recovery_required" if recovery_required else "ready",
             "reason": (
@@ -1805,12 +3411,22 @@ class AgentService:
         # 2026-10-14 (q3 05 -> 06): requesting the pass's next node on a
         # finished node is the advance; check it before the active-reset
         # verification path, which also matches 05/06/06b.
+        # Operator request 2026-10-19 (q1 05st): a statistics node already run
+        # with active reset may be repeated once with thermal reset to compare.
+        # Checked first, since its node is finished and would otherwise count
+        # as an advance.
+        reset_comparison = (
+            not conversational
+            and node_id != workflow["current_node"]
+            and self._is_thermal_reset_comparison(workflow, node_id, parameters)
+        )
         advances_completed_node = (
             not conversational
+            and not reset_comparison
             and node_id != workflow["current_node"]
             and self._node_is_finished_and_fully_decided(workflow, node_id)
         )
-        prerequisite_verification = (
+        prerequisite_verification = reset_comparison or (
             not conversational
             and not advances_completed_node
             and node_id != workflow["current_node"]
@@ -1900,11 +3516,27 @@ class AgentService:
                     f"{node_id}: {exc}",
                 )
             raise
-        if prerequisite_verification and not _is_active_reset(merged):
+        if reset_comparison and _is_active_reset(merged):
+            raise AutonomyScopeError("A reset comparison run must use thermal reset")
+        if (
+            prerequisite_verification
+            and not reset_comparison
+            and not _is_active_reset(merged)
+        ):
             raise ServiceError(
                 "An off-sequence 05/06/06b verification run is allowed only "
                 "for active-reset revalidation after 07b qualification"
             )
+        if prerequisite_verification and self._is_late_active_07b(workflow, node_id):
+            earned = (self._active_reset_repeat_targets(workflow) or set()) - (
+                self._active_reset_repeated_targets(workflow)
+            )
+            if not set(merged["qubits"]) or not set(merged["qubits"]) <= earned:
+                raise AutonomyScopeError(
+                    "A late active-reset 07b run is only for qubits whose thermal 07b "
+                    "earned the repeat and that have not had it yet: "
+                    f"{sorted(earned)}"
+                )
         requested_targets = set(merged["qubits"])
         try:
             if conversational:
@@ -2042,6 +3674,7 @@ class AgentService:
             "warnings": warnings,
             "conversational": conversational,
             "prerequisite_verification": prerequisite_verification,
+            "reset_comparison": reset_comparison,
         }
         payload["duration_prediction"] = self.run_telemetry(
             node_id, list(merged["qubits"]), limit=100
@@ -2097,6 +3730,14 @@ class AgentService:
         client_id: str,
     ) -> dict[str, Any]:
         """Validate, delegate, and launch one run under a human-approved lease."""
+        if self._qm_cleanup_active.is_set():
+            # Full-auto judgement is closing this chip's stale quantum
+            # machine; a run opened now could be the one it closes.
+            raise AutonomyScopeError(
+                "JY is closing this chip's stale quantum machine before the retry; "
+                "new actions are blocked for about a minute. Wait and call again."
+            )
+        shadow = self._shadow_run_record(workflow_id, lease_id, node_id, parameters)
         try:
             proposal = self.request_run(
                 workflow_id,
@@ -2108,6 +3749,10 @@ class AgentService:
                 autonomy_lease_id=lease_id,
             )
             result = self.execute_run(proposal["id"], client_id)
+            if shadow is not None:
+                # Only runs that really started count in the shadow report.
+                shadow["run_id"] = result.get("run_id") or result.get("id")
+                self.db.event("autopilot_shadow", "autopilot_shadow", shadow, workflow_id)
             return {**result, "proposal_id": proposal["id"], "lease_id": lease_id}
         except AutonomyQuotaError:
             # Exhausting one node/qubit budget marks only that target incomplete.
@@ -2242,7 +3887,9 @@ class AgentService:
             }
         result = self.analyzer.analyze_run(run)
         if run["node_id"] == "03a":
+            result = self._03a_upper_check_result(run, result)
             result = self._require_reproduced_03a_line(run, result)
+            result = self._require_03a_upper_check(run, result)
         if run["node_id"] == "06":
             result = self._06_calibration_run_result(run, result)
         self.db.execute(
@@ -2261,6 +3908,7 @@ class AgentService:
             # Operator request 2026-10-13: the static chip history follows
             # every success, so it is current even after shutdown.
             self._refresh_static_chip_history(str(run["workflow_id"]))
+        self._refresh_history_site(str(run["workflow_id"]))
         return result
 
     # -- 06 frequency calibration before T2*, operator instruction 2026-10-15 --
@@ -2278,7 +3926,7 @@ class AgentService:
         """
 
         rules = self._06_rules()
-        calibration = int(rules.get("frequency_calibration_max_wait_ns", 1016))
+        calibration = int(rules.get("frequency_calibration_max_wait_ns", 816))
         prior = [
             row
             for row in self._qubit_runs(workflow_id, "06", qubit)
@@ -2314,7 +3962,10 @@ class AgentService:
             ladder = [int(value) for value in rules.get("max_wait_ladder_ns", [calibration])]
             longest = max(windows) if windows else calibration
             if estimate is not None:
-                step = 500
+                # The policy grid: 16 + 400n ns (operator 2026-10-20).
+                step = int(
+                    self.policy.node_definition("06").get("max_wait_time_step_in_ns") or 400
+                )
                 wanted = float(rules.get("target_lifetimes", 4.0)) * estimate * 1e9
                 window = 16 + step * max(1, math.ceil(wanted / step))
                 if window <= longest:
@@ -2502,6 +4153,467 @@ class AgentService:
             result["analysis_status"] = "needs_review"
         return result
 
+    # -- 03a upward check for f02/2, operator instruction 2026-10-19 ---------
+
+    def _03a_upper_check_rules(self) -> dict[str, float]:
+        rules = self.policy.raw["analysis"]["03a"]
+        return {
+            "span_hz": 1e6 * float(rules.get("upper_check_span_mhz", 300.0)),
+            "offset_hz": 1e6 * float(rules.get("upper_check_offset_mhz", 150.0)),
+            "step_mhz": float(rules.get("upper_check_step_mhz", 1.0)),
+            "num_averages": int(rules.get("upper_check_num_averages", 2000)),
+            "min_sep_hz": 1e6 * float(rules.get("upper_check_min_separation_mhz", 50.0)),
+            "max_sep_hz": 1e6 * float(rules.get("upper_check_max_separation_mhz", 300.0)),
+            "alpha_min_hz": 1e6 * float(rules.get("upper_check_alpha_min_mhz", 150.0)),
+            "alpha_max_hz": 1e6 * float(rules.get("upper_check_alpha_max_mhz", 300.0)),
+            "max_order": int(rules.get("upper_check_max_photon_order", 4)),
+            "ladder_min_snr": float(rules.get("upper_check_ladder_min_snr", 3.0)),
+            "ladder_tolerance_hz": 1e6
+            * float(rules.get("upper_check_ladder_tolerance_mhz", 10.0)),
+            "tolerance_hz": 1e6 * float(rules.get("reproduce_tolerance_mhz", 5.0)),
+            "min_snr": float(rules["min_robust_snr"]),
+            "min_edge": float(rules["min_edge_fraction"]),
+        }
+
+    def _is_03a_upper_check_run(self, parameters: dict[str, Any]) -> bool:
+        """An upward check is the 03a run swept over exactly the check span."""
+
+        span = parameters.get("frequency_span_in_mhz")
+        return _finite_number(span) and math.isclose(
+            1e6 * float(span), self._03a_upper_check_rules()["span_hz"], abs_tol=1.0
+        )
+
+    def _03a_upper_check_history(
+        self, workflow_id: str, qubit: str, *, before_rowid: int | None = None
+    ) -> dict[str, Any]:
+        """Where a qubit stands in its 03a upward check.
+
+        Walks the qubit's 03a runs (after its latest 04 -> 03a return) in
+        order. A fine run marked `upper_check_pending` opens a check on its
+        line; the next upward-check run closes it with an outcome. Returns
+        `pending_reference_hz` (a fine line still waiting for its check) and
+        `outcome` (the latest closed check: reference, upper line or None).
+        """
+
+        pending: float | None = None
+        outcome: dict[str, Any] | None = None
+        outcomes: list[dict[str, Any]] = []
+        for row in self._qubit_runs(workflow_id, "03a", qubit):
+            if before_rowid is not None and int(row.get("run_rowid") or 0) >= before_rowid:
+                break
+            analysis = json_loads(row.get("analysis_json"), {})
+            fit = analysis.get("fit_quality", {}).get("results", {}).get(qubit, {})
+            if not isinstance(fit, dict):
+                continue
+            check = fit.get("upper_check")
+            if analysis.get("03a_stage") == "upper_check" and isinstance(check, dict):
+                outcome = check
+                outcomes.append(check)
+                pending = None
+            elif fit.get("upper_check_pending") and _finite_number(fit.get("drive_freq")):
+                pending = float(fit["drive_freq"])
+        return {"pending_reference_hz": pending, "outcome": outcome, "outcomes": outcomes}
+
+    def _03a_upper_check_pending(self, workflow_id: str) -> dict[str, float]:
+        """Qubits whose fine line waits for its upward check, with that line."""
+
+        workflow = self._workflow(workflow_id)
+        found: dict[str, float] = {}
+        for qubit in sorted(set(json_loads(workflow["targets_json"], []))):
+            reference = self._03a_upper_check_history(workflow_id, qubit)[
+                "pending_reference_hz"
+            ]
+            if reference is not None:
+                found[qubit] = reference
+        return found
+
+    def _03a_upper_check_result(
+        self, run: dict[str, Any], result: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Judge an upward-check run: is the reference line f01 or f02/2?
+
+        Operator instruction 2026-10-19. The check run sweeps the check span
+        with the reference line near its lower edge. A credible peak (03a SNR
+        floor, edge fraction) `upper_check_min/max_separation_mhz` above the
+        reference means the reference was f02/2: that peak becomes the run's
+        candidate (so centring, refinement and the fine scan follow it).
+        Otherwise the reference stands as f01 and this run is no candidate.
+        """
+
+        parameters = json_loads(run.get("parameters_json"), {})
+        if not self._is_03a_upper_check_run(parameters):
+            return result
+        rules = self._03a_upper_check_rules()
+        results = result.get("fit_quality", {}).get("results", {})
+        metrics_by_qubit = result.get("dataset_metrics", {}).get("qubits", {})
+        if not isinstance(results, dict) or not isinstance(metrics_by_qubit, dict):
+            return result
+        result = dict(result)
+        judged = False
+        rowid = self._run_rowid(str(run["id"]))
+        for name in [str(n) for n in parameters.get("qubits", [])]:
+            reference = self._03a_upper_check_history(
+                str(run["workflow_id"]), name, before_rowid=rowid
+            )["pending_reference_hz"]
+            fit = results.get(name)
+            metrics = metrics_by_qubit.get(name)
+            if reference is None or not isinstance(fit, dict) or not isinstance(metrics, dict):
+                continue
+            judged = True
+            coordinate = metrics.get("feature_coordinate")
+            center = (
+                float(fit["drive_freq"]) - float(coordinate)
+                if _finite_number(fit.get("drive_freq")) and _finite_number(coordinate)
+                else None
+            )
+            upper = None
+            if center is not None:
+                for candidate in metrics.get("peak_candidates") or []:
+                    if not isinstance(candidate, dict) or not _finite_number(
+                        candidate.get("coordinate_hz")
+                    ):
+                        continue
+                    separation = center + float(candidate["coordinate_hz"]) - reference
+                    if not rules["min_sep_hz"] <= separation <= rules["max_sep_hz"]:
+                        continue
+                    if not (
+                        _finite_number(candidate.get("robust_snr"))
+                        and float(candidate["robust_snr"]) >= rules["min_snr"]
+                        and _finite_number(candidate.get("edge_fraction"))
+                        and float(candidate["edge_fraction"]) >= rules["min_edge"]
+                    ):
+                        continue
+                    # Operator choice 2026-10-19: the highest credible line
+                    # is the f01 candidate, even with an f02/2 between.
+                    if upper is None or float(candidate["coordinate_hz"]) > float(
+                        upper["coordinate_hz"]
+                    ):
+                        upper = candidate
+            reasons = result.setdefault("failure_reasons_by_target", {})
+            failures = [
+                item
+                for item in result.get("failure_reasons") or []
+                if item not in reasons.get(name, [])
+            ]
+            if upper is not None:
+                line = center + float(upper["coordinate_hz"])
+                separation = line - reference
+                order, alpha = _03a_ladder_order(
+                    reference,
+                    line,
+                    [
+                        center + float(item["coordinate_hz"])
+                        for item in metrics.get("peak_candidates") or []
+                        if isinstance(item, dict)
+                        and _finite_number(item.get("coordinate_hz"))
+                        and _finite_number(item.get("robust_snr"))
+                        and float(item["robust_snr"]) >= rules["ladder_min_snr"]
+                    ],
+                    rules,
+                )
+                fit["protected_node_drive_freq"] = fit.get("drive_freq")
+                fit["drive_freq"] = line
+                fit["fit_successful"] = True
+                fit["upper_check"] = {
+                    "reference_hz": reference,
+                    "upper_line_hz": line,
+                    "separation_hz": separation,
+                    "photon_order": order,
+                    "anharmonicity_hz": alpha,
+                    "outcome": {2: "reference_is_f02_half", 3: "reference_is_f03_third"}.get(
+                        order, "reference_is_multiphoton"
+                    ),
+                }
+                metrics["original_feature_coordinate"] = coordinate
+                metrics["feature_coordinate"] = upper["coordinate_hz"]
+                metrics["feature_fwhm_hz"] = upper.get("fwhm_hz")
+                metrics["robust_snr"] = upper.get("robust_snr")
+                metrics["edge_fraction"] = upper.get("edge_fraction")
+                metrics["dynamic_range"] = upper.get("prominence")
+                metrics["feature_selection"] = "upper_check_f01"
+                reasons.pop(name, None)
+                if name not in (result.get("passing_targets") or []):
+                    result["passing_targets"] = sorted(
+                        [*(result.get("passing_targets") or []), name]
+                    )
+                ladder = (
+                    f"that line was f0{order}/{order} (anharmonicity "
+                    f"{alpha / 1e6:.4g} MHz)"
+                    if order is not None
+                    else "that line was a multi-photon line (ladder order "
+                    "ambiguous, no anharmonicity)"
+                )
+                result.setdefault("warnings", []).append(
+                    f"{name} upward check: the highest credible line, "
+                    f"{line / 1e9:.6g} GHz, lies {separation / 1e6:.4g} MHz above "
+                    f"{reference / 1e9:.6g} GHz, so {ladder}. The upper line is the "
+                    "f01 candidate; centre it and run the refinement and low-power "
+                    "fine scans, then its own upward check."
+                )
+            else:
+                fit["fit_successful"] = False
+                fit["upper_check"] = {
+                    "reference_hz": reference,
+                    "upper_line_hz": None,
+                    "outcome": "reference_is_f01",
+                }
+                reasons.pop(name, None)
+                result["passing_targets"] = [
+                    n for n in result.get("passing_targets") or [] if n != name
+                ]
+                result.setdefault("warnings", []).append(
+                    f"{name} upward check: no credible line "
+                    f"{rules['min_sep_hz'] / 1e6:g}-{rules['max_sep_hz'] / 1e6:g} MHz "
+                    f"above {reference / 1e9:.6g} GHz, so that line is f01 (no "
+                    "anharmonicity recorded). Centre it again and repeat its fine scan "
+                    "to commit."
+                )
+            result["failure_reasons"] = failures
+        if judged:
+            result["03a_stage"] = "upper_check"
+            result["analysis_status"] = (
+                "pass" if not result.get("failure_reasons") else "needs_review"
+            )
+        return result
+
+    def _run_rowid(self, run_id: str) -> int:
+        row = self.db.one("SELECT rowid AS run_rowid FROM runs WHERE id = ?", (run_id,))
+        return int(row["run_rowid"]) if row else 0
+
+    def _require_03a_upper_check(
+        self, run: dict[str, Any], result: dict[str, Any]
+    ) -> dict[str, Any]:
+        """A fine 03a line commits only after its upward check.
+
+        Operator instruction 2026-10-19. Without a closed check on this line
+        the fine evidence is held (`upper_check_pending`) until the check
+        runs. A check that found nothing confirms the line as f01. A check
+        that found an upper line accepts only that upper line, and its commit
+        adds the anharmonicity (2 x separation) to `anharmonicity` and
+        `extras.anharmonicity`; the f02/2 reference itself never commits.
+        """
+
+        if result.get("03a_stage") != "fine":
+            return result
+        rules = self._03a_upper_check_rules()
+        results = result.get("fit_quality", {}).get("results", {})
+        metrics_by_qubit = result.get("dataset_metrics", {}).get("qubits", {})
+        held: dict[str, str] = {}
+        anharmonicity: dict[str, float] = {}
+        for name in list(result.get("passing_targets") or []):
+            fit = results.get(name, {}) if isinstance(results, dict) else {}
+            metrics = metrics_by_qubit.get(name, {}) if isinstance(metrics_by_qubit, dict) else {}
+            line = fit.get("drive_freq") if isinstance(fit, dict) else None
+            if not _finite_number(line):
+                continue
+            width = metrics.get("feature_fwhm_hz") if isinstance(metrics, dict) else None
+            window = max(rules["tolerance_hz"], float(width) if _finite_number(width) else 0.0)
+            history = self._03a_upper_check_history(
+                str(run["workflow_id"]), str(name), before_rowid=self._run_rowid(str(run["id"]))
+            )
+            outcome = history["outcome"]
+            reference = (outcome or {}).get("reference_hz")
+            upper = (outcome or {}).get("upper_line_hz")
+            if (
+                not _finite_number(upper)
+                and _finite_number(reference)
+                and abs(float(line) - float(reference)) <= window
+            ):
+                # Confirmed f01. Operator choice 2026-10-19: the anharmonicity
+                # comes from the earlier check that found this line above a
+                # multi-photon line, recomputed from the fine positions.
+                value = _03a_ladder_anharmonicity(
+                    float(line), history["outcomes"][:-1], window, rules
+                )
+                if value is not None:
+                    anharmonicity[str(name)] = value
+                continue
+            if _finite_number(upper) and _finite_number(reference) and abs(
+                float(line) - float(reference)
+            ) <= window:
+                fit["fit_successful"] = False
+                held[str(name)] = (
+                    f"{name} line {float(line) / 1e9:.6g} GHz is a multi-photon "
+                    "line (f02/2 or below): the upward "
+                    f"check found f01 at {float(upper) / 1e9:.6g} GHz. Centre and "
+                    "fine-scan that line instead."
+                )
+                continue
+            fit["fit_successful"] = False
+            fit["upper_check_pending"] = True
+            held[str(name)] = (
+                f"{name} fine line {float(line) / 1e9:.6g} GHz waits for its upward "
+                "check (operator 2026-10-19): centre the drive "
+                f"{rules['offset_hz'] / 1e6:g} MHz above it with "
+                "jy_request_03a_upper_check_center and run 03a over "
+                f"{rules['span_hz'] / 1e6:g} MHz at coarse drive, to tell f01 from f02/2."
+            )
+        result = dict(result)
+        if held:
+            result["passing_targets"] = [
+                n for n in result.get("passing_targets") or [] if n not in held
+            ]
+            for name, message in held.items():
+                result.setdefault("failure_reasons", []).append(message)
+                result.setdefault("failure_reasons_by_target", {}).setdefault(name, []).append(
+                    message
+                )
+            result["candidate_state_patch"] = [
+                item
+                for item in result.get("candidate_state_patch") or []
+                if not any(
+                    str(item.get("path", "")).startswith(f"/qubits/{name}/") for name in held
+                )
+            ]
+            if result.get("analysis_status") == "pass":
+                result["analysis_status"] = "needs_review"
+        if anharmonicity:
+            patch = list(result.get("candidate_state_patch") or [])
+            if any(
+                str(item.get("path", "")).startswith(f"/qubits/{name}/")
+                for name in anharmonicity
+                for item in patch
+            ):
+                for name, value in sorted(anharmonicity.items()):
+                    # `add` creates or overwrites a member, so a state without
+                    # the key yet takes it too.
+                    patch.append(
+                        {"op": "add", "path": f"/qubits/{name}/anharmonicity", "value": value}
+                    )
+                    patch.append(
+                        {"op": "add", "path": f"/qubits/{name}/extras/anharmonicity", "value": value}
+                    )
+                    result.setdefault("warnings", []).append(
+                        f"{name} fine line is the f01 the upward check found; its commit "
+                        f"records anharmonicity {value / 1e6:.4g} MHz."
+                    )
+                result["candidate_state_patch"] = patch
+        return result
+
+    def request_03a_upper_check_center(
+        self,
+        workflow_id: str,
+        qubits: list[str],
+        client_id: str,
+        autonomy_lease_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Centre a pending qubit's drive above its fine line for the check."""
+        if not client_id.strip():
+            raise ServiceError("client_id is required for the audit log")
+        workflow = self._workflow(workflow_id)
+        if workflow["status"] != "active" or workflow["current_node"] != "03a":
+            raise ServiceError("The 03a upward check requires an active 03a workflow")
+        pending = self._03a_upper_check_pending(workflow_id)
+        selected = set(qubits)
+        if not selected or len(selected) != len(qubits) or not selected.issubset(pending):
+            raise ServiceError(
+                "Upward-check qubits must have a fine 03a line waiting for its check; "
+                f"pending: {sorted(pending)}"
+            )
+        rules = self._03a_upper_check_rules()
+        target_rf_hz = {name: pending[name] + rules["offset_hz"] for name in qubits}
+        state = load_state(self.settings.active_state)
+        wiring = load_state(self.settings.wiring_path)
+        try:
+            patch, details = drive_lo_recenter_patch(
+                state,
+                wiring,
+                qubits,
+                float(self.policy.raw["instrument_limits"]["drive_lo_grid_hz"]),
+                target_rf_hz=target_rf_hz,
+                **self._drive_lo_recenter_kwargs(),
+            )
+            self.policy.validate_state_patch(patch, state)
+        except (PolicyError, ValueError) as exc:
+            if autonomy_lease_id:
+                self._record_refused_autonomy_action(
+                    autonomy_lease_id,
+                    workflow_id,
+                    "deterministic_setup_policy_violation",
+                    f"03a upward check center: {exc}",
+                )
+            raise ServiceError(str(exc)) from exc
+        for name, item in details.items():
+            item["upper_check_reference_hz"] = pending[name]
+        payload = {
+            "patch": patch,
+            "reason": (
+                "Centre each pending qubit's drive "
+                f"{rules['offset_hz'] / 1e6:g} MHz above its fine 03a line so one "
+                f"{rules['span_hz'] / 1e6:g} MHz run at coarse drive can tell f01 "
+                "from f02/2 (operator 2026-10-19)."
+            ),
+            "run_id": None,
+            "base_hash": sha256_file(self.settings.active_state),
+            "active_state": str(self.settings.active_state),
+            "03a_upper_check_center": details,
+            "authorization_evidence": (
+                "deterministic_setup" if autonomy_lease_id else "human_proposal"
+            ),
+        }
+        if autonomy_lease_id:
+            lease = self._active_autonomy(autonomy_lease_id, workflow_id)
+            self._validate_autonomy_scope(lease, node_id="03a", targets=qubits)
+        proposal = self._create_proposal(
+            workflow_id,
+            "state_commit",
+            payload,
+            client_id,
+            int(self.policy.raw["approval"]["state_commit_ttl_minutes"]),
+            1,
+            autonomy_lease_id=autonomy_lease_id,
+        )
+        if autonomy_lease_id:
+            proposal = self._delegate_proposal_to_autonomy(
+                proposal["id"], autonomy_lease_id, client_id
+            )
+        proposal["03a_upper_check_center"] = details
+        return proposal
+
+    def _03a_drive_rf_near(
+        self, state: dict[str, Any], qubit: str, rf_hz: float, tolerance_hz: float = 1e6
+    ) -> bool:
+        """Whether the qubit's drive (LO + IF) already sits at this RF."""
+
+        # The XY port comes from wiring.json; state.json alone may not name it.
+        wiring = (
+            load_state(self.settings.wiring_path)
+            if self.settings.wiring_path.is_file()
+            else state
+        )
+        reference = _xy_output_of(state, wiring, qubit)
+        if reference is None:
+            return False
+        node: Any = state
+        for part in reference.lstrip("#/").split("/"):
+            node = node.get(part) if isinstance(node, dict) else None
+        lo_hz = node.get("upconverter_frequency") if isinstance(node, dict) else None
+        if_hz = (
+            state.get("qubits", {}).get(qubit, {}).get("xy", {}).get("intermediate_frequency")
+        )
+        if not (_finite_number(lo_hz) and _finite_number(if_hz)):
+            return False
+        return abs(float(lo_hz) + float(if_hz) - float(rf_hz)) <= tolerance_hz
+
+    def _03a_upper_check_run_parameters(self, qubit: str) -> dict[str, Any]:
+        """The parameters of one qubit's upward-check run."""
+
+        rules = self.policy.raw["analysis"]["03a"]
+        check = self._03a_upper_check_rules()
+        shared = self.policy.spectroscopy_amplitude_factor_caps().shared(qubit)
+        factor = float(
+            rules["initial_coarse_operation_amplitude_factor"]
+            if shared
+            else rules["max_operation_amplitude_factor_private_xy"]
+        )
+        return {
+            "qubits": [qubit],
+            "frequency_span_in_mhz": check["span_hz"] / 1e6,
+            "frequency_step_in_mhz": check["step_mhz"],
+            "operation_amplitude_factor": factor,
+            "num_averages": check["num_averages"],
+        }
+
     def analyze_authorized_run(
         self, run_id: str, lease_id: str, client_id: str
     ) -> dict[str, Any]:
@@ -2545,6 +4657,16 @@ class AgentService:
                     client_id,
                     stop_active=False,
                 )
+            elif self._auto_record_analyzer_failure(run, exc):
+                # Full-auto judgement (operator decision 2026-10-20): the run
+                # is recorded as failed, so the agent repeats it instead of
+                # waiting for the operator.
+                raise ServiceError(
+                    f"JY's analyzer raised {type(exc).__name__} for run {run_id}: "
+                    f"{exc}. Full-auto judgement recorded the run as failed; "
+                    "record `repeat` (or `advance` if its targets are now "
+                    "incomplete) and continue."
+                ) from exc
             else:
                 self._pause_autonomy_for_review(
                     run,
@@ -2555,7 +4677,95 @@ class AgentService:
                 )
             raise
 
+    def _auto_record_analyzer_failure(
+        self, run: dict[str, Any], exc: BaseException
+    ) -> bool:
+        """Under full-auto judgement, mark a run JY could not analyze as failed."""
+
+        lease_id = run.get("autonomy_lease_id")
+        if not lease_id or not int(
+            self._autonomy_row(str(lease_id)).get("auto_judgement") or 0
+        ):
+            return False
+        detail = f"{type(exc).__name__}: {exc}"
+        # The data was acquired; only JY's analysis failed, so the quantum
+        # machine is not stale.
+        if not self._auto_handle_failed_run(
+            run, "analyzer_exception", detail, close_qm=False
+        ):
+            return False
+        self.db.execute(
+            "UPDATE runs SET analysis_status = 'failed', analysis_json = ? "
+            "WHERE id = ? AND analysis_status NOT IN ('pass', 'needs_review', 'failed')",
+            (
+                json_dumps(
+                    {
+                        "analysis_status": "failed",
+                        "failure_category": "analyzer_exception",
+                        "failure_reasons": [f"JY analyzer exception: {detail}"],
+                        "run_level_failure_reasons": [f"JY analyzer exception: {detail}"],
+                        "passing_targets": [],
+                    }
+                ),
+                run["id"],
+            ),
+        )
+        return True
+
     def record_decision(
+        self,
+        workflow_id: str,
+        run_id: str,
+        decision: str,
+        reason: str,
+        next_node: str | None,
+        new_parameters: dict[str, Any] | None,
+        state_patch: list[dict[str, Any]] | None,
+        client_id: str,
+    ) -> dict[str, Any]:
+        # Autopilot shadow mode (operator decision 2026-10-20): note what the
+        # deterministic rule would have decided, next to the agent's choice.
+        predicted: str | None = None
+        try:
+            run = self.db.one(
+                "SELECT * FROM runs WHERE id = ? AND workflow_id = ?", (run_id, workflow_id)
+            )
+            if run is not None and not self.db.one(
+                "SELECT id FROM decisions WHERE run_id = ?", (run_id,)
+            ):
+                predicted = self._shadow_predicted_decision(
+                    self._workflow(workflow_id), run
+                )
+        except Exception:
+            predicted = None
+        result = self._record_decision(
+            workflow_id,
+            run_id,
+            decision,
+            reason,
+            next_node,
+            new_parameters,
+            state_patch,
+            client_id,
+        )
+        if predicted is not None:
+            self.db.event(
+                "autopilot_shadow",
+                "autopilot_shadow",
+                {
+                    "stage": "decision",
+                    "run_id": run_id,
+                    "node_id": run["node_id"],
+                    "predicted": predicted,
+                    "actual": decision,
+                    "match": predicted == decision,
+                },
+                workflow_id,
+            )
+        self._refresh_history_site(workflow_id)
+        return result
+
+    def _record_decision(
         self,
         workflow_id: str,
         run_id: str,
@@ -2615,8 +4825,23 @@ class AgentService:
             if next_node is not None:
                 self.policy.node_definition(next_node)
             resolved_next = next_node
+        elif proposal_payload.get("reset_comparison"):
+            if decision not in {"advance", "manual_review"}:
+                raise ServiceError(
+                    "A reset comparison run is recorded as advance or manual_review"
+                )
+            if state_patch:
+                raise ServiceError(
+                    "A thermal reset comparison does not change the state; the "
+                    "active-reset statistics stay committed"
+                )
+            if next_node not in {None, current}:
+                raise ServiceError(f"A reset comparison keeps the workflow at {current}")
+            resolved_next = current
         elif prerequisite_verification:
-            if run["node_id"] not in self._active_reset_verification_nodes():
+            if run["node_id"] not in self._active_reset_verification_nodes() and not (
+                self._is_late_active_07b(workflow, str(run["node_id"]))
+            ):
                 raise ServiceError("Invalid active-reset prerequisite verification node")
             if not _is_active_reset(json_loads(run.get("parameters_json"), {})):
                 raise ServiceError("Prerequisite verification must use active reset")
@@ -4135,6 +6360,7 @@ class AgentService:
             name: float(value) * 1e9 if float(value) < 1e6 else float(value)
             for name, value in zip(ordered, design)
         }
+        design_hz.update(self._02_expected_resonator_frequencies(workflow["id"], ordered))
         defaults = self.policy.node_definition("02").get("defaults", {})
         max_if = float(defaults.get("max_if_in_mhz", 400.0)) * 1e6
         guard = float(defaults.get("lo_guard_in_mhz", 10.0)) * 1e6
@@ -4202,6 +6428,40 @@ class AgentService:
                 "new_if_hz": ifs,
             }
         return {"patch": patch, "details": details, "qubits": moved}
+
+    def _02_expected_resonator_frequencies(
+        self, workflow_id: str, targets: list[str]
+    ) -> dict[str, float]:
+        """Where this workflow's latest 02 places each resonator.
+
+        Operator request 2026-10-19 (7SQ_4Fa3H die(5,1) q7, #592): a +144 MHz
+        design shift put q7's shifted design at 6.152 GHz, above LO 5.65 GHz +
+        400 MHz, while its raw design was covered. A matched qubit counts at its
+        measured dip and an unmatched one at design + shift, so the recentred
+        LO covers the resonators 02 actually found.
+        """
+        row = self.db.one(
+            "SELECT analysis_json FROM runs WHERE workflow_id = ? AND node_id = '02' "
+            "AND status = 'completed' AND analysis_json IS NOT NULL "
+            "ORDER BY rowid DESC LIMIT 1",
+            (workflow_id,),
+        )
+        if row is None:
+            return {}
+        metrics = json_loads(row.get("analysis_json"), {}).get("dataset_metrics") or {}
+        assignments = metrics.get("qubits") or {}
+        expected: dict[str, float] = {}
+        for name in targets:
+            item = assignments.get(name)
+            if not isinstance(item, dict):
+                continue
+            measured = item.get("measured_freq")
+            shifted = item.get("shifted_design_freq")
+            if item.get("status") == "matched" and _finite_positive(measured):
+                expected[name] = float(measured)
+            elif _finite_positive(shifted):
+                expected[name] = float(shifted)
+        return expected
 
     def request_readout_lo_recenter(
         self,
@@ -4564,9 +6824,27 @@ class AgentService:
         for name in qubits:
             # After a 04 -> 03a return only the qubit's new runs count.
             for row in reversed(self._qubit_runs(workflow_id, "03a", name)):
+                analysis = json_loads(row.get("analysis_json"), {})
+                fit = analysis.get("fit_quality", {}).get("results", {}).get(name, {})
+                check = fit.get("upper_check") if isinstance(fit, dict) else None
+                if analysis.get("03a_stage") == "upper_check" and isinstance(check, dict):
+                    # 2026-10-19 (q2 #651): a closed upward check names the
+                    # line to centre -- the f01 found above, or the reference
+                    # it confirmed -- ahead of older candidate runs.
+                    line = check.get("upper_line_hz")
+                    if not _finite_number(line):
+                        line = check.get("reference_hz")
+                    if _finite_number(line):
+                        target_rf_hz[name] = float(line)
+                        evidence[name] = {
+                            "run_id": row["id"],
+                            "candidate_rf_hz": float(line),
+                            "03a_stage": "upper_check",
+                            "upper_check_outcome": check.get("outcome"),
+                        }
+                        break
                 if name not in resolve_03a_candidate_targets([row], min_snr):
                     continue
-                analysis = json_loads(row.get("analysis_json"), {})
                 fit = analysis.get("fit_quality", {}).get("results", {}).get(name, {})
                 drive_freq = fit.get("drive_freq") if isinstance(fit, dict) else None
                 if (
@@ -4732,8 +7010,8 @@ class AgentService:
             )
             if terminal is not None:
                 self.db.execute(
-                    "UPDATE workflows SET status = 'completed', updated_at = ? "
-                    "WHERE id = ? AND current_node IS NULL",
+                    "UPDATE workflows SET status = 'completed', updated_at = ?, "
+                    "end_kind = 'completed' WHERE id = ? AND current_node IS NULL",
                     (utc_now(), proposal["workflow_id"]),
                 )
                 self.db.execute(
@@ -5002,6 +7280,8 @@ class AgentService:
             existing = self.db.one(
                 "SELECT * FROM measurement_sessions WHERE id = ?", (existing["id"],)
             )
+        # The static history homepage links to the live session (2026-10-22).
+        self._refresh_history_site()
         return self._decode_dashboard_session(existing)
 
     def dashboard_status(self, session_id: str) -> dict[str, Any]:
@@ -5031,30 +7311,40 @@ class AgentService:
         result["shutdown"] = self._shutdown_request_for_session(str(result["id"]))
         return result
 
-    def dashboard_review(self, session_id: str) -> dict[str, Any]:
+    def dashboard_review(
+        self, session_id: str, *, maintain: bool = True
+    ) -> dict[str, Any]:
+        """Everything a Dashboard page shows for one session.
+
+        `maintain=False` (the static history site, 2026-10-22) only reads: it
+        neither pauses for an instrument failure nor expires proposals, and it
+        leaves the live page's plot cache alone.
+        """
         raw_session = self.db.one(
             "SELECT workflow_id FROM measurement_sessions WHERE id = ?",
             (session_id,),
         )
         if raw_session is None:
             raise ServiceError("Unknown measurement dashboard session")
-        failed_runs = self.db.all(
-            "SELECT * FROM runs WHERE workflow_id = ? AND status = 'failed' "
-            "ORDER BY started_at DESC LIMIT 20",
-            (raw_session["workflow_id"],),
-        )
-        for failed_run in failed_runs:
-            if self._is_instrument_connectivity_failure(failed_run):
-                self._pause_for_instrument_connectivity(failed_run)
-                break
+        if maintain:
+            failed_runs = self.db.all(
+                "SELECT * FROM runs WHERE workflow_id = ? AND status = 'failed' "
+                "ORDER BY started_at DESC LIMIT 20",
+                (raw_session["workflow_id"],),
+            )
+            for failed_run in failed_runs:
+                if self._is_instrument_connectivity_failure(failed_run):
+                    self._pause_for_instrument_connectivity(failed_run)
+                    break
         session = self.dashboard_status(session_id)
         workflow_id = str(session["workflow_id"])
         now = utc_now()
-        self.db.execute(
-            "UPDATE proposals SET status = 'expired' WHERE workflow_id = ? "
-            "AND status = 'pending' AND expires_at <= ?",
-            (workflow_id, now),
-        )
+        if maintain:
+            self.db.execute(
+                "UPDATE proposals SET status = 'expired' WHERE workflow_id = ? "
+                "AND status = 'pending' AND expires_at <= ?",
+                (workflow_id, now),
+            )
         run_rows = self.db.all(
             # Runs carried over from an earlier workflow on this chip belong to
             # that workflow's results, not this session's.
@@ -5088,11 +7378,16 @@ class AgentService:
             review = self._run_review(str(row["id"]), workflow_id)
             run_info = review.get("run") or {}
             parameters = run_info.get("parameters", {})
-            review["duration_prediction"] = self.run_telemetry(
-                str(run_info.get("node_id")),
-                list(parameters.get("qubits", [])),
-                limit=100,
-            )["prediction"]
+            # A static copy has no use for duration forecasts (2026-10-22).
+            review["duration_prediction"] = (
+                self.run_telemetry(
+                    str(run_info.get("node_id")),
+                    list(parameters.get("qubits", [])),
+                    limit=100,
+                )["prediction"]
+                if maintain
+                else None
+            )
             item_plots = list(review.get("plots", []))
             review["asset_indices"] = list(
                 range(len(all_plots), len(all_plots) + len(item_plots))
@@ -5101,7 +7396,8 @@ class AgentService:
             all_plots.extend(item_plots)
             history.append(review)
         revision = self.dashboard_ui_revision(session_id)
-        self._dashboard_plot_cache[session_id] = (revision, list(all_plots))
+        if maintain:
+            self._dashboard_plot_cache[session_id] = (revision, list(all_plots))
         return {
             "session": session,
             "pending_proposal": (
@@ -5263,6 +7559,34 @@ class AgentService:
 
         return collect_chip_history(self, self._session_device_key(session_id))
 
+    def chip_progress_for_workflow(self, workflow_id: str) -> dict[str, Any] | None:
+        """The merged node x qubit chip history shown on Dashboard Home.
+
+        Operator decision 2026-10-21: the same table as the Approval page,
+        including this workflow's own passes so far. It is recomputed only
+        when a run, an event or state.json changes.
+        """
+
+        try:
+            workflow = self._workflow(workflow_id)
+            marker = self.db.one(
+                "SELECT (SELECT MAX(rowid) FROM runs) AS runs, "
+                "(SELECT MAX(id) FROM events) AS events"
+            ) or {}
+            try:
+                mtime = Path(self.settings.active_state).stat().st_mtime_ns
+            except OSError:
+                mtime = None
+            key = (workflow_id, marker.get("runs"), marker.get("events"), mtime)
+            cache = getattr(self, "_chip_progress_cache", None)
+            if cache is not None and cache[0] == key:
+                return cache[1]
+            history = self._chip_history(workflow)
+            self._chip_progress_cache = (key, history)
+            return history
+        except Exception:  # pragma: no cover - display only, never blocks Home
+            return None
+
     def chip_history_asset(self, session_id: str, run_id: str, position: int) -> Path:
         from .chip_history import chip_history_asset
 
@@ -5272,6 +7596,78 @@ class AgentService:
             )
         except ValueError as exc:
             raise ServiceError(str(exc)) from exc
+
+    #: The static history site is rewritten off the calling thread, so an
+    #: analysis or decision never waits for it (a 114-run session page takes
+    #: seconds). Tests set this to False to write synchronously.
+    HISTORY_SITE_ASYNC = True
+
+    def _refresh_history_site(
+        self, workflow_id: str | None = None, *, wait: bool = False
+    ) -> None:
+        """Rewrite the static history site; never fails or delays the caller.
+
+        Operator request 2026-10-22: runtime/history_site/ keeps every
+        session's results readable after shutdown and links to the live
+        Dashboard while a session runs. With a workflow, that workflow's
+        session pages and chip page are rewritten; the index always is.
+        Requests made while a rewrite runs are merged into the next one.
+        `wait` writes before returning: an ending measurement must not leave a
+        stale live link behind when its process exits.
+        """
+
+        with self._history_site_lock:
+            if workflow_id:
+                self._history_site_pending.add(str(workflow_id))
+            self._history_site_dirty = True
+            running = (
+                self._history_site_thread is not None
+                and self._history_site_thread.is_alive()
+            )
+            if self.HISTORY_SITE_ASYNC and not wait:
+                if not running:
+                    self._history_site_thread = threading.Thread(
+                        target=self._drain_history_site,
+                        name="jy-history-site",
+                        daemon=True,
+                    )
+                    self._history_site_thread.start()
+                return
+            thread = self._history_site_thread if running else None
+        if thread is not None:
+            thread.join(timeout=120)
+        self._drain_history_site()
+
+    def _drain_history_site(self) -> None:
+        from .history_site import write_history_site
+
+        while True:
+            with self._history_site_lock:
+                if not self._history_site_dirty:
+                    return
+                self._history_site_dirty = False
+                workflow_ids = sorted(self._history_site_pending)
+                self._history_site_pending.clear()
+            try:
+                session_ids = [
+                    str(row["id"])
+                    for workflow_id in workflow_ids
+                    for row in self.db.all(
+                        "SELECT id FROM measurement_sessions WHERE workflow_id = ?",
+                        (workflow_id,),
+                    )
+                ]
+                write_history_site(self, session_ids=session_ids)
+            except Exception as exc:  # pragma: no cover - a report never blocks work
+                try:
+                    self.db.event(
+                        "history_site_failed",
+                        "history_site",
+                        {"error": f"{type(exc).__name__}: {exc}"},
+                        workflow_ids[0] if workflow_ids else None,
+                    )
+                except Exception:
+                    return
 
     def _refresh_static_chip_history(self, workflow_id: str) -> None:
         """Rewrite runtime/chip_history/<chip>/ after an analysis; never fails it."""
@@ -5416,11 +7812,17 @@ class AgentService:
                     .get("workflow_options_offer", {})
                     .get("start_node")
                 ) or {}
-                qubit_plan = [
-                    {"qubit": name, "start_node": self._qubit_start_node(workflow, name)}
-                    for name in (history.get("qubit_start_nodes") or {})
-                    if workflow.get("start_node") == history.get("serialize_from_node")
-                ]
+                if isinstance(options.get("qubit_plan"), dict):
+                    qubit_plan = [
+                        {"qubit": name, "start_node": choice}
+                        for name, choice in options["qubit_plan"].items()
+                    ]
+                else:
+                    qubit_plan = [
+                        {"qubit": name, "start_node": self._qubit_start_node(workflow, name)}
+                        for name in (history.get("qubit_start_nodes") or {})
+                        if workflow.get("start_node") == history.get("serialize_from_node")
+                    ]
                 preview = {
                     "nodes": nodes,
                     "qubit_starts": qubit_plan,
@@ -5451,6 +7853,7 @@ class AgentService:
         actor: str | None = None,
         approval_method: str = "local_browser",
         lease_options: dict[str, Any] | None = None,
+        authorization_choices: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         expected_confirmation = f"APPROVE {proposal_id}"
         if not hmac.compare_digest(confirmation, expected_confirmation):
@@ -5484,6 +7887,9 @@ class AgentService:
             resolved_actor,
             approval_method,
             lease_options=lease_options,
+            authorization_choices=self._resolve_authorization_choices(
+                authorization_choices
+            ),
         )
 
     def proposal_review(self, proposal_id: str) -> dict[str, Any]:
@@ -5632,6 +8038,9 @@ class AgentService:
                 "autonomy_scope_completed",
                 "autonomy_resumed",
                 "autonomy_targets_scientifically_unmeasurable",
+                "auto_judgement_applied",
+                "autonomy_reauthorization_requested",
+                "autonomy_reauthorization_offered",
             }
         )
 
@@ -5689,6 +8098,24 @@ class AgentService:
         """
 
         workflow = self._workflow(workflow_id)
+        if workflow.get("current_node") in (None, "") or workflow.get("status") == "completed":
+            # 2026-10-21: a completed workflow has no current node; say so
+            # instead of failing on the sequence lookup.
+            return {
+                "workflow_id": workflow_id,
+                "workflow_status": workflow.get("status"),
+                "current_node": workflow.get("current_node"),
+                "next_node_in_sequence": None,
+                "action": "complete",
+                "targets": {"active": [], "resolved": [], "incomplete": [], "unresolved": []},
+                "latest_run": None,
+                "rules": [],
+                "required_setup": [],
+                "notes": [
+                    "This workflow has finished its sequence; nothing is left to run. "
+                    "Start or continue a workflow to measure further."
+                ],
+            }
         node_id = str(workflow["current_node"])
         sequence = self._workflow_sequence(workflow)
         active = self._active_targets_for_node(workflow, node_id)
@@ -6012,6 +8439,25 @@ class AgentService:
             result["rules"].append("PLAYBOOK: Multiplex workflows")
             return result
 
+        if node_id == "03a":
+            checks = sorted(set(self._03a_upper_check_pending(workflow_id)) & unresolved)
+            if checks:
+                # Operator instruction 2026-10-19: one upward-check run per
+                # pending qubit decides f01 versus f02/2.
+                parameters = self._03a_upper_check_run_parameters(checks[0])
+                result["action"] = "run"
+                result["run"] = {
+                    "node_id": node_id,
+                    "qubits": parameters["qubits"],
+                    "parameters": parameters,
+                }
+                result["reason"] = (
+                    f"{checks[0]}'s fine 03a line waits for its upward check: sweep "
+                    f"{parameters['frequency_span_in_mhz']:g} MHz at coarse drive with "
+                    "the line near the lower edge, to tell f01 from f02/2."
+                )
+                result["rules"].append("PLAYBOOK: 03a upward check for f02/2 and other multi-photon lines")
+                return result
         batch = sorted(unresolved)
         capped = cap is not None and len(batch) > cap
         if capped:
@@ -6237,6 +8683,29 @@ class AgentService:
                     ),
                 }
             )
+        if node_id == "03a":
+            uncentred = [
+                name
+                for name, reference in sorted(
+                    self._03a_upper_check_pending(workflow_id).items()
+                )
+                if name in targets
+                and not self._03a_drive_rf_near(
+                    state, name, reference + self._03a_upper_check_rules()["offset_hz"]
+                )
+            ]
+            if uncentred:
+                required.append(
+                    {
+                        "tool": "jy_request_03a_upper_check_center",
+                        "targets": ", ".join(uncentred),
+                        "why": (
+                            "Operator instruction 2026-10-19: a fine 03a line commits "
+                            "only after an upward check for f02/2. Centre the drive "
+                            "above the fine line before the check run."
+                        ),
+                    }
+                )
         try:
             lo_patch, lo_details = self._xy_lo_plan(
                 self._workflow(workflow_id), node_id, state
@@ -6488,6 +8957,7 @@ class AgentService:
         approval_method: str,
         *,
         lease_options: dict[str, Any] | None = None,
+        authorization_choices: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         with self.db.transaction(immediate=True) as connection:
             row = connection.execute(
@@ -6519,6 +8989,9 @@ class AgentService:
             if proposal["kind"] == "autonomy_lease":
                 self._apply_lease_options(
                     connection, proposal, lease_options, approval_method, actor
+                )
+                self._store_authorization_choices(
+                    connection, proposal, authorization_choices, actor
                 )
                 self._activate_autonomy_lease(
                     proposal, actor, connection=connection
@@ -7039,6 +9512,24 @@ class AgentService:
             request["last_run_id"] = request["active_run_id"]
         request["active_run_id"] = None
         previous_status = str(request.get("status") or "")
+        forced_run_id = self._forced_stop_lock_owner()
+        if forced_run_id is not None:
+            # Operator decision 2026-10-20: after a verified forced
+            # termination, close this chip's stale quantum machine and
+            # release the lock automatically when the evidence is clean.
+            outcome = self._forced_stop_release_state(
+                forced_run_id, "full-shutdown-coordinator"
+            )
+            request["forced_stop_run_id"] = forced_run_id
+            if outcome is None:
+                request["status"] = "closing_stale_qm"
+                self._save_shutdown_request(request)
+                return request
+            request["forced_stop_release"] = outcome
+        elif str(request.get("forced_stop_run_id") or "") in self._forced_release_results:
+            request["forced_stop_release"] = self._forced_release_results[
+                str(request["forced_stop_run_id"])
+            ]
         if self.settings.lock_path.exists():
             request["status"] = "quarantine_ready"
             request["quarantine"] = True
@@ -7167,7 +9658,7 @@ class AgentService:
             if workflow is None:
                 raise ServiceError("Shutdown workflow no longer exists")
             changed = connection.execute(
-                "UPDATE workflows SET status = ?, updated_at = ? "
+                "UPDATE workflows SET status = ?, updated_at = ?, end_kind = 'operator' "
                 "WHERE id = ? AND status IN ('active','paused','recovery_required')",
                 (final_status, now, workflow_id),
             ).rowcount
@@ -7199,6 +9690,7 @@ class AgentService:
                     workflow_id,
                     connection=connection,
                 )
+        self._refresh_history_site(workflow_id, wait=True)
 
     def control_autonomy_from_browser(
         self,
@@ -7211,18 +9703,213 @@ class AgentService:
             raise ServiceError("The autonomy control token was invalid.")
         reason = f"Manual {action.replace('_', ' ')} requested from control page."
         if action == "pause":
-            return self.pause_autonomy(lease_id, actor, reason)
+            result = self.pause_autonomy(lease_id, actor, reason)
+            # Operator request 2026-10-19: a manual pause offers, on the
+            # Approval page, to continue or to re-plan the qubits.
+            try:
+                self._create_replan_proposal(lease_id, actor)
+            except ServiceError as exc:
+                self.db.event(
+                    "autonomy_replan_unavailable",
+                    actor,
+                    {"lease_id": lease_id, "reason": str(exc)},
+                    result.get("workflow_id"),
+                )
+            return result
         if action == "resume":
-            return self.resume_autonomy(
+            result = self.resume_autonomy(
                 lease_id,
                 actor,
                 self.settings.autonomy_mode_entry_phrase,
             )
+            self._cancel_replan_proposals(str(result.get("workflow_id")), actor)
+            return result
+        if action == "reauthorize":
+            # Operator decision 2026-10-20: "停止核准" lets the current run
+            # finish, then asks again for the hours and the judgement mode.
+            return self.request_reauthorization(lease_id, actor)
         if action == "stop":
             return self.stop_autonomy(lease_id, actor, reason)
         if action == "emergency_stop":
             return self.stop_autonomy(lease_id, actor, reason, emergency=True)
         raise ServiceError("Unknown autonomy control action")
+
+    # -- Dashboard pause: continue or re-plan, operator request 2026-10-19 -----
+
+    REPLAN_KIND = "autonomy_replan"
+
+    def _cancel_replan_proposals(self, workflow_id: str, actor: str) -> None:
+        changed = self.db.execute(
+            "UPDATE proposals SET status = 'cancelled' WHERE workflow_id = ? "
+            "AND kind = ? AND status = 'pending'",
+            (workflow_id, self.REPLAN_KIND),
+        )
+        if changed:
+            self.db.event(
+                "autonomy_replan_cancelled", actor, {"workflow_id": workflow_id}, workflow_id
+            )
+
+    def _create_replan_proposal(self, lease_id: str, actor: str) -> dict[str, Any]:
+        """Offer, after a manual pause, to continue or to re-plan the qubits.
+
+        The re-plan choices are the lease page's per-qubit plan computed
+        against this (paused) workflow: not measured, from the beginning, or
+        restart at any node the qubit reached. The default is where each
+        qubit stands (its last offered node).
+        """
+
+        lease = self.db.one("SELECT * FROM autonomy_leases WHERE id = ?", (lease_id,))
+        if lease is None or lease["status"] != "paused":
+            raise ServiceError("Re-plan is offered only for a paused lease")
+        workflow = self._workflow(lease["workflow_id"])
+        if workflow["status"] != "active":
+            raise ServiceError("Re-plan needs an open workflow")
+        self._cancel_replan_proposals(workflow["id"], actor)
+        history = self._chip_history(workflow, source=workflow)
+        plan = self._qubit_plan_offer(workflow, history)
+        default_plan = {
+            name: (choices[-1] if len(choices) > 2 else "beginning")
+            for name, choices in (plan.get("qubits") or {}).items()
+        }
+        payload = {
+            "lease_id": lease_id,
+            "reason": (
+                "Manual pause from the Dashboard: continue the same authorization, "
+                "or re-plan where each qubit (re)starts in a new workflow."
+            ),
+            "qubit_plan": plan,
+            "default_plan": default_plan,
+            "start_node": history,
+            "workflow_options": self._workflow_options(workflow),
+        }
+        return self._create_proposal(
+            workflow["id"],
+            self.REPLAN_KIND,
+            payload,
+            actor,
+            8 * 60,
+            1,
+        )
+
+    def _pending_replan(self, proposal_id: str) -> tuple[dict[str, Any], dict[str, Any]]:
+        row = self.db.one("SELECT * FROM proposals WHERE id = ?", (proposal_id,))
+        if row is None or row["kind"] != self.REPLAN_KIND or row["status"] != "pending":
+            raise ServiceError("This re-plan choice is no longer pending.")
+        return row, json_loads(row.get("payload_json"), {})
+
+    def replan_continue_from_browser(
+        self,
+        proposal_id: str,
+        csrf_token: str,
+        actor: str,
+        authorization_choices: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Continue: resume the same paused lease and drop the re-plan offer.
+
+        With the simple card's choices (operator decision 2026-10-20) the
+        lease takes the chosen hours and judgement mode, counted from now.
+        """
+
+        if not hmac.compare_digest(csrf_token, self.approval_csrf_token(proposal_id)):
+            raise ServiceError("The browser approval token was invalid.")
+        row, payload = self._pending_replan(proposal_id)
+        choices = self._resolve_authorization_choices(authorization_choices)
+        if choices:
+            self._restart_lease_clock(str(payload["lease_id"]), choices, actor)
+        result = self.resume_autonomy(
+            str(payload["lease_id"]), actor, self.settings.autonomy_mode_entry_phrase
+        )
+        self._cancel_replan_proposals(str(row["workflow_id"]), actor)
+        self.db.event(
+            "autonomy_replan_continue",
+            actor,
+            {"proposal_id": proposal_id, "lease_id": payload["lease_id"]},
+            row["workflow_id"],
+        )
+        return result
+
+    def replan_apply_from_browser(
+        self,
+        proposal_id: str,
+        confirmation: str,
+        csrf_token: str,
+        qubit_plan: dict[str, str],
+        actor: str,
+        authorization_choices: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Re-plan: stop this workflow and start a new one at the chosen nodes.
+
+        Operator request 2026-10-19 (restart semantics, the lease form, the
+        nodes each qubit reached, the paused qubit first). The new workflow's
+        lease offer describes the stopped one as chip history; it is approved
+        here with the old workflow's options and the operator's per-qubit plan,
+        so its runs before each start are inherited and the new lease (a fresh
+        duration) starts active.
+        """
+
+        if not hmac.compare_digest(csrf_token, self.approval_csrf_token(proposal_id)):
+            raise ServiceError("The browser approval token was invalid.")
+        if confirmation.strip() != f"APPROVE {proposal_id}":
+            raise ServiceError(f"Enter exactly: APPROVE {proposal_id}")
+        row, payload = self._pending_replan(proposal_id)
+        offered = (payload.get("qubit_plan") or {}).get("qubits") or {}
+        for name, choice in qubit_plan.items():
+            if name not in offered or choice not in offered[name]:
+                raise ServiceError(f"{name} cannot start at {choice}")
+        if not any(choice != "skip" for choice in qubit_plan.values()):
+            raise ServiceError("Choose at least one qubit to measure.")
+        choices = self._resolve_authorization_choices(authorization_choices)
+        old = self._workflow(str(row["workflow_id"]))
+        if self.db.one(
+            "SELECT id FROM runs WHERE workflow_id = ? "
+            "AND status IN ('starting', 'running', 'stopping') LIMIT 1",
+            (old["id"],),
+        ):
+            raise ServiceError(
+                "The current run is still finishing; re-plan once it has ended."
+            )
+        options = self._workflow_options(old)
+        targets = sorted(json_loads(old["targets_json"], []), key=_natural_qubit_key)
+        initial = json_loads(old.get("initial_parameters_json"), {}) or {}
+        self.db.execute(
+            "UPDATE proposals SET status = 'approved', approved_at = ?, approved_by = ? "
+            "WHERE id = ? AND status = 'pending'",
+            (utc_now(), actor, proposal_id),
+        )
+        phrase = self.settings.autonomy_mode_entry_phrase
+        self.stop_workflow(
+            old["id"], actor, "Re-plan approved from the Dashboard.", end_kind="replan"
+        )
+        new = self.start_workflow(
+            targets, {"multiplexed": bool(initial.get("multiplexed", True))}, actor, phrase
+        )
+        lease = self.request_autonomy_lease(
+            new["id"], actor, phrase, "Operator re-plan from the Dashboard after a pause."
+        )
+        # request_autonomy_lease returns the lease proposal itself.
+        lease_proposal_id = str(lease["id"])
+        lease_proposal = self.proposal(lease_proposal_id)
+        offer = (lease_proposal.get("payload") or {}).get("workflow_options_offer") or {}
+        lease_options = self._carry_over_lease_options(options, offer, qubit_plan)
+        self._approve_pending_proposal(
+            lease_proposal_id,
+            actor,
+            "dashboard_replan",
+            lease_options=lease_options,
+            authorization_choices=choices,
+        )
+        self.db.event(
+            "autonomy_replanned",
+            actor,
+            {
+                "old_workflow_id": old["id"],
+                "new_workflow_id": new["id"],
+                "lease_proposal_id": lease_proposal_id,
+                "qubit_plan": qubit_plan,
+            },
+            new["id"],
+        )
+        return {"old_workflow_id": old["id"], "new_workflow_id": new["id"]}
 
     def start_autonomy_watchdog(self) -> None:
         """Start an idempotent daemon that enforces expiry and hard-stop rules."""
@@ -7265,6 +9952,10 @@ class AgentService:
             if refreshed["status"] == "expired":
                 expired += 1
                 continue
+            if refreshed["status"] == "paused":
+                # Operator decision 2026-10-20: a Home re-authorization ends
+                # the lease once its last run has finished.
+                self._finish_reauthorization(str(lease["id"]), "autonomy_watchdog")
             runs = self.db.all(
                 "SELECT * FROM runs WHERE autonomy_lease_id = ? "
                 "ORDER BY started_at DESC LIMIT 20",
@@ -7277,6 +9968,7 @@ class AgentService:
                 if before != "halted" and after == "halted":
                     halted += 1
                     break
+        self._schedule_auto_judgement()
         shutdown = self._reconcile_full_shutdown_request()
         return {
             "expired": expired,
@@ -7880,6 +10572,10 @@ class AgentService:
         try:
             if run and run["status"] in {"starting", "running", "stopping"}:
                 result = self.runner.force_stop(run_id, pending["actor"])
+                if result.get("forced"):
+                    self._schedule_release_after_forced_stop(
+                        run_id, "emergency-stop-coordinator"
+                    )
             else:
                 result = {
                     "run_id": run_id,
@@ -7995,6 +10691,23 @@ class AgentService:
             return analysis if isinstance(analysis, dict) else {}
         return None
 
+    def _event_logged_for_run(self, run: dict[str, Any], event_type: str) -> bool:
+        """True when this run already has an event of this type.
+
+        The watchdog re-examines the last twenty runs on every sweep; without
+        this check one failed run logged the same event every two seconds
+        (17 117 submission-timeout events by 2026-10-20).
+        """
+
+        return (
+            self.db.one(
+                "SELECT 1 FROM events WHERE workflow_id = ? AND event_type = ? "
+                "AND json_extract(payload_json, '$.run_id') = ? LIMIT 1",
+                (run["workflow_id"], event_type, run["id"]),
+            )
+            is not None
+        )
+
     def _pause_already_resumed(
         self, run: dict[str, Any], event_type: str
     ) -> bool:
@@ -8047,6 +10760,24 @@ class AgentService:
             "measurement_paused_for_instrument_error",
             "instrument_failure_guard",
         )
+
+    def _resolve_requested_duration(self, requested: float | None) -> float:
+        """Hours an entry or lease request preselects on the Approval page.
+
+        Operator decision 2026-10-20: the page offers only
+        `autonomy.duration_choices_hours`, so a request names one of them; any
+        other value is refused instead of being shown as the default.
+        """
+
+        hours = self._resolve_autonomy_duration(requested)
+        choices = self.authorization_duration_choices()
+        if requested is not None and hours not in choices:
+            raise ServiceError(
+                "duration_hours must be one of the Approval page choices: "
+                + ", ".join(f"{value:g}" for value in choices)
+                + " hours"
+            )
+        return hours
 
     def _resolve_autonomy_duration(self, requested: float | None) -> float:
         """Clamp-check an entry-supplied lease budget against policy.
@@ -8206,7 +10937,10 @@ class AgentService:
                 # remedy is a smaller multiplex group, which the agent can do
                 # without an operator, so the lease stays active. The worker
                 # already paused if a single target had left no room to halve.
-                if not submission.get("measurement_paused"):
+                # The sweep revisits this run every few seconds; log it once.
+                if not submission.get("measurement_paused") and not self._event_logged_for_run(
+                    run, "autonomy_program_submission_timeout"
+                ):
                     self.db.event(
                         "autonomy_program_submission_timeout",
                         "autonomy_watchdog",
@@ -8225,10 +10959,32 @@ class AgentService:
                         run["workflow_id"],
                     )
                 return
+            if (
+                json_loads(run.get("analysis_json"), {}).get("failure_category")
+                == "analysis_failure"
+            ):
+                # Operator instruction 2026-10-19: a crash inside the node's
+                # fitting code keeps the lease (the worker released the lock);
+                # the agent repeats the same run.
+                if self._event_logged_for_run(run, "autonomy_analysis_failure"):
+                    return
+                self.db.event(
+                    "autonomy_analysis_failure",
+                    "autonomy_watchdog",
+                    {
+                        "run_id": run["id"],
+                        "remedy": "Repeat the same run; the crash was in the "
+                        "node's fitting code, after the data was acquired.",
+                    },
+                    run["workflow_id"],
+                )
+                return
             recoverable = self.recoverable_worker_exception(run)
             if recoverable is not None:
                 # Registered node-parameter rejection: nothing ran, the cause is
                 # known, and the remedy is a different parameter. Keep the lease.
+                if self._event_logged_for_run(run, "autonomy_recoverable_worker_exception"):
+                    return
                 self.db.event(
                     "autonomy_recoverable_worker_exception",
                     "autonomy_watchdog",
@@ -8247,6 +11003,12 @@ class AgentService:
                 # The operator has seen this failure and resumed past it.
                 # Re-pausing here would undo the resume on the next sweep and
                 # leave the lease permanently stuck.
+                return
+            if self._auto_handle_failed_run(
+                run, "worker_failure", str(run.get("error") or run["status"])
+            ):
+                # Full-auto judgement (operator decision 2026-10-20): retry,
+                # or mark incomplete after repeated failures, without pausing.
                 return
             self._pause_autonomy_for_review(
                 run,
@@ -9194,7 +11956,11 @@ class AgentService:
         """
 
         current = str(workflow["current_node"] or "")
-        if not current or current not in SUBGROUP_NODES:
+        # 2026-10-20 (q7 07d #759 decided `repeat`): a single-pass node such
+        # as 07d whose one run carries a non-advance decision deadlocked too.
+        if not current or (
+            current not in SUBGROUP_NODES and not self._node_is_single_pass(current)
+        ):
             return False
         sequence = self._workflow_sequence(workflow)
         if current not in sequence:
@@ -9344,6 +12110,16 @@ class AgentService:
             for row in rows
         ):
             raise ServiceError("Analyze the completed 03a run before requesting another")
+        if self._is_03a_upper_check_run(parameters):
+            # Operator instruction 2026-10-19: the upward-check span is reserved
+            # for qubits whose fine line waits for its check, centred above it.
+            pending = self._03a_upper_check_pending(workflow_id)
+            if not requested or not requested.issubset(pending):
+                raise AutonomyScopeError(
+                    "03a upward-check runs are only for qubits whose fine line waits "
+                    f"for its check: {sorted(pending)}"
+                )
+            return
         candidates = self._03a_candidate_targets(workflow_id)
         is_fine = (
             float(parameters["frequency_span_in_mhz"])
@@ -9921,6 +12697,11 @@ class AgentService:
         stored_parameters = dict(options.get("node_parameters") or {})
         forced = self._broadband_required_targets(workflow)
         history = self._chip_history(workflow)
+        display_history = None
+        if history is not None and history.get("display_only"):
+            # Operator decision 2026-10-21: a workflow with runs of its own
+            # sees the merged chip history but gets no start choice from it.
+            display_history, history = history, None
         if (
             history is not None
             and "02" not in stored_parameters
@@ -9990,65 +12771,622 @@ class AgentService:
                     item["default"] = False
         if history is not None:
             offer["start_node"] = history
-        return offer
-
-    def _chip_history(self, workflow: dict[str, Any]) -> dict[str, Any] | None:
-        """The latest earlier workflow on this chip and where it can resume.
-
-        Operator request 2026-10-10: a new workflow may start from the
-        beginning or at any node the chip's latest workflow reached, keeping
-        the evidence before that node. Offered only to a workflow that has no
-        run of its own yet.
-        """
-
-        if workflow.get("source_workflow_id"):
-            return None
-        if self.db.one(
+        elif display_history is not None:
+            offer["chip_history"] = display_history
+        if not self.db.one(
             "SELECT 1 FROM runs WHERE workflow_id = ? LIMIT 1", (workflow["id"],)
         ):
-            return None
-        device = workflow.get("device_key") or self._device_key()
-        source = self.db.one(
-            "SELECT * FROM workflows WHERE device_key = ? AND id != ? "
-            "AND status NOT IN ('active', 'paused') "
-            "AND EXISTS (SELECT 1 FROM runs WHERE runs.workflow_id = workflows.id) "
-            "ORDER BY created_at DESC LIMIT 1",
-            (device, workflow["id"]),
+            offer["qubit_plan"] = self._qubit_plan_offer(workflow, history)
+        return offer
+
+    # -- Per-qubit plan on the lease page, operator request 2026-10-15 -------
+
+    def _qubit_plan_offer(
+        self, workflow: dict[str, Any], history: dict[str, Any] | None
+    ) -> dict[str, Any]:
+        """Per qubit: skip, start from the beginning, or resume at a node.
+
+        A qubit may resume at any node of its source workflow before which it
+        cleared every node, and at the first node it did not clear. Its
+        source is the chip workflow holding its most recent result (operator
+        decision 2026-10-21; before that, the chip's latest workflow). A
+        qubit without such a record (a fresh qubit, one whose readout IF is
+        unset, or one found absent there) only starts from the beginning, and
+        a qubit whose committed values state.json no longer holds resumes at
+        most at the first node that committed one of them.
+        """
+
+        targets = sorted(
+            (str(name) for name in json_loads(workflow.get("targets_json"), [])),
+            key=_natural_qubit_key,
         )
+        first = self.settings.workflow_sequence[0]
+        full = list(self.settings.workflow_sequence)
+        resume: dict[str, list[str]] = {name: [] for name in targets}
+        if isinstance(history, dict) and not history.get("display_only"):
+            sources = history.get("qubit_sources")
+            entries = dict(history.get("source_entries") or {})
+            if not isinstance(sources, dict):
+                # A history stored before 2026-10-21: one source for every qubit.
+                sources = {name: history.get("source_workflow_id") for name in targets}
+            fallback = history.get("source_workflow_id")
+            if fallback and fallback not in entries:
+                entries[fallback] = history
+            caps = history.get("qubit_state_mismatch_node") or {}
+            fresh = set(self._fresh_qubits(workflow))
+            contexts: dict[str, dict[str, Any] | None] = {}
+            for name in targets:
+                sid = sources.get(name)
+                if not sid or name in fresh:
+                    continue
+                if sid not in contexts:
+                    contexts[sid] = self._qubit_plan_source_context(
+                        str(sid), entries.get(sid) or {}, history
+                    )
+                context = contexts[sid]
+                if context is None or name in context["blocked"]:
+                    continue
+                sequence, reached = context["sequence"], context["reached"]
+                cleared_by_node = context["cleared_by_node"]
+                nodes: list[str] = []
+                for node in sequence[: reached + 1]:
+                    if node != first and node not in FLUX_NODES:
+                        nodes.append(node)
+                    cleared = cleared_by_node.get(node)
+                    if cleared is not None and name not in cleared and node not in FLUX_NODES:
+                        break
+                else:
+                    # Operator choice 2026-10-13: a statistics node beyond the
+                    # reached node is offered when its single measurement passed.
+                    for node in sequence[reached + 1:]:
+                        source_node = self._statistics_source(node)
+                        if source_node is not None and name in self._node_target_resolution(
+                            str(sid), source_node
+                        ):
+                            nodes.append(node)
+                own_pass = (context["qubit_start_nodes"] or {}).get(name)
+                serial = context["serialize_from_node"]
+                if own_pass and serial in nodes:
+                    # In a per-qubit pass the workflow's node is the current
+                    # qubit's; a qubit that went further in its own pass
+                    # resumes there too ("from the experiment it last
+                    # reached", operator 2026-10-15).
+                    nodes = sorted(
+                        set(nodes) | {node for node in own_pass if node in sequence},
+                        key=sequence.index,
+                    )
+                cap = caps.get(name)
+                if cap in full:
+                    nodes = [
+                        node
+                        for node in nodes
+                        if node in full and full.index(node) <= full.index(cap)
+                    ]
+                resume[name] = nodes
+        return {
+            "first_node": first,
+            "qubits": {name: ["skip", "beginning", *resume[name]] for name in targets},
+        }
+
+    def _qubit_plan_source_context(
+        self, workflow_id: str, entry: dict[str, Any], history: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        """What `_qubit_plan_offer` needs to know about one source workflow.
+
+        The passed qubits per node come from the history's own table of that
+        workflow when it has one (it was just computed); otherwise they are
+        resolved here.
+        """
+
+        source = self.db.one("SELECT * FROM workflows WHERE id = ?", (workflow_id,))
         if source is None:
             return None
         sequence = self._workflow_sequence(source)
-        current = str(source.get("current_node") or "")
-        if source["status"] == "completed" or current not in sequence:
-            reached = len(sequence) - 1
-        else:
-            reached = sequence.index(current)
-        options = self._workflow_options(source)
-        nodes = []
+        reached_node = entry.get("reached_node")
+        reached = sequence.index(reached_node) if reached_node in sequence else len(sequence) - 1
+        blocked = set(entry.get("start_blocked_by") or [])
+        blocked |= set(entry.get("absent_at_02") or [])
+        _, absent = self._02c_target_resolution(workflow_id)
+        blocked |= absent
+        table = next(
+            (
+                {str(item.get("node")): item for item in described.get("nodes") or []}
+                for described in history.get("workflows") or []
+                if isinstance(described, dict) and described.get("workflow_id") == workflow_id
+            ),
+            None,
+        )
+        cleared_by_node: dict[str, set[str] | None] = {}
         for node in sequence[: reached + 1]:
-            ran = self.db.one(
-                "SELECT 1 FROM runs WHERE workflow_id = ? AND node_id = ? LIMIT 1",
-                (source["id"], node),
+            item = table.get(node) if table is not None else None
+            if item is not None:
+                ran = bool(item.get("ran"))
+            else:
+                ran = self.db.one(
+                    "SELECT 1 FROM runs WHERE workflow_id = ? AND node_id = ? LIMIT 1",
+                    (workflow_id, node),
+                ) is not None
+            if not ran:
+                cleared_by_node[node] = None  # not run there: nothing to clear
+                continue
+            cleared = (
+                {str(name) for name in item.get("passed") or []}
+                if item is not None
+                else set(self._node_target_resolution(workflow_id, node))
             )
-            advanced = self.db.one(
-                "SELECT 1 FROM decisions d JOIN runs r ON r.id = d.run_id "
-                "WHERE r.workflow_id = ? AND r.node_id = ? AND d.decision = 'advance' "
-                "LIMIT 1",
-                (source["id"], node),
+            if self._node_is_single_pass(node):
+                cleared |= self._single_pass_measured_targets(source, node)
+            cleared_by_node[node] = cleared
+        return {
+            "sequence": sequence,
+            "reached": reached,
+            "blocked": blocked,
+            "cleared_by_node": cleared_by_node,
+            "qubit_start_nodes": entry.get("qubit_start_nodes") or {},
+            "serialize_from_node": entry.get("serialize_from_node"),
+        }
+
+    def _qubit_plan_choice(
+        self, offer: dict[str, Any], plan: Any
+    ) -> tuple[dict[str, Any] | None, dict[str, str], list[str]]:
+        """Validate the per-qubit plan; return (history, start per kept qubit, kept)."""
+
+        offered = (offer.get("qubit_plan") or {}).get("qubits") or {}
+        if not isinstance(plan, dict):
+            raise ServiceError("qubit_plan must be an object")
+        unknown = sorted(set(map(str, plan)) - set(offered))
+        if unknown:
+            raise ServiceError(f"{unknown} are not qubits of this measurement")
+        first = self.settings.workflow_sequence[0]
+        starts: dict[str, str] = {}
+        for name, choices in offered.items():
+            choice = str(plan.get(name, "beginning"))
+            if choice not in choices:
+                raise ServiceError(
+                    f"{name} cannot start at {choice}; choose one of {choices}"
+                )
+            if choice != "skip":
+                starts[name] = first if choice == "beginning" else choice
+        if not starts:
+            raise ServiceError("Choose at least one qubit to measure.")
+        history = offer.get("start_node")
+        if any(node != first for node in starts.values()) and not isinstance(history, dict):
+            raise ServiceError("Only a chip with an earlier workflow can resume a qubit.")
+        kept = sorted(starts, key=_natural_qubit_key)
+        return (history if isinstance(history, dict) else None), starts, kept
+
+    def _inherit_qubit_runs(
+        self,
+        connection: sqlite3.Connection,
+        workflow_id: str,
+        source_workflow_id: str,
+        qubit: str,
+        nodes: list[str],
+    ) -> int:
+        """Copy `qubit`'s own share of the source runs at `nodes`.
+
+        Each copy names only `qubit` and keeps only its entries of the analysis,
+        so the other qubits of a multiplexed source run are measured afresh.
+        """
+
+        if not nodes:
+            return 0
+        placeholders = ",".join("?" for _ in nodes)
+        rows = connection.execute(
+            f"SELECT * FROM runs WHERE workflow_id = ? AND node_id IN ({placeholders}) "
+            "AND status = 'completed' ORDER BY rowid",
+            (source_workflow_id, *nodes),
+        ).fetchall()
+        copied = 0
+        for row in rows:
+            parameters = json_loads(row["parameters_json"], {})
+            names = [str(name) for name in parameters.get("qubits", [])]
+            if qubit not in names:
+                continue
+            run = dict(row)
+            new_id = uuid.uuid4().hex
+            run["inherited_from_run_id"] = run.get("inherited_from_run_id") or run["id"]
+            run["id"] = new_id
+            run["workflow_id"] = workflow_id
+            run["autonomy_lease_id"] = None
+            run["pid"] = None
+            run["process_token"] = None
+            run["parameters_json"] = json_dumps({**parameters, "qubits": [qubit]})
+            run["analysis_json"] = json_dumps(
+                _restrict_to_qubit(json_loads(row["analysis_json"], {}), qubit)
             )
-            nodes.append(
-                {
-                    "node": node,
-                    "ran": ran is not None,
-                    "finished": advanced is not None,
-                    "passed": sorted(
-                        self._node_target_resolution(source["id"], node),
-                        key=_natural_qubit_key,
+            columns = list(run)
+            connection.execute(
+                f"INSERT INTO runs({', '.join(columns)}) "
+                f"VALUES ({', '.join('?' for _ in columns)})",
+                tuple(run[column] for column in columns),
+            )
+            decision = connection.execute(
+                "SELECT * FROM decisions WHERE run_id = ?", (row["id"],)
+            ).fetchone()
+            if decision is not None:
+                copy = dict(decision)
+                copy["id"] = uuid.uuid4().hex
+                copy["workflow_id"] = workflow_id
+                copy["run_id"] = new_id
+                keys = list(copy)
+                connection.execute(
+                    f"INSERT INTO decisions({', '.join(keys)}) "
+                    f"VALUES ({', '.join('?' for _ in keys)})",
+                    tuple(copy[key] for key in keys),
+                )
+            copied += 1
+        for event in connection.execute(
+            "SELECT payload_json FROM events WHERE workflow_id = ? "
+            "AND event_type = 'autonomy_targets_scientifically_unmeasurable' ORDER BY id",
+            (source_workflow_id,),
+        ).fetchall():
+            payload = json_loads(event["payload_json"], {})
+            if str(payload.get("node_id", "")) not in nodes:
+                continue
+            if qubit not in {str(name) for name in payload.get("targets", [])}:
+                continue
+            self.db.event(
+                "autonomy_targets_scientifically_unmeasurable",
+                "inherited",
+                {**payload, "targets": [qubit], "inherited_from_workflow_id": source_workflow_id},
+                workflow_id,
+                connection=connection,
+            )
+        return copied
+
+    def _chip_history(
+        self, workflow: dict[str, Any], source: dict[str, Any] | None = None
+    ) -> dict[str, Any] | None:
+        """This chip's measured history, merged across workflows, and where to resume.
+
+        Operator request 2026-10-10: a new workflow may start from the
+        beginning or at a node reached earlier, keeping the evidence before
+        it. Operator decision 2026-10-21: the history is merged across every
+        earlier workflow of the chip (`merged`: each node x qubit cell is that
+        qubit's most recent pass from any workflow, with its workflow and
+        date; `workflows` keeps each workflow's own table), and each qubit
+        resumes from the workflow that holds its most recent result
+        (`qubit_sources`, described in `source_entries`). The top-level
+        single-workflow fields (`source_workflow_id`, `start_nodes`, ...)
+        still describe the latest earlier workflow -- or the explicit
+        `source`, the Dashboard re-plan of a paused workflow (2026-10-19) --
+        while `qubit_start_nodes` is per qubit from its own source.
+
+        A workflow that already has runs, or was itself started from history,
+        gets the merged table for display only (`display_only`): its own
+        passes so far are part of it and no start choice is offered.
+        """
+
+        device = workflow.get("device_key") or self._device_key()
+        own_runs = (
+            self.db.one(
+                "SELECT 1 FROM runs WHERE workflow_id = ? LIMIT 1", (workflow["id"],)
+            )
+            is not None
+        )
+        display_only = source is None and (
+            bool(workflow.get("source_workflow_id")) or own_runs
+        )
+        earlier = self.db.all(
+            "SELECT * FROM workflows WHERE device_key = ? AND id != ? "
+            "AND status NOT IN ('active', 'paused') "
+            "AND EXISTS (SELECT 1 FROM runs WHERE runs.workflow_id = workflows.id) "
+            "ORDER BY created_at DESC, rowid DESC",
+            (device, workflow["id"]),
+        )
+        candidates = list(earlier)
+        if source is not None:
+            candidates = [source] + [row for row in earlier if row["id"] != source["id"]]
+        shown = list(candidates)
+        current_id = str(workflow["id"]) if display_only and own_runs else None
+        if current_id is not None:
+            shown = [workflow, *shown]
+        if not shown:
+            return None
+        records = self._history_records(shown)
+        targets = sorted(
+            {str(name) for name in json_loads(workflow.get("targets_json"), []) or []},
+            key=_natural_qubit_key,
+        )
+
+        def rank(wid: str, item: tuple[str, bool]) -> tuple[str, bool, str]:
+            return (item[0], item[1], str(records[wid]["created_at"] or ""))
+
+        # The merged node x qubit table: each cell is the most recent pass.
+        cells: dict[str, dict[str, dict[str, Any]]] = {}
+        for row in shown:
+            wid = str(row["id"])
+            for name, by_node in records[wid]["passes"].items():
+                for node, item in by_node.items():
+                    key = rank(wid, item)
+                    held = cells.setdefault(node, {}).get(name)
+                    if held is None or key > held["_rank"]:
+                        cells[node][name] = {
+                            "workflow_id": wid,
+                            "date": item[0],
+                            "current": wid == current_id,
+                            "_rank": key,
+                        }
+        full = list(self.settings.workflow_sequence)
+        merged_qubits = sorted(
+            set(targets) | {name for by_name in cells.values() for name in by_name},
+            key=_natural_qubit_key,
+        )
+        merged_nodes = [
+            {
+                "node": node,
+                "cells": {
+                    name: {key: value for key, value in cell.items() if key != "_rank"}
+                    for name, cell in sorted(
+                        cells[node].items(), key=lambda pair: _natural_qubit_key(pair[0])
                     )
-                    if ran is not None
-                    else [],
-                }
+                },
+            }
+            for node in sorted(
+                cells, key=lambda node: (full.index(node) if node in full else len(full), node)
             )
+        ]
+        # Each qubit resumes from the workflow holding its most recent result
+        # (a pass, or a verdict that it has no resonator).
+        qubit_sources: dict[str, str] = {}
+        best: dict[str, tuple[str, bool, str]] = {}
+        for row in candidates:
+            wid = str(row["id"])
+            record = records[wid]
+            for name in targets:
+                items = list((record["passes"].get(name) or {}).values())
+                if name in record["absent"]:
+                    items.append(record["absent"][name])
+                for item in items:
+                    key = rank(wid, item)
+                    if name not in best or key > best[name]:
+                        best[name], qubit_sources[name] = key, wid
+        primary = candidates[0] if candidates else workflow
+        entry_cache: dict[str, dict[str, Any]] = {}
+
+        def entry_for(wid: str) -> dict[str, Any]:
+            if wid not in entry_cache:
+                row = next(
+                    (item for item in shown if str(item["id"]) == wid), None
+                ) or self._workflow(wid)
+                entry_cache[wid] = self._history_start_entry(workflow, row, records[wid])
+            return entry_cache[wid]
+
+        entry = dict(entry_for(str(primary["id"])))
+        mismatch = {} if display_only else self._qubit_state_mismatch(qubit_sources)
+        qubit_start_nodes: dict[str, list[str]] = {}
+        if not display_only:
+            for name in targets:
+                sid = qubit_sources.get(name)
+                offer = (entry_for(sid) if sid else entry)["qubit_start_nodes"]
+                if name not in offer:
+                    continue
+                nodes = list(offer[name])
+                cap = mismatch.get(name)
+                if cap in full:
+                    nodes = [
+                        node
+                        for node in nodes
+                        if node in full and full.index(node) <= full.index(cap)
+                    ] or nodes[:1]
+                qubit_start_nodes[name] = nodes
+        serial = entry.get("serialize_from_node") or next(
+            (
+                item.get("serialize_from_node")
+                for item in entry_cache.values()
+                if item.get("serialize_from_node")
+            ),
+            None,
+        )
+        if display_only:
+            entry["start_nodes"] = []
+        source_entries = {
+            wid: {
+                key: value
+                for key, value in item.items()
+                if key
+                in {
+                    "reached_node",
+                    "start_blocked_by",
+                    "absent_at_02",
+                    "qubit_start_nodes",
+                    "serialize_from_node",
+                    "flux_calibration",
+                    "drive_mode",
+                    "created_at",
+                    "status",
+                    "start_nodes",
+                }
+            }
+            for wid, item in entry_cache.items()
+        }
+        qubit_state_matches = {name: name not in mismatch for name in qubit_sources}
+        return {
+            **{key: value for key, value in entry.items() if key != "final_hash"},
+            "device_key": device,
+            "nodes": records[str(primary["id"])]["nodes"],
+            "qubit_start_nodes": qubit_start_nodes,
+            "serialize_from_node": serial if qubit_start_nodes else None,
+            "display_only": display_only,
+            "current_workflow_id": current_id,
+            "qubit_sources": {} if display_only else qubit_sources,
+            "source_entries": {} if display_only else source_entries,
+            "qubit_state_matches": qubit_state_matches,
+            "qubit_state_mismatch_node": mismatch,
+            "state_matches": (
+                all(qubit_state_matches.values())
+                if qubit_sources and not display_only
+                else entry["state_matches"]
+            ),
+            "merged": {"qubits": merged_qubits, "nodes": merged_nodes},
+            "workflows": [
+                {
+                    "workflow_id": str(row["id"]),
+                    "created_at": records[str(row["id"])]["created_at"],
+                    "status": row.get("status"),
+                    "reached_node": records[str(row["id"])]["reached_node"],
+                    "current": str(row["id"]) == current_id,
+                    "nodes": records[str(row["id"])]["nodes"],
+                }
+                for row in shown
+            ],
+        }
+
+    def _history_records(self, workflows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+        """Per workflow: its node table, each qubit's passes and absent verdicts.
+
+        A workflow's record is kept until its runs, decisions or events
+        change, so a Dashboard refresh recomputes only the live workflow.
+        """
+
+        ids = [str(row["id"]) for row in workflows]
+        placeholders = ",".join("?" for _ in ids)
+        marks: dict[str, list[Any]] = {wid: [None] * 6 for wid in ids}
+        for row in self.db.all(
+            "SELECT workflow_id, COUNT(*) AS n, MAX(rowid) AS last, "
+            "SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS done, "
+            "SUM(CASE WHEN analysis_status = 'pass' THEN 1 ELSE 0 END) AS passed "
+            f"FROM runs WHERE workflow_id IN ({placeholders}) GROUP BY workflow_id",
+            tuple(ids),
+        ):
+            marks[str(row["workflow_id"])][0:4] = [row["n"], row["last"], row["done"], row["passed"]]
+        for row in self.db.all(
+            "SELECT workflow_id, MAX(id) AS last FROM events "
+            f"WHERE workflow_id IN ({placeholders}) GROUP BY workflow_id",
+            tuple(ids),
+        ):
+            marks[str(row["workflow_id"])][4] = row["last"]
+        for row in self.db.all(
+            "SELECT workflow_id, COUNT(*) AS n FROM decisions "
+            f"WHERE workflow_id IN ({placeholders}) GROUP BY workflow_id",
+            tuple(ids),
+        ):
+            marks[str(row["workflow_id"])][5] = row["n"]
+        cache: dict[str, tuple[Any, dict[str, Any]]] = self.__dict__.setdefault(
+            "_history_record_cache", {}
+        )
+        result: dict[str, dict[str, Any]] = {}
+        todo: list[dict[str, Any]] = []
+        keys: dict[str, Any] = {}
+        for row in workflows:
+            wid = str(row["id"])
+            keys[wid] = (
+                row.get("status"),
+                row.get("current_node"),
+                row.get("options_json"),
+                tuple(marks[wid]),
+            )
+            held = cache.get(wid)
+            if held is not None and held[0] == keys[wid]:
+                result[wid] = held[1]
+            else:
+                todo.append(row)
+        if todo:
+            for wid, record in self._compute_history_records(todo).items():
+                cache[wid] = (keys[wid], record)
+                result[wid] = record
+        return result
+
+    def _compute_history_records(
+        self, workflows: list[dict[str, Any]]
+    ) -> dict[str, dict[str, Any]]:
+        """`_history_records` without the cache.
+
+        One query reads every run of these workflows; a pass is dated by the
+        latest completed run of that node naming the qubit (an inherited copy
+        keeps its original date and ranks below the original on a tie).
+        """
+
+        ids = [str(row["id"]) for row in workflows]
+        placeholders = ",".join("?" for _ in ids)
+        runs = self.db.all(
+            "SELECT workflow_id, node_id, parameters_json, status, started_at, finished_at, "
+            "inherited_from_run_id FROM runs "
+            f"WHERE workflow_id IN ({placeholders}) ORDER BY rowid",
+            tuple(ids),
+        )
+        advanced = {
+            (str(row["workflow_id"]), str(row["node_id"]))
+            for row in self.db.all(
+                "SELECT r.workflow_id, r.node_id FROM decisions d JOIN runs r ON r.id = d.run_id "
+                f"WHERE r.workflow_id IN ({placeholders}) AND d.decision = 'advance'",
+                tuple(ids),
+            )
+        }
+        ran: dict[str, set[str]] = {wid: set() for wid in ids}
+        dates: dict[tuple[str, str, str], tuple[str, bool]] = {}
+        for row in runs:
+            wid, node = str(row["workflow_id"]), str(row["node_id"])
+            ran[wid].add(node)
+            if row.get("status") != "completed":
+                continue
+            item = (
+                str(row.get("started_at") or row.get("finished_at") or ""),
+                not row.get("inherited_from_run_id"),
+            )
+            for name in json_loads(row.get("parameters_json"), {}).get("qubits", []) or []:
+                key = (wid, node, str(name))
+                if key not in dates or item > dates[key]:
+                    dates[key] = item
+        full = list(self.settings.workflow_sequence)
+        result: dict[str, dict[str, Any]] = {}
+        for row in workflows:
+            wid = str(row["id"])
+            created = str(row.get("created_at") or "")
+            sequence = self._workflow_sequence(row) or full
+            current = str(row.get("current_node") or "")
+            if row.get("status") == "completed" or current not in sequence:
+                reached = len(sequence) - 1
+            else:
+                reached = sequence.index(current)
+            listed = set(sequence[: reached + 1]) | ran[wid]
+            nodes: list[dict[str, Any]] = []
+            passes: dict[str, dict[str, tuple[str, bool]]] = {}
+            for node in sorted(
+                listed, key=lambda node: (full.index(node) if node in full else len(full), node)
+            ):
+                passed = self._node_target_resolution(wid, node) if node in ran[wid] else set()
+                nodes.append(
+                    {
+                        "node": node,
+                        "ran": node in ran[wid],
+                        "finished": (wid, node) in advanced,
+                        "passed": sorted(passed, key=_natural_qubit_key),
+                    }
+                )
+                for name in passed:
+                    passes.setdefault(name, {})[node] = dates.get(
+                        (wid, node, name), (created, True)
+                    )
+            absent: dict[str, tuple[str, bool]] = {}
+            if "02c" in ran[wid]:
+                for name in self._02c_target_resolution(wid)[1]:
+                    absent[name] = dates.get((wid, "02c", name), (created, True))
+            for name in self._scientifically_unmeasurable_targets_by_node(wid).get("02", set()):
+                item = dates.get((wid, "02", name), (created, True))
+                absent[name] = max(absent.get(name, item), item)
+            result[wid] = {
+                "created_at": row.get("created_at"),
+                "reached_node": sequence[reached] if sequence else None,
+                "nodes": nodes,
+                "passes": passes,
+                "absent": absent,
+            }
+        return result
+
+    def _history_start_entry(
+        self,
+        workflow: dict[str, Any],
+        source: dict[str, Any],
+        record: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Where `workflow` may start when it resumes from `source`."""
+
+        sequence = self._workflow_sequence(source)
+        reached_node = record.get("reached_node")
+        reached = sequence.index(reached_node) if reached_node in sequence else len(sequence) - 1
+        options = self._workflow_options(source)
         # Starting at the configured first node is "from the beginning"; a
         # source that itself skipped 02 still offers 02x (2026-10-11).
         first = self.settings.workflow_sequence[0]
@@ -10090,9 +13428,7 @@ class AgentService:
             "source_workflow_id": source["id"],
             "created_at": source["created_at"],
             "status": source["status"],
-            "device_key": device,
-            "reached_node": sequence[reached],
-            "nodes": nodes,
+            "reached_node": sequence[reached] if sequence else None,
             "start_nodes": start_nodes,
             "flux_calibration": options.get("flux_calibration") is True,
             "drive_mode": options.get("drive_mode"),
@@ -10101,6 +13437,98 @@ class AgentService:
                 or final_hash == sha256_file(self.settings.active_state)
             ),
         }
+
+    def _committed_qubit_values(self, workflow_id: str) -> dict[str, dict[str, tuple[Any, str | None]]]:
+        """Per qubit, the last value each state leaf got along this workflow's line.
+
+        The line is the workflow and the workflows it inherited from (oldest
+        first, so a later commit wins). Only commits of a run's result count
+        (setup defaults are not results); a value written at a parent path is
+        split into its leaves, so a later commit of one leaf replaces just
+        that leaf. Each value carries the node of the run it came from.
+        """
+
+        chain: list[str] = []
+        current: str | None = workflow_id
+        while current and current not in chain and len(chain) < 32:
+            chain.append(current)
+            row = self.db.one(
+                "SELECT source_workflow_id FROM workflows WHERE id = ?", (current,)
+            )
+            current = str(row["source_workflow_id"]) if row and row["source_workflow_id"] else None
+        placeholders = ",".join("?" for _ in chain)
+        rows = self.db.all(
+            "SELECT e.workflow_id, e.payload_json, r.node_id FROM events e "
+            "LEFT JOIN proposals p ON p.id = json_extract(e.payload_json, '$.proposal_id') "
+            "LEFT JOIN runs r ON r.id = json_extract(p.payload_json, '$.run_id') "
+            f"WHERE e.event_type = 'state_committed' AND e.workflow_id IN ({placeholders}) "
+            "ORDER BY e.id",
+            tuple(chain),
+        )
+        rank = {wid: index for index, wid in enumerate(reversed(chain))}
+        rows.sort(key=lambda row: rank.get(str(row["workflow_id"]), 0))  # stable: ids kept
+
+        def leaves(path: str, value: Any) -> list[tuple[str, Any]]:
+            if isinstance(value, dict) and value:
+                found: list[tuple[str, Any]] = []
+                for key, item in value.items():
+                    part = str(key).replace("~", "~0").replace("/", "~1")
+                    found.extend(leaves(f"{path}/{part}", item))
+                return found
+            if isinstance(value, dict):
+                return []
+            return [(path, value)]
+
+        values: dict[str, dict[str, tuple[Any, str | None]]] = {}
+        for row in rows:
+            payload = json_loads(row["payload_json"], {})
+            node = str(row["node_id"]) if row.get("node_id") else None
+            for op in payload.get("patch") or []:
+                if not isinstance(op, dict) or op.get("op") not in {"replace", "add", "remove"}:
+                    continue
+                path = str(op.get("path") or "")
+                match = re.match(r"^/qubits/([^/]+)/", path)
+                if not match:
+                    continue
+                held = values.setdefault(match.group(1), {})
+                for key in [key for key in held if key == path or key.startswith(path + "/")]:
+                    del held[key]
+                if node is None or op.get("op") == "remove":
+                    continue
+                for leaf, value in leaves(path, op.get("value")):
+                    held[leaf] = (value, node)
+        return values
+
+    def _qubit_state_mismatch(self, qubit_sources: dict[str, str]) -> dict[str, str]:
+        """Per qubit, the earliest node whose committed value state.json no longer holds.
+
+        Operator decision 2026-10-21: a qubit resuming from its source keeps
+        only the starts up to that node; qubits whose values still match are
+        unaffected by what other workflows changed for other qubits.
+        """
+
+        if not qubit_sources:
+            return {}
+        try:
+            state = json.loads(Path(self.settings.active_state).read_text(encoding="utf-8"))
+        except Exception:  # pragma: no cover - an unreadable state fails elsewhere
+            return {}
+        full = list(self.settings.workflow_sequence)
+        cache: dict[str, dict[str, dict[str, tuple[Any, str | None]]]] = {}
+        result: dict[str, str] = {}
+        for name, wid in qubit_sources.items():
+            if wid not in cache:
+                cache[wid] = self._committed_qubit_values(wid)
+            earliest: int | None = None
+            for path, (value, node) in (cache[wid].get(name) or {}).items():
+                present, current = _json_pointer_value(state, path)
+                if present and _same_state_value(current, value):
+                    continue
+                index = full.index(node) if node in full else 0
+                earliest = index if earliest is None else min(earliest, index)
+            if earliest is not None:
+                result[name] = full[earliest]
+        return result
 
     def _qubit_start_offer(
         self,
@@ -10128,14 +13556,20 @@ class AgentService:
             for name in json_loads(workflow.get("targets_json"), [])
             if str(name) not in absent
         ]
+        placeholders = ",".join("?" for _ in tail)
+        measured: dict[str, set[str]] = {}
+        for row in self.db.all(
+            "SELECT node_id, parameters_json FROM runs WHERE workflow_id = ? "
+            f"AND status = 'completed' AND node_id IN ({placeholders})",
+            (source["id"], *tail),
+        ):
+            for name in json_loads(row["parameters_json"], {}).get("qubits", []) or []:
+                measured.setdefault(str(name), set()).add(str(row["node_id"]))
+        resolved: dict[str, set[str]] = {}
         for name in sorted(targets, key=_natural_qubit_key):
             reached = 0
             for index, node in enumerate(tail):
-                if self.db.one(
-                    "SELECT 1 FROM runs WHERE workflow_id = ? AND node_id = ? "
-                    "AND status = 'completed' AND parameters_json LIKE ? LIMIT 1",
-                    (source["id"], node, f'%"{name}"%'),
-                ):
+                if node in measured.get(name, set()):
                     reached = index
             nodes = [
                 node
@@ -10147,9 +13581,13 @@ class AgentService:
             # never reached 05st, but its 05 and 06b passed).
             for node in tail[reached + 1:]:
                 source_node = self._statistics_source(node)
-                if source_node is not None and name in self._node_target_resolution(
-                    source["id"], source_node
-                ):
+                if source_node is None:
+                    continue
+                if source_node not in resolved:
+                    resolved[source_node] = self._node_target_resolution(
+                        source["id"], source_node
+                    )
+                if name in resolved[source_node]:
                     nodes.append(node)
             offer[name] = nodes
         return offer
@@ -10231,12 +13669,18 @@ class AgentService:
         workflow_id: str,
         source_workflow_id: str,
         qubit_starts: dict[str, str],
+        qubit_sources: dict[str, str] | None = None,
     ) -> int:
-        """Copy each qubit's own pass runs before its chosen start node."""
+        """Copy each qubit's own pass runs before its chosen start node.
+
+        Each qubit's runs come from its own source workflow when
+        `qubit_sources` names one (operator decision 2026-10-21).
+        """
 
         full = list(self.settings.workflow_sequence)
         copied = 0
         for qubit, start in qubit_starts.items():
+            source_id = str((qubit_sources or {}).get(qubit) or source_workflow_id)
             serial = self.policy.shared_xy_drive.get("serialize_from_node")
             earlier = full[full.index(str(serial)): full.index(start)]
             if not earlier:
@@ -10245,46 +13689,19 @@ class AgentService:
             rows = connection.execute(
                 f"SELECT * FROM runs WHERE workflow_id = ? AND node_id IN ({placeholders}) "
                 "AND status = 'completed' ORDER BY rowid",
-                (source_workflow_id, *earlier),
+                (source_id, *earlier),
             ).fetchall()
             for row in rows:
                 names = json_loads(row["parameters_json"], {}).get("qubits", [])
                 if [str(name) for name in names] != [qubit]:
                     continue
-                run = dict(row)
-                new_id = uuid.uuid4().hex
-                run["inherited_from_run_id"] = run.get("inherited_from_run_id") or run["id"]
-                run["id"] = new_id
-                run["workflow_id"] = workflow_id
-                run["autonomy_lease_id"] = None
-                run["pid"] = None
-                run["process_token"] = None
-                columns = list(run)
-                connection.execute(
-                    f"INSERT INTO runs({', '.join(columns)}) "
-                    f"VALUES ({', '.join('?' for _ in columns)})",
-                    tuple(run[column] for column in columns),
-                )
-                decision = connection.execute(
-                    "SELECT * FROM decisions WHERE run_id = ?", (row["id"],)
-                ).fetchone()
-                if decision is not None:
-                    copy = dict(decision)
-                    copy["id"] = uuid.uuid4().hex
-                    copy["workflow_id"] = workflow_id
-                    copy["run_id"] = new_id
-                    keys = list(copy)
-                    connection.execute(
-                        f"INSERT INTO decisions({', '.join(keys)}) "
-                        f"VALUES ({', '.join('?' for _ in keys)})",
-                        tuple(copy[key] for key in keys),
-                    )
+                self._copy_inherited_run(connection, workflow_id, row)
                 copied += 1
             for event in connection.execute(
                 "SELECT payload_json FROM events WHERE workflow_id = ? "
                 "AND event_type = 'autonomy_targets_scientifically_unmeasurable' "
                 "ORDER BY id",
-                (source_workflow_id,),
+                (source_id,),
             ).fetchall():
                 payload = json_loads(event["payload_json"], {})
                 if str(payload.get("node_id", "")) not in earlier:
@@ -10297,12 +13714,53 @@ class AgentService:
                     {
                         **payload,
                         "targets": [qubit],
-                        "inherited_from_workflow_id": source_workflow_id,
+                        "inherited_from_workflow_id": source_id,
                     },
                     workflow_id,
                     connection=connection,
                 )
         return copied
+
+    def _chosen_qubit_sources(
+        self,
+        history: dict[str, Any] | None,
+        plan_starts: dict[str, str] | None,
+    ) -> tuple[dict[str, str], str | None]:
+        """(source workflow per inheriting qubit, the workflow's own source).
+
+        With a per-qubit plan the qubits that resume take their recorded
+        source and the most recent of those becomes the workflow's
+        `source_workflow_id`; the single start point keeps the latest
+        workflow as source and lets the qubits with another source take their
+        own evidence from it (operator decision 2026-10-21).
+        """
+
+        if history is None:
+            return {}, None
+        fallback = str(history["source_workflow_id"])
+        known = history.get("qubit_sources")
+        known = known if isinstance(known, dict) else {}
+        if plan_starts is None:
+            return {str(name): str(sid) for name, sid in known.items() if sid}, fallback
+        first = self.settings.workflow_sequence[0]
+        sources = {
+            str(name): str(known.get(name) or fallback)
+            for name, node in plan_starts.items()
+            if node != first
+        }
+        if not sources:
+            return {}, fallback
+        entries = history.get("source_entries") or {}
+
+        def created(sid: str) -> str:
+            entry = entries.get(sid) or {}
+            if entry.get("created_at"):
+                return str(entry["created_at"])
+            row = self.db.one("SELECT created_at FROM workflows WHERE id = ?", (sid,))
+            return str(row["created_at"]) if row else ""
+
+        primary = max(set(sources.values()), key=lambda sid: (created(sid), sid))
+        return sources, primary
 
     def _start_locks(
         self, history: dict[str, Any], start_node: str
@@ -10336,61 +13794,133 @@ class AgentService:
         workflow_id: str,
         source_workflow_id: str,
         start_node: str,
+        qubit_sources: dict[str, str] | None = None,
     ) -> int:
         """Copy the source workflow's runs and decisions before `start_node`.
 
         The copies carry `inherited_from_run_id`, no lease and the original
         analysis, so every per-workflow guard sees the earlier evidence while
         lease attempts and the session results stay with the new runs.
+
+        Operator decision 2026-10-21: a qubit listed in `qubit_sources` with
+        another workflow takes its share of these shared nodes from that
+        workflow instead, so each qubit's evidence comes from one line. A
+        run present in several sources (the same original) is copied once.
         """
 
         full = list(self.settings.workflow_sequence)
         earlier = full[: full.index(start_node)]
         if not earlier:
             return 0
+        owners = {
+            str(name): str(sid)
+            for name, sid in (qubit_sources or {}).items()
+            if sid and str(sid) != str(source_workflow_id)
+        }
         placeholders = ",".join("?" for _ in earlier)
-        rows = connection.execute(
-            f"SELECT * FROM runs WHERE workflow_id = ? AND node_id IN ({placeholders}) "
-            "ORDER BY rowid",
-            (source_workflow_id, *earlier),
-        ).fetchall()
+        picked: dict[str, dict[str, Any]] = {}
+        order = [str(source_workflow_id)] + sorted(set(owners.values()))
+        for sid in order:
+            mine = {name for name, owner in owners.items() if owner == sid}
+            rows = connection.execute(
+                f"SELECT * FROM runs WHERE workflow_id = ? AND node_id IN ({placeholders}) "
+                "ORDER BY rowid",
+                (sid, *earlier),
+            ).fetchall()
+            for row in rows:
+                if row["status"] != "completed":
+                    continue
+                names = [
+                    str(name)
+                    for name in json_loads(row["parameters_json"], {}).get("qubits", []) or []
+                ]
+                want: set[str] | None
+                if sid == str(source_workflow_id):
+                    want = None if not names else set(names) - set(owners)
+                else:
+                    want = set(names) & mine
+                if want is not None and not want:
+                    continue
+                key = str(row["inherited_from_run_id"] or row["id"])
+                held = picked.get(key)
+                if held is None:
+                    picked[key] = {"row": row, "want": want, "names": names}
+                elif held["want"] is not None:
+                    held["want"] = None if want is None else held["want"] | want
+        items = list(picked.values())
+        if owners:
+            items.sort(key=lambda item: str(item["row"]["started_at"] or ""))
         copied = 0
-        for row in rows:
-            run = dict(row)
-            if run.get("status") != "completed":
-                continue
-            new_id = uuid.uuid4().hex
-            run["inherited_from_run_id"] = run.get("inherited_from_run_id") or run["id"]
-            run["id"] = new_id
-            run["workflow_id"] = workflow_id
-            run["autonomy_lease_id"] = None
-            run["pid"] = None
-            run["process_token"] = None
-            columns = list(run)
-            connection.execute(
-                f"INSERT INTO runs({', '.join(columns)}) "
-                f"VALUES ({', '.join('?' for _ in columns)})",
-                tuple(run[column] for column in columns),
-            )
-            decision = connection.execute(
-                "SELECT * FROM decisions WHERE run_id = ?", (row["id"],)
-            ).fetchone()
-            if decision is not None:
-                copy = dict(decision)
-                copy["id"] = uuid.uuid4().hex
-                copy["workflow_id"] = workflow_id
-                copy["run_id"] = new_id
-                keys = list(copy)
-                connection.execute(
-                    f"INSERT INTO decisions({', '.join(keys)}) "
-                    f"VALUES ({', '.join('?' for _ in keys)})",
-                    tuple(copy[key] for key in keys),
-                )
+        for item in items:
+            keep = item["want"]
+            if keep is not None and keep >= set(item["names"]):
+                keep = None
+            self._copy_inherited_run(connection, workflow_id, item["row"], keep)
             copied += 1
         self._inherit_unmeasurable_marks(
-            connection, workflow_id, source_workflow_id, earlier
+            connection, workflow_id, source_workflow_id, earlier, exclude=set(owners)
         )
+        for sid in sorted(set(owners.values())):
+            self._inherit_unmeasurable_marks(
+                connection,
+                workflow_id,
+                sid,
+                earlier,
+                only={name for name, owner in owners.items() if owner == sid},
+            )
         return copied
+
+    def _copy_inherited_run(
+        self,
+        connection: sqlite3.Connection,
+        workflow_id: str,
+        row: Any,
+        keep: set[str] | None = None,
+    ) -> str:
+        """Copy one run (and its decision) into `workflow_id`.
+
+        With `keep` the copy names only those qubits and keeps only their
+        entries of the analysis.
+        """
+
+        run = dict(row)
+        new_id = uuid.uuid4().hex
+        run["inherited_from_run_id"] = run.get("inherited_from_run_id") or run["id"]
+        run["id"] = new_id
+        run["workflow_id"] = workflow_id
+        run["autonomy_lease_id"] = None
+        run["pid"] = None
+        run["process_token"] = None
+        if keep is not None:
+            parameters = json_loads(row["parameters_json"], {})
+            parameters["qubits"] = [
+                name for name in parameters.get("qubits", []) or [] if str(name) in keep
+            ]
+            run["parameters_json"] = json_dumps(parameters)
+            run["analysis_json"] = json_dumps(
+                _restrict_to_qubits(json_loads(row["analysis_json"], {}), keep)
+            )
+        columns = list(run)
+        connection.execute(
+            f"INSERT INTO runs({', '.join(columns)}) "
+            f"VALUES ({', '.join('?' for _ in columns)})",
+            tuple(run[column] for column in columns),
+        )
+        decision = connection.execute(
+            "SELECT * FROM decisions WHERE run_id = ?", (row["id"],)
+        ).fetchone()
+        if decision is not None:
+            copy = dict(decision)
+            copy["id"] = uuid.uuid4().hex
+            copy["workflow_id"] = workflow_id
+            copy["run_id"] = new_id
+            keys = list(copy)
+            connection.execute(
+                f"INSERT INTO decisions({', '.join(keys)}) "
+                f"VALUES ({', '.join('?' for _ in keys)})",
+                tuple(copy[key] for key in keys),
+            )
+        return new_id
 
     def _inherit_unmeasurable_marks(
         self,
@@ -10398,11 +13928,16 @@ class AgentService:
         workflow_id: str,
         source_workflow_id: str,
         earlier: list[str],
+        *,
+        only: set[str] | None = None,
+        exclude: set[str] | None = None,
     ) -> int:
         """Carry the source's scientifically-unmeasurable marks before the start.
 
         2026-10-11: a workflow started at 02x kept 02's runs but not 02's mark
         on q7 (no resonator), so q7 with IF 0 came back as a 02x target.
+        `only` / `exclude` limit the marks to the qubits taken from this
+        source (per-qubit sources, operator decision 2026-10-21).
         """
         rows = connection.execute(
             "SELECT payload_json FROM events WHERE workflow_id = ? "
@@ -10415,6 +13950,16 @@ class AgentService:
             payload = json_loads(row["payload_json"], {})
             if str(payload.get("node_id", "")) not in earlier:
                 continue
+            if only is not None or exclude:
+                names = [str(name) for name in payload.get("targets", []) or []]
+                kept = [
+                    name
+                    for name in names
+                    if (only is None or name in only) and name not in (exclude or set())
+                ]
+                if not kept:
+                    continue
+                payload = {**payload, "targets": kept}
             self.db.event(
                 "autonomy_targets_scientifically_unmeasurable",
                 "inherited",
@@ -10428,7 +13973,7 @@ class AgentService:
     def _backfill_inherited_marks(self) -> None:
         """Give open mid-sequence workflows the marks their start skipped."""
         for workflow in self.db.all(
-            "SELECT id, source_workflow_id, start_node FROM workflows "
+            "SELECT id, source_workflow_id, start_node, options_json FROM workflows "
             "WHERE source_workflow_id IS NOT NULL AND start_node IS NOT NULL "
             "AND status IN ('active', 'paused')"
         ):
@@ -10443,13 +13988,30 @@ class AgentService:
             if workflow["start_node"] not in full:
                 continue
             earlier = full[: full.index(workflow["start_node"])]
+            # Per-qubit sources (operator decision 2026-10-21): each qubit's
+            # marks come from its own source workflow.
+            sources = json_loads(workflow.get("options_json"), {}).get("qubit_sources") or {}
+            owners = {
+                str(name): str(sid)
+                for name, sid in sources.items()
+                if sid and str(sid) != str(workflow["source_workflow_id"])
+            }
             with self.db.transaction(immediate=True) as connection:
                 self._inherit_unmeasurable_marks(
                     connection,
                     workflow["id"],
                     workflow["source_workflow_id"],
                     earlier,
+                    exclude=set(owners),
                 )
+                for sid in sorted(set(owners.values())):
+                    self._inherit_unmeasurable_marks(
+                        connection,
+                        workflow["id"],
+                        sid,
+                        earlier,
+                        only={name for name, owner in owners.items() if owner == sid},
+                    )
 
     def _apply_lease_options(
         self,
@@ -10505,11 +14067,34 @@ class AgentService:
         unknown = sorted(set(selected) - set(offered))
         if unknown:
             raise ServiceError(f"These experiments are not optional here: {unknown}")
-        history, start_node = self._start_node_choice(offer, lease_options)
-        qubit_starts = self._qubit_start_choice(history, start_node, lease_options)
+        plan_starts: dict[str, str] | None = None
+        kept_targets: list[str] | None = None
+        if isinstance(offer.get("qubit_plan"), dict) and "qubit_plan" in lease_options:
+            # Operator request 2026-10-15: each qubit is skipped, starts from the
+            # beginning, or resumes where it stopped; the workflow starts at the
+            # earliest of them and later qubits join at their own node.
+            history, plan_starts, kept_targets = self._qubit_plan_choice(
+                offer, lease_options["qubit_plan"]
+            )
+            full_order = list(self.settings.workflow_sequence)
+            earliest = min(plan_starts.values(), key=full_order.index)
+            start_node = None if earliest == full_order[0] else earliest
+            qubit_starts: dict[str, str] = {}
+        else:
+            history, start_node = self._start_node_choice(offer, lease_options)
+            qubit_starts = self._qubit_start_choice(history, start_node, lease_options)
+        # Operator decision 2026-10-21: each resuming qubit inherits from the
+        # workflow holding its most recent result; the most recent of those
+        # is recorded as the workflow's source and sets the start locks.
+        qubit_sources, primary_source = self._chosen_qubit_sources(history, plan_starts)
+        lock_history = (
+            (history.get("source_entries") or {}).get(primary_source) or history
+            if history is not None
+            else None
+        )
         flux_history_lock, drive_history_lock = (
-            self._start_locks(history, start_node)
-            if history is not None and start_node is not None
+            self._start_locks(lock_history, start_node)
+            if lock_history is not None and start_node is not None
             else (None, None)
         )
         full_sequence = list(self.settings.workflow_sequence)
@@ -10542,9 +14127,18 @@ class AgentService:
                 # Nodes before the start node do not run in this workflow.
                 continue
             if isinstance(item, dict) and item.get("required") and item.get("node") not in selected:
+                because = [
+                    str(name)
+                    for name in item.get("required_because") or []
+                    # A qubit the per-qubit plan leaves out is not measured,
+                    # so its unset readout IF does not force 02.
+                    if kept_targets is None or str(name) in kept_targets
+                ]
+                if not because:
+                    continue
                 raise ServiceError(
                     f"{item.get('node')} is required: readout IFs of "
-                    f"{item.get('required_because')} are zero or duplicated. Fill in "
+                    f"{because} are zero or duplicated. Fill in "
                     "the resonator count and design frequencies."
                 )
         drive_mode = lease_options.get("drive_mode")
@@ -10688,9 +14282,37 @@ class AgentService:
             options["drive_mode"] = drive_mode
         if flux_choice is not None:
             options["flux_calibration"] = bool(flux_choice)
+        serial_node = self.policy.shared_xy_drive.get("serialize_from_node")
+        if plan_starts is not None:
+            options["qubit_plan"] = {
+                name: str(lease_options["qubit_plan"].get(name, "beginning"))
+                for name in (offer.get("qubit_plan") or {}).get("qubits") or {}
+            }
+            if (
+                drive_mode == "per_qubit"
+                and isinstance(serial_node, str)
+                and serial_node in full_sequence
+            ):
+                # A per-qubit pass starts at the serialization node; a qubit
+                # resuming later starts its own pass at its node.
+                qubit_starts = {
+                    name: node
+                    for name, node in plan_starts.items()
+                    if full_sequence.index(node) > full_sequence.index(serial_node)
+                }
+                if start_node is not None and full_sequence.index(
+                    start_node
+                ) > full_sequence.index(serial_node):
+                    start_node = serial_node
+                    current = serial_node
+        if qubit_sources:
+            options["qubit_sources"] = qubit_sources
         if qubit_starts:
             options["qubit_start_nodes"] = qubit_starts
-            first_qubit = next(iter(history.get("qubit_start_nodes") or {}), None)
+            if plan_starts is not None:
+                first_qubit = kept_targets[0] if kept_targets else None
+            else:
+                first_qubit = next(iter(history.get("qubit_start_nodes") or {}), None)
             if first_qubit is not None:
                 current = qubit_starts.get(first_qubit, current)
         now = utc_now()
@@ -10700,12 +14322,41 @@ class AgentService:
             (json_dumps(options), current, now, workflow["id"]),
         )
         inherited = 0
-        if history is not None and start_node is not None:
+        if plan_starts is not None:
+            connection.execute(
+                "UPDATE workflows SET targets_json = ? WHERE id = ?",
+                (json_dumps(kept_targets), workflow["id"]),
+            )
+            connection.execute(
+                "UPDATE autonomy_leases SET targets_json = ? WHERE proposal_id = ?",
+                (json_dumps(kept_targets), proposal["id"]),
+            )
+            begin = start_node or full_sequence[0]
+            if history is not None:
+                source_id = str(primary_source)
+                if start_node is not None:
+                    inherited += self._inherit_evidence(
+                        connection, workflow["id"], source_id, start_node, qubit_sources
+                    )
+                for name, node in plan_starts.items():
+                    inherited += self._inherit_qubit_runs(
+                        connection,
+                        workflow["id"],
+                        qubit_sources.get(name, source_id),
+                        name,
+                        full_sequence[full_sequence.index(begin): full_sequence.index(node)],
+                    )
+                connection.execute(
+                    "UPDATE workflows SET source_workflow_id = ?, start_node = ? WHERE id = ?",
+                    (source_id, start_node, workflow["id"]),
+                )
+        elif history is not None and start_node is not None:
             inherited = self._inherit_evidence(
                 connection,
                 workflow["id"],
                 str(history["source_workflow_id"]),
                 start_node,
+                qubit_sources,
             )
             if qubit_starts:
                 inherited += self._inherit_qubit_tail(
@@ -10713,6 +14364,7 @@ class AgentService:
                     workflow["id"],
                     str(history["source_workflow_id"]),
                     qubit_starts,
+                    qubit_sources,
                 )
             connection.execute(
                 "UPDATE workflows SET source_workflow_id = ?, start_node = ? WHERE id = ?",
@@ -10752,9 +14404,9 @@ class AgentService:
                 "current_node": current,
                 "start_node": start_node,
                 "qubit_start_nodes": qubit_starts,
-                "source_workflow_id": (
-                    history.get("source_workflow_id") if history is not None else None
-                ),
+                "qubit_plan": options.get("qubit_plan"),
+                "source_workflow_id": primary_source,
+                "qubit_sources": qubit_sources,
                 "inherited_runs": inherited,
                 "approval_method": approval_method,
             },
@@ -11555,9 +15207,69 @@ class AgentService:
         )
         return tuple(str(node) for node in configured)
 
+    def _is_late_active_07b(self, workflow: dict[str, Any], node_id: str) -> bool:
+        """The 07b active-reset repeat requested after the pass left 07b.
+
+        Operator request 2026-10-19 (q1 at 06): the one active-reset 07b run a
+        thermal result above the trigger earns may also run later, off
+        sequence, without moving the workflow back. It uses the active-reset
+        verification path, so the current node stays where it is.
+        """
+
+        qualification_node = str(
+            self.policy.raw.get("reset_policy", {}).get("active_qualification_node", "07b")
+        )
+        if node_id != qualification_node:
+            return False
+        sequence = list(self.settings.workflow_sequence)
+        current = workflow.get("current_node")
+        return (
+            current in sequence
+            and qualification_node in sequence
+            and sequence.index(current) > sequence.index(qualification_node)
+        )
+
+    def _is_thermal_reset_comparison(
+        self, workflow: dict[str, Any], node_id: str, parameters: dict[str, Any]
+    ) -> bool:
+        """A thermal repeat of an active-reset statistics run, for comparison.
+
+        Operator request 2026-10-19: only for the qubit of the current pass
+        (the shared XY LO is placed for it), only after a decided active-reset
+        run of the same statistics node, and once per node and qubit.
+        """
+
+        if node_id not in {"05st", "06st_t2star", "06st_t2e"}:
+            return False
+        if str((parameters or {}).get("reset_type", "")) != "thermal":
+            return False
+        qubits = list((parameters or {}).get("qubits") or [])
+        serial = self._serial_pass_state(workflow)
+        if len(qubits) != 1 or serial is None or serial.get("current") != qubits[0]:
+            return False
+        rows = self.db.all(
+            "SELECT r.parameters_json, p.payload_json, d.id AS decision_id "
+            "FROM runs r LEFT JOIN proposals p ON p.id = r.proposal_id "
+            "LEFT JOIN decisions d ON d.run_id = r.id "
+            "WHERE r.workflow_id = ? AND r.node_id = ?",
+            (workflow["id"], node_id),
+        )
+        decided_active = compared = False
+        for row in rows:
+            run_parameters = json_loads(row["parameters_json"], {})
+            if qubits[0] not in (run_parameters.get("qubits") or []):
+                continue
+            if json_loads(row["payload_json"], {}).get("reset_comparison"):
+                compared = True
+            elif _is_active_reset(run_parameters) and row["decision_id"]:
+                decided_active = True
+        return decided_active and not compared
+
     def _is_active_reset_verification_node(
         self, workflow: dict[str, Any], node_id: str
     ) -> bool:
+        if self._is_late_active_07b(workflow, node_id):
+            return True
         if node_id not in self._active_reset_verification_nodes():
             return False
         sequence = list(self.settings.workflow_sequence)
@@ -11713,8 +15425,9 @@ class AgentService:
                 if (
                     isinstance(fit, dict)
                     and fit.get("fit_successful") is True
+                    # The analyzer's flag already applies the active-reset
+                    # shape limit (operator 2026-10-19: up to 15% off-blob).
                     and fit.get("active_reset_qualified") is True
-                    and fit.get("morphology_pass") is True
                     and _finite_positive(fidelity)
                     and floor <= float(fidelity) <= 1.0
                 ):
@@ -11908,6 +15621,59 @@ def _reset_type(parameters: Any) -> str:
 
 def _is_active_reset(parameters: Any) -> bool:
     return _reset_type(parameters).startswith("active")
+
+
+def _03a_ladder_order(
+    reference: float, line: float, positions: list[float], rules: dict[str, Any]
+) -> tuple[int | None, float | None]:
+    """Which multi-photon line `reference` was, below the f01 at `line`.
+
+    Operator choice 2026-10-19: f0k/k = f01 - (k-1) alpha/2. An order counts
+    when its alpha lies in the plausible window and every intermediate
+    f0j/j (2 <= j < k) appears among `positions`. Only a unique order is
+    returned, with its alpha; otherwise (None, None).
+    """
+
+    separation = line - reference
+    found: list[tuple[int, float]] = []
+    for order in range(2, int(rules["max_order"]) + 1):
+        alpha = 2.0 * separation / (order - 1)
+        if not rules["alpha_min_hz"] <= alpha <= rules["alpha_max_hz"]:
+            continue
+        if all(
+            any(
+                abs(position - (line - (j - 1) * alpha / 2.0))
+                <= rules["ladder_tolerance_hz"]
+                for position in positions
+            )
+            for j in range(2, order)
+        ):
+            found.append((order, alpha))
+    return found[0] if len(found) == 1 else (None, None)
+
+
+def _03a_ladder_anharmonicity(
+    line: float, outcomes: list[dict[str, Any]], window: float, rules: dict[str, Any]
+) -> float | None:
+    """Anharmonicity for a confirmed f01 from the check that found it."""
+
+    for check in reversed(outcomes):
+        upper = check.get("upper_line_hz")
+        reference = check.get("reference_hz")
+        order = check.get("photon_order")
+        if not (
+            _finite_number(upper)
+            and _finite_number(reference)
+            and isinstance(order, int)
+            and order >= 2
+            and abs(line - float(upper)) <= window
+        ):
+            continue
+        alpha = 2.0 * (line - float(reference)) / (order - 1)
+        if rules["alpha_min_hz"] <= alpha <= rules["alpha_max_hz"]:
+            return alpha
+        return None
+    return None
 
 
 def _finite_positive(value: Any) -> bool:

@@ -125,6 +125,83 @@ class TwoBlobSelectionTests(unittest.TestCase):
             self.assertTrue(any("fidelity optimum 98.0%" in w for w in warnings))
 
 
+class SeparationWeightedSelectionTests(unittest.TestCase):
+    """Operator decision 2026-10-20: 3 x blob overlap + 1 x off-blob, lowest wins."""
+
+    RULES = {
+        "neighborhood_points": 0,
+        "max_outlier_fraction": 0.05,
+        "separation_weight": 3.0,
+        "outlier_weight": 1.0,
+    }
+
+    def dataset(self) -> xr.Dataset:
+        # Amplitude columns: barely separated (best node fidelity), well
+        # separated, and widest but smeared beyond the 5% limit.
+        runs, freqs, amps = 2000, 2, 3
+        shape = (1, runs, freqs, amps, 1)
+        arrays = {k: np.zeros(shape) for k in ("I_g", "Q_g", "I_e", "Q_e")}
+        fidelity = np.full((1, freqs, amps, 1), 80.0)
+        fidelity[0, :, 0, 0] = 98.0
+        for f in range(freqs):
+            for a, (separation, smear) in enumerate(((1.0, 0.0), (4.0, 0.0), (6.0, 0.3))):
+                g, e = blobs(runs, separation, smear=smear)
+                arrays["I_g"][0, :, f, a, 0] = g.real
+                arrays["Q_g"][0, :, f, a, 0] = g.imag
+                arrays["I_e"][0, :, f, a, 0] = e.real
+                arrays["Q_e"][0, :, f, a, 0] = e.imag
+        dims = ("qubit", "run", "freq", "amp", "duration")
+        return xr.Dataset(
+            {
+                **{k: (dims, v) for k, v in arrays.items()},
+                "fidelity": (("qubit", "freq", "amp", "duration"), fidelity),
+            },
+            coords={
+                "qubit": ["q1"],
+                "run": np.arange(runs),
+                "freq": [0.0, 1e5],
+                "amp": [0.5, 1.0, 2.0],
+                "duration": [1000.0],
+            },
+        )
+
+    def test_separation_outweighs_node_fidelity(self) -> None:
+        result = two_blob_metrics(self.dataset(), self.RULES)["q1"]
+        self.assertEqual(result["selection"], "separation_weighted")
+        self.assertEqual(result["unconstrained"]["amplitude_factor"], 0.5)
+        self.assertEqual(result["selected"]["amplitude_factor"], 1.0)
+        self.assertTrue(result["two_blob"])
+        self.assertGreater(result["selected"]["separation_sigma"], 3.0)
+
+    def test_smear_beyond_the_limit_is_never_chosen(self) -> None:
+        result = two_blob_metrics(self.dataset(), self.RULES)["q1"]
+        self.assertNotEqual(result["selected"]["amplitude_factor"], 2.0)
+        self.assertLessEqual(result["selected"]["outlier_fraction"], 0.05)
+
+    def test_weights_trade_overlap_against_off_blob(self) -> None:
+        # With the off-blob share weighted 100:1 a smeared-but-separated point
+        # cannot beat the clean barely-separated one on off-blob alone.
+        rules = dict(self.RULES, separation_weight=1.0, outlier_weight=100.0)
+        rules["max_outlier_fraction"] = 1.0
+        result = two_blob_metrics(self.dataset(), rules)["q1"]
+        self.assertNotEqual(result["selected"]["amplitude_factor"], 2.0)
+
+    def test_report_names_the_separation(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            self.dataset().to_netcdf(Path(folder) / "ds.h5")
+            current = sample_state(0.2, 0.1)
+            old_amp = current["qubits"]["q1"]["resonator"]["operations"]["readout"]["amplitude"]
+            patch, warnings, failures = _select_07d_readout_patch(
+                [], Path(folder), current, ["q1"], self.RULES
+            )
+            values = {item["path"]: item["value"] for item in patch}
+            self.assertEqual(failures, [])
+            self.assertAlmostEqual(
+                values["/qubits/q1/resonator/operations/readout/amplitude"], old_amp * 1.0
+            )
+            self.assertTrue(any("separation-weighted point (3:1)" in w for w in warnings))
+
+
 class IqBlobTwoBlobModeTests(unittest.TestCase):
     def test_07b_passes_thermal_tails_and_fails_smear(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
@@ -178,13 +255,17 @@ class Reopen07dTests(unittest.TestCase):
             self.assertEqual(
                 service._single_pass_measured_targets(workflow, "07d"), set(first)
             )
-            with self.assertRaisesRegex(Exception, "only from 07b or 06"):
+            with self.assertRaisesRegex(Exception, "only from a node after 07d"):
                 service.reopen_07d_after_readout_rule_change(
                     workflow["id"], "rule change", "unittest"
                 )
+            # 2026-10-20: any node after 07d may reopen it (q7 was at 10a).
+            sequence = service._workflow_sequence(service._workflow(workflow["id"]))
+            later = sequence[sequence.index("07d") + 1 :]
+            self.assertIn("07b", later)
             service.db.execute(
-                "UPDATE workflows SET current_node = '07b' WHERE id = ?",
-                (workflow["id"],),
+                "UPDATE workflows SET current_node = ? WHERE id = ?",
+                (later[-1], workflow["id"]),
             )
             result = service.reopen_07d_after_readout_rule_change(
                 workflow["id"], "two-blob rule", "unittest"
@@ -196,6 +277,48 @@ class Reopen07dTests(unittest.TestCase):
             self.assertNotIn(
                 first[0], service._node_target_resolution(workflow["id"], "07d")
             )
+
+
+class SinglePassRepeatDeadlockTests(unittest.TestCase):
+    """2026-10-20 (q7 07d #759): the one 07d run was decided `repeat`; 07d
+    may not run again and the run cannot take a second decision, so asking for
+    07b must be the advance."""
+
+    def test_next_node_advances_a_repeat_decided_07d(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            state, wiring, all_targets = sample_multiplex_state_and_wiring()
+            targets = sorted(all_targets)[:4]
+            settings = make_settings(Path(folder), state)
+            atomic_write_json(settings.wiring_path, wiring)
+            service = AgentService(settings)
+            _with_readout_nodes(service)
+            workflow = service.start_workflow(
+                targets, {"multiplexed": True}, "unittest", ENTRY_PHRASE
+            )
+            service.db.execute(
+                "UPDATE workflows SET current_node = '07d' WHERE id = ?",
+                (workflow["id"],),
+            )
+            proposal = service.request_run(
+                workflow["id"], "07d", {"qubits": targets}, "All.", "unittest"
+            )
+            service.db.execute(
+                "INSERT INTO runs(id, workflow_id, proposal_id, node_id, parameters_json, "
+                "status, analysis_status, started_at) VALUES ('r07d', ?, ?, '07d', ?, "
+                "'completed', 'pass', '2999-01-01T00:00:00+00:00')",
+                (workflow["id"], proposal["id"], json.dumps({"qubits": targets})),
+            )
+            current = service._workflow(workflow["id"])
+            self.assertFalse(service._node_is_finished_and_fully_decided(current, "07b"))
+            service.db.execute(
+                "INSERT INTO decisions(id, workflow_id, run_id, decision, reason, next_node, "
+                "next_parameters_json, state_patch_json, client_id, created_at) VALUES "
+                "('d07d', ?, 'r07d', 'repeat', 'test', '07d', '{}', '[]', 'test', "
+                "'2999-01-01T00:00:00+00:00')",
+                (workflow["id"],),
+            )
+            current = service._workflow(workflow["id"])
+            self.assertTrue(service._node_is_finished_and_fully_decided(current, "07b"))
 
 
 class ReopenActiveRepeatTests(unittest.TestCase):
@@ -269,7 +392,7 @@ class ReopenDownstreamTests(unittest.TestCase):
             proposal = service.request_run(
                 workflow["id"], "06",
                 {"qubits": targets, "use_state_discrimination": False,
-                 "max_wait_time_in_ns": 1016},
+                 "max_wait_time_in_ns": 816},
                 "Ramsey.", "unittest"
             )
             service.db.execute(

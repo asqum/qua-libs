@@ -1306,7 +1306,15 @@ class AnalysisTests(unittest.TestCase):
             settings = make_settings(Path(folder), sample_state(0.2, 0.1))
             analyzer = SnapshotAnalyzer(settings, PolicyEngine(settings))
 
-            def qualify(fidelity: float, morphology_pass: bool) -> dict:
+            def qualify(
+                fidelity: float, morphology_pass: bool, off_blob: float | None = None
+            ) -> dict:
+                metrics = {"morphology_pass": morphology_pass, "clouds": {}}
+                if off_blob is not None:
+                    metrics["two_blob"] = {
+                        "g_on_neither_blob": off_blob,
+                        "e_on_neither_blob": off_blob,
+                    }
                 return analyzer._fit_quality(
                     "07b",
                     {
@@ -1315,21 +1323,19 @@ class AnalysisTests(unittest.TestCase):
                         },
                         "results": {"q1": {"fidelity": fidelity}},
                     },
-                    dataset_metrics={
-                        "qubits": {
-                            "q1": {
-                                "morphology_pass": morphology_pass,
-                                "clouds": {},
-                            }
-                        }
-                    },
+                    dataset_metrics={"qubits": {"q1": metrics}},
                     targets=["q1"],
                 )["results"]["q1"]
 
-            self.assertFalse(qualify(79.9, True)["active_reset_qualified"])
-            self.assertTrue(qualify(80.0, True)["active_reset_qualified"])
-            # Without two Gaussian blobs there is no active reset.
+            # Operator choice 2026-10-19: the active-reset floor is 0.75.
+            self.assertFalse(qualify(74.9, True)["active_reset_qualified"])
+            self.assertTrue(qualify(75.0, True)["active_reset_qualified"])
+            # Without two Gaussian blobs there is no active reset ...
             self.assertFalse(qualify(84.0, False)["active_reset_qualified"])
+            # ... but the active repeat tolerates up to 15% of shots off both
+            # blobs (q1 #632: 10.6%/9.0%), not more.
+            self.assertTrue(qualify(77.0, False, 0.106)["active_reset_qualified"])
+            self.assertFalse(qualify(77.0, False, 0.16)["active_reset_qualified"])
 
             thermal = analyzer._fit_quality(
                 "07b",
