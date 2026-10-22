@@ -512,6 +512,11 @@ elif node.parameters.load_data_id is None:
             node.results["fit_results"][q.name]["EPG"] = EPG.sel(qubit=q.name).values
             print(f"{q.name}: EPC={EPC.sel(qubit=q.name).values}")
             print(f"{q.name}: EPG={EPG.sel(qubit=q.name).values}")
+            # A flat or undecayed trace gives NaN or non-positive EPC: not a fit.
+            q_epc = float(EPC.sel(qubit=q.name).item())
+            if not (np.isfinite(q_epc) and 0 < q_epc < 0.5):
+                node.results["fit_results"][q.name]["fit_successful"] = False
+                node.results["fit_results"][q.name]["fit_error"] = f"Invalid EPC {q_epc}"
         except Exception as e:
             node.results["fit_results"][q.name]["fit_successful"] = False
             node.results["fit_results"][q.name]["fit_error"] = str(e)
@@ -574,6 +579,13 @@ if not node.parameters.simulate:
         q for q in qubits if node.results["fit_results"].get(q.name, {}).get("fit_successful", False)
     ]
     if not node.parameters.simulate and successful_fit_qubits:
+        # record_state_updates reads the old value first; a qubit that never
+        # ran 10a has no such key and would raise KeyError.
+        keys = ("EPG", "EPC") if node.parameters.multiplexed else ("iso_EPG", "iso_EPC")
+        for q in successful_fit_qubits:
+            for key in keys:
+                if key not in q.extras:
+                    q.extras[key] = None
         with node.record_state_updates():
             for q in successful_fit_qubits:
                 if node.parameters.multiplexed:

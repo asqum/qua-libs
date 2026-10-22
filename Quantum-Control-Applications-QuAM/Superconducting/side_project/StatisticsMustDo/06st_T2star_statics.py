@@ -243,7 +243,11 @@ if not node.parameters.simulate:
         sep_data = repetition_data(dss, repetition_dim="qubit")
         for sq_data in sep_data:
             qubit_name = sq_data["qubit"].values.item()
-            analysis = RamseyAnalysis(sq_data)
+            try:
+                analysis = RamseyAnalysis(sq_data)
+            except Exception:  # flat or NaN trace: keep the run alive, JY refits the raw data
+                analysis = RamseyAnalysis.__new__(RamseyAnalysis)
+                analysis.data, analysis.fit_result = sq_data, None
             models[qubit_name].append(analysis)
             # figs = analysis._plot_results()
 
@@ -262,6 +266,10 @@ if not node.parameters.simulate:
                 t2_collection.append(tau)
 
             data = np.array(t2_collection)
+            data = data[np.isfinite(data) & (np.abs(data) < 1e6)]  # failed (NaN) or flat (>1 s) fits; JY refits the raw data
+            if len(data) == 0:
+                mu_collection[qubit['qubit']] = sig_collection[qubit['qubit']] = np.nan
+                continue
             lower_bound = np.percentile(data, 5)   # 下界
             upper_bound = np.percentile(data, 95)  # 上界
             data = data[(data >= lower_bound) & (data <= upper_bound)]

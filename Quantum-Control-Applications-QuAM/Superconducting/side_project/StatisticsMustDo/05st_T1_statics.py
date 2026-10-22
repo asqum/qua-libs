@@ -285,6 +285,10 @@ if not node.parameters.simulate:
         for ax, qubit in grid_iter(grid):
         
             data = np.array(t1_collection[qubit['qubit']])
+            data = data[np.isfinite(data) & (np.abs(data) < 1e6)]  # failed (NaN) or flat (>1 s) fits; JY refits the raw data
+            if len(data) == 0:
+                mu_collection[qubit['qubit']] = sig_collection[qubit['qubit']] = np.nan
+                continue
             lower_bound = np.percentile(data, 1)   # 下界
             upper_bound = np.percentile(data, 99)  # 上界
             data = data[(data >= lower_bound) & (data <= upper_bound)]
