@@ -108,8 +108,8 @@ class CZGate(TwoQubitGate):
         self.transmon_pair.align()
         frame_rotation_2pi(self.phase_shift_control, self.qubit_control.xy.name)
         frame_rotation_2pi(self.phase_shift_target, self.qubit_target.xy.name)
-        self.qubit_control.xy.play("x180", amplitude_scale=0.0, duration=4)
-        self.qubit_target.xy.play("x180", amplitude_scale=0.0, duration=4)
+        # self.qubit_control.xy.play("x180", amplitude_scale=0.0, duration=4)
+        # self.qubit_target.xy.play("x180", amplitude_scale=0.0, duration=4)
         self.transmon_pair.align()
         
     def execute_dgx(self, amplitude_scale=None, phase_shift_control = None, phase_shift_target =None):        
@@ -138,8 +138,8 @@ class CZGate(TwoQubitGate):
         self.transmon_pair.align()
         frame_rotation_2pi(phase_shift_control, self.qubit_control.xy.name)
         frame_rotation_2pi(phase_shift_target, self.qubit_target.xy.name)
-        self.qubit_control.xy.play("x180", amplitude_scale=0.0, duration=4)
-        self.qubit_target.xy.play("x180", amplitude_scale=0.0, duration=4)
+        # self.qubit_control.xy.play("x180", amplitude_scale=0.0, duration=4)
+        # self.qubit_target.xy.play("x180", amplitude_scale=0.0, duration=4)
         self.transmon_pair.align()
     
     def execute_dgx_vRatis(self, qubit_flux_scale=None, phase_shift_control = None, phase_shift_target =None, coupler_flux_scale=None, cz_duration=None):        
@@ -177,8 +177,8 @@ class CZGate(TwoQubitGate):
         self.transmon_pair.align()
         frame_rotation_2pi(phase_shift_control, self.qubit_control.xy.name)
         frame_rotation_2pi(phase_shift_target, self.qubit_target.xy.name)
-        self.qubit_control.xy.play("x180", amplitude_scale=0.0, duration=4)
-        self.qubit_target.xy.play("x180", amplitude_scale=0.0, duration=4)
+        # self.qubit_control.xy.play("x180", amplitude_scale=0.0, duration=4)
+        # self.qubit_target.xy.play("x180", amplitude_scale=0.0, duration=4)
         self.transmon_pair.align()
 
     @property

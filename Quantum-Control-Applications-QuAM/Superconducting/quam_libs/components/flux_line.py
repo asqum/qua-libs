@@ -22,13 +22,13 @@ class FluxLine(SingleChannel):
     joint_offset: float = 0.0
     min_offset: float = 0.0
     arbitrary_offset: float = 0.0
-    settle_time: float = 24
+    settle_time: float = 1000000
     reset_offset: float = 0.0  # reset by bringing the qubit in resonance with the resonator
 
     def settle(self):
         """Wait for the flux bias to settle"""
         if self.settle_time is not None:
-            self.wait(int(self.settle_time) // 4 * 4)
+            self.wait(int(self.settle_time) // 4 )
 
     def to_independent_idle(self):
         """Set the flux bias to the independent offset"""
