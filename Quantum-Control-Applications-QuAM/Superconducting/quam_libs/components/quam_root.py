@@ -24,6 +24,7 @@ from .transmon_pair import TransmonPair
 
 from qm import QuantumMachinesManager, QuantumMachine
 from qm.octave import QmOctaveConfig
+from qm.qua import align, wait
 from qualang_tools.results.data_handler import DataHandler
 
 from dataclasses import field
@@ -205,12 +206,14 @@ class QuAM(QuamRoot):
             target.to_mutual_idle()
             target_bias = target.mutual_flux_bias
 
-        if isinstance(target, Transmon):
-            target.z.settle()
-        elif isinstance(target, TransmonPair):
-            target.qubit_control.z.settle()
-            target.qubit_target.z.settle()
-        target.align()
+        # Wait once, after every flux line has been set
+        settle_time = (
+            target.z.settle_time
+            if isinstance(target, Transmon)
+            else target.qubit_control.z.settle_time
+        )
+        align()
+        wait(max(int(settle_time) // 4, 4))
         return target_bias
 
     def connect(self, timeout: int = 100) -> QuantumMachinesManager:
