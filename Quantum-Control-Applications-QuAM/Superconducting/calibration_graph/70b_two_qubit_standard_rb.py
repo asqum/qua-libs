@@ -126,6 +126,7 @@ cache_key = rb_cache_key(
     node.parameters.seed,
     node.parameters.circuit_lengths,
     node.parameters.num_circuits_per_length,
+    reduce_to_1q_cliffords=node.parameters.reduce_to_1q_cliffords,
 )
 cache_dir = Path(__file__).resolve().parent.parent / ".rb_cache"
 cached = rb_try_load(cache_dir, cache_key)
@@ -145,7 +146,9 @@ else:
     standard_RB = StandardRB(
         amplification_lengths=node.parameters.circuit_lengths,
         num_circuits_per_length=node.parameters.num_circuits_per_length,
+        basis_gates=node.parameters.basis_gates,
         num_qubits=2,
+        reduce_to_1q_cliffords=node.parameters.reduce_to_1q_cliffords,
         seed=node.parameters.seed,
     )
 
@@ -209,6 +212,7 @@ if node.parameters.use_input_stream:
 if node.parameters.simulate:
     simulation_config = SimulationConfig(duration=node.parameters.simulation_duration_ns//4)  # in clock cycles
     job = qmm.simulate(config, rb, simulation_config)
+    job.wait_until("Done")
     samples = job.get_simulated_samples()
 
 elif node.parameters.load_data_id is None:

@@ -24,6 +24,7 @@ from .transmon_pair import TransmonPair
 
 from qm import QuantumMachinesManager, QuantumMachine
 from qm.octave import QmOctaveConfig
+from qm.qua import align, wait
 from qualang_tools.results.data_handler import DataHandler
 
 from dataclasses import field
@@ -205,12 +206,14 @@ class QuAM(QuamRoot):
             target.to_mutual_idle()
             target_bias = target.mutual_flux_bias
 
-        if isinstance(target, Transmon):
-            target.z.settle()
-        elif isinstance(target, TransmonPair):
-            target.qubit_control.z.settle()
-            target.qubit_target.z.settle()
-        target.align()
+        # Wait once, after every flux line has been set
+        settle_time = (
+            target.z.settle_time
+            if isinstance(target, Transmon)
+            else target.qubit_control.z.settle_time
+        )
+        align()
+        wait(max(int(settle_time) // 4, 4))
         return target_bias
 
     def connect(self, timeout: int = 100) -> QuantumMachinesManager:
@@ -233,6 +236,10 @@ class QuAM(QuamRoot):
                 octave_config.add_device_info(name, ip, port)
             settings["octave"] = octave_config
         self.qmm = QuantumMachinesManager(**settings)
+        # No-op unless a QM is being held (see quam_libs/lib/qm_hold.py and side_project/00y_hold_dc_offset_qm.ipynb)
+        from quam_libs.lib.qm_hold import install_hold_hook
+
+        install_hold_hook(self.qmm, host=settings["host"], cluster_name=settings["cluster_name"])
         return self.qmm
 
     def get_octave_config(self) -> Optional[QmOctaveConfig]:

@@ -30,12 +30,14 @@ def rb_cache_key(
     num_circuits_per_length: int,
     *,
     target_gate: str | None = None,
+    reduce_to_1q_cliffords: bool = False,
 ) -> str:
-    """Match qualibration_graphs two_qubit_interleaved_rb cache key format."""
+    """Hash the circuit-generation settings that change the played sequences."""
     payload = {
         "seed": seed,
         "circuit_lengths": sorted(circuit_lengths),
         "num_circuits_per_length": num_circuits_per_length,
+        "reduce_to_1q_cliffords": reduce_to_1q_cliffords,
     }
     if target_gate is not None:
         payload["target_gate"] = target_gate
@@ -168,6 +170,28 @@ class RBBase:
             if pbar is not None:
                 pbar.close()
     
+    def _wire_index(self, qubit) -> int:
+        if hasattr(qubit, "_index"):
+            return qubit._index
+        return qubit.index
+
+    def _transpile_with_clifford_barriers(self, qc: QuantumCircuit) -> QuantumCircuit:
+        """Transpile one circuit without letting optimization cancel across Cliffords.
+
+        A barrier after every Clifford (and after every interleaved gate) keeps
+        ``optimization_level=1`` from merging the sequence. That merge deletes a
+        ``reduce_to_1q_cliffords`` standard-RB circuit, because the 1q product plus
+        its inverse is the identity.
+        """
+        protected = QuantumCircuit(qc.num_qubits)
+        for instruction in qc.data:
+            qargs = [self._wire_index(qubit) for qubit in instruction.qubits]
+            protected.append(instruction.operation, qargs)
+            protected.barrier()
+        compiled = transpile(protected, basis_gates=self.basis_gates, optimization_level=1)
+        compiled.data = [inst for inst in compiled.data if inst.operation.name != "barrier"]
+        return compiled
+
     def transpile_circuits(self, circuits: list[QuantumCircuit], depth: int | None = None) -> list[QuantumCircuit]:
         """Transpile full RB circuits in one Qiskit call per circuit (much faster than per-Clifford)."""
         circuit_iter = circuits
@@ -175,6 +199,8 @@ class RBBase:
             label = f"Transpiling depth={depth}" if depth is not None else "Transpiling RB circuits"
             circuit_iter = tqdm(circuits, desc=label, leave=False, unit="circ")
 
+        if self.reduce_to_1q_cliffords:
+            return [self._transpile_with_clifford_barriers(qc) for qc in circuit_iter]
         return [
             transpile(qc, basis_gates=self.basis_gates, optimization_level=1)
             for qc in circuit_iter

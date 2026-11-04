@@ -114,6 +114,7 @@ cache_key = rb_cache_key(
     node_SRB.parameters.seed,
     node_SRB.parameters.circuit_lengths,
     node_SRB.parameters.num_circuits_per_length,
+    reduce_to_1q_cliffords=getattr(node_SRB.parameters, "reduce_to_1q_cliffords", False),
 )
 cache_dir = Path(__file__).resolve().parent.parent / ".rb_cache"
 cached = rb_try_load(cache_dir, cache_key)
@@ -126,7 +127,9 @@ else:
     standard_RB = StandardRB(
         amplification_lengths=node_SRB.parameters.circuit_lengths,
         num_circuits_per_length=node_SRB.parameters.num_circuits_per_length,
+        basis_gates=getattr(node_SRB.parameters, "basis_gates", ["cz", "rz", "sx", "x"]),
         num_qubits=2,
+        reduce_to_1q_cliffords=getattr(node_SRB.parameters, "reduce_to_1q_cliffords", False),
         seed=node_SRB.parameters.seed,
     )
 
