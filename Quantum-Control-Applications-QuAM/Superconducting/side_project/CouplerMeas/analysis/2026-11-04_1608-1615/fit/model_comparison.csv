@@ -1,4 +1,0 @@
-model,points,parameters,rmse_mhz,median_absolute_error_mhz
-sqrt_cos_with_run_offset,342,4,1.3190313577823447,0.6589175592475183
-sqrt_cos_without_offset,342,3,10.26978880740639,1.1121815719374872
-quadratic_with_run_offset,342,4,5.428775634687135,3.7697975939843253
