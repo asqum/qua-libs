@@ -1,0 +1,439 @@
+{
+  "reference_transition_constraint": {
+    "source": "User-provided transitions at the same reference operating point; its flux voltage was not assumed",
+    "f01_ghz": 2.760584,
+    "half_f02_ghz": 2.672584,
+    "f02_ghz": 5.345168,
+    "f12_ghz": 2.584584,
+    "alpha_mhz": -176.00000000000017,
+    "leading_ec_over_h_ghz": 0.17600000000000016,
+    "exact_ec_over_h_ghz": 0.15225564646376097,
+    "exact_ej_effective_over_h_ghz": 7.010297111082561,
+    "predicted_f01_ghz": 2.760583999999944,
+    "predicted_half_f02_ghz": 2.67258400000012,
+    "ec_range_over_ng_0_to_half_ghz": [
+      0.15198175078574072,
+      0.15225564646520556
+    ],
+    "implied_capacitance_ff": 127.22174694039683
+  },
+  "physical_fit": {
+    "ej_sum_over_h_ghz": 13.936951589527306,
+    "ec_over_h_ghz": 0.15225564646444173,
+    "d": 9.461399202089117e-13,
+    "ej1_over_h_ghz": 6.968475794770246,
+    "ej2_over_h_ghz": 6.96847579475706,
+    "flux_period_v": 0.7513045152509277,
+    "sweet_flux_v": -0.24983949286410456,
+    "ng": 0.49997842695650446,
+    "maximum_f01_ghz": 3.9616589495580827,
+    "predicted_f12_at_sweet_ghz": 3.7940590192721553,
+    "predicted_anharmonicity_at_sweet_mhz": -167.59993028592746,
+    "rmse_mhz": 4.249070830107773,
+    "robust_cost": 2372.4715321154536
+  },
+  "numerical_parameters": [
+    4.120174340007576,
+    0.15225564646444173,
+    8.951807486129258e-25,
+    0.7513045152509277,
+    -0.24983949286410456,
+    0.49997842695650446
+  ],
+  "energy_units": "EJ/h and EC/h in GHz; f01 and f02/2 are ordinary frequencies, not angular frequencies",
+  "model": "H/h=4 ec (n-ng)^2 - ej_eff(V) cos(phi); f01=lambda1-lambda0; f02/2=(lambda2-lambda0)/2",
+  "flux_rule": "#1615: V_corrected=V_raw-0.01621188060019709 V; other runs unchanged",
+  "interpretation": "EC is constrained by the provided 0-1 and 0-2 transitions. EJ_sum and d are conditional on the isolated-transmon flux model; systematic ridge residuals remain and d reaches its lower bound.",
+  "frequency_correction_hz": 0.0,
+  "source_peak_count": 458,
+  "numerical_validation_max_hz": 0.003582023566650605,
+  "ng_profiles": [
+    {
+      "ej_sum_over_h_ghz": 13.960031727324601,
+      "ec_over_h_ghz": 0.15198175078574072,
+      "d": 4.427198723597033e-12,
+      "ej1_over_h_ghz": 6.980015863693202,
+      "ej2_over_h_ghz": 6.980015863631398,
+      "flux_period_v": 0.7512123213870618,
+      "sweet_flux_v": -0.24982195673344318,
+      "ng": 0.0,
+      "maximum_f01_ghz": 3.961655679128673,
+      "predicted_f12_at_sweet_ghz": 3.794389104147231,
+      "predicted_anharmonicity_at_sweet_mhz": -167.2665749814417,
+      "rmse_mhz": 4.275866660394189,
+      "robust_cost": 2396.215530387362
+    },
+    {
+      "ej_sum_over_h_ghz": 13.948640589168388,
+      "ec_over_h_ghz": 0.15211680691139787,
+      "d": 1.0569360512786604e-12,
+      "ej1_over_h_ghz": 6.974320294591565,
+      "ej2_over_h_ghz": 6.974320294576823,
+      "flux_period_v": 0.7512576174405627,
+      "sweet_flux_v": -0.24983055686662944,
+      "ng": 0.25,
+      "maximum_f01_ghz": 3.961657287176733,
+      "predicted_f12_at_sweet_ghz": 3.794226352309435,
+      "predicted_anharmonicity_at_sweet_mhz": -167.43093486729776,
+      "rmse_mhz": 4.262531953840742,
+      "robust_cost": 2384.4254198085487
+    },
+    {
+      "ej_sum_over_h_ghz": 13.945061097778568,
+      "ec_over_h_ghz": 0.15215929626301572,
+      "d": 4.4760491456484394e-13,
+      "ej1_over_h_ghz": 6.972530548892405,
+      "ej2_over_h_ghz": 6.972530548886163,
+      "flux_period_v": 0.7512719336067246,
+      "sweet_flux_v": -0.24983328130871837,
+      "ng": 0.3,
+      "maximum_f01_ghz": 3.961657795169102,
+      "predicted_f12_at_sweet_ghz": 3.7941751456465482,
+      "predicted_anharmonicity_at_sweet_mhz": -167.48264952255278,
+      "rmse_mhz": 4.258386100686981,
+      "robust_cost": 2380.7492185862316
+    },
+    {
+      "ej_sum_over_h_ghz": 13.941807168389701,
+      "ec_over_h_ghz": 0.15219794185561092,
+      "d": 2.2326727542020242e-08,
+      "ej1_over_h_ghz": 6.970903739832316,
+      "ej2_over_h_ghz": 6.970903428557385,
+      "flux_period_v": 0.7512849813849738,
+      "sweet_flux_v": -0.24983576683411118,
+      "ng": 0.35,
+      "maximum_f01_ghz": 3.961658257406694,
+      "predicted_f12_at_sweet_ghz": 3.7941285689750446,
+      "predicted_anharmonicity_at_sweet_mhz": -167.5296884316495,
+      "rmse_mhz": 4.254635566152054,
+      "robust_cost": 2377.419311942652
+    },
+    {
+      "ej_sum_over_h_ghz": 13.93920781432017,
+      "ec_over_h_ghz": 0.15222882755960562,
+      "d": 1.248660862000388e-10,
+      "ej1_over_h_ghz": 6.9696039080303525,
+      "ej2_over_h_ghz": 6.969603906289818,
+      "flux_period_v": 0.7512954290956934,
+      "sweet_flux_v": -0.24983775896676857,
+      "ng": 0.4,
+      "maximum_f01_ghz": 3.9616586274394274,
+      "predicted_f12_at_sweet_ghz": 3.7940913435708756,
+      "predicted_anharmonicity_at_sweet_mhz": -167.56728386855178,
+      "rmse_mhz": 4.251651831893171,
+      "robust_cost": 2374.7674434660353
+    },
+    {
+      "ej_sum_over_h_ghz": 13.938240612478747,
+      "ec_over_h_ghz": 0.15224032315377398,
+      "d": 3.4245760922480154e-09,
+      "ej1_over_h_ghz": 6.969120330105657,
+      "ej2_over_h_ghz": 6.969120282373091,
+      "flux_period_v": 0.7512993221250261,
+      "sweet_flux_v": -0.24983850170351027,
+      "ng": 0.425,
+      "maximum_f01_ghz": 3.961658765378604,
+      "predicted_f12_at_sweet_ghz": 3.794077488166913,
+      "predicted_anharmonicity_at_sweet_mhz": -167.58127721169203,
+      "rmse_mhz": 4.250544397926184,
+      "robust_cost": 2373.7825576331725
+    },
+    {
+      "ej_sum_over_h_ghz": 13.93753088465797,
+      "ec_over_h_ghz": 0.15224875965426113,
+      "d": 2.339912420487541e-09,
+      "ej1_over_h_ghz": 6.9687654586352865,
+      "ej2_over_h_ghz": 6.968765426022685,
+      "flux_period_v": 0.7513021803391887,
+      "sweet_flux_v": -0.2498390470871395,
+      "ng": 0.45,
+      "maximum_f01_ghz": 3.961658866371466,
+      "predicted_f12_at_sweet_ghz": 3.7940673194493506,
+      "predicted_anharmonicity_at_sweet_mhz": -167.59154692211453,
+      "rmse_mhz": 4.24973274382595,
+      "robust_cost": 2373.0604964895288
+    },
+    {
+      "ej_sum_over_h_ghz": 13.937097379784024,
+      "ec_over_h_ghz": 0.15225391319373133,
+      "d": 6.801241923900185e-10,
+      "ej1_over_h_ghz": 6.96854869463149,
+      "ej2_over_h_ghz": 6.968548685152534,
+      "flux_period_v": 0.7513039273292653,
+      "sweet_flux_v": -0.24983938056812965,
+      "ng": 0.475,
+      "maximum_f01_ghz": 3.961658928379757,
+      "predicted_f12_at_sweet_ghz": 3.794061108022789,
+      "predicted_anharmonicity_at_sweet_mhz": -167.59782035696878,
+      "rmse_mhz": 4.249237365028935,
+      "robust_cost": 2372.619723449502
+    },
+    {
+      "ej_sum_over_h_ghz": 13.936951586796,
+      "ec_over_h_ghz": 0.15225564646520556,
+      "d": 7.668565858505902e-09,
+      "ej1_over_h_ghz": 6.968475846836215,
+      "ej2_over_h_ghz": 6.968475739959785,
+      "flux_period_v": 0.7513045148530073,
+      "sweet_flux_v": -0.2498394927056339,
+      "ng": 0.5,
+      "maximum_f01_ghz": 3.9616589491639846,
+      "predicted_f12_at_sweet_ghz": 3.7940590188745267,
+      "predicted_anharmonicity_at_sweet_mhz": -167.59993028945706,
+      "rmse_mhz": 4.249070839268312,
+      "robust_cost": 2372.4715321481376
+    }
+  ],
+  "d_profiles": [
+    {
+      "fixed_d": 0,
+      "ej_sum_over_h_ghz": 13.936951587849544,
+      "ec_over_h_ghz": 0.15225564646487572,
+      "d": 0.0,
+      "ej1_over_h_ghz": 6.968475793924772,
+      "ej2_over_h_ghz": 6.968475793924772,
+      "flux_period_v": 0.7513045150172036,
+      "sweet_flux_v": -0.24983949277006637,
+      "ng": 0.49998382021725274,
+      "maximum_f01_ghz": 3.961658949315723,
+      "predicted_f12_at_sweet_ghz": 3.794059019027956,
+      "predicted_anharmonicity_at_sweet_mhz": -167.59993028776597,
+      "rmse_mhz": 4.2490708348437956,
+      "robust_cost": 2372.471532102766
+    },
+    {
+      "fixed_d": 0.025,
+      "ej_sum_over_h_ghz": 13.937053310125927,
+      "ec_over_h_ghz": 0.1522556464649273,
+      "d": 0.025,
+      "ej1_over_h_ghz": 7.1427398214395375,
+      "ej2_over_h_ghz": 6.79431348868639,
+      "flux_period_v": 0.7505223432370712,
+      "sweet_flux_v": -0.24971909862939046,
+      "ng": 0.4999846368492327,
+      "maximum_f01_ghz": 3.9616740108837023,
+      "predicted_f12_at_sweet_ghz": 3.7940741492048184,
+      "predicted_anharmonicity_at_sweet_mhz": -167.59986167888385,
+      "rmse_mhz": 4.3681338925290065,
+      "robust_cost": 2480.0071939722034
+    },
+    {
+      "fixed_d": 0.05,
+      "ej_sum_over_h_ghz": 13.937223874879376,
+      "ec_over_h_ghz": 0.1522556464647936,
+      "d": 0.05,
+      "ej1_over_h_ghz": 7.317042534311672,
+      "ej2_over_h_ghz": 6.6201813405677035,
+      "flux_period_v": 0.7482029351943079,
+      "sweet_flux_v": -0.2493634647989297,
+      "ng": 0.49998262553629413,
+      "maximum_f01_ghz": 3.961699265527397,
+      "predicted_f12_at_sweet_ghz": 3.7940995188888715,
+      "predicted_anharmonicity_at_sweet_mhz": -167.59974663852617,
+      "rmse_mhz": 4.74515293442819,
+      "robust_cost": 2821.8979501720114
+    },
+    {
+      "fixed_d": 0.075,
+      "ej_sum_over_h_ghz": 13.937259867140096,
+      "ec_over_h_ghz": 0.15225564646522394,
+      "d": 0.075,
+      "ej1_over_h_ghz": 7.491277178587802,
+      "ej2_over_h_ghz": 6.445982688552294,
+      "flux_period_v": 0.7444609604852488,
+      "sweet_flux_v": -0.24880188000703726,
+      "ng": 0.49999195930951057,
+      "maximum_f01_ghz": 3.961704594701458,
+      "predicted_f12_at_sweet_ghz": 3.794104872337728,
+      "predicted_anharmonicity_at_sweet_mhz": -167.59972236373068,
+      "rmse_mhz": 5.435441321632068,
+      "robust_cost": 3443.78790848676
+    },
+    {
+      "fixed_d": 0.1,
+      "ej_sum_over_h_ghz": 13.937107761415382,
+      "ec_over_h_ghz": 0.1522556464652066,
+      "d": 0.1,
+      "ej1_over_h_ghz": 7.66540926877846,
+      "ej2_over_h_ghz": 6.271698492636922,
+      "flux_period_v": 0.7394337312077028,
+      "sweet_flux_v": -0.24807236101334396,
+      "ng": 0.49999995842916073,
+      "maximum_f01_ghz": 3.9616820732269815,
+      "predicted_f12_at_sweet_ghz": 3.794082248272794,
+      "predicted_anharmonicity_at_sweet_mhz": -167.59982495418768,
+      "rmse_mhz": 6.526037767510579,
+      "robust_cost": 4390.745403990565
+    },
+    {
+      "fixed_d": 0.125,
+      "ej_sum_over_h_ghz": 13.936664710523958,
+      "ec_over_h_ghz": 0.15225564639827488,
+      "d": 0.125,
+      "ej1_over_h_ghz": 7.839373899669726,
+      "ej2_over_h_ghz": 6.097290810854232,
+      "flux_period_v": 0.7331207018057333,
+      "sweet_flux_v": -0.24717270247102655,
+      "ng": 0.49984048717343527,
+      "maximum_f01_ghz": 3.9616164715304993,
+      "predicted_f12_at_sweet_ghz": 3.794016347824341,
+      "predicted_anharmonicity_at_sweet_mhz": -167.6001237061584,
+      "rmse_mhz": 8.113850181114296,
+      "robust_cost": 5701.240669117036
+    },
+    {
+      "fixed_d": 0.15,
+      "ej_sum_over_h_ghz": 13.935824686279004,
+      "ec_over_h_ghz": 0.15225564646520626,
+      "d": 0.15,
+      "ej1_over_h_ghz": 8.013099194610426,
+      "ej2_over_h_ghz": 5.922725491668577,
+      "flux_period_v": 0.7255353010943336,
+      "sweet_flux_v": -0.24610369289781475,
+      "ng": 0.49999997207616265,
+      "maximum_f01_ghz": 3.9614920902946382,
+      "predicted_f12_at_sweet_ghz": 3.793891399881078,
+      "predicted_anharmonicity_at_sweet_mhz": -167.6006904135594,
+      "rmse_mhz": 10.28774407577808,
+      "robust_cost": 7417.044258598442
+    }
+  ],
+  "flux_registration_sensitivity": [
+    {
+      "shift_v": -0.0175594499410659,
+      "ej_sum_over_h_ghz": 13.940131707646945,
+      "ec_over_h_ghz": 0.15225564646346018,
+      "d": 1.3159548048253979e-11,
+      "ej1_over_h_ghz": 6.9700658539151945,
+      "ej2_over_h_ghz": 6.970065853731749,
+      "flux_period_v": 0.7516709182010772,
+      "sweet_flux_v": -0.2499940232987321,
+      "ng": 0.4999701475906295,
+      "maximum_f01_ghz": 3.96212978947963,
+      "predicted_f12_at_sweet_ghz": 3.794532003695587,
+      "predicted_anharmonicity_at_sweet_mhz": -167.59778578404294,
+      "rmse_mhz": 4.670657853804534,
+      "robust_cost": 2661.1298609417718
+    },
+    {
+      "shift_v": -0.017104383239875936,
+      "ej_sum_over_h_ghz": 13.93905362295875,
+      "ec_over_h_ghz": 0.1522556458922031,
+      "d": 4.41855485256262e-10,
+      "ej1_over_h_ghz": 6.969526814558899,
+      "ej2_over_h_ghz": 6.969526808399852,
+      "flux_period_v": 0.75155262422929,
+      "sweet_flux_v": -0.24994360315973704,
+      "ng": 0.499541960495859,
+      "maximum_f01_ghz": 3.961970170012183,
+      "predicted_f12_at_sweet_ghz": 3.794371657982772,
+      "predicted_anharmonicity_at_sweet_mhz": -167.59851202941078,
+      "rmse_mhz": 4.518185553161979,
+      "robust_cost": 2562.1185042113043
+    },
+    {
+      "shift_v": -0.01621188060019709,
+      "ej_sum_over_h_ghz": 13.936951588201534,
+      "ec_over_h_ghz": 0.1522556464652056,
+      "d": 7.3166720958115155e-09,
+      "ej1_over_h_ghz": 6.96847584508682,
+      "ej2_over_h_ghz": 6.968475743114715,
+      "flux_period_v": 0.7513045151087894,
+      "sweet_flux_v": -0.2498394928038265,
+      "ng": 0.49999999998584915,
+      "maximum_f01_ghz": 3.9616589493716337,
+      "predicted_f12_at_sweet_ghz": 3.7940590190836385,
+      "predicted_anharmonicity_at_sweet_mhz": -167.59993028799514,
+      "rmse_mhz": 4.249070830643891,
+      "robust_cost": 2372.471532148148
+    },
+    {
+      "shift_v": -0.01524919872789214,
+      "ej_sum_over_h_ghz": 13.934645396873295,
+      "ec_over_h_ghz": 0.15225564646517672,
+      "d": 8.12036350270697e-18,
+      "ej1_over_h_ghz": 6.967322698436647,
+      "ej2_over_h_ghz": 6.967322698436647,
+      "flux_period_v": 0.7509887785213327,
+      "sweet_flux_v": -0.24971077789646753,
+      "ng": 0.4999900945927918,
+      "maximum_f01_ghz": 3.961317467009744,
+      "predicted_f12_at_sweet_ghz": 3.793715981019938,
+      "predicted_anharmonicity_at_sweet_mhz": -167.60148598980606,
+      "rmse_mhz": 4.011990580567227,
+      "robust_cost": 2178.8679703579387
+    }
+  ],
+  "uncertainty": "Profiles and registration sensitivity diagnose model dependence; no statistical confidence interval is claimed without transition uncertainties.",
+  "function_data": {
+    "full_curve": {
+      "expression": "f(V_corrected) = sum_j c_j B_{j,3}(V_corrected; t)",
+      "degree": 3,
+      "knots_with_multiplicity": [
+        -0.33121188060119705,
+        -0.33121188060119705,
+        -0.33121188060119705,
+        -0.33121188060119705,
+        -0.1402,
+        -0.096,
+        -0.0322,
+        0.055600000001,
+        0.055600000001,
+        0.055600000001,
+        0.055600000001
+      ],
+      "coefficients_ghz": [
+        3.849186562385832,
+        4.034447929338088,
+        3.974461632168028,
+        3.505627951608066,
+        3.053948466041781,
+        2.4886790198526993,
+        2.04939822664743
+      ],
+      "python": "scipy.interpolate.BSpline(knots_with_multiplicity, coefficients_ghz, degree, extrapolate=False)"
+    },
+    "local_join": {
+      "expression": "f/GHz=f_max+c2*z^2+c4*z^4; z=(V_corrected-V_sweet)/0.15 V",
+      "fitted_parameters": {
+        "maximum_frequency_ghz": {
+          "value": 3.961871679826394,
+          "conditional_95_percent_ci": [
+            3.9616067496550023,
+            3.9621398468605906
+          ]
+        },
+        "sweet_flux_corrected_v": {
+          "value": -0.253018787249107,
+          "conditional_95_percent_ci": [
+            -0.2535721172507662,
+            -0.2525910137327692
+          ]
+        },
+        "run_1615_flux_shift_v": {
+          "value": -0.01621188060019709,
+          "conditional_95_percent_ci": [
+            -0.016717201320212163,
+            -0.015810245480588583
+          ]
+        },
+        "quadratic_scaled_ghz": {
+          "value": -0.419400078801085,
+          "conditional_95_percent_ci": [
+            -0.42264887963576536,
+            -0.41527461774793956
+          ]
+        },
+        "quartic_scaled_ghz": {
+          "value": 0.021771851859479833,
+          "conditional_95_percent_ci": [
+            0.018051593797984346,
+            0.025982964981940172
+          ]
+        }
+      }
+    },
+    "coordinate_rule": "V_corrected = V_raw + delta_V * (run == 1615)",
+    "energy_parameter_interpretation": "These empirical functions describe the data and do not themselves determine EJ, EC, or d."
+  }
+}

@@ -1,0 +1,151 @@
+{
+  "coordinate_rule": "V_corrected = V_raw + delta_V * (run == 1615)",
+  "frequency_correction_hz": 0.0,
+  "interpretation": "Assume the #1615 change is a constant flux displacement caused by simultaneous qubit detuning. Register the neighboring scans using a shared local ridge; retain the measured frequencies.",
+  "registration": {
+    "runs": [
+      1614,
+      1615
+    ],
+    "points": 98,
+    "degree": 4,
+    "model": "f(V_corrected) = f_max + c2*z^2 + c4*z^4; z=(V_corrected-V_sweet)/0.15 V",
+    "parameters": {
+      "maximum_frequency_ghz": {
+        "value": 3.961871679826394,
+        "conditional_95_percent_ci": [
+          3.9616067496550023,
+          3.9621398468605906
+        ]
+      },
+      "sweet_flux_corrected_v": {
+        "value": -0.253018787249107,
+        "conditional_95_percent_ci": [
+          -0.2535721172507662,
+          -0.2525910137327692
+        ]
+      },
+      "run_1615_flux_shift_v": {
+        "value": -0.01621188060019709,
+        "conditional_95_percent_ci": [
+          -0.016717201320212163,
+          -0.015810245480588583
+        ]
+      },
+      "quadratic_scaled_ghz": {
+        "value": -0.419400078801085,
+        "conditional_95_percent_ci": [
+          -0.42264887963576536,
+          -0.41527461774793956
+        ]
+      },
+      "quartic_scaled_ghz": {
+        "value": 0.021771851859479833,
+        "conditional_95_percent_ci": [
+          0.018051593797984346,
+          0.025982964981940172
+        ]
+      }
+    },
+    "rmse_mhz": 1.1196494245963662
+  },
+  "crosstalk": {
+    "source_qubits": [
+      "q4",
+      "q5"
+    ],
+    "voltage_per_qubit_v": 0.3,
+    "definition": "V_effective = V_command + k_q4*V_q4 + k_q5*V_q5; k_q4+k_q5 = delta_V / 0.30 V",
+    "combined_voltage_equivalent_coefficient": -0.054039602000656974,
+    "combined_percent": -5.403960200065697,
+    "conditional_95_percent_ci": [
+      -5.572400440070721,
+      -5.270081826862861
+    ],
+    "model_sensitivity_percent_range": [
+      -5.8531499803553,
+      -5.083066242630713
+    ],
+    "interpretation": "Combined voltage-equivalent coefficient for both qubit Z lines each driven by +0.30 V. Individual line coefficients and a mutual-inductance flux ratio cannot be separated from these scans."
+  },
+  "sensitivity_models": [
+    {
+      "registration_runs": "1614-1615",
+      "degree": 4,
+      "points": 98,
+      "shift_v": -0.01621188060019709,
+      "combined_crosstalk_percent": -5.403960200065697,
+      "rmse_mhz": 1.1196494245963662
+    },
+    {
+      "registration_runs": "1614-1615",
+      "degree": 6,
+      "points": 98,
+      "shift_v": -0.0175594499410659,
+      "combined_crosstalk_percent": -5.8531499803553,
+      "rmse_mhz": 0.9891559723153117
+    },
+    {
+      "registration_runs": "1613-1615",
+      "degree": 4,
+      "points": 149,
+      "shift_v": -0.01524919872789214,
+      "combined_crosstalk_percent": -5.083066242630713,
+      "rmse_mhz": 1.8996550704567425
+    },
+    {
+      "registration_runs": "1613-1615",
+      "degree": 6,
+      "points": 149,
+      "shift_v": -0.017104383239875936,
+      "combined_crosstalk_percent": -5.701461079958645,
+      "rmse_mhz": 0.9074699604936426
+    }
+  ],
+  "bootstrap_replicates": 500,
+  "uncertainty": "Bootstrap intervals condition on the shared local quartic model and peak extraction. The sensitivity-model range is a separate model-dependence check, not a confidence interval. Registration spans an unmeasured gap rather than matching overlapping resonance peaks.",
+  "continuous_curve": {
+    "method": "Cubic smoothing spline on registered main-ridge centers; interpolation in unsampled intervals.",
+    "accepted_peak_centers": 458,
+    "excluded_secondary_branch_points": 3,
+    "smoothing_target_mhz": 1.5,
+    "rmse_mhz": 1.505769358978651,
+    "knots": [
+      -0.33121188060119705,
+      -0.1402,
+      -0.096,
+      -0.0322,
+      0.055600000001
+    ],
+    "validated_flux_domain_v": [
+      -0.3312118806001971,
+      0.055600000000000004
+    ]
+  },
+  "source_runs": [
+    1608,
+    1609,
+    1610,
+    1611,
+    1612,
+    1613,
+    1614,
+    1615,
+    1616,
+    1617,
+    1618
+  ],
+  "source_data_directory": "/home/ratiswu/Qualibrate_data/as-qpu-10qV2/2026-11-04",
+  "unsampled_seam": {
+    "flux_interval_v": [
+      -0.1612118806001971,
+      -0.145
+    ],
+    "width_mv": 16.211880600197098,
+    "rendering": "Unmeasured background remains white; smooth curve provides an interpolated connection."
+  },
+  "local_run_1615_peak_after_axis_correction": {
+    "sweet_flux_v": -0.25294568511818927,
+    "maximum_frequency_ghz": 3.961773519770407
+  }
+}

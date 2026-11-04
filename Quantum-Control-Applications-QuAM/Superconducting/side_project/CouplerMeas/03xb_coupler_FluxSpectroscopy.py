@@ -16,17 +16,17 @@ from quam_libs.experiments.coupler_RD_related.CouplerFluxSpectroscopy import CP_
 
 
 # %% {Node_parameters}
-node.parameters.coupler = ['coupler_q6_q7']
-node.parameters.flux_point_joint_or_independent = 'independent'
-node.parameters.operation_amplitude_factor = 0.05
-node.parameters.num_averages = 350
-node.parameters.Driving_LO_GHz = 3.9
-node.parameters.frequency_span_in_mhz = 100
-node.parameters.frequency_step_in_mhz = 1
-node.parameters.min_flux_offset_in_v = 0.1
-node.parameters.max_flux_offset_in_v = 0.45
+node.parameters.coupler = ['coupler_q4_q5']
+node.parameters.flux_point_joint_or_independent = 'joint'
+node.parameters.operation_amplitude_factor = 0.1
+node.parameters.num_averages = 350*1
+node.parameters.Driving_LO_GHz = 2.4
+node.parameters.frequency_span_in_mhz = 300
+node.parameters.frequency_step_in_mhz = 3
+node.parameters.min_flux_offset_in_v = 0.04
+node.parameters.max_flux_offset_in_v = 0.07
 node.parameters.num_flux_points = 51
-node.parameters.qubits_detune_flux_amp = 0.35
+node.parameters.qubits_detune_flux_amp = 0.0
 node.parameters.enforce_aswap_on_coupler = False
 
 node.parameters.load_data_id = None

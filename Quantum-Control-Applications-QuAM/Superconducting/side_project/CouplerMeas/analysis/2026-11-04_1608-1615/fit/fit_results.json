@@ -1,0 +1,160 @@
+{
+  "model": "f(V, run) = A * sqrt(cos(pi * (V - V_sweet) / V_period)) + delta * (run == 1615)",
+  "interpretation": "Effective envelope on the measured lobe, with an empirical acquisition-condition offset; not a determination of EJ, EC, junction asymmetry, or the cause of the offset.",
+  "model_motivation_source": "https://scqubits.readthedocs.io/en/v4.1/guide/qubits/tunable_transmon.html",
+  "parameters": {
+    "reference_max_ghz": {
+      "value": 3.9112300766730836,
+      "conditional_95_percent_ci": [
+        3.909568331323989,
+        3.912520655822569
+      ]
+    },
+    "sweet_flux_v": {
+      "value": -0.23660952113972872,
+      "conditional_95_percent_ci": [
+        -0.2370149318921752,
+        -0.23612450087990405
+      ]
+    },
+    "effective_period_v": {
+      "value": 0.70823639791257,
+      "conditional_95_percent_ci": [
+        0.7070829178542061,
+        0.7092181885655454
+      ]
+    },
+    "run_1615_offset_ghz": {
+      "value": 0.052621124197845245,
+      "conditional_95_percent_ci": [
+        0.05108198476444385,
+        0.05434705400591302
+      ]
+    }
+  },
+  "global_rmse_mhz": 1.3190313577823447,
+  "reference_validated_flux_range_v": [
+    -0.145,
+    0.0031999999999999997
+  ],
+  "run_1615_validated_flux_range_v": [
+    -0.315,
+    -0.145
+  ],
+  "peak_extraction": {
+    "total_traces": 408,
+    "candidates": 345,
+    "accepted": 342,
+    "rejected_off_ridge": 3,
+    "off_ridge_threshold_mhz": 10.0,
+    "method": "Positive Lorentzian plus linear baseline, initialized by strongest smoothed peak; edge-clipped and low-SNR lines excluded."
+  },
+  "local_run_1615_quadratic": {
+    "model": "f(V) = f_max + curvature * (V - V_sweet)^2",
+    "parameters": {
+      "sweet_flux_v": {
+        "value": -0.2367338045179926,
+        "conditional_95_percent_ci": [
+          -0.23693556357216994,
+          -0.2365563296364587
+        ]
+      },
+      "maximum_frequency_ghz": {
+        "value": 3.961773519770409,
+        "conditional_95_percent_ci": [
+          3.9615230616801207,
+          3.9620217661950448
+        ]
+      },
+      "curvature_ghz_per_v2": {
+        "value": -18.39023635281714,
+        "conditional_95_percent_ci": [
+          -18.4955033509946,
+          -18.261466893646197
+        ]
+      }
+    },
+    "polynomial_coefficients_descending": [
+      -18.39023635281714,
+      -8.70718123557499,
+      2.9311314495077374
+    ],
+    "points": 51,
+    "rmse_mhz": 0.8836790671267849
+  },
+  "uncertainty": "95% intervals from stratified resampling of accepted flux traces with fixed extraction and model selection; acquisition systematics and model uncertainty are excluded.",
+  "bootstrap_replicates": 300,
+  "model_comparison_same_points": [
+    {
+      "model": "sqrt_cos_with_run_offset",
+      "points": 342,
+      "parameters": 4,
+      "rmse_mhz": 1.3190313577823447,
+      "median_absolute_error_mhz": 0.6589175592475183
+    },
+    {
+      "model": "sqrt_cos_without_offset",
+      "points": 342,
+      "parameters": 3,
+      "rmse_mhz": 10.26978880740639,
+      "median_absolute_error_mhz": 1.1121815719374872
+    },
+    {
+      "model": "quadratic_with_run_offset",
+      "points": 342,
+      "parameters": 4,
+      "rmse_mhz": 5.428775634687135,
+      "median_absolute_error_mhz": 3.7697975939843253
+    }
+  ],
+  "residual_by_run": [
+    {
+      "run": 1608,
+      "points": 18,
+      "mean_residual_mhz": -0.3179307536068284,
+      "rmse_mhz": 0.5577710234808168
+    },
+    {
+      "run": 1609,
+      "points": 39,
+      "mean_residual_mhz": 0.5420488302079025,
+      "rmse_mhz": 0.7462997923547391
+    },
+    {
+      "run": 1610,
+      "points": 47,
+      "mean_residual_mhz": -0.4288423330143704,
+      "rmse_mhz": 0.8565712168576699
+    },
+    {
+      "run": 1611,
+      "points": 38,
+      "mean_residual_mhz": 0.09800130871567543,
+      "rmse_mhz": 2.0282297834994254
+    },
+    {
+      "run": 1612,
+      "points": 51,
+      "mean_residual_mhz": 0.17527609887027779,
+      "rmse_mhz": 0.6993956257434302
+    },
+    {
+      "run": 1613,
+      "points": 51,
+      "mean_residual_mhz": 0.1896369350006364,
+      "rmse_mhz": 0.8692346566851965
+    },
+    {
+      "run": 1614,
+      "points": 47,
+      "mean_residual_mhz": -0.2264795445609618,
+      "rmse_mhz": 0.7377451061497776
+    },
+    {
+      "run": 1615,
+      "points": 51,
+      "mean_residual_mhz": 0.2516836002084236,
+      "rmse_mhz": 2.3756847522174174
+    }
+  ]
+}

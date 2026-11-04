@@ -18,15 +18,15 @@ from quam_libs.experiments.coupler_RD_related.CouplerSpectroscopy import CP_Spec
 
 # %% {Node_parameters}
 node.parameters.coupler = ['coupler_q4_q5']
-node.parameters.flux_point_joint_or_independent = 'independent'
-node.parameters.operation_amplitude_factor = 0.02
-node.parameters.num_averages = 350
+node.parameters.flux_point_joint_or_independent = 'joint'
+node.parameters.operation_amplitude_factor = 0.05
+node.parameters.num_averages = 700
 node.parameters.Driving_LO_GHz = None
 node.parameters.frequency_span_in_mhz = 300
 node.parameters.frequency_step_in_mhz = 1
 node.parameters.load_data_id = None
 node.parameters.simulate = False
-node.parameters.readme_password = ''
+node.parameters.readme_password = '0xffe8'
 
 
 
@@ -52,7 +52,7 @@ EXP.visualize()
 
 
 # %% {Update state}
-node.parameters.UPDATE_STATE = False
+node.parameters.UPDATE_STATE = True
 EXP.state_management(node.parameters.UPDATE_STATE)
 
 
