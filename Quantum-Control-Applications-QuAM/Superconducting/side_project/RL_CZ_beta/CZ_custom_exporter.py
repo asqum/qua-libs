@@ -1,5 +1,5 @@
 """
-Export a calibrated composed_CZGate of a qubit pair as a plain CZGate named "Cz_Custom" (one WaveformPulse per line).
+Export a calibrated composed_CZGate of a qubit pair as a plain CZGate named "Cz_Custom" (or any gate_name; one WaveformPulse per line).
 
     - What will happen:
         1. The flux waveform the composed gate plays is rebuilt sample by sample:
@@ -77,8 +77,9 @@ def export_composed_to_custom(
     composed_gate: str,
     save: bool = False,
     save_path=None,
+    gate_name: str = CUSTOM_GATE_NAME,
 ) -> CZGate:
-    """Build qp.gates["Cz_Custom"] as a CZGate with WaveformPulse lines reproducing qp.gates[composed_gate].
+    """Build qp.gates[gate_name] (default "Cz_Custom") as a CZGate with WaveformPulse lines reproducing qp.gates[composed_gate].
 
     Args:
         machine: loaded QuAM.
@@ -86,7 +87,11 @@ def export_composed_to_custom(
         composed_gate: source composed_CZGate in qp.gates, e.g. "composed_cz_dflat32".
         save: call machine.save(save_path) after adding the gate.
         save_path: where to save; None uses the active QuAM state path.
+        gate_name: name of the exported gate (2026-10-28: several exported gates can coexist, e.g. the arms of an ABBA). Its pulse
+            labels are "<gate_name>.<pulse id>", so they never collide with another gate. Must not be "Cz" or the source gate.
     """
+    if gate_name in ("Cz", composed_gate):
+        raise ValueError(f"gate_name {gate_name!r} would overwrite Cz or the source gate")
     qp = machine.qubit_pairs[qubit_pair]
     if composed_gate not in qp.gates:
         raise KeyError(f"'{composed_gate}' not in {qubit_pair}.gates: {list(qp.gates)}")
@@ -107,13 +112,13 @@ def export_composed_to_custom(
         phase_shift_target=float(source.phase_shift_target),
         extras={"source_gate": composed_gate, **{k: _plain(v) for k, v in source.extras.items() if k != "seg_num"}},
     )
-    if CUSTOM_GATE_NAME in qp.gates:
-        del qp.gates[CUSTOM_GATE_NAME]
-    qp.gates[CUSTOM_GATE_NAME] = gate
+    if gate_name in qp.gates:
+        del qp.gates[gate_name]
+    qp.gates[gate_name] = gate
 
     # The generated QUA config must play exactly these samples
     config = machine.generate_config()
-    gate = qp.gates[CUSTOM_GATE_NAME]
+    gate = qp.gates[gate_name]
     if not np.allclose(_config_samples(config, qp.qubit_control.z.name, gate.flux_pulse_control_label), q, rtol=0, atol=1e-12):
         raise RuntimeError(f"config samples of {gate.flux_pulse_control_label} differ from the composed waveform")
     if c is not None and not np.allclose(_config_samples(config, qp.coupler.name, gate.coupler_flux_pulse_label), c, rtol=0, atol=1e-12):
@@ -127,7 +132,7 @@ def export_composed_to_custom(
 # %%
 if __name__ == "__main__":
     target_qubit_pair: str = "coupler_q4_q5"
-    source_composed_gate: str = "composed_cz_dflat32_rb211"
+    source_composed_gate: str = "composed_cz_dflat32_rb233"
 
     machine = QuAM.load()
     gate = export_composed_to_custom(machine, target_qubit_pair, source_composed_gate, save=True)
