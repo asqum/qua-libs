@@ -180,6 +180,7 @@ cache_key = rb_cache_key(
     node.parameters.seed,
     node.parameters.circuit_lengths,
     node.parameters.num_circuits_per_length,
+    reduce_to_1q_cliffords=node.parameters.reduce_to_1q_cliffords,
 )
 cache_dir = Path(__file__).resolve().parent.parent / ".rb_cache"
 cached = rb_try_load(cache_dir, cache_key)

@@ -115,6 +115,7 @@ cache_key = rb_cache_key(
     circuit_lengths,
     n_random,
     target_gate="avg_mb",
+    reduce_to_1q_cliffords=node.parameters.reduce_to_1q_cliffords,
 )
 cache_dir = Path(__file__).resolve().parent.parent / ".rb_cache"
 cached = rb_try_load(cache_dir, cache_key)

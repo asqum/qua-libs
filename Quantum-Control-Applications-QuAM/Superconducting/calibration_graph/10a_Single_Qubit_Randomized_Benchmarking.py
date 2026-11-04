@@ -463,9 +463,6 @@ elif node.parameters.load_data_id is None:
     # %% {Data_analysis}
     if readout_mode == "gef":
         gef_state_probabilities = build_gef_state_probabilities(ds)
-        gef_state_probabilities = gef_state_probabilities.assign_coords(
-            depths=gef_state_probabilities.depths - 1
-        )
         gef_state_probabilities = gef_state_probabilities.rename(depths="m")
         gef_state_probabilities.m.attrs = {"long_name": "no. of Cliffords"}
         node.results["gef_state_probabilities"] = gef_state_probabilities.to_dataset(name="probability")
@@ -475,7 +472,6 @@ elif node.parameters.load_data_id is None:
         da_state = 1 - ds["state"].mean(dim="sequence")
     da_state: xr.DataArray
     da_state.attrs = {"long_name": "p(0)"}
-    da_state = da_state.assign_coords(depths=da_state.depths - 1)
     da_state = da_state.rename(depths="m")
     da_state.m.attrs = {"long_name": "no. of Cliffords"}
     # Fit the exponential decay

@@ -236,6 +236,10 @@ class QuAM(QuamRoot):
                 octave_config.add_device_info(name, ip, port)
             settings["octave"] = octave_config
         self.qmm = QuantumMachinesManager(**settings)
+        # No-op unless a QM is being held (see quam_libs/lib/qm_hold.py and side_project/00y_hold_dc_offset_qm.ipynb)
+        from quam_libs.lib.qm_hold import install_hold_hook
+
+        install_hold_hook(self.qmm, host=settings["host"], cluster_name=settings["cluster_name"])
         return self.qmm
 
     def get_octave_config(self) -> Optional[QmOctaveConfig]:

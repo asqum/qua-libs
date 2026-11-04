@@ -121,6 +121,7 @@ cache_key = rb_cache_key(
     node.parameters.circuit_lengths,
     node.parameters.num_circuits_per_length,
     target_gate=node.parameters.target_gate,
+    reduce_to_1q_cliffords=node.parameters.reduce_to_1q_cliffords,
 )
 cache_dir = Path(__file__).resolve().parent.parent / ".rb_cache"
 cached = rb_try_load(cache_dir, cache_key)
@@ -140,7 +141,9 @@ else:
         target_gate=node.parameters.target_gate,
         amplification_lengths=node.parameters.circuit_lengths,
         num_circuits_per_length=node.parameters.num_circuits_per_length,
+        basis_gates=node.parameters.basis_gates,
         num_qubits=2,
+        reduce_to_1q_cliffords=node.parameters.reduce_to_1q_cliffords,
         seed=node.parameters.seed,
     )
 
