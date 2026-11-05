@@ -133,7 +133,7 @@ def active_reset_gef(
     readout_pulse_name: str = "readout",
     pi_01_pulse_name: str = "x180",
     pi_12_pulse_name: str = "EF_x180",
-    max_attempts: int = 10,
+    max_attempts: int = 15,
 ):
     res_ar = declare(int)
     success = declare(int)
@@ -141,7 +141,7 @@ def active_reset_gef(
     attempts = declare(int)
     assign(attempts, 0)
     qubit.align()
-    qubit.resonator.wait(4*(qubit.resonator.depletion_time//4))       
+    qubit.resonator.wait(qubit.resonator.depletion_time//4)      
     wait(4)
     with while_((success < 2) & (attempts < max_attempts)):
         readout_state_gef(qubit, res_ar, readout_pulse_name)
@@ -155,10 +155,10 @@ def active_reset_gef(
         with if_(res_ar == 2):
             update_frequency(
                 qubit.xy.name,
-                int(qubit.xy.intermediate_frequency - qubit.anharmonicity),
+                int(qubit.xy.intermediate_frequency - qubit.anharmonicity), keep_phase=True
             )
             qubit.xy.play(pi_12_pulse_name)
-            update_frequency(qubit.xy.name, int(qubit.xy.intermediate_frequency))
+            update_frequency(qubit.xy.name, int(qubit.xy.intermediate_frequency), keep_phase=True)
             qubit.xy.play(pi_01_pulse_name)
             assign(success, 0)
         qubit.align()
@@ -208,12 +208,10 @@ def active_reset(
     qubit.align()
     with while_((I > pulse.rus_exit_threshold) & (attempts < max_attempts)):
         qubit.align()
-        wait(4)
         reset_if_phase(qubit.resonator.name)
-        wait(4)
         qubit.resonator.measure("readout", qua_vars=(I, Q))
         assign(state, I > pulse.threshold)
-        wait(qubit.resonator.depletion_time, qubit.resonator.name)
+        wait(qubit.resonator.depletion_time//4, qubit.resonator.name)
         qubit.align()
         qubit.xy.play(pi_pulse_name, condition=state)
         qubit.align()
