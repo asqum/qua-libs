@@ -16,7 +16,11 @@ from .macros import (
     evaluate_log_fidelity,
     update_record,
     update_data_frame,
+    cross_entropy,
+    two_qubit_unitary_from_fsim_params,
 )
+from quam_libs.macros import readout_state_gef
+from scipy.optimize import curve_fit, minimize
 import matplotlib.pyplot as plt
 from qiskit_aer import AerJob
 import pandas as pd
@@ -37,6 +41,66 @@ from warnings import warn
 from qualang_tools.units import unit
 
 u = unit(coerce_to_integer=True)
+
+
+def _resolve_readout_modes(xeb_config: XEBConfig) -> List[int]:
+    """
+    Returns the number of readout levels (2 or 3) to use for each qubit in `xeb_config.qubits`.
+
+    For the standard (single qubit-pair) XEB use case, `xeb_config.qubits` is ordered as
+    [qubit_control, qubit_target], so the first qubit uses `control_readout_mode` and the
+    second uses `target_readout_mode`. Any other configuration (0 or >1 qubit pairs) defaults
+    to 2-level (G/E) readout for every qubit, since leakage tracking is only implemented for the
+    single qubit-pair XEB use case.
+    """
+    modes = [2] * xeb_config.n_qubits
+    if len(xeb_config.qubit_pairs) == 1 and xeb_config.n_qubits == 2:
+        modes = [xeb_config.control_readout_mode, xeb_config.target_readout_mode]
+    return modes
+
+
+# Minimum mean of (sum_i p_i^2 - 1/D)^2 over the circuits of a depth for the linear XEB fidelity to be defined.
+_MIN_XEB_SIGNAL = 1e-9
+
+
+def _fit_decay_zero(depths, values, min_depth: int = 6) -> Dict:
+    """
+    Fit ``values = amplitude * base**depth`` (no offset) with bounded least squares.
+
+    Non-finite points are ignored. Depths below ``min_depth`` are dropped when at least four deeper points remain.
+    The same routine is used for linear XEB, purity and the unitary-fit comparison so that their decay bases are
+    directly comparable.
+
+    Returns a dict with ``amplitude``, ``base``, ``amplitude_stderr``, ``base_stderr`` and the ``depths`` used.
+    """
+    x = np.asarray(depths, dtype=float)
+    y = np.asarray(values, dtype=float)
+    mask = np.isfinite(x) & np.isfinite(y)
+    if np.count_nonzero(mask & (x >= min_depth)) >= 4:
+        mask &= x >= min_depth
+    if np.count_nonzero(mask) < 4:
+        raise ValueError("Need at least four depth points for the decay fit.")
+
+    def model(depth, amplitude, base):
+        return amplitude * base**depth
+
+    amplitude_0 = float(np.clip(np.max(y[mask]), 1e-3, 1.9))
+    popt, pcov = curve_fit(
+        model,
+        x[mask],
+        y[mask],
+        p0=[amplitude_0, 0.98],
+        bounds=([0.0, 0.0], [2.0, 1.0]),
+        maxfev=5000,
+    )
+    stderr = np.sqrt(np.diag(pcov))
+    return {
+        "amplitude": float(popt[0]),
+        "base": float(popt[1]),
+        "amplitude_stderr": float(stderr[0]),
+        "base_stderr": float(stderr[1]),
+        "depths": x[mask],
+    }
 
 
 class XEB:
@@ -161,6 +225,12 @@ class XEB:
                     with case_(i):
                         self.xeb_config.gate_set[i].gate_macro(qubit)
 
+    def _readout_modes(self) -> List[int]:
+        """
+        Returns the number of readout levels (2 or 3) to use for each qubit in `self.qubits`.
+        """
+        return _resolve_readout_modes(self.xeb_config)
+
     def _xeb_prog(self, simulate: bool = False):
         """
         Generate the QUA program for the XEB experiment
@@ -171,6 +241,7 @@ class XEB:
         n_qubits = self.xeb_config.n_qubits
         dim = self.xeb_config.dim
         random_gates = len(self.xeb_config.gate_set)
+        readout_modes = self._readout_modes()
         ge_thresholds = [
             readout_element.operations[self.xeb_config.readout_pulse_name].threshold
             for readout_element in self.readout_channels
@@ -189,12 +260,17 @@ class XEB:
                     [declare(fixed, size=self.xeb_config.depths[-1]) for _ in range(4)] for _ in range(n_qubits)
                 ]
             counts = declare(int, value=[0] * dim)  # Counts for all possible bit-strings (00, 01, 10, 11)
-            state = [declare(bool) for _ in range(n_qubits)]  # Qubit states
+            # Qubit states: 0/1 for 2-level (G/E) readout, 0/1/2 for 3-level (G/E/F) readout
+            state = [declare(int) for _ in range(n_qubits)]
+            leak = [declare(bool) for _ in range(n_qubits)]  # True if qubit q was measured in |f> this shot
+            any_leak = declare(bool)
+            leak_counts = declare(int, value=[0] * n_qubits)  # Number of leakage (|f>) events per qubit, per depth
             # Declare streams
             counts_st = [
                 declare_stream() for _ in range(dim)
             ]  # Stream for counts of all possible bit-strings (00, 01, 10, 11)
             state_st = [declare_stream() for _ in range(n_qubits)]  # Stream for individual qubit states
+            leak_counts_st = [declare_stream() for _ in range(n_qubits)]  # Stream for per-qubit leakage counts
             gate_st = [
                 declare_stream() for _ in range(n_qubits)
             ]  # Stream for gate indices (enabling circuit reconstruction in post-processing)
@@ -300,57 +376,80 @@ class XEB:
                         # Measure the state
                         wait(150 * u.ns)
                         align()
+                        assign(any_leak, False)
                         for q_idx, qubit in enumerate(self.qubits):
                             # Play the readout on the other resonator to measure in the same condition as when optimizing readout
                             for other_qubit in self.readout_qubits:
                                 if other_qubit.resonator != qubit.resonator:
                                     other_qubit.resonator.play("readout")
 
-                            qubit.resonator.measure(
-                                self.xeb_config.readout_pulse_name,
-                                qua_vars=(I[q_idx], Q[q_idx]),
-                            )
-                            # State Estimation: returned as an integer, to be later converted to bit-strings
-                            assign(state[q_idx], I[q_idx] > ge_thresholds[q_idx])
+                            if readout_modes[q_idx] == 3:
+                                # 3-level (G/E/F) readout: state[q_idx] in {0, 1, 2}. The |f> outcome (2) is
+                                # flagged as leakage and excluded from the computational-subspace bitstring count.
+                                readout_state_gef(qubit, state[q_idx], pulse_name=self.xeb_config.readout_pulse_name)
+                                assign(leak[q_idx], state[q_idx] == 2)
+                            else:
+                                qubit.resonator.measure(
+                                    self.xeb_config.readout_pulse_name,
+                                    qua_vars=(I[q_idx], Q[q_idx]),
+                                )
+                                # State Estimation: returned as an integer, to be later converted to bit-strings
+                                assign(state[q_idx], Cast.to_int(I[q_idx] > ge_thresholds[q_idx]))
+                                save(I[q_idx], I_st[q_idx])
+                                save(Q[q_idx], Q_st[q_idx])
+                                assign(leak[q_idx], False)
                             save(state[q_idx], state_st[q_idx])
-                            save(I[q_idx], I_st[q_idx])
-                            save(Q[q_idx], Q_st[q_idx])
+                            assign(any_leak, any_leak | leak[q_idx])
+                            with if_(leak[q_idx]):
+                                assign(leak_counts[q_idx], leak_counts[q_idx] + 1)
                             assign(
                                 tot_state_,
-                                tot_state_ + 2**q_idx * Cast.to_int(state[q_idx]),
+                                tot_state_ + 2**q_idx * Cast.to_int(state[q_idx] == 1),
                             )
 
                             reset_qubit(
                                 self.xeb_config.reset_method,
                                 qubit,
                                 threshold=ge_thresholds[q_idx],
+                                readout_pulse_name=self.xeb_config.readout_pulse_name,
                                 **self.xeb_config.reset_kwargs,
                             )
                         if len(self.qubit_pairs) > 1:  # Multi-qubit XEB case (Reset pattern)
                             assign(two_qubit_gate_pattern, 0)
 
-                        with switch_(tot_state_):
-                            for i in range(dim):  # Bitstring conversion
-                                with case_(i):
-                                    assign(counts[i], counts[i] + 1)  # counts for 00, 01, 10 and 11
+                        # Only accumulate the bitstring counts (used for the XEB fidelity estimate) when
+                        # neither qubit leaked out of the computational subspace this shot.
+                        with if_(~any_leak):
+                            with switch_(tot_state_):
+                                for i in range(dim):  # Bitstring conversion
+                                    with case_(i):
+                                        assign(counts[i], counts[i] + 1)  # counts for 00, 01, 10 and 11
                         assign(tot_state_, 0)  # Resetting the state
                     for i in range(dim):  # Resetting Bitstring collection
                         save(counts[i], counts_st[i])
                         assign(counts[i], 0)
+                    for q in range(n_qubits):  # Resetting per-depth leakage collection
+                        save(leak_counts[q], leak_counts_st[q])
+                        assign(leak_counts[q], 0)
 
             # Save the results
             with stream_processing():
                 for q in range(n_qubits):
                     gate_st[q].buffer(self.xeb_config.depths[-1]).save_all(f"g{q}")
-                    I_st[q].buffer(self.xeb_config.n_shots).map(FUNCTIONS.average()).buffer(
-                        len(self.xeb_config.depths)
-                    ).save_all(f"I{q}")
-                    Q_st[q].buffer(self.xeb_config.n_shots).map(FUNCTIONS.average()).buffer(
-                        len(self.xeb_config.depths)
-                    ).save_all(f"Q{q}")
-                    state_st[q].boolean_to_int().buffer(self.xeb_config.n_shots).map(FUNCTIONS.average()).buffer(
+                    # I_st/Q_st are only ever saved to for 2-level (G/E) readout (see the measurement
+                    # block above); for 3-level (G/E/F) readout, these streams stay empty, and QOP
+                    # errors out ("cannot process an empty stream") if they are referenced here.
+                    if readout_modes[q] != 3:
+                        I_st[q].buffer(self.xeb_config.n_shots).map(FUNCTIONS.average()).buffer(
+                            len(self.xeb_config.depths)
+                        ).save_all(f"I{q}")
+                        Q_st[q].buffer(self.xeb_config.n_shots).map(FUNCTIONS.average()).buffer(
+                            len(self.xeb_config.depths)
+                        ).save_all(f"Q{q}")
+                    state_st[q].buffer(self.xeb_config.n_shots).map(FUNCTIONS.average()).buffer(
                         len(self.xeb_config.depths)
                     ).save_all(f"state{q}")
+                    leak_counts_st[q].buffer(len(self.xeb_config.depths)).save_all(f"leak{q}")
                     amp_st[q].buffer(self.xeb_config.depths[-1], 2, 2).save_all(f"amp_matrix_q{q}")
                 for i in range(dim):
                     string = "s" + binary(i, n_qubits)
@@ -602,13 +701,17 @@ class XEBJob:
                 saved_data = {"counts": counts, "states": states, "density_matrices": dms}
             else:
 
-                gate_indices, states, counts, quadratures, amp_st = {}, {}, {}, {}, {}
+                gate_indices, states, counts, quadratures, amp_st, leak_counts = {}, {}, {}, {}, {}, {}
                 result = self._result_handles
+                readout_modes = _resolve_readout_modes(self.xeb_config)
                 for q, qubit in enumerate(self.xeb_config.qubits):
                     gate_indices[f"g_{qubit.name}"] = result.get(f"g{q}").fetch_all()["value"]
-                    quadratures[f"I_{qubit.name}"] = result.get(f"I{q}").fetch_all()["value"]
-                    quadratures[f"Q_{qubit.name}"] = result.get(f"Q{q}").fetch_all()["value"]
+                    # I/Q quadratures are only streamed for qubits read out in 2-level (G/E) mode.
+                    if readout_modes[q] != 3:
+                        quadratures[f"I_{qubit.name}"] = result.get(f"I{q}").fetch_all()["value"]
+                        quadratures[f"Q_{qubit.name}"] = result.get(f"Q{q}").fetch_all()["value"]
                     states[f"state_{qubit.name}"] = result.get(f"state{q}").fetch_all()["value"]
+                    leak_counts[f"leak_{qubit.name}"] = result.get(f"leak{q}").fetch_all()["value"]
                     if self.xeb_config.gate_set.run_through_amp_matrix_modulation:
                         amp_st[f"amp_matrix_{qubit.name}"] = result.get(f"amp_matrix_q{q}").fetch_all()["value"]
 
@@ -621,6 +724,7 @@ class XEBJob:
                     **states,
                     **counts,
                     **amp_st,
+                    **leak_counts,
                     "gate_indices": self.gate_indices,
                     "gate_sequences": self.gate_sequences,
                 }
@@ -708,6 +812,15 @@ class XEBResult:
         self.states = states
         self.data = saved_data
         self.data_handler = data_handler
+        self.readout_modes = _resolve_readout_modes(xeb_config)
+        # Leakage (|f>) counts per qubit, shape (seqs, len(depths)). Only populated for qubits
+        # actually read out with `control_readout_mode`/`target_readout_mode` == 3 (for 2-level
+        # qubits, the corresponding stream is always zero since leakage is never checked for them).
+        self.leak_counts = {
+            qubit_name: np.asarray(saved_data[f"leak_{qubit_name}"])
+            for qubit_name, mode in zip(self.qubit_names, self.readout_modes)
+            if mode == 3 and f"leak_{qubit_name}" in saved_data
+        }
         (
             self._joint_measured_probs,
             self._disjoint_measured_probs,
@@ -726,6 +839,7 @@ class XEBResult:
                 "disjoint_measured_probs": self._disjoint_measured_probs,
                 "joint_expected_probs": self._joint_expected_probs,
                 "disjoint_expected_probs": self._disjoint_expected_probs,
+                "valid_shots": self._valid_shots,
                 "log_fidelities": self._log_fidelities,
                 "linear_fidelities": (
                     np.array(self.linear_fidelities["fidelity"])
@@ -790,6 +904,73 @@ class XEBResult:
 
         return cls(xeb_config, circuits, new_data["counts"], new_data["states"], new_data, data_handler)
 
+    @classmethod
+    def from_node_results(
+        cls,
+        results: Dict,
+        machine: QuAM,
+        apply_confusion_matrix: Optional[bool] = None,
+        disjoint_processing: Optional[bool] = None,
+    ):
+        """
+        Rebuild an XEBResult from the ``node.results`` of a saved (hardware) XEB node, so the analysis can be
+        re-run without a new measurement.
+
+        Only the raw data (bitstring counts, qubit states, leakage counts, gate indices) is used; probabilities,
+        fidelities and purity are recomputed, so analysis options can be changed freely.
+
+        Args:
+            results: ``node.results`` of the loaded node (must contain ``xeb_config``, ``gate_indices``, the
+                bitstring counts ``"00"``, ``"01"``, ... and ``"state_<qubit>"``). Results saved from a
+                ``qiskit_simulation`` run do not contain these keys and cannot be reloaded; run them again.
+            machine: QuAM machine of the loaded node (used to resolve qubits and qubit pairs).
+            apply_confusion_matrix: Overrides the saved setting when not None.
+            disjoint_processing: Overrides the saved setting when not None.
+        """
+
+        def raw_array(key):
+            if key not in results:
+                raise KeyError(
+                    f"'{key}' is missing from the loaded node results. Only results from a hardware XEB run "
+                    "contain the raw data needed for re-analysis."
+                )
+            array = np.asarray(results[key])
+            if array.dtype.kind not in "biuf":
+                raise ValueError(f"'{key}' was not restored as a numeric array from the saved node.")
+            return array
+
+        if "xeb_config" not in results:
+            raise KeyError("'xeb_config' is missing from the loaded node results.")
+
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="No gate macro or amp_matrix provided")
+            xeb_config = XEBConfig.from_dict(dict(results["xeb_config"]), machine=machine)
+        if apply_confusion_matrix is not None:
+            xeb_config.apply_confusion_matrix = bool(apply_confusion_matrix)
+        if disjoint_processing is not None:
+            xeb_config.disjoint_processing = bool(disjoint_processing)
+
+        # Creating the XEB object (no program is built or run) fills in the coupling map and the parallel gate
+        # combinations that are needed to rebuild the circuits.
+        xeb = XEB(xeb_config, machine=machine)
+
+        n_qubits = xeb_config.n_qubits
+        gate_indices = raw_array("gate_indices").astype(int)
+        circuits = generate_circuits(xeb_config, gate_indices, xeb.available_combinations)
+
+        counts = {binary(i, n_qubits): raw_array(binary(i, n_qubits)) for i in range(xeb_config.dim)}
+        qubit_names_ = [qubit.name for qubit in xeb_config.qubits]
+        states = {f"state_{name}": raw_array(f"state_{name}") for name in qubit_names_}
+
+        saved_data = {**counts, **states, "gate_indices": gate_indices}
+        for name in qubit_names_:
+            for prefix in ("leak", "I", "Q"):
+                key = f"{prefix}_{name}"
+                if key in results:
+                    saved_data[key] = np.asarray(results[key])
+
+        return cls(xeb_config, circuits, counts, states, saved_data, None)
+
     @staticmethod
     def _normalize_probabilities(probabilities: np.ndarray) -> np.ndarray:
         corrected = np.clip(np.real_if_close(probabilities), 0, None).astype(float)
@@ -798,22 +979,33 @@ class XEBResult:
             return corrected
         return corrected / norm
 
-    def _get_joint_confusion_matrix(self) -> Optional[np.ndarray]:
-        if len(self.xeb_config.qubit_pairs) != 1 or self.xeb_config.n_qubits != 2:
-            return None
-
-        qp = self.xeb_config.qubit_pairs[0]
-        confusion = getattr(qp, "confusion", None)
-        if confusion is None:
-            return None
-
-        confusion = np.asarray(confusion, dtype=float)
-        if confusion.shape != (4, 4):
-            return None
-        return confusion
-
     def _get_single_qubit_confusion_matrix(self, qubit_index: int) -> Optional[np.ndarray]:
-        resonator = self.xeb_config.qubits[qubit_index].resonator
+        """
+        Returns the 2x2 readout matrix ``M[measured, prepared]`` (columns sum to 1) of one qubit, so that
+        ``p_measured = M @ p_true``.
+
+        ``resonator.confusion_matrix`` (07b_IQ_Blobs) and ``resonator.gef_confusion_matrix`` (08d_IQ_Blobs_G_E_F)
+        are stored as ``[prepared][measured]``, hence they are transposed here. For 3-level (G/E/F) readout the
+        |f> outcome is discarded in the QUA program, so only the G/E block is used, renormalized per prepared state.
+        """
+        qubit = self.xeb_config.qubits[qubit_index]
+        resonator = getattr(qubit, "resonator", None)
+        if resonator is None:
+            return None
+
+        if self.readout_modes[qubit_index] == 3:
+            gef = getattr(resonator, "gef_confusion_matrix", None)
+            if gef is None:
+                return None
+            gef = np.asarray(gef, dtype=float)
+            if gef.shape != (3, 3):
+                return None
+            block = gef[:2, :2]
+            row_sums = block.sum(axis=1, keepdims=True)
+            if np.any(row_sums <= 0):
+                return None
+            return (block / row_sums).T
+
         confusion = getattr(resonator, "confusion_matrix", None)
         if confusion is None:
             return None
@@ -821,7 +1013,43 @@ class XEBResult:
         confusion = np.asarray(confusion, dtype=float)
         if confusion.shape != (2, 2):
             return None
-        return confusion
+        return confusion.T
+
+    def _get_joint_confusion_matrix(self) -> Optional[np.ndarray]:
+        """
+        Returns the 4x4 readout matrix ``M[measured, prepared]`` in the bitstring order used by this experiment
+        (index = b0 + 2*b1, i.e. ``xeb_config.qubits[0]`` is the least significant bit, as in Qiskit and in the QUA
+        program), so that ``p_measured = M @ p_true``.
+
+        ``qubit_pair.confusion`` (34_2Q_confusion_matrix) is stored as ``[measured][prepared]`` with the index
+        ``2 * control + target`` (control is the most significant bit), so it is reordered when the first XEB qubit
+        is the control qubit.
+
+        With 3-level readout (or when the pair matrix is missing), the matrix is built from the single-qubit matrices
+        (this ignores readout correlations between the two qubits).
+        """
+        if len(self.xeb_config.qubit_pairs) != 1 or self.xeb_config.n_qubits != 2:
+            return None
+
+        qp = self.xeb_config.qubit_pairs[0]
+
+        if all(mode == 2 for mode in self.readout_modes):
+            confusion = getattr(qp, "confusion", None)
+            if confusion is not None:
+                confusion = np.asarray(confusion, dtype=float)
+                if confusion.shape == (4, 4):
+                    first_qubit_name = getattr(self.xeb_config.qubits[0], "name", self.xeb_config.qubits[0])
+                    control = getattr(qp, "qubit_control", None)
+                    control_name = getattr(control, "name", control)
+                    if first_qubit_name == control_name:
+                        perm = [0, 2, 1, 3]
+                        confusion = confusion[np.ix_(perm, perm)]
+                    return confusion
+
+        single_qubit_matrices = [self._get_single_qubit_confusion_matrix(q) for q in range(2)]
+        if all(matrix is not None for matrix in single_qubit_matrices):
+            return np.kron(single_qubit_matrices[1], single_qubit_matrices[0])
+        return None
 
     def _apply_joint_confusion_correction(self, measured_probs: np.ndarray) -> np.ndarray:
         confusion = self._get_joint_confusion_matrix()
@@ -870,7 +1098,19 @@ class XEBResult:
         counts = self.counts
         states = self.states
 
+        if self.xeb_config.disjoint_processing and any(mode == 3 for mode in self.readout_modes):
+            raise ValueError(
+                "disjoint_processing is not supported with 3-level (G/E/F) readout: the per-qubit state stream "
+                "contains the |f> outcome. Set control_readout_mode/target_readout_mode to 2 or disable "
+                "disjoint_processing."
+            )
+
         existing_data = "joint_expected_probs" in self.data.keys()
+        # Number of shots that contribute to the bitstring counts (shots with |f> on either qubit are discarded)
+        if existing_data and "valid_shots" in self.data:
+            valid_shots = np.asarray(self.data["valid_shots"], dtype=float)
+        else:
+            valid_shots = np.full((seqs, len(depths)), float(self.xeb_config.n_shots))
 
         if not existing_data:
             joint_expected_probs = np.zeros((seqs, len(depths), dim))
@@ -902,17 +1142,24 @@ class XEBResult:
                 qc = self.circuits[s][d_].remove_final_measurements(inplace=False)
                 if not existing_data:
                     statevector = Statevector(qc)
-                    joint_expected_probs[s, d_] = statevector.probabilities(decimals=5)
-                    joint_raw_measured_probs = (
-                        np.array([counts[binary(i, n_qubits)][s][d_] for i in range(dim)]) / self.xeb_config.n_shots
+                    joint_expected_probs[s, d_] = statevector.probabilities()
+                    joint_raw_counts = np.array(
+                        [counts[binary(i, n_qubits)][s][d_] for i in range(dim)], dtype=float
                     )
+                    # Normalize over the shots that were actually counted: shots where a qubit was found in |f>
+                    # are not part of the bitstring counts. Leakage is reported separately (leakage_probs).
+                    valid_shots[s, d_] = joint_raw_counts.sum()
+                    if valid_shots[s, d_] > 0:
+                        joint_raw_measured_probs = joint_raw_counts / valid_shots[s, d_]
+                    else:
+                        joint_raw_measured_probs = np.zeros(dim)
                     if self.xeb_config.apply_confusion_matrix:
                         joint_measured_probs[s, d_] = self._apply_joint_confusion_correction(joint_raw_measured_probs)
                     else:
                         joint_measured_probs[s, d_] = joint_raw_measured_probs
 
                     for q in range(n_qubits):
-                        disjoint_expected_probs[q, s, d_] = statevector.probabilities([q], 5)
+                        disjoint_expected_probs[q, s, d_] = statevector.probabilities([q])
                         qubit_state = states[f"state_{self.qubit_names[q]}"][s, d_]
                         disjoint_raw_measured_probs = np.array([1 - qubit_state, qubit_state])
                         if self.xeb_config.apply_confusion_matrix:
@@ -955,7 +1202,12 @@ class XEBResult:
                         )
 
         def per_cycle_depth(df):
-            fid_lsq = df["numerator"].sum() / df["denominator"].sum()
+            denominator = df["denominator"].sum()
+            # Depths whose ideal distribution is uniform for every circuit (e.g. depth 1: sqrt-gates on |0> give
+            # 50/50 and CZ only adds a phase) carry no XEB signal: 0/0 up to float noise -> undefined.
+            if denominator < _MIN_XEB_SIGNAL * len(df):
+                return pd.Series({"fidelity": np.nan})
+            fid_lsq = df["numerator"].sum() / denominator
             return pd.Series({"fidelity": fid_lsq})
 
         if not self.xeb_config.disjoint_processing:
@@ -970,6 +1222,8 @@ class XEBResult:
 
         if np.isnan(log_fidelities).all():
             warnings.warn("All fidelities computed from log-entropies are singularities.")
+
+        self._valid_shots = valid_shots
 
         return (
             joint_measured_probs,
@@ -1303,11 +1557,159 @@ class XEBResult:
         Estimated purities of final states, computed from the variance of the measured probabilities
         Returns: Purities
         """
-        var_pt = (2**self.xeb_config.n_qubits - 1) / (
-            2 ** (2 * self.xeb_config.n_qubits)(2**self.xeb_config.n_qubits + 1)
-        )
+        dim = 2**self.xeb_config.n_qubits
+        var_pt = (dim - 1) / (dim**2 * (dim + 1))
         purities = np.var(self.measured_probs, axis=-1) / var_pt
         return purities
+
+    def _shot_noise_variance(self) -> np.ndarray:
+        """
+        Expected contribution of finite-shot (multinomial) noise to the pooled variance of the measured
+        probabilities, per depth. The raw counts have covariance (diag(p) - p p^T) / N; when the confusion
+        matrix correction is applied, this covariance is propagated through the inverse confusion matrix
+        (ignoring the clipping/renormalization of negative entries).
+
+        Returns: array of shape (len(depths),)
+        """
+        probs = np.asarray(self.measured_probs, dtype=float)
+        n_seqs, n_depths, dim = probs.shape
+        valid_shots = np.maximum(np.asarray(self._valid_shots, dtype=float)[:n_seqs, :n_depths], 1.0)
+
+        inverse = np.eye(dim)
+        if self.xeb_config.apply_confusion_matrix:
+            confusion = self._get_joint_confusion_matrix()
+            if confusion is not None:
+                try:
+                    inverse = np.linalg.inv(confusion)
+                except np.linalg.LinAlgError:
+                    pass
+
+        cov = np.einsum("sdi,ij->sdij", probs, np.eye(dim)) - np.einsum("sdi,sdj->sdij", probs, probs)
+        cov = cov / valid_shots[:, :, None, None]
+        noise_diag = np.einsum("ij,sdjk,ik->sdi", inverse, cov, inverse)
+        return noise_diag.mean(axis=(0, 2))
+
+    def calculate_speckle_purity(self, correct_shot_noise: bool = True) -> np.ndarray:
+        """
+        Speckle purity at each depth, Arute et al., Nature 574, 505 (2019), Eq. (49):
+        purity = Var(p) * D^2 * (D + 1) / (D - 1).
+
+        The variance is pooled across sequences and bitstrings. The mean of a normalized distribution is exactly
+        1/D, so the variance is computed around 1/D. sqrt(purity) decays with the incoherent (coherence-limited)
+        error; linear XEB decays with the total error.
+
+        Args:
+            correct_shot_noise: Subtract the expected finite-shot noise contribution to Var(p). Without it, the
+                raw estimator is biased upwards (about 1% purity for D=4 and 500 shots) and never decays below
+                that floor. With the correction the estimate is unbiased but can be slightly negative at large
+                depth, so fit it directly (not through its square root).
+        """
+        if self.xeb_config.disjoint_processing:
+            raise ValueError("Speckle purity uses the joint bitstring distribution.")
+        probs = np.asarray(self.measured_probs)
+        n_depths = probs.shape[1]
+        dim = 2**self.xeb_config.n_qubits
+        flat = probs.transpose(0, 2, 1).reshape(-1, n_depths)
+        var_p = np.mean((flat - 1.0 / dim) ** 2, axis=0)
+        if correct_shot_noise:
+            var_p = var_p - self._shot_noise_variance()
+        purity = var_p * (dim**2 * (dim + 1) / (dim - 1))
+        self.average_state_purity = purity
+        return purity
+
+    def coherence_limit_comparison(self, min_depth: int = 6, correct_shot_noise: bool = True):
+        """
+        Separate the per-cycle error into incoherent and coherent parts.
+
+        Two decays are fitted with the same model (``A * base**depth``), the same depth range and the same bounds:
+
+        - linear XEB          -> ``F_total``  (total error, ``1 - F_total``)
+        - speckle purity      -> ``base = f_cycle**2``, i.e. ``f_cycle = sqrt(base)`` (incoherent error,
+          ``1 - f_cycle``). Purity is fitted directly because the shot-noise-corrected estimate can be negative
+          at large depth, which would bias a fit of ``sqrt(purity)``.
+
+        Unitary (coherent) errors such as a wrong CZ conditional phase or uncompensated local Z phases lower the
+        overlap with the ideal circuit (linear XEB) but not the purity, so
+        ``coherent_error_per_cycle = f_cycle - F_total`` (= total error - incoherent error).
+        Decoherence, leakage and stochastic noise lower both and cancel in the difference.
+
+        Depths below ``min_depth`` are dropped from both fits when at least four deeper points remain.
+
+        Returns (summary, figure).
+        """
+        purity = np.asarray(self.calculate_speckle_purity(correct_shot_noise=correct_shot_noise), dtype=float)
+        xs = np.asarray(self.xeb_config.depths, dtype=float)
+        linear = self.linear_fidelities
+        xeb_depths = np.asarray(linear["depth"], dtype=float)
+        xeb_fidelity = np.asarray(linear["fidelity"], dtype=float)
+
+        # Depths where linear XEB is undefined (uniform ideal distribution, e.g. depth 1) carry no information for
+        # the purity either (it is just shot noise there): leave them out of the purity fit and the plot.
+        signal_depths = np.isin(xs, xeb_depths[np.isfinite(xeb_fidelity)])
+        purity_valid = np.where(signal_depths, purity, np.nan)
+
+        fit_xeb = _fit_decay_zero(xeb_depths, xeb_fidelity, min_depth=min_depth)
+        fit_purity = _fit_decay_zero(xs, purity_valid, min_depth=min_depth)
+        curve_depths = xs[signal_depths]
+
+        f_total = fit_xeb["base"]
+        f_total_stderr = fit_xeb["base_stderr"]
+        purity_base = fit_purity["base"]
+        f_cycle = float(np.sqrt(purity_base))
+        # delta method: d sqrt(g) / dg = 1 / (2 sqrt(g))
+        f_cycle_stderr = float(fit_purity["base_stderr"] / (2.0 * f_cycle)) if f_cycle > 0 else float("inf")
+        coherent_error = f_cycle - f_total
+        coherent_error_stderr = float(np.hypot(f_total_stderr, f_cycle_stderr))
+        summary = {
+            "estimator": "pooled Arute purity" + (", shot-noise corrected" if correct_shot_noise else ", raw"),
+            "min_depth": min_depth,
+            "fit_depths": fit_xeb["depths"],
+            "F_total": f_total,
+            "F_total_stderr": f_total_stderr,
+            "f_cycle": f_cycle,
+            "f_cycle_stderr": f_cycle_stderr,
+            "f_cycle_minus_F_total": coherent_error,
+            "total_error_per_cycle": 1.0 - f_total,
+            "total_error_stderr": f_total_stderr,
+            "incoherent_error_per_cycle": 1.0 - f_cycle,
+            "incoherent_error_stderr": f_cycle_stderr,
+            "coherent_error_per_cycle": coherent_error,
+            "coherent_error_stderr": coherent_error_stderr,
+            "purity": purity,
+        }
+
+        fig, ax = plt.subplots(figsize=(8, 6))
+        ax.plot(xeb_depths, xeb_fidelity, "o", color="C0", label="Linear XEB")
+        ax.plot(
+            curve_depths,
+            fit_xeb["amplitude"] * f_total**curve_depths,
+            "-",
+            color="C0",
+            label=f"F_total = {f_total:.5f} (err {1 - f_total:.2e})",
+        )
+        ax.plot(
+            curve_depths,
+            np.sqrt(np.clip(purity[signal_depths], 0.0, None)),
+            "s",
+            color="C1",
+            label=r"$\sqrt{\mathrm{Purity}}$",
+        )
+        ax.plot(
+            curve_depths,
+            np.sqrt(fit_purity["amplitude"]) * f_cycle**curve_depths,
+            "--",
+            color="C1",
+            label=f"f_cycle = {f_cycle:.5f} (err {1 - f_cycle:.2e})",
+        )
+        ax.set_xlabel("Cycle depth")
+        ax.set_ylabel(r"XEB fidelity, $\sqrt{\mathrm{Purity}}$")
+        ax.set_title(
+            f"coherent error = f_cycle - F_total = {coherent_error:+.2e} +/- {coherent_error_stderr:.1e}"
+        )
+        ax.grid(True, alpha=0.3)
+        ax.legend()
+        fig.tight_layout()
+        return summary, fig
 
     @property
     def qubit_names(self):
@@ -1315,3 +1717,375 @@ class XEBResult:
         Qubit names
         """
         return [qubit.name if isinstance(qubit, Transmon) else qubit for qubit in self.xeb_config.qubits]
+
+    @property
+    def leakage_probs(self) -> Dict[str, np.ndarray]:
+        """
+        Measured leakage (|f>) probability per qubit, depth and sequence, for qubits configured with
+        3-level (G/E/F) readout (`control_readout_mode`/`target_readout_mode` == 3).
+
+        Returns:
+            Dict mapping qubit name to a (seqs, len(depths)) array of leakage probabilities. Only
+            includes qubits for which 3-level readout data is available.
+        """
+        return {name: counts / self.xeb_config.n_shots for name, counts in self.leak_counts.items()}
+
+    def plot_leakage(self):
+        """
+        Plot the leakage (|f>) probability vs. circuit depth, averaged over sequences (with the
+        standard error of the mean as error bars), for every qubit configured with 3-level readout.
+
+        Returns: Matplotlib figure, or None if no qubit was configured with 3-level readout.
+        """
+        if not self.leak_counts:
+            warnings.warn(
+                "No leakage data available: set control_readout_mode/target_readout_mode to 3 to enable it."
+            )
+            return None
+
+        depths = self.xeb_config.depths
+        fig = plt.figure()
+        for qubit_name, probs in self.leakage_probs.items():
+            mean = np.mean(probs, axis=0)
+            sem = np.std(probs, axis=0) / np.sqrt(max(probs.shape[0], 1))
+            plt.errorbar(depths, mean, yerr=sem, marker="o", capsize=3, label=f"{qubit_name} leakage to |f>")
+        plt.xlabel("Cycle Depth $d$", fontsize=14)
+        plt.ylabel("Leakage probability", fontsize=14)
+        plt.title("XEB leakage vs. depth")
+        plt.legend(loc="best")
+        plt.tight_layout()
+        plt.show()
+        return fig
+
+    def plot_leakage_heatmap(self):
+        """
+        Plot a heatmap (sequences vs. depths) of the leakage (|f>) probability for every qubit
+        configured with 3-level readout.
+
+        Returns: List of matplotlib figures (one per qubit with 3-level readout data), or an empty
+            list if no qubit was configured with 3-level readout.
+        """
+        if not self.leak_counts:
+            warnings.warn(
+                "No leakage data available: set control_readout_mode/target_readout_mode to 3 to enable it."
+            )
+            return []
+
+        ret_figs = []
+        for qubit_name, probs in self.leakage_probs.items():
+            fig, ax = plt.subplots(figsize=(6, 5))
+            mesh = ax.pcolor(self.xeb_config.depths, range(self.xeb_config.seqs), probs, vmin=0, vmax=1, cmap="magma")
+            ax.set_title(f"{qubit_name}: leakage to |f> probability")
+            ax.set_xlabel("Circuit depth")
+            ax.set_ylabel("Sequences")
+            ax.set_xticks(self.xeb_config.depths)
+            fig.colorbar(mesh, ax=ax)
+            plt.tight_layout()
+            plt.show()
+            ret_figs.append(fig)
+        return ret_figs
+
+    def estimate_2q_unitary(
+        self,
+        x0: Tuple[float, float, float, float] = (0.0, np.pi, 0.0, 0.0),
+        method: str = "Nelder-Mead",
+        max_depth: Optional[int] = None,
+        min_fit_depth: int = 6,
+        **minimize_kwargs,
+    ) -> Dict:
+        """
+        Fit an *effective* two-qubit unitary to the measured XEB data.
+
+        The two-qubit gate is modeled as a generic fSim gate with local Z corrections (see
+        `two_qubit_unitary_from_fsim_params`), parameterized by (theta_iswap, phi_cphase, phi_rz1,
+        phi_rz2). The ideal CZ gate corresponds to (0, pi, 0, 0), which is also the default starting
+        point of the fit. The fit minimizes the average cross-entropy between the measured
+        probabilities and the probabilities predicted by re-simulating every recorded random circuit
+        with this parameterized two-qubit gate in place of the nominal one (e.g. the ideal CZ gate).
+
+        This enables distinguishing *coherent* two-qubit gate miscalibration (captured by a
+        significant deviation of the fitted parameters from (0, pi, 0, 0)) from *incoherent* error
+        sources (decoherence, leakage, etc., which still show up as an exponential fidelity decay with
+        depth even after fitting the best possible unitary).
+
+        Args:
+            x0: Initial guess for (theta_iswap, phi_cphase, phi_rz1, phi_rz2), in radians.
+            method: Optimization method passed to `scipy.optimize.minimize` (default "Nelder-Mead").
+            max_depth: Only depths up to ``max_depth`` enter the cross-entropy loss. The model has no
+                depolarization parameter, so deep circuits (whose outcome is close to uniform) carry almost no
+                information about the unitary and mostly add noise. ``None`` uses all depths.
+            min_fit_depth: Shallowest depth used to fit the layer fidelity decay of the nominal/fitted unitary
+                (same rule as ``coherence_limit_comparison``).
+            minimize_kwargs: Additional keyword arguments passed to `scipy.optimize.minimize`.
+
+        Returns:
+            Dict with the fitted parameters (in radians and degrees), the fitted/nominal average
+            cross-entropy loss, the `OptimizeResult.success` flag, and the re-simulated expected
+            probabilities under the fitted unitary (`fitted_probs`, shape (seqs, len(depths), 4)),
+            which can be passed to `plot_fidelity_with_unitary_fit` for visualization. It also contains the
+            linear-XEB decay bases for the nominal gate (`layer_fid_nominal`) and the fitted unitary
+            (`layer_fid_fitted`); their difference `coherent_error_unitary_fit` is the error that a unitary
+            correction of the gate could remove. `nominal_consistency_error` is the largest deviation between
+            the internal simulation of the nominal gate and the Qiskit expected probabilities and should be ~0.
+
+        Bit order: the matrices are built with ``qubits[0]`` as the most significant bit (the convention of
+        `two_qubit_unitary_from_fsim_params`) and the simulated probabilities are converted to the bitstring order
+        of the measured data (``qubits[0]`` is the least significant bit) before they are compared.
+        """
+        if self.xeb_config.disjoint_processing:
+            raise ValueError("2Q unitary estimation requires joint (not disjoint) processing.")
+        if self.xeb_config.two_qb_gate is None:
+            raise ValueError("2Q unitary estimation requires a two-qubit gate to be configured in the experiment.")
+        if self.xeb_config.n_qubits != 2:
+            raise ValueError("2Q unitary estimation only supports the standard 2-qubit XEB use case.")
+
+        gate_set = self.xeb_config.gate_set
+        sq_matrices = [gate_set[i].gate.to_matrix() for i in range(len(gate_set))]
+        gate_indices = np.asarray(self.data["gate_indices"])  # shape (seqs, n_qubits, max_depth)
+        depths = self.xeb_config.depths
+        seqs = self.xeb_config.seqs
+        measured = self.measured_probs  # shape (seqs, len(depths), 4)
+
+        # Index permutation from "qubits[0] is the MSB" (kron order) to "qubits[0] is the LSB" (measured data)
+        msb_to_lsb = [0, 2, 1, 3]
+
+        depths_arr = np.asarray(depths)
+        if max_depth is None:
+            n_fit_depths = len(depths_arr)
+        else:
+            n_fit_depths = int(np.count_nonzero(depths_arr <= max_depth))
+            if n_fit_depths == 0:
+                raise ValueError(f"No depth is <= max_depth={max_depth}.")
+
+        def simulate(theta, phi, rz1, rz2, n_depths=len(depths)):
+            u2 = two_qubit_unitary_from_fsim_params(theta, phi, rz1, rz2)
+            probs = np.zeros((seqs, len(depths), 4))
+            for s in range(seqs):
+                psi = np.zeros(4, dtype=complex)
+                psi[0] = 1.0
+                ptr = 0
+                for d_, depth in enumerate(depths[:n_depths]):
+                    while ptr < depth:
+                        g0, g1 = gate_indices[s, 0, ptr], gate_indices[s, 1, ptr]
+                        psi = np.kron(sq_matrices[g0], sq_matrices[g1]) @ psi
+                        psi = u2 @ psi
+                        ptr += 1
+                    probs[s, d_] = (np.abs(psi) ** 2)[msb_to_lsb]
+            return probs
+
+        nominal_params = np.array([0.0, np.pi, 0.0, 0.0])
+        nominal_probs = simulate(*nominal_params)
+        nominal_consistency_error = float(np.max(np.abs(nominal_probs - np.asarray(self.expected_probs))))
+        if nominal_consistency_error > 1e-3:
+            warnings.warn(
+                "The internal simulation of the nominal CZ circuit differs from the Qiskit expected probabilities "
+                f"(max deviation {nominal_consistency_error:.2e}); the 2Q unitary fit is not reliable."
+            )
+
+        def loss(params):
+            probs = simulate(*params, n_depths=n_fit_depths)
+            return float(
+                np.mean(
+                    [cross_entropy(measured[s, d_], probs[s, d_]) for s in range(seqs) for d_ in range(n_fit_depths)]
+                )
+            )
+
+        loss_nominal = loss(nominal_params)
+        opt_result = minimize(loss, x0=np.asarray(x0, dtype=float), method=method, **minimize_kwargs)
+        theta, phi, rz1, rz2 = opt_result.x
+        if not opt_result.success:
+            warnings.warn(f"2Q unitary fit did not converge: {opt_result.message}")
+        fitted_probs = simulate(theta, phi, rz1, rz2)
+
+        # Decay bases of linear XEB for the nominal gate and the fitted unitary (same fit as F_total)
+        layer_fid_nominal, layer_fid_fitted = np.nan, np.nan
+        try:
+            depths_nom, fid_nom, _ = self._linear_xeb_with_stderr(self.expected_probs)
+            depths_fit, fid_fit, _ = self._linear_xeb_with_stderr(fitted_probs, signal_probs=self.expected_probs)
+            layer_fid_nominal = _fit_decay_zero(depths_nom, fid_nom, min_depth=min_fit_depth)["base"]
+            layer_fid_fitted = _fit_decay_zero(depths_fit, fid_fit, min_depth=min_fit_depth)["base"]
+        except Exception as e:
+            warnings.warn(f"Could not fit the layer fidelity decay for the unitary fit comparison: {e}")
+
+        fit_summary = {
+            "theta_iswap": theta,
+            "phi_cphase": phi,
+            "phi_rz1": rz1,
+            "phi_rz2": rz2,
+            "theta_iswap_deg": np.degrees(theta),
+            "cphase_error_deg": np.degrees(phi - np.pi),
+            "rz1_deg": np.degrees(rz1),
+            "rz2_deg": np.degrees(rz2),
+            "loss_fitted": float(opt_result.fun),
+            "loss_nominal": loss_nominal,
+            "success": bool(opt_result.success),
+            "fit_max_depth": max_depth,
+            "min_fit_depth": min_fit_depth,
+            "nominal_consistency_error": nominal_consistency_error,
+            "layer_fid_nominal": layer_fid_nominal,
+            "layer_fid_fitted": layer_fid_fitted,
+            "coherent_error_unitary_fit": float(layer_fid_fitted - layer_fid_nominal),
+            "fitted_probs": fitted_probs,
+        }
+        self._unitary_fit = fit_summary
+        return fit_summary
+
+    def _linear_xeb_with_stderr(self, expected_probs: np.ndarray, signal_probs: Optional[np.ndarray] = None):
+        """
+        Pooled linear XEB versus depth, with the standard error from the per-sequence residuals.
+
+        Args:
+            expected_probs: Ideal probabilities used as the model (e.g. nominal CZ or fitted unitary).
+            signal_probs: Probabilities that decide which depths carry XEB signal. Defaults to ``expected_probs``.
+                Pass the nominal probabilities when evaluating a fitted unitary, so that both series are undefined at
+                the same depths (a fitted unitary with a small iSWAP angle or Z phases is no longer exactly uniform
+                at depth 1, which would otherwise give a noisy ratio of two tiny numbers).
+        """
+        measured = np.asarray(self.measured_probs)
+        expected = np.asarray(expected_probs)
+        signal = expected if signal_probs is None else np.asarray(signal_probs)
+        limit = min(measured.shape[1], expected.shape[1], signal.shape[1], len(self.xeb_config.depths))
+        measured = measured[:, :limit]
+        expected = expected[:, :limit]
+        signal = signal[:, :limit]
+        depths = np.asarray(self.xeb_config.depths[:limit])
+
+        e_u = np.sum(expected**2, axis=-1)
+        u_u = np.sum(expected, axis=-1) / self.xeb_config.dim
+        m_u = np.sum(measured * expected, axis=-1)
+        x = e_u - u_u
+        y = m_u - u_u
+        denominator = (x**2).sum(axis=0)
+        # Depths without XEB signal (uniform ideal distribution, e.g. depth 1) are undefined
+        x_signal = np.sum(signal**2, axis=-1) - np.sum(signal, axis=-1) / self.xeb_config.dim
+        defined = ((x_signal**2).sum(axis=0) >= _MIN_XEB_SIGNAL * x.shape[0]) & (
+            denominator >= _MIN_XEB_SIGNAL * x.shape[0]
+        )
+        fidelity = np.full(limit, np.nan)
+        fidelity[defined] = (x * y).sum(axis=0)[defined] / denominator[defined]
+
+        std_errs = []
+        for i in range(limit):
+            if not defined[i]:
+                std_errs.append(np.nan)
+                continue
+            residuals = y[:, i] - fidelity[i] * x[:, i]
+            residual_variance = np.sum(residuals**2) / max(len(x[:, i]) - 1, 1)
+            std_errs.append(np.sqrt(residual_variance / np.sum(x[:, i] ** 2)))
+        return depths, fidelity, np.asarray(std_errs)
+
+    def plot_fidelity_with_unitary_fit(self, fit_summary: Optional[Dict] = None):
+        """
+        Linear XEB versus depth for the nominal gate and the fitted unitary, with speckle purity
+        and the fitted angles printed in the upper-right corner.
+        """
+        if fit_summary is None:
+            fit_summary = getattr(self, "_unitary_fit", None)
+        if fit_summary is None:
+            raise ValueError("Call estimate_2q_unitary() first, or pass its returned dict explicitly.")
+
+        min_fit_depth = fit_summary.get("min_fit_depth", 6)
+        # Both series are undefined at the depths where the nominal circuits carry no XEB signal (e.g. depth 1)
+        depths_init, fid_init, err_init = self._linear_xeb_with_stderr(self.expected_probs)
+        depths_opt, fid_opt, err_opt = self._linear_xeb_with_stderr(
+            fit_summary["fitted_probs"], signal_probs=self.expected_probs
+        )
+
+        def fit_curve(depths, fidelity):
+            """Same fit (and depth range) as F_total / the numbers printed by the node."""
+            try:
+                fit = _fit_decay_zero(depths, fidelity, min_depth=min_fit_depth)
+            except Exception:
+                return None, np.nan
+            valid_depths = depths[np.isfinite(fidelity)]
+            return (valid_depths, fit["amplitude"] * fit["base"] ** valid_depths), fit["base"]
+
+        curve_init, layer_init = fit_curve(depths_init, fid_init)
+        curve_opt, layer_opt = fit_curve(depths_opt, fid_opt)
+
+        fig, ax = plt.subplots(figsize=(8, 6))
+        ax.errorbar(
+            depths_init,
+            fid_init,
+            yerr=err_init,
+            fmt="o",
+            color="C0",
+            alpha=0.6,
+            label="Linear XEB Data (Initial)",
+        )
+        if curve_init is not None:
+            ax.plot(
+                *curve_init,
+                "--",
+                color="C0",
+                label=f"Fit (Initial): {layer_init * 100:.2f}% (err: {1 - layer_init:.1e})",
+            )
+        ax.errorbar(
+            depths_opt,
+            fid_opt,
+            yerr=err_opt,
+            fmt="o",
+            color="C1",
+            label="Linear XEB Data (Optimized)",
+        )
+        if curve_opt is not None:
+            ax.plot(
+                *curve_opt,
+                "-",
+                color="C1",
+                label=f"Fit (Opt): {layer_opt * 100:.2f}% (err: {1 - layer_opt:.1e})",
+            )
+
+        # Purity only where XEB carries signal (depth 1 is uniform for every circuit, purity is just shot noise)
+        sqrt_purity = np.sqrt(np.clip(self.calculate_speckle_purity(), 0.0, None))
+        signal_depths = np.isfinite(fid_init)
+        purity_depths = np.asarray(self.xeb_config.depths)[signal_depths]
+        sqrt_purity = sqrt_purity[signal_depths]
+        ax.plot(
+            purity_depths,
+            sqrt_purity,
+            "s",
+            color="gray",
+            alpha=0.5,
+            zorder=-1,
+            label=r"$\sqrt{\mathrm{Purity}}$ (Speckle)",
+        )
+        ax.plot(purity_depths, sqrt_purity, "--", color="gray", linewidth=1, alpha=0.5, zorder=-1)
+
+        ax.set_xlabel("Cycle Depth")
+        ax.set_ylabel(r"$\sqrt{\mathrm{Purity}}$, Circuit Fidelity")
+        ylim = ax.get_ylim()
+        ax.set_ylim(max(ylim[0] - 0.2 * (ylim[1] - ylim[0]), -0.05), min(ylim[1], 1.05))
+        ax.legend(loc="lower left", fontsize="small")
+        ax.grid(True, alpha=0.3)
+
+        param_text = (
+            "Estimated Param.\n"
+            + r"$\theta_\mathrm{iSWAP}=$"
+            + f"{fit_summary['theta_iswap_deg']:.2f}"
+            + r"$^\circ$"
+            + "\n"
+            + r"$\phi_\mathrm{CZ}=$"
+            + f"{np.degrees(fit_summary['phi_cphase']):.2f}"
+            + r"$^\circ$"
+            + "\n"
+            + r"$\phi_\mathrm{RZ1}=$"
+            + f"{fit_summary['rz1_deg']:.2f}"
+            + r"$^\circ$"
+            + "\n"
+            + r"$\phi_\mathrm{RZ2}=$"
+            + f"{fit_summary['rz2_deg']:.2f}"
+            + r"$^\circ$"
+        )
+        ax.text(
+            0.98,
+            0.98,
+            param_text,
+            ha="right",
+            va="top",
+            transform=ax.transAxes,
+            bbox=dict(boxstyle="round", facecolor="white", alpha=0.8),
+        )
+        fig.tight_layout()
+        plt.show()
+        return fig

@@ -33,7 +33,11 @@ class XEBConfig:
         generate_new_data (bool): Whether to generate new data
         disjoint_processing (bool): Whether to process the data in a disjoint manner (that is compute qubit states independently, relevant only when no two-qubit gate is provided)
         seed (int): Seed for the random number generator
-
+        control_readout_mode (Literal[2, 3]): Number of readout levels (2=G/E, 3=G/E/F) used to discriminate the
+            control qubit (first qubit of ``qubits``/``qubit_pairs[0].qubit_control``). When set to 3, leakage to the
+            |f> state is tracked separately (see ``XEBResult.leakage_probs``/``plot_leakage``) and excluded from the
+            computational-subspace bitstring counts used for the XEB fidelity estimate.
+        target_readout_mode (Literal[2, 3]): Same as ``control_readout_mode`` but for the target qubit.
 
     """
 
@@ -47,7 +51,7 @@ class XEBConfig:
     two_qb_gate: Optional[QUAGate] = None
     qubit_pairs: Optional[List[TransmonPair]] = field(default_factory=lambda: [])
     readout_pulse_name: str = "readout"
-    reset_method: Literal["active", "cooldown"] = "cooldown"
+    reset_method: Literal["active", "active_gef", "cooldown"] = "cooldown"
     reset_kwargs: Optional[Dict[str, Union[float, str, int]]] = field(
         default_factory=lambda: {
             "cooldown_time": 20,
@@ -62,6 +66,8 @@ class XEBConfig:
     disjoint_processing: bool = False
     apply_confusion_matrix: bool = False
     seed: int = 1234
+    control_readout_mode: Literal[2, 3] = 2
+    target_readout_mode: Literal[2, 3] = 2
 
     def __post_init__(self):
         if isinstance(self.depths, List):
@@ -90,6 +96,8 @@ class XEBConfig:
             "available_combinations": self.available_combinations,
             "apply_confusion_matrix": self.apply_confusion_matrix,
             "seed": self.seed,
+            "control_readout_mode": self.control_readout_mode,
+            "target_readout_mode": self.target_readout_mode,
         }
         return config_dict
 
@@ -124,6 +132,8 @@ class XEBConfig:
             two_qb_gate=two_qb_gate,
             qubit_pairs=qubit_pairs,
             apply_confusion_matrix=config_dict.get("apply_confusion_matrix", False),
+            control_readout_mode=config_dict.get("control_readout_mode", 2),
+            target_readout_mode=config_dict.get("target_readout_mode", 2),
         )
         new_class.coupling_map = config_dict["coupling_map"]
         new_class.available_combinations = config_dict["available_combinations"]
