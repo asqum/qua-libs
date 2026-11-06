@@ -163,6 +163,19 @@ def controller_only_config(config: dict, fems: Iterable[FemKey]) -> dict:
     return out
 
 
+def without_shareable(obj: Any) -> Any:
+    """Copy of a (controller) config without the 'shareable' keys.
+
+    The shareable status cannot change on an open QM ("Cannot change the shareable status of a port in an open QM"),
+    even when the value is the same as before, so it is never sent to the held QM after it was opened.
+    """
+    if isinstance(obj, dict):
+        return {k: without_shareable(v) for k, v in obj.items() if k != "shareable"}
+    if isinstance(obj, (list, tuple)):
+        return type(obj)(without_shareable(x) for x in obj)
+    return obj
+
+
 def logical_config(config: dict, fems: Iterable[FemKey]) -> dict:
     """The part of a node's config that must travel with every job: elements, pulses, waveforms... of the given FEMs."""
     pruned = prune_config(config, fems)
@@ -250,6 +263,7 @@ def install_hold_hook(qmm: Any, host: Optional[str] = None, cluster_name: Option
                     "the physical config is sent with the job:\n  " + "\n  ".join(differences[:8])
                 )
                 job_config = prune_config(config, fems)
+                job_config["controllers"] = without_shareable(job_config["controllers"])
         logger.info(f"qm_hold: using the held QM {flag['qm_id']} instead of opening a new one.")
         return HeldQM(qmm.get_qm(flag["qm_id"]), job_config)
 
@@ -408,6 +422,43 @@ def status(qmm: Any) -> str:
     lines = [f"Holding QM {flag['qm_id']}  (open on the QOP: {is_open})"]
     lines += [f"  {t['channel']:<18} {t['value']:+.5f} V" for t in flag["targets"]]
     return "\n".join(lines)
+
+
+def sync_held_to_state(qmm: Any) -> dict:
+    """Make the held QM match the current state.json, without closing it (qm.update_config).
+
+    - the offset of every held flux line = the current z.joint_offset / coupler.decouple_offset (also written to the port in the state)
+    - every other port setting (delay, filter, ...) = what the state generates now
+    Only the FEMs owned by the held QM are sent. If the server refuses, an error is raised and nothing is saved.
+    """
+    from quam_libs.components import QuAM
+
+    flag = read_flag()
+    if flag is None:
+        raise RuntimeError("No QM is being held (run 00y cells 1-3 first).")
+    if flag["qm_id"] not in qmm.list_open_qms():
+        raise RuntimeError(f"The held QM {flag['qm_id']} is no longer open. Run deactivate() to clear {FLAG_PATH}.")
+
+    machine = QuAM.load()
+    for t in flag["targets"]:
+        if t["kind"] == "qubit":
+            channel = machine.qubits[t["name"]].z
+            t["value"] = float(channel.joint_offset)
+        else:
+            channel = machine.qubit_pairs[t["name"]].coupler
+            t["value"] = float(channel.decouple_offset)
+        channel.opx_output.offset = t["value"]
+
+    fems = [(con, int(fem)) for con, fem in flag["fems"]]
+    config = controller_only_config(machine.generate_config(), fems)
+    # shareable cannot change on an open QM: not sent. If the server refuses, the state and the flag stay as they were.
+    qmm.get_qm(flag["qm_id"]).update_config(without_shareable(config))
+
+    machine.save()
+    flag["physical"] = _normalize(config)
+    write_flag(flag)
+    print(f"Held QM {flag['qm_id']} now matches the state (offsets and port settings of the held FEMs).")
+    return flag
 
 
 def deactivate(qmm: Any, close_qm: bool = True) -> None:
