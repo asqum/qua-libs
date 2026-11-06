@@ -13,6 +13,7 @@ from qm.qua import *
 from qualang_tools.addons.variables import assign_variables_to_element
 import numpy as np
 from quam_libs.components import TransmonPair, Transmon
+from quam_libs.macros import active_reset_gef
 from scipy import optimize
 from scipy.stats import stats
 from itertools import combinations
@@ -78,6 +79,17 @@ def reset_qubit(method: str, qubit: Transmon, **kwargs):
         pi_pulse_name = kwargs.get("pi_pulse", "x180")
         # Reset qubit state
         return active_reset(threshold, qubit, max_tries=max_tries, Ig=Ig, pi_pulse=pi_pulse_name)
+    elif method == "active_gef":
+        max_tries = kwargs.get("max_tries", 10)
+        if (max_tries is None) or (not float(max_tries).is_integer()) or (max_tries < 1):
+            raise Exception("'max_tries' must be an integer > 0.")
+        active_reset_gef(
+            qubit,
+            readout_pulse_name=kwargs.get("readout_pulse_name", "readout"),
+            max_attempts=int(max_tries),
+        )
+    else:
+        raise Exception(f"Unknown reset method {method!r}. Use 'cooldown', 'active', or 'active_gef'.")
 
 
 # Macro for performing active reset until successful for a given number of tries.
@@ -240,6 +252,51 @@ def binary(n, length):
     return bin(n)[2:].zfill(length)
 
 
+def two_qubit_unitary_from_fsim_params(theta: float, phi: float, rz1: float = 0.0, rz2: float = 0.0) -> np.ndarray:
+    """
+    Returns the 4x4 unitary matrix (in the computational basis |00>, |01>, |10>, |11>) of a generic
+    "fSim + local Z" two-qubit gate:
+
+        U(theta, phi, rz1, rz2) = (Z(rz1) (x) Z(rz2)) @ fSim(theta, phi)
+
+    where fSim(theta, phi) is defined (consistently with Google's XEB literature, e.g. [2] in the
+    module README) as:
+
+        [[1,              0,               0,             0],
+         [0,       cos(theta),    -1j*sin(theta),          0],
+         [0,    -1j*sin(theta),       cos(theta),          0],
+         [0,              0,               0,     exp(-1j*phi)]]
+
+    and Z(angle) = diag(1, exp(1j*angle)) is a local Z-rotation. This parametrization is used to fit
+    an *effective* implemented 2-qubit unitary from measured XEB data (see `XEBResult.estimate_2q_unitary`),
+    in order to separate coherent (unitary) 2-qubit gate miscalibration from incoherent error sources.
+
+    Note that at theta=0, phi=pi, rz1=rz2=0, this unitary is exactly the ideal CZ gate
+    (diag(1, 1, 1, -1)), which is the default starting point ("x0") used when fitting.
+
+    Args:
+        theta: iSWAP-like angle (ideally 0 for a pure CZ gate; a non-zero value indicates
+            population leaking between |01> and |10>, i.e. partial-iSWAP coherent error).
+        phi: Conditional-phase angle (ideally pi for a CZ gate).
+        rz1: Local Z-rotation angle applied to the first (control) qubit.
+        rz2: Local Z-rotation angle applied to the second (target) qubit.
+    """
+    c, s = np.cos(theta), np.sin(theta)
+    fsim = np.array(
+        [
+            [1, 0, 0, 0],
+            [0, c, -1j * s, 0],
+            [0, -1j * s, c, 0],
+            [0, 0, 0, np.exp(-1j * phi)],
+        ],
+        dtype=complex,
+    )
+    z1 = np.array([1.0, np.exp(1j * rz1)])
+    z2 = np.array([1.0, np.exp(1j * rz2)])
+    local_phase = np.kron(z1, z2)
+    return np.diag(local_phase) @ fsim
+
+
 def cross_entropy(p, q, epsilon=1e-15):
     """
     Calculate cross entropy between two probability distributions.
@@ -274,7 +331,11 @@ def compute_log_fidelity(incoherent_dist, expected_probs, measured_probs):
     xe_measured = cross_entropy(measured_probs, expected_probs)
     xe_expected = cross_entropy(expected_probs, expected_probs)
 
-    f_xeb = (xe_incoherent - xe_measured) / (xe_incoherent - xe_expected)
+    denominator = xe_incoherent - xe_expected
+    # A uniform ideal distribution (e.g. depth 1) gives denominator == 0 up to float noise: undefined
+    if abs(denominator) < 1e-9:
+        return np.nan
+    f_xeb = (xe_incoherent - xe_measured) / denominator
     return f_xeb
 
 
