@@ -1,0 +1,365 @@
+"""
+        TWO-QUBIT INTERLEAVED RANDOMIZED BENCHMARKING  (smaller gaps between gate layers)
+
+Interleaved counterpart of 70k_two_qubit_standard_rb_smaller_gap.py. What differs from
+calibration_graph/70b_two_qubit_standard_rb.py / 70c_two_qubit_interleaved_rb.py:
+    - No readout case in the gate switch. Circuits are gate-only and packed as [n_circuits, len0, gates...,
+      len1, gates..., ...]; readout / save / reset runs once per circuit after its gate loop (an empty circuit is
+      still read out).
+    - Each circuit's gates are copied into a buffer and its gate loop runs from index 0 over that buffer. Only then
+      does the compiler use its fast path for switch_(unsafe=True) (the array index must be the loop variable of a
+      for_ starting at 0), which shortens the gaps between gate layers.
+    - The switch has the compact opcodes 0..37 only: XZ basis (virtual Z), basis_gates must be ['rz', 'sx', 'x', 'cz'].
+    - CZ case: the CZ macro (cz_align_elements=True) or only its flux pulses and frame rotations (False), followed
+      by wait(4) on the control and target xy. Without that wait the next XY pulse starts 16 ns before the end of
+      the CZ flux pulse.
+    - frame_rotation_wait_cycles > 0 adds xy.wait() after every single-qubit frame rotation.
+    - use_input_stream / max_chunk_ints: circuits can be streamed to the OPX chunk by chunk instead of one array.
+    - Circuits are cached in <Superconducting>/.rb_cache_no_readout_case.
+    - The reference decay is read from qubit_pair.extras["StandardRB_no_readout_case"], written by 70k in the same
+      basis: run 70k first. If it is missing or from another basis the node raises before acquiring data (70b's
+      "StandardRB" entry is not used).
+Helpers: quam_libs/experiments/rb_standard_no_readout_case/ and rb_standard_no_readout_case_zerostart/.
+
+The program consists in playing random sequences of Clifford gates interleaved with a target two-qubit gate and measuring 
+the state of the resonators afterward. Each random sequence is generated for the maximum depth (specified as an input) 
+and played for each depth asked by the user (the sequence is truncated to the desired depth). Each truncated sequence 
+ends with the recovery gate that will bring the qubits back to their ground state.
+
+The random circuits are generated offline and transpiled to a basis gate set (default is ['rz', 'sx', 'x', 'cz']). 
+The circuits are executed per two-qubit layer using a switch_case block structure, allowing for efficient execution 
+of the quantum circuits.
+
+The program supports two types of target gates: 'idle_2q' and 'cz'. The 'idle_2q' gate is implemented as a hardcoded 
+wait time of T1/50 for each qubit. The interleaved RB protocol allows for direct measurement of the fidelity of the 
+target gate by comparing the decay rates of the interleaved sequences with reference sequences.
+
+Key Features:
+    - reduce_to_1q_cliffords: When enabled (default), the Clifford gates are sampled as 1q Cliffords per qubit 
+      (this is of course a much smaller subset of the whole 2q Clifford group).
+    - use_input_stream: When enabled, the circuit sequences are streamed to the OPX chunk-by-chunk (one chunk
+      per circuit depth) using the QUA input-stream feature (advance_input_stream) instead of being declared
+      as a single large array. This bypasses the OPX's QUA variable budget cap on declared arrays, enabling
+      longer circuit depths and/or more circuits per depth than the without-input-stream path can support.
+
+Each sequence is played multiple times for averaging, and multiple random sequences are generated for each depth to 
+improve statistical significance. The data is then post-processed to extract both the two-qubit Clifford fidelity and 
+the specific target gate fidelity.
+
+Prerequisites:
+    - Having calibrated both qubits' single-qubit gates (resonator_spectroscopy, qubit_spectroscopy, rabi_chevron, power_rabi).
+    - Having calibrated the two-qubit gate (cz or idle_2q) that will be benchmarked.
+    - Having calibrated the readout for both qubits (readout_frequency, amplitude, duration_optimization IQ_blobs).
+    - Having set the appropriate flux bias points for the qubit pair.
+    - Having calibrated the qubit frequencies and coupling strength.
+"""
+
+# %%
+
+from datetime import datetime, timezone, timedelta
+from pathlib import Path
+from typing import List, Literal, Optional
+from more_itertools import flatten
+from quam_libs.experiments.rb_standard.data_utils import RBResult, InterleavedRBResult
+import xarray as xr
+from tqdm.auto import tqdm
+
+
+from qm.qua import *
+from qm import SimulationConfig
+from qualang_tools.multi_user import qm_session
+
+from qualang_tools.results import progress_counter, fetching_tool
+
+from qualibrate  import NodeParameters, QualibrationNode
+from quam_libs.experiments.rb_standard.circuit_utils import circuit_to_layer_ints
+from quam_libs.experiments.rb_standard_no_readout_case_zerostart.qua_utils import QuaProgramHandler
+from quam_libs.experiments.rb_standard_no_readout_case.circuit_cache import (
+    get_reference_alpha,
+    load_circuits,
+    save_circuits,
+)
+from quam_libs.experiments.rb_standard_no_readout_case.packing import SINGLE_QUBIT_BASIS
+from quam_libs.lib.plot_utils import plot_samples
+from quam_libs.lib.save_utils import (
+    fetch_results_as_xarray,
+    restore_load_data_id,
+    resolve_qubit_pairs_from_node,
+)
+
+from quam_libs.components import QuAM
+from quam_libs.experiments.rb_standard.rb_utils import InterleavedRB, rb_cache_key, rb_save, rb_try_load
+from quam_libs.experiments.rb_standard.plot_utils import gate_mapping
+
+
+
+
+# %% {Node_parameters}
+
+class Parameters(NodeParameters):
+    qubit_pairs: Optional[List[str]] = ["coupler_q4_q5"] #None
+    circuit_lengths: tuple[int] =  (1, 2 ,4, 8, 12, 16, 20, 25, 30, 40, 60) # in number of cliffords
+    num_circuits_per_length: int = 100
+    num_averages: int = 200
+    target_gate: str = "cz" # "idle_2q" or "cz" supported 
+    basis_gates: list[str] = ['rz', 'sx', 'x', 'cz'] 
+    readout_mode: Literal["ge", "gef"] = "ge"
+    flux_point_joint_or_independent: Literal["joint", "independent"] = "joint"
+    reset_type_thermal_or_active: Literal["thermal", "active", "active_gef"] = "active"
+    reduce_to_1q_cliffords: bool = False
+    use_input_stream: bool = True
+    max_chunk_ints: int = 14000
+    cz_align_elements: bool = True  # False: CZ case without the macro's aligns; True: CZGate.execute()
+    frame_rotation_wait_cycles: int = 4  # xy.wait (clock cycles) after each 1Q frame rotation; 0 = off
+    simulate: bool = False
+    simulation_duration_ns: int = 10000
+    load_data_id: Optional[int] = None
+    timeout: int = 100
+    seed: int = 0
+
+node = QualibrationNode(name="70l_two_qubit_interleaved_rb_smaller_gap", parameters=Parameters())
+
+# %% {Initialize_QuAM_and_QOP}
+
+# Instantiate the QuAM class from the state file
+node.machine = QuAM.load()
+
+# Get the relevant QuAM components
+if node.parameters.qubit_pairs is None or node.parameters.qubit_pairs == "":
+    qubit_pairs = node.machine.active_qubit_pairs
+else:
+    qubit_pairs = [node.machine.qubit_pairs[qp] for qp in node.parameters.qubit_pairs]
+
+if len(qubit_pairs) == 0:
+    raise ValueError("No qubit pairs selected")
+
+# Only the virtual-Z (XZ) basis is implemented in rb_standard_no_readout_case.
+if sorted(node.parameters.basis_gates) != sorted(["rz", "sx", "x", "cz"]):
+    raise ValueError(
+        f"basis_gates={node.parameters.basis_gates} is not supported: this node implements the XZ basis "
+        "['rz', 'sx', 'x', 'cz'] only (no analog XY mode)."
+    )
+# The IRB decay is only meaningful against a same-basis reference from 70k: check before using the QPU.
+for _qp in qubit_pairs:
+    get_reference_alpha(_qp, SINGLE_QUBIT_BASIS)
+
+# Generate the OPX and Octave configurations
+
+# Open Communication with the QOP
+if node.parameters.load_data_id is None:
+    qmm = node.machine.connect()
+
+config = node.machine.generate_config()
+
+
+# %% {Random circuit generation}
+
+cache_key = rb_cache_key(
+    node.parameters.seed,
+    node.parameters.circuit_lengths,
+    node.parameters.num_circuits_per_length,
+    target_gate=node.parameters.target_gate,
+    reduce_to_1q_cliffords=node.parameters.reduce_to_1q_cliffords,
+)
+# Circuits here have NO readout opcode. The cache of 70c is only read (never written), see circuit_cache.py
+calibration_graph_dir = Path(__file__).resolve().parents[1] / "calibration_graph"  # cache next to the main graph
+cached = load_circuits(calibration_graph_dir, cache_key)
+
+total_cliffords = node.parameters.num_circuits_per_length * sum(node.parameters.circuit_lengths)
+print(
+    f"IRB config ({node.parameters.target_gate}): {len(node.parameters.circuit_lengths)} depths, "
+    f"{node.parameters.num_circuits_per_length} circuits/depth, "
+    f"~{total_cliffords} Cliffords to generate+transpile (first run only; cached after)"
+)
+
+if cached is not None:
+    circuits_as_ints = cached["circuits_as_ints"]
+    print(f"Loaded {len(circuits_as_ints)} cached IRB circuits (key {cache_key[:12]})")
+else:
+    interleaved_RB = InterleavedRB(
+        target_gate=node.parameters.target_gate,
+        amplification_lengths=node.parameters.circuit_lengths,
+        num_circuits_per_length=node.parameters.num_circuits_per_length,
+        basis_gates=node.parameters.basis_gates,
+        num_qubits=2,
+        reduce_to_1q_cliffords=node.parameters.reduce_to_1q_cliffords,
+        seed=node.parameters.seed,
+    )
+
+    transpiled_circuits = interleaved_RB.transpiled_circuits
+    transpiled_circuits_as_ints = {}
+    total_circuits_to_encode = sum(len(circuits) for circuits in transpiled_circuits.values())
+    with tqdm(total=total_circuits_to_encode, desc="Encoding IRB circuits to ints", unit="circ") as pbar:
+        for length, circuits in transpiled_circuits.items():
+            encoded = []
+            for qc in circuits:
+                encoded.append(circuit_to_layer_ints(qc))
+                pbar.update(1)
+            transpiled_circuits_as_ints[length] = encoded
+
+    circuits_as_ints = []
+    for circuits_per_len in transpiled_circuits_as_ints.values():
+        for circuit in circuits_per_len:
+            circuits_as_ints.append(list(circuit))
+
+    save_circuits(
+        calibration_graph_dir,
+        cache_key,
+        {"circuits_as_ints": circuits_as_ints},
+    )
+    print(f"Computed and cached {len(circuits_as_ints)} IRB circuits (key {cache_key[:12]})")
+
+total_circuits = len(circuits_as_ints)
+total_circuit_executions = total_circuits * node.parameters.num_averages
+print("=== 2Q Interleaved RB circuit summary ===")
+print(f"Target gate: {node.parameters.target_gate}")
+print(f"Circuit depths: {list(node.parameters.circuit_lengths)}")
+print(f"Circuits per depth: {node.parameters.num_circuits_per_length}")
+print(f"Total number of circuits (per qubit pair): {total_circuits}")
+print(f"Number of averages per circuit: {node.parameters.num_averages}")
+print(f"Total circuit executions (per qubit pair): {total_circuits} x {node.parameters.num_averages} = {total_circuit_executions}")
+print("==========================================")
+
+# %% {QUA_program}
+
+num_pairs = len(qubit_pairs)
+
+qua_program_handler = QuaProgramHandler(node, num_pairs, circuits_as_ints, node.machine, qubit_pairs)
+
+rb = qua_program_handler.get_qua_program()
+
+if node.parameters.use_input_stream:
+    print(f"Total input-stream pushes (all qubit pairs): {qua_program_handler.n_sub_chunks} x {num_pairs} = {qua_program_handler.total_pushes}")
+
+# %% {Simulate_or_execute}
+if node.parameters.simulate:
+    simulation_config = SimulationConfig(duration=node.parameters.simulation_duration_ns//4)  # in clock cycles
+    job = qmm.simulate(config, rb, simulation_config)
+    samples = job.get_simulated_samples()
+
+elif node.parameters.load_data_id is None:
+    # Prepare data for saving
+    node.results = {}
+    date_time = datetime.now(timezone(timedelta(hours=3))).strftime("%Y-%m-%d %H:%M:%S")
+    
+    with qm_session(node.machine.qmm, config, timeout=node.parameters.timeout) as qm:
+        if node.parameters.use_input_stream:
+            job = qm.execute(rb)
+            qua_program_handler.push_all_chunks(job)
+        else:
+            job = qm.execute(rb)
+
+        results = fetching_tool(job, ["iteration"], mode="live")
+        while results.is_processing():
+            n = results.fetch_all()[0]
+            # Progress bar: with input streams, "iteration" counts host pushes
+            # (advance_input_stream calls, i.e. depth/sub-chunk boundaries) across all
+            # qubit pairs. Without input streams, it counts completed averages.
+            if node.parameters.use_input_stream:
+                progress_counter(n, qua_program_handler.total_pushes, start_time=results.start_time)
+            else:
+                progress_counter(n, node.parameters.num_averages, start_time=results.start_time)
+
+# %% {Plot_sequence}
+
+for num in flatten(circuits_as_ints):
+    print(gate_mapping[num])
+    
+# %% {Plot and save if simulation}
+if node.parameters.simulate:
+    qubit_names = [qubit_pair.qubit_control.name for qubit_pair in qubit_pairs] + [qubit_pair.qubit_target.name for qubit_pair in qubit_pairs]
+    readout_lines = set([q[1] for q in qubit_names])
+    fig = plot_samples(samples, qubit_names, readout_lines=list(readout_lines), xlim=(0,10000))
+    
+    # node.results["figure"] = fig
+    # node.save()
+
+ # %% {Data_fetching_and_dataset_creation}
+if node.parameters.load_data_id is None:
+    if node.parameters.use_input_stream:
+        # With input streams, the QUA program advances one (depth) chunk at a time and
+        # replays every shot before advancing, so the raw save order is depth-major,
+        # then shot, then sequence (see QuaProgramHandler._get_qua_program_with_input_stream).
+        # fetch_results_as_xarray reverses the dict order, so pass it reversed here too.
+        measurement_axis = {
+            "sequence": range(node.parameters.num_circuits_per_length),
+            "shots": range(node.parameters.num_averages),
+            "depths": list(node.parameters.circuit_lengths),
+        }
+    else:
+        measurement_axis = {
+            "sequence": range(node.parameters.num_circuits_per_length),
+            "depths": list(node.parameters.circuit_lengths),
+            "shots": range(node.parameters.num_averages),
+        }
+    ds = fetch_results_as_xarray(
+    job.result_handles,
+    qubit_pairs,
+        measurement_axis,
+    )
+else:
+    load_data_id = node.parameters.load_data_id
+    node = node.load_from_id(load_data_id)
+    ds = node.results["ds"]
+    restore_load_data_id(node, load_data_id)
+    machine = node.machine
+    qubit_pairs = resolve_qubit_pairs_from_node(machine, node)
+# Add the dataset to the node
+node.results = {"ds": ds}
+# %% {Data_analysis and plotting}
+
+# Assume ds is your input dataset and ds['state'] is your DataArray
+state = ds['state']  # shape: (qubit, shots, sequence, depths)
+
+# Outcome labels for 2-qubit states
+labels = ["00", "01", "10", "11"]
+
+# Create a list of DataArrays: one for each outcome
+probs = [state == i for i in range(4)]
+
+# Stack along a new outcome dimension
+probs = xr.concat(probs, dim='outcome')
+
+# Assign outcome labels
+probs = probs.assign_coords(outcome=("outcome", labels))
+
+probs_00 = probs.sel(outcome="00")
+probs_00 = probs_00.rename({"shots": "average", "sequence": "repeat", "depths": "circuit_depth"})
+probs_00 = probs_00.transpose("qubit", "repeat", "circuit_depth", "average")
+
+
+probs_00 = probs_00.astype(int)
+
+ds_transposed = ds.rename({"shots": "average", "sequence": "repeat", "depths": "circuit_depth"})
+ds_transposed = ds_transposed.transpose("qubit", "repeat", "circuit_depth", "average")
+
+rb_result = {}
+
+for qp in qubit_pairs:
+
+    rb_result[qp.id] = InterleavedRBResult(
+        standard_rb_alpha=get_reference_alpha(qp, SINGLE_QUBIT_BASIS),  # from 70k, same basis
+        circuit_depths=list(node.parameters.circuit_lengths),
+        num_repeats=node.parameters.num_circuits_per_length,
+        num_averages=node.parameters.num_averages,
+        state=ds_transposed.sel(qubit=qp.name).state.data
+    )
+
+    # Fit the data and calculate all error and fidelity metrics
+    rb_result[qp.id].fit()
+    
+    # Plot the results
+    fig = rb_result[qp.id].plot_with_fidelity()
+    fig.suptitle(f"2Q {node.parameters.target_gate.upper()} Interleaved Randomized Benchmarking - {qp.name}")
+    # node.add_node_info_subtitle(fig)
+    fig.show()
+    
+    node.results[f"{qp.id}_figure_IRB_decay"] = fig
+
+# %% {Update_state}
+with node.record_state_updates():
+    for qp in qubit_pairs:
+        qp.extras['Interleaved_RB'] = rb_result[qp.id].fidelity
+# %% {Save_results}
+node.save()
+# %%
